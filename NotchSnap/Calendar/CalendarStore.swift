@@ -31,9 +31,40 @@ final class CalendarStore: ObservableObject {
     /// Set once the user connects, so we don't re-prompt on every launch.
     @AppStorage("calendarConnected") private var connectedPreference = false
 
-    private var provider: MeetingProvider = EventKitCalendarProvider()
+    /// Which backend supplies meetings. Google exists because macOS's own
+    /// Google sync can be broken (it was, on Marcello's Mac, for months) and
+    /// because it needs no calendar permission at all — which matters on a
+    /// machine where an unsigned build can't get one.
+    enum Source: String, CaseIterable, Identifiable {
+        case macOS, google
+        var id: String { rawValue }
+        var label: String {
+            self == .macOS ? L10n.t("gcal.sourceMac") : L10n.t("gcal.sourceGoogle")
+        }
+    }
+
+    @AppStorage("calendarSource") private var storedSource: String = Source.macOS.rawValue
+    var source: Source {
+        get { Source(rawValue: storedSource) ?? .macOS }
+        set {
+            guard newValue != source else { return }
+            // Switching backends invalidates everything derived from the old
+            // one — never leave one provider's meetings on screen under the
+            // other's name.
+            disconnect()
+            storedSource = newValue.rawValue
+            provider = Self.makeProvider(newValue)
+            objectWillChange.send()
+        }
+    }
+
+    private static func makeProvider(_ source: Source) -> MeetingProvider {
+        source == .google ? GoogleCalendarProvider() : EventKitCalendarProvider()
+    }
+
+    private lazy var provider: MeetingProvider = Self.makeProvider(source)
     /// The concrete provider, for the EventKit-specific diagnostics shown in
-    /// Settings. Nil once a non-EventKit provider (e.g. Google OAuth) is used.
+    /// Settings. Nil while the Google provider is selected.
     private var eventKit: EventKitCalendarProvider? { provider as? EventKitCalendarProvider }
 
     /// Every calendar NotchSnap can see — shown in Settings so "Connected"

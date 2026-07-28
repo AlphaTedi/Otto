@@ -6,30 +6,116 @@ import SwiftUI
 // the one deliberate exception to "everything lives in the notch", because
 // granting calendar access is a rare, one-time, system-mediated action.
 //
-// Deviation from SU-2/SU-3/SU-4, agreed with Marcello (2026-07-25): the data
-// source is macOS Calendar via EventKit rather than Google OAuth, so there's
-// no Google-branded button and no consent sheet — macOS presents its own
-// permission prompt instead. The user-visible outcome (see your Google
-// meetings in Today, get alerts) is the same, with no Google Cloud project to
-// register. The rest of this screen follows the PRD's connected/disconnected
-// structure exactly.
+// Two sources (2026-07-26). macOS Calendar via EventKit was the original and
+// still suits a Mac whose sync is healthy. Google OAuth was added because that
+// assumption failed twice over: macOS stopped syncing Marcello's Google
+// account entirely, and an ad-hoc-signed copy on a second Mac cannot obtain
+// the calendar permission EventKit needs. Talking to Google directly sidesteps
+// both — no macOS sync in the path, and no TCC prompt at all.
 
 struct CalendarSettingsView: View {
     @ObservedObject private var calendar = CalendarStore.shared
     @State private var isConnecting = false
     @State private var probeLines: [String] = []
+    @State private var clientID = ""
+    @State private var clientSecret = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             PageTitle(title: "Calendar",
                       subtitle: "Meetings in Today, and a heads-up before they start.")
 
+            Picker(L10n.t("gcal.source"), selection: Binding(
+                get: { calendar.source },
+                set: { calendar.source = $0 }
+            )) {
+                ForEach(CalendarStore.Source.allCases) { source in
+                    Text(source.label).tag(source)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
             if calendar.isConnected {
                 connected
+            } else if calendar.source == .google {
+                googleDisconnected
             } else {
                 disconnected
             }
         }
+    }
+
+    // MARK: Google (disconnected)
+
+    private var googleDisconnected: some View {
+        SettingsSection_Card(title: L10n.t("gcal.title")) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(L10n.t("gcal.subtitle"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                // The client ID is the one thing only the user can produce —
+                // it identifies THEIR Google Cloud project, so it cannot be
+                // shipped in the app.
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.t("gcal.setupTitle"))
+                        .font(.system(size: 11, weight: .semibold))
+                    Text(L10n.t("gcal.setupBody"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Link("console.cloud.google.com/apis/credentials",
+                         destination: URL(string: "https://console.cloud.google.com/apis/credentials")!)
+                        .font(.system(size: 11))
+                }
+
+                LabeledContent(L10n.t("gcal.clientID")) {
+                    TextField("", text: $clientID)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11).monospacedDigit())
+                }
+                LabeledContent(L10n.t("gcal.clientSecret")) {
+                    SecureField("", text: $clientSecret)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11).monospacedDigit())
+                }
+
+                Button {
+                    saveCredentialsAndConnect()
+                } label: {
+                    Text(isConnecting ? "Connecting\u{2026}" : L10n.t("gcal.signIn"))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color(hex: "#111111"))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(Color(hex: "#EEEEEE"))
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(isConnecting || clientID.isEmpty || clientSecret.isEmpty)
+
+                if let error = calendar.lastError {
+                    Text(error)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(hex: "#E07A5F"))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .onAppear {
+            clientID = GoogleOAuth.shared.clientID ?? ""
+            clientSecret = GoogleOAuth.shared.clientSecret ?? ""
+        }
+    }
+
+    private func saveCredentialsAndConnect() {
+        GoogleOAuth.shared.clientID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        GoogleOAuth.shared.clientSecret = clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        connect()
     }
 
     // MARK: Disconnected

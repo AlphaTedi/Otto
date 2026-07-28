@@ -29,6 +29,10 @@
 		AA01BB02CC03DD04EE05FB05 /* UpNextSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB05AA01BB02CC03DD04EE05 /* UpNextSection.swift */; };
 		AA01BB02CC03DD04EE05FB04 /* MeetingAlertView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB04AA01BB02CC03DD04EE05 /* MeetingAlertView.swift */; };
 		AA01BB02CC03DD04EE05FB03 /* CalendarStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB03AA01BB02CC03DD04EE05 /* CalendarStore.swift */; };
+		AA00BB11CC22DD33EE44FD010 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00BB11CC22DD33EE44FD011 /* KeychainStore.swift */; };
+		AA00BB11CC22DD33EE44FD020 /* GoogleOAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00BB11CC22DD33EE44FD021 /* GoogleOAuth.swift */; };
+		AA00BB11CC22DD33EE44FD030 /* LoopbackListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00BB11CC22DD33EE44FD031 /* LoopbackListener.swift */; };
+		AA00BB11CC22DD33EE44FD040 /* GoogleCalendarProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00BB11CC22DD33EE44FD041 /* GoogleCalendarProvider.swift */; };
 		AA01BB02CC03DD04EE05FB02 /* EventKitCalendarProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB02AA01BB02CC03DD04EE05 /* EventKitCalendarProvider.swift */; };
 		AA01BB02CC03DD04EE05FB01 /* CalendarModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB01AA01BB02CC03DD04EE05 /* CalendarModels.swift */; };
 		AA01BB02CC03DD04EE05FA05 /* VoiceFeatureFlag.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA05AA01BB02CC03DD04EE05 /* VoiceFeatureFlag.swift */; };
@@ -147,6 +151,10 @@
 		FB05AA01BB02CC03DD04EE05 /* UpNextSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = UpNextSection.swift; path = ../Calendar/UpNextSection.swift; sourceTree = "<group>"; };
 		FB04AA01BB02CC03DD04EE05 /* MeetingAlertView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MeetingAlertView.swift; path = ../Calendar/MeetingAlertView.swift; sourceTree = "<group>"; };
 		FB03AA01BB02CC03DD04EE05 /* CalendarStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CalendarStore.swift; path = ../Calendar/CalendarStore.swift; sourceTree = "<group>"; };
+		AA00BB11CC22DD33EE44FD011 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = KeychainStore.swift; path = ../Calendar/KeychainStore.swift; sourceTree = "<group>"; };
+		AA00BB11CC22DD33EE44FD021 /* GoogleOAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GoogleOAuth.swift; path = ../Calendar/GoogleOAuth.swift; sourceTree = "<group>"; };
+		AA00BB11CC22DD33EE44FD031 /* LoopbackListener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LoopbackListener.swift; path = ../Calendar/LoopbackListener.swift; sourceTree = "<group>"; };
+		AA00BB11CC22DD33EE44FD041 /* GoogleCalendarProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GoogleCalendarProvider.swift; path = ../Calendar/GoogleCalendarProvider.swift; sourceTree = "<group>"; };
 		FB02AA01BB02CC03DD04EE05 /* EventKitCalendarProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EventKitCalendarProvider.swift; path = ../Calendar/EventKitCalendarProvider.swift; sourceTree = "<group>"; };
 		FB01AA01BB02CC03DD04EE05 /* CalendarModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CalendarModels.swift; path = ../Calendar/CalendarModels.swift; sourceTree = "<group>"; };
 		FA05AA01BB02CC03DD04EE05 /* VoiceFeatureFlag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VoiceFeatureFlag.swift; path = ../Voice/VoiceFeatureFlag.swift; sourceTree = "<group>"; };
@@ -364,6 +372,10 @@
 				FB05AA01BB02CC03DD04EE05 /* UpNextSection.swift */,
 				FB04AA01BB02CC03DD04EE05 /* MeetingAlertView.swift */,
 				FB03AA01BB02CC03DD04EE05 /* CalendarStore.swift */,
+				AA00BB11CC22DD33EE44FD011 /* KeychainStore.swift */,
+				AA00BB11CC22DD33EE44FD021 /* GoogleOAuth.swift */,
+				AA00BB11CC22DD33EE44FD031 /* LoopbackListener.swift */,
+				AA00BB11CC22DD33EE44FD041 /* GoogleCalendarProvider.swift */,
 				FB02AA01BB02CC03DD04EE05 /* EventKitCalendarProvider.swift */,
 				FB01AA01BB02CC03DD04EE05 /* CalendarModels.swift */,
 				FA05AA01BB02CC03DD04EE05 /* VoiceFeatureFlag.swift */,
@@ -516,6 +528,10 @@
 				AA01BB02CC03DD04EE05FB05 /* UpNextSection.swift in Sources */,
 				AA01BB02CC03DD04EE05FB04 /* MeetingAlertView.swift in Sources */,
 				AA01BB02CC03DD04EE05FB03 /* CalendarStore.swift in Sources */,
+				AA00BB11CC22DD33EE44FD010 /* KeychainStore.swift in Sources */,
+				AA00BB11CC22DD33EE44FD020 /* GoogleOAuth.swift in Sources */,
+				AA00BB11CC22DD33EE44FD030 /* LoopbackListener.swift in Sources */,
+				AA00BB11CC22DD33EE44FD040 /* GoogleCalendarProvider.swift in Sources */,
 				AA01BB02CC03DD04EE05FB02 /* EventKitCalendarProvider.swift in Sources */,
 				AA01BB02CC03DD04EE05FB01 /* CalendarModels.swift in Sources */,
 				AA01BB02CC03DD04EE05FA05 /* VoiceFeatureFlag.swift in Sources */,
