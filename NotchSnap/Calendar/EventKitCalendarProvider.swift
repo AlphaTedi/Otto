@@ -203,6 +203,10 @@ final class EventKitCalendarProvider: MeetingProvider {
     func connect() async -> String? {
         let status = EKEventStore.authorizationStatus(for: .event)
         if Self.authorized(status) { return nil }
+        // If macOS launched us in a way that makes a prompt impossible, say
+        // THAT. Sending someone to the Calendars list when the app cannot
+        // appear in it is a dead end (Marcello, 2026-07-26).
+        if let blocked = LaunchIntegrity.permissionBlockReason() { return blocked }
         if status == .denied || status == .restricted {
             return L10n.t("cal.err.denied")
         }
