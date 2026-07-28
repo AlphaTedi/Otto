@@ -90,6 +90,79 @@ enum DebugDriver {
                 }
             } else if command == "collections" {
                 appendState("collections: " + store.collections.map(\.name).joined(separator: " > "))
+            } else if command.hasPrefix("braindump ") {
+                let transcript = String(command.dropFirst(10))
+                let collections = store.collections
+                Task { @MainActor in
+                    let parsed = await BrainDumpParser.parse(transcript: transcript,
+                                                             collections: collections)
+                    let rendered = parsed.map { todo in
+                        "{title='\(todo.title)' cat=\(todo.suggestedCategoryName ?? "nil") "
+                        + "urg=\(todo.urgency.rawValue) date=\(todo.dueDatePhrase ?? "nil")}"
+                    }.joined(separator: " | ")
+                    appendState("braindump engine=\(BrainDumpParser.activeEngine) "
+                                + "count=\(parsed.count) -> \(rendered)")
+                }
+            } else if command.hasPrefix("meeting ") {
+                // meeting <minutesFromNow> [nolink]
+                let args = command.dropFirst(8).split(separator: " ")
+                let minutes = Int(args.first ?? "2") ?? 2
+                let withLink = !args.contains("nolink")
+                CalendarStore.shared.injectTestMeeting(minutesFromNow: minutes,
+                                                       withLink: withLink)
+            } else if command == "cal-status" {
+                let cal = CalendarStore.shared
+                appendState("calConnected=\(cal.isConnected) "
+                            + "account=\(cal.accountDescription ?? "nil") "
+                            + "upcoming=\(cal.upcomingToday.count) "
+                            + "ambient=\(cal.ambientMeeting?.title ?? "nil") "
+                            + "activeAlert=\(cal.activeAlert?.title ?? "nil") "
+                            + "leads=\(cal.ambientLeadMinutes)m/\(cal.alertLeadMinutes)m "
+                            + "notch=\(NotchController.shared.state)")
+            } else if command == "cal-debug" {
+                let cal = CalendarStore.shared
+                appendState("cal-debug connected=\(cal.isConnected)")
+                appendState("  calendars (\(cal.visibleCalendars.count)):")
+                for c in cal.visibleCalendars {
+                    appendState("    • \(c.title) [\(c.source) / \(c.sourceType)]")
+                }
+                let rows = cal.diagnoseToday()
+                appendState("  today's raw events (\(rows.count)):")
+                for r in rows { appendState("    • \(r)") }
+                appendState("  surfaced upcoming: \(cal.upcomingToday.count)")
+            } else if command == "cal-connect" {
+                Task { @MainActor in
+                    await CalendarStore.shared.connect()
+                    appendState("cal-connect → connected=\(CalendarStore.shared.isConnected) "
+                                + "error=\(CalendarStore.shared.lastError ?? "none")")
+                }
+            } else if command == "cal-attendees" {
+                for line in CalendarStore.shared.diagnoseAttendees() { appendState(line) }
+            } else if command == "cal-probe" {
+                for line in CalendarStore.shared.probeWideWindow() { appendState(line) }
+            } else if command == "cal-refresh" {
+                Task { @MainActor in await CalendarStore.shared.refresh() }
+            } else if command == "cal-snooze" {
+                CalendarStore.shared.snooze()
+            } else if command == "cal-dismiss" {
+                CalendarStore.shared.dismissAlert()
+            } else if command == "cal-disconnect" {
+                CalendarStore.shared.disconnect()
+            } else if command == "voice-status" {
+                appendState("voiceOnDevice=\(VoiceTranscriber.isOnDeviceAvailable) "
+                            + "engine=\(BrainDumpParser.activeEngine) "
+                            + "phase=\(VoiceCaptureController.shared.phase)")
+            } else if command == "create-fresh" {
+                NotchController.shared.openCreateFresh()
+            } else if command.hasPrefix("setdefault ") {
+                // setdefault <index> — mark the collection at tab index default.
+                if let i = Int(command.dropFirst(11)), i >= 0, i < store.collections.count {
+                    store.setDefaultCollection(store.collections[i].id)
+                }
+            } else if command == "defaultcat" {
+                let name = store.collection(id: store.defaultCreationCollectionID ?? UUID())?.name ?? "nil"
+                let draftName = store.collection(id: store.draftCollectionID ?? UUID())?.name ?? "nil"
+                appendState("defaultCreationCollection=\(name) mode=\(store.panelMode) draftCollection=\(draftName)")
             } else if command.hasPrefix("entities ") {
                 let text = String(command.dropFirst(9))
                 let segments = EntityParser.parse(text).map { segment -> String in

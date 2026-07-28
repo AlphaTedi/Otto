@@ -107,6 +107,10 @@ class AppState: ObservableObject {
     /// so the user can type immediately). Consumed by NotesTabView.
     @Published var focusNotesComposer = false
 
+    /// One-shot request to open Settings on a specific section (used by the
+    /// calendar nudge card). Consumed by SettingsView.
+    @Published var pendingSettingsSection: SettingsSection? = nil
+
     /// One-shot request to open the notch gallery on a specific filter —
     /// e.g. a file drag touching the notch opens straight onto the Tray.
     /// Consumed (reset to nil) by NotchExpandedView.

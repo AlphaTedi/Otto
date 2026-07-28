@@ -802,7 +802,7 @@ class AreaSelectorNSView: NSView {
     private func drawDimensionBadge() {
         let text = "\(Int(selectionRect.width)) \u{00D7} \(Int(selectionRect.height))"
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .medium),
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium),
             .foregroundColor: NSColor.white
         ]
         let str = NSAttributedString(string: text, attributes: attrs)
@@ -915,7 +915,7 @@ class AreaSelectorNSView: NSView {
             : "\(Int(point.x)), \(Int(point.y))"
 
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .medium),
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium),
             .foregroundColor: NSColor.white
         ]
         let str = NSAttributedString(string: text, attributes: attrs)

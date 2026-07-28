@@ -113,7 +113,7 @@ struct AnnotationToolbar: View {
                                 .lineLimit(1)
                                 .fixedSize()
                             Text("\u{2318}S")
-                                .font(.system(size: 10, weight: .regular, design: .monospaced))
+                                .font(.system(size: 10, weight: .regular).monospacedDigit())
                                 .foregroundStyle(.white.opacity(0.5))
                                 .fixedSize()
                         }
@@ -142,7 +142,7 @@ struct AnnotationToolbar: View {
                                 .lineLimit(1)
                                 .fixedSize()
                             Text("\u{2318}C")
-                                .font(.system(size: 10, weight: .regular, design: .monospaced))
+                                .font(.system(size: 10, weight: .regular).monospacedDigit())
                                 .foregroundStyle(.white.opacity(0.6))
                                 .fixedSize()
                         }

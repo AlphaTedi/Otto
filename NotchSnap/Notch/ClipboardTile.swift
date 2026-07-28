@@ -164,14 +164,14 @@ struct ClipboardTile: View {
                     .fill(colorFromItem)
                     .frame(width: 32, height: 32)
                 Text(item.previewText ?? "")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .font(.system(size: 10, weight: .medium).monospacedDigit())
                     .foregroundStyle(.primary)
             }
             .frame(height: 42)
 
         case .code:
             Text(item.previewText ?? "")
-                .font(.system(size: 9, design: .monospaced))
+                .font(.system(size: 9).monospacedDigit())
                 .foregroundStyle(Color.green.opacity(0.9))
                 .lineLimit(3)
                 .frame(height: 42, alignment: .topLeading)
@@ -190,7 +190,7 @@ struct ClipboardTile: View {
 
         case .number:
             Text(item.previewText ?? "")
-                .font(.system(size: 18, weight: .bold, design: .monospaced))
+                .font(.system(size: 18, weight: .bold).monospacedDigit())
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)

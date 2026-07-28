@@ -24,6 +24,18 @@
 		EE81AA82BB83CC84DD85FF86 /* NotesTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF86EE81AA82BB83CC84DD85 /* NotesTabView.swift */; };
 		AA01BB02CC03DD04EE05F001 /* TodoModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F001AA01BB02CC03DD04EE05 /* TodoModels.swift */; };
 		AA01BB02CC03DD04EE05F002 /* TodoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F002AA01BB02CC03DD04EE05 /* TodoStore.swift */; };
+		AA01BB02CC03DD04EE05FB07 /* AttendeePhotoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB07AA01BB02CC03DD04EE05 /* AttendeePhotoStore.swift */; };
+		AA01BB02CC03DD04EE05FB06 /* CalendarSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB06AA01BB02CC03DD04EE05 /* CalendarSettingsView.swift */; };
+		AA01BB02CC03DD04EE05FB05 /* UpNextSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB05AA01BB02CC03DD04EE05 /* UpNextSection.swift */; };
+		AA01BB02CC03DD04EE05FB04 /* MeetingAlertView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB04AA01BB02CC03DD04EE05 /* MeetingAlertView.swift */; };
+		AA01BB02CC03DD04EE05FB03 /* CalendarStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB03AA01BB02CC03DD04EE05 /* CalendarStore.swift */; };
+		AA01BB02CC03DD04EE05FB02 /* EventKitCalendarProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB02AA01BB02CC03DD04EE05 /* EventKitCalendarProvider.swift */; };
+		AA01BB02CC03DD04EE05FB01 /* CalendarModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB01AA01BB02CC03DD04EE05 /* CalendarModels.swift */; };
+		AA01BB02CC03DD04EE05FA05 /* VoiceFeatureFlag.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA05AA01BB02CC03DD04EE05 /* VoiceFeatureFlag.swift */; };
+		AA01BB02CC03DD04EE05FA04 /* VoiceCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA04AA01BB02CC03DD04EE05 /* VoiceCaptureView.swift */; };
+		AA01BB02CC03DD04EE05FA03 /* VoiceCaptureController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA03AA01BB02CC03DD04EE05 /* VoiceCaptureController.swift */; };
+		AA01BB02CC03DD04EE05FA02 /* BrainDumpParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA02AA01BB02CC03DD04EE05 /* BrainDumpParser.swift */; };
+		AA01BB02CC03DD04EE05FA01 /* VoiceTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA01AA01BB02CC03DD04EE05 /* VoiceTranscriber.swift */; };
 		AA01BB02CC03DD04EE05F00F /* EntityTitleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00FAA01BB02CC03DD04EE05 /* EntityTitleView.swift */; };
 		AA01BB02CC03DD04EE05F00E /* EntityParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00EAA01BB02CC03DD04EE05 /* EntityParser.swift */; };
 		AA01BB02CC03DD04EE05F00D /* TodoPanelForms.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00DAA01BB02CC03DD04EE05 /* TodoPanelForms.swift */; };
@@ -128,6 +140,18 @@
 		FF86EE81AA82BB83CC84DD85 /* NotesTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NotesTabView.swift; path = ../Notes/NotesTabView.swift; sourceTree = "<group>"; };
 		F001AA01BB02CC03DD04EE05 /* TodoModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TodoModels.swift; path = ../Todo/TodoModels.swift; sourceTree = "<group>"; };
 		F002AA01BB02CC03DD04EE05 /* TodoStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TodoStore.swift; path = ../Todo/TodoStore.swift; sourceTree = "<group>"; };
+		FB07AA01BB02CC03DD04EE05 /* AttendeePhotoStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AttendeePhotoStore.swift; path = ../Calendar/AttendeePhotoStore.swift; sourceTree = "<group>"; };
+		FB06AA01BB02CC03DD04EE05 /* CalendarSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CalendarSettingsView.swift; path = ../Calendar/CalendarSettingsView.swift; sourceTree = "<group>"; };
+		FB05AA01BB02CC03DD04EE05 /* UpNextSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = UpNextSection.swift; path = ../Calendar/UpNextSection.swift; sourceTree = "<group>"; };
+		FB04AA01BB02CC03DD04EE05 /* MeetingAlertView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MeetingAlertView.swift; path = ../Calendar/MeetingAlertView.swift; sourceTree = "<group>"; };
+		FB03AA01BB02CC03DD04EE05 /* CalendarStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CalendarStore.swift; path = ../Calendar/CalendarStore.swift; sourceTree = "<group>"; };
+		FB02AA01BB02CC03DD04EE05 /* EventKitCalendarProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EventKitCalendarProvider.swift; path = ../Calendar/EventKitCalendarProvider.swift; sourceTree = "<group>"; };
+		FB01AA01BB02CC03DD04EE05 /* CalendarModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CalendarModels.swift; path = ../Calendar/CalendarModels.swift; sourceTree = "<group>"; };
+		FA05AA01BB02CC03DD04EE05 /* VoiceFeatureFlag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VoiceFeatureFlag.swift; path = ../Voice/VoiceFeatureFlag.swift; sourceTree = "<group>"; };
+		FA04AA01BB02CC03DD04EE05 /* VoiceCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VoiceCaptureView.swift; path = ../Voice/VoiceCaptureView.swift; sourceTree = "<group>"; };
+		FA03AA01BB02CC03DD04EE05 /* VoiceCaptureController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VoiceCaptureController.swift; path = ../Voice/VoiceCaptureController.swift; sourceTree = "<group>"; };
+		FA02AA01BB02CC03DD04EE05 /* BrainDumpParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BrainDumpParser.swift; path = ../Voice/BrainDumpParser.swift; sourceTree = "<group>"; };
+		FA01AA01BB02CC03DD04EE05 /* VoiceTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VoiceTranscriber.swift; path = ../Voice/VoiceTranscriber.swift; sourceTree = "<group>"; };
 		F00FAA01BB02CC03DD04EE05 /* EntityTitleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EntityTitleView.swift; path = ../Todo/EntityTitleView.swift; sourceTree = "<group>"; };
 		F00EAA01BB02CC03DD04EE05 /* EntityParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EntityParser.swift; path = ../Todo/EntityParser.swift; sourceTree = "<group>"; };
 		F00DAA01BB02CC03DD04EE05 /* TodoPanelForms.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TodoPanelForms.swift; path = ../Todo/TodoPanelForms.swift; sourceTree = "<group>"; };
@@ -333,6 +357,18 @@
 				FF86EE81AA82BB83CC84DD85 /* NotesTabView.swift */,
 				F001AA01BB02CC03DD04EE05 /* TodoModels.swift */,
 				F002AA01BB02CC03DD04EE05 /* TodoStore.swift */,
+				FB07AA01BB02CC03DD04EE05 /* AttendeePhotoStore.swift */,
+				FB06AA01BB02CC03DD04EE05 /* CalendarSettingsView.swift */,
+				FB05AA01BB02CC03DD04EE05 /* UpNextSection.swift */,
+				FB04AA01BB02CC03DD04EE05 /* MeetingAlertView.swift */,
+				FB03AA01BB02CC03DD04EE05 /* CalendarStore.swift */,
+				FB02AA01BB02CC03DD04EE05 /* EventKitCalendarProvider.swift */,
+				FB01AA01BB02CC03DD04EE05 /* CalendarModels.swift */,
+				FA05AA01BB02CC03DD04EE05 /* VoiceFeatureFlag.swift */,
+				FA04AA01BB02CC03DD04EE05 /* VoiceCaptureView.swift */,
+				FA03AA01BB02CC03DD04EE05 /* VoiceCaptureController.swift */,
+				FA02AA01BB02CC03DD04EE05 /* BrainDumpParser.swift */,
+				FA01AA01BB02CC03DD04EE05 /* VoiceTranscriber.swift */,
 				F00FAA01BB02CC03DD04EE05 /* EntityTitleView.swift */,
 				F00EAA01BB02CC03DD04EE05 /* EntityParser.swift */,
 				F00DAA01BB02CC03DD04EE05 /* TodoPanelForms.swift */,
@@ -472,6 +508,18 @@
 				EE81AA82BB83CC84DD85FF86 /* NotesTabView.swift in Sources */,
 				AA01BB02CC03DD04EE05F001 /* TodoModels.swift in Sources */,
 				AA01BB02CC03DD04EE05F002 /* TodoStore.swift in Sources */,
+				AA01BB02CC03DD04EE05FB07 /* AttendeePhotoStore.swift in Sources */,
+				AA01BB02CC03DD04EE05FB06 /* CalendarSettingsView.swift in Sources */,
+				AA01BB02CC03DD04EE05FB05 /* UpNextSection.swift in Sources */,
+				AA01BB02CC03DD04EE05FB04 /* MeetingAlertView.swift in Sources */,
+				AA01BB02CC03DD04EE05FB03 /* CalendarStore.swift in Sources */,
+				AA01BB02CC03DD04EE05FB02 /* EventKitCalendarProvider.swift in Sources */,
+				AA01BB02CC03DD04EE05FB01 /* CalendarModels.swift in Sources */,
+				AA01BB02CC03DD04EE05FA05 /* VoiceFeatureFlag.swift in Sources */,
+				AA01BB02CC03DD04EE05FA04 /* VoiceCaptureView.swift in Sources */,
+				AA01BB02CC03DD04EE05FA03 /* VoiceCaptureController.swift in Sources */,
+				AA01BB02CC03DD04EE05FA02 /* BrainDumpParser.swift in Sources */,
+				AA01BB02CC03DD04EE05FA01 /* VoiceTranscriber.swift in Sources */,
 				AA01BB02CC03DD04EE05F00F /* EntityTitleView.swift in Sources */,
 				AA01BB02CC03DD04EE05F00E /* EntityParser.swift in Sources */,
 				AA01BB02CC03DD04EE05F00D /* TodoPanelForms.swift in Sources */,

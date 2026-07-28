@@ -28,6 +28,18 @@ struct SettingsView: View {
                 // No background of its own → same surface as the traffic lights.
                 SettingsSidebar(selection: $selection)
                     .frame(width: 220)
+                    // SU-6: the Today nudge card deep-links straight here.
+                    .onChange(of: appState.pendingSettingsSection) { requested in
+                        guard let requested else { return }
+                        selection = requested
+                        appState.pendingSettingsSection = nil
+                    }
+                    .onAppear {
+                        if let requested = appState.pendingSettingsSection {
+                            selection = requested
+                            appState.pendingSettingsSection = nil
+                        }
+                    }
 
                 // RIGHT: content sheet — inset panel with its own tone.
                 ContentPane {
@@ -38,6 +50,7 @@ struct SettingsView: View {
                             case .appearance: AppearanceSettingsView()
                             case .notch:      NotchSettingsView()
                             case .capture:    CaptureSettingsView()
+                            case .calendar:   CalendarSettingsView()
                             case .shortcuts:  ShortcutsSettingsView()
                             case .about:      AboutSettingsView()
                             }
@@ -119,7 +132,7 @@ private struct ContentPane<Content: View>: View {
 // MARK: - Sidebar
 
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case general, appearance, notch, capture, shortcuts, about
+    case general, appearance, notch, capture, calendar, shortcuts, about
     var id: String { rawValue }
 
     var title: String {
@@ -128,6 +141,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .appearance: return "Appearance"
         case .notch:      return "Notch"
         case .capture:    return "Capture"
+        case .calendar:   return "Calendar"
         case .shortcuts:  return "Shortcuts"
         case .about:      return "About"
         }
@@ -139,6 +153,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .appearance: return "paintpalette"
         case .notch:      return "macbook"
         case .capture:    return "camera.viewfinder"
+        case .calendar:   return "calendar"
         case .shortcuts:  return "keyboard"
         case .about:      return "info.circle"
         }
@@ -225,7 +240,7 @@ private struct SidebarRow: View {
 
 // MARK: - Reusable building blocks
 
-private struct SettingsSection_Card<Content: View>: View {
+struct SettingsSection_Card<Content: View>: View {
     let title: String
     var subtitle: String? = nil
     @ViewBuilder var content: () -> Content
@@ -274,7 +289,7 @@ private struct SettingsRow<Trailing: View>: View {
     }
 }
 
-private struct PageTitle: View {
+struct PageTitle: View {
     let title: String
     var subtitle: String? = nil
     var body: some View {
@@ -512,9 +527,9 @@ private struct ThemePreview: View {
             // Mock content lines
             VStack(alignment: .leading, spacing: 5) {
                 Spacer().frame(height: 14)
-                RoundedRectangle(cornerRadius: 2).fill(fg.opacity(0.85)).frame(width: 32, height: 5)
-                RoundedRectangle(cornerRadius: 2).fill(fg.opacity(0.35)).frame(width: 50, height: 4)
-                RoundedRectangle(cornerRadius: 2).fill(fg.opacity(0.35)).frame(width: 42, height: 4)
+                RoundedRectangle(cornerRadius: 2, style: .continuous).fill(fg.opacity(0.85)).frame(width: 32, height: 5)
+                RoundedRectangle(cornerRadius: 2, style: .continuous).fill(fg.opacity(0.35)).frame(width: 50, height: 4)
+                RoundedRectangle(cornerRadius: 2, style: .continuous).fill(fg.opacity(0.35)).frame(width: 42, height: 4)
             }
             .padding(.leading, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -894,7 +909,7 @@ struct ShortcutRow: View {
             Text(label).font(.system(size: 13))
             Spacer()
             Text(keys)
-                .font(.system(size: 12, design: .monospaced))
+                .font(.system(size: 12).monospacedDigit())
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
                 .background(
@@ -920,7 +935,7 @@ struct AboutSettingsView: View {
                         .foregroundStyle(Color.accentColor)
                         .frame(width: 56, height: 56)
                         .background(
-                            RoundedRectangle(cornerRadius: 12)
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
                                 .fill(Color.accentColor.opacity(0.12))
                         )
 

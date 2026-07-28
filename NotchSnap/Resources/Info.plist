@@ -26,11 +26,36 @@
 	<string>13.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>NotchSnap reads your calendar to show today's meetings in the notch and warn you before they start. It never creates or changes events.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>NotchSnap reads your calendar to show today's meetings in the notch and warn you before they start. It never creates or changes events.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>NotchSnap matches meeting attendees to your contacts so it can show their photo next to a meeting. Contacts are read on this Mac only and never sent anywhere.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 NotchSnap. All rights reserved.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>NotchSnap listens only while you hold a voice capture session open, so you can speak your to-dos instead of typing them. Audio is transcribed on this Mac and never leaves it.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>NotchSnap creates and completes reminders in your NotchSnap list so they sync with Apple Reminders.</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>NotchSnap ha bisogno di accesso allo schermo per catturare screenshot.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>NotchSnap turns your spoken brain-dump into to-dos using on-device speech recognition. Nothing is sent to Apple or any server.</string>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>NotchSnap internal item</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.notchsnap.internal-item</string>
+			<key>UTTypeTagSpecification</key>
+			<dict/>
+		</dict>
+	</array>
 </dict>
 </plist>

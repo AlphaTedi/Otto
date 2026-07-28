@@ -55,7 +55,7 @@ struct NotchNotificationContent: View {
             Image(nsImage: thumbnail)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
         } else if let iconName = controller.notificationIcon {
             Image(systemName: iconName)
                 .font(.system(size: 12, weight: .semibold))

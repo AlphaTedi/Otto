@@ -1,4 +1,19 @@
 import Foundation
+import UniformTypeIdentifiers
+
+// MARK: - Private drag type
+//
+// Reordering used to hand SwiftUI an NSString, which registers as
+// `public.plain-text`. The notch's own shelf accepts `.plainText`, so dragging
+// a to-do lit the ENTIRE panel with the system's green drop-target ring
+// (Marcello, 2026-07-26) — the app was offering to drop the row into itself.
+//
+// A private type that conforms to nothing public means only our own reorder
+// targets can ever match it. Declared in Info.plist under
+// UTExportedTypeDeclarations.
+extension UTType {
+    static let notchSnapInternalItem = UTType(exportedAs: "com.notchsnap.internal-item")
+}
 import SwiftUI
 
 // MARK: - TodoStore — source of truth for collections + to-dos
@@ -14,6 +29,9 @@ enum TodoPanelMode: Equatable {
     case create
     case newCategory
     case find
+    /// Voice brain-dump: listening → parsing → review (see
+    /// VoiceCaptureController). Owned by that controller, not this store.
+    case voice
 }
 
 @MainActor
@@ -56,19 +74,54 @@ final class TodoStore: ObservableObject {
     @Published var findQuery = ""
     @Published var findSelection = 0
 
+    /// FB8: the user's explicitly chosen default category for new to-dos —
+    /// the one preselected (and listed first) in the creation flow. Set from
+    /// a tab's context menu; persisted. Independent of tab order.
+    @Published var defaultCollectionID: UUID?
+
+    /// The category the creation flow should default to: the explicit choice
+    /// if still valid and not the smart Today view, else the first real tab.
+    var defaultCreationCollectionID: UUID? {
+        if let id = defaultCollectionID, let c = collection(id: id), !c.isSystemToday {
+            return id
+        }
+        return firstUserCollection?.id
+    }
+
+    func setDefaultCollection(_ id: UUID) {
+        guard let c = collection(id: id), !c.isSystemToday else { return }
+        defaultCollectionID = id
+        scheduleSave()
+    }
+
+    /// A global "new to-do" entry point (⌃⇧N / ⌥⌘N) starts on the user's
+    /// default category rather than whatever was last browsed.
+    func prepareGlobalCreateDraft() {
+        draftCollectionID = defaultCreationCollectionID
+    }
+
     /// While any non-browsing surface is up, the notch must not auto-collapse
     /// under the user mid-typing. Checked by NotchController.triggerCollapse.
     var isPanelPinnedOpen: Bool {
         panelMode != .browsing || showShortcuts
     }
 
+    /// Leaving voice mode must also tear the capture session down, so mode
+    /// changes route through here rather than assigning panelMode directly.
+    func exitVoiceIfNeeded(_ newMode: TodoPanelMode) {
+        if panelMode == .voice, newMode != .voice {
+            VoiceCaptureController.shared.cancel()
+        }
+    }
+
     func setMode(_ mode: TodoPanelMode) {
         guard panelMode != mode else { return }
+        exitVoiceIfNeeded(mode)
         withAnimation(NotchAnimation.contentHug) {
             panelMode = mode
             if mode == .find { findQuery = ""; findSelection = 0 }
             if mode == .create, draftCollectionID == nil {
-                draftCollectionID = lastUsedCollectionID ?? firstUserCollection?.id
+                draftCollectionID = defaultCreationCollectionID
             }
         }
     }
@@ -81,7 +134,7 @@ final class TodoStore: ObservableObject {
         if let active = activeCollection, !active.isSystemToday {
             draftCollectionID = active.id
         } else {
-            draftCollectionID = lastUsedCollectionID ?? firstUserCollection?.id
+            draftCollectionID = defaultCreationCollectionID
         }
     }
 
@@ -141,9 +194,21 @@ final class TodoStore: ObservableObject {
         scheduleSave()
     }
 
-    // MARK: - Progress rings (PR-1..3)
+    // MARK: - Tab indicators (PR-1..3, revised 2026-07-23)
 
-    /// Completed fraction for a category's ring; nil hides the ring (no items).
+    /// How many to-dos are still open in a category — the number shown on its
+    /// tab. nil when the category holds nothing at all (no indicator); 0 means
+    /// "everything here is done" and renders as a checkmark.
+    func remainingCount(for collection: TodoCollection) -> Int? {
+        let open = openItems(in: collection).filter { !$0.isCompleted }.count
+        let done = completedItems(in: collection).count
+            + openItems(in: collection).filter(\.isCompleted).count
+        guard open + done > 0 else { return nil }
+        return open
+    }
+
+    /// Completed fraction — no longer drives the tab chip (the ring proved
+    /// unreadable at 14pt), kept for any larger progress affordance.
     func progress(for collection: TodoCollection) -> Double? {
         let open = openItems(in: collection).filter { !$0.isCompleted }.count
         let done = completedItems(in: collection).count + openItems(in: collection).filter(\.isCompleted).count
@@ -166,6 +231,7 @@ final class TodoStore: ObservableObject {
         var collections: [TodoCollection]
         var items: [TodoItem]
         var lastUsedCollectionID: UUID?
+        var defaultCollectionID: UUID?   // FB8; decodeIfPresent for old files
     }
 
     private init() {
@@ -278,6 +344,23 @@ final class TodoStore: ObservableObject {
         guard to >= 0, to < collections.count else { return }
         withAnimation(NotchAnimation.contentHug) {
             collections.swapAt(from, to)
+            for (i, _) in collections.enumerated() {
+                collections[i].sortOrder = i
+            }
+        }
+        scheduleSave()
+    }
+
+    /// Drag-to-reorder for the tab row: drop `id` into `targetID`'s slot.
+    /// Any tab can move, including Today — the "+" chips aren't collections
+    /// so they're never part of this (Marcello, 2026-07-23).
+    func moveCollection(_ id: UUID, before targetID: UUID) {
+        guard id != targetID,
+              let from = collections.firstIndex(where: { $0.id == id }),
+              let to = collections.firstIndex(where: { $0.id == targetID }) else { return }
+        withAnimation(NotchAnimation.contentHug) {
+            let moved = collections.remove(at: from)
+            collections.insert(moved, at: to)
             for (i, _) in collections.enumerated() {
                 collections[i].sortOrder = i
             }
@@ -402,40 +485,80 @@ final class TodoStore: ObservableObject {
 
     /// TD-5: mouse drag-to-reorder — live re-slotting as the drag passes
     /// over a sibling row. Same sortOrder rewrite as the keyboard path.
-    func reorder(_ id: UUID, before targetID: UUID) {
-        guard id != targetID,
-              let collection = activeCollection, !collection.isSystemToday else { return }
-        var ordered = openItems(in: collection)
-        guard let from = ordered.firstIndex(where: { $0.id == id }),
-              let to = ordered.firstIndex(where: { $0.id == targetID }) else { return }
-        let moved = ordered.remove(at: from)
-        ordered.insert(moved, at: to)
-        withAnimation(NotchAnimation.contentHug) {
-            for (i, item) in ordered.enumerated() {
-                if let idx = items.firstIndex(where: { $0.id == item.id }) {
-                    items[idx].sortOrder = i
+    ///
+    /// Works in EVERY tab including Today (Marcello, 2026-07-23). Today is a
+    /// cross-collection smart view, so a full 0..n reindex there would also
+    /// shuffle those items inside their own categories — instead we SWAP the
+    /// two items' sortOrder values, which moves them in the Today view while
+    /// leaving every other list untouched.
+    /// Drop past the last row. `reorder(_:before:)` can only ever land an item
+    /// in front of another one, so without this the bottom slot is unreachable.
+    func moveToEnd(_ id: UUID) {
+        guard let collection = activeCollection,
+              let sourceIdx = items.firstIndex(where: { $0.id == id }) else { return }
+        let ordered = openItems(in: collection)
+        guard ordered.last?.id != id else { return }   // already last
+
+        if collection.isSystemToday {
+            // Today is a smart aggregation ordered by sortOrder, so "last"
+            // just means one past the current maximum.
+            let maxOrder = ordered.map(\.sortOrder).max() ?? 0
+            withAnimation(NotchAnimation.contentHug) {
+                items[sourceIdx].sortOrder = maxOrder + 1
+            }
+        } else {
+            var reordered = ordered.filter { $0.id != id }
+            if let moved = ordered.first(where: { $0.id == id }) { reordered.append(moved) }
+            withAnimation(NotchAnimation.contentHug) {
+                for (i, item) in reordered.enumerated() {
+                    if let idx = items.firstIndex(where: { $0.id == item.id }) {
+                        items[idx].sortOrder = i
+                    }
                 }
             }
         }
         scheduleSave()
     }
 
-    /// TD-11: keyboard-accessible reorder within a collection.
-    func moveItem(_ id: UUID, by offset: Int) {
-        guard let collection = activeCollection, !collection.isSystemToday else { return }
-        var ordered = openItems(in: collection)
-        guard let from = ordered.firstIndex(where: { $0.id == id }) else { return }
-        let to = from + offset
-        guard to >= 0, to < ordered.count else { return }
-        ordered.swapAt(from, to)
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-            for (i, item) in ordered.enumerated() {
-                if let idx = items.firstIndex(where: { $0.id == item.id }) {
-                    items[idx].sortOrder = i
+    func reorder(_ id: UUID, before targetID: UUID) {
+        guard id != targetID, let collection = activeCollection else { return }
+        let ordered = openItems(in: collection)
+        guard let from = ordered.firstIndex(where: { $0.id == id }),
+              let to = ordered.firstIndex(where: { $0.id == targetID }),
+              let sourceIdx = items.firstIndex(where: { $0.id == id }),
+              let targetIdx = items.firstIndex(where: { $0.id == targetID }) else { return }
+
+        if collection.isSystemToday {
+            withAnimation(NotchAnimation.contentHug) {
+                let sourceOrder = items[sourceIdx].sortOrder
+                items[sourceIdx].sortOrder = items[targetIdx].sortOrder
+                items[targetIdx].sortOrder = sourceOrder
+            }
+        } else {
+            var reordered = ordered
+            let moved = reordered.remove(at: from)
+            reordered.insert(moved, at: to)
+            withAnimation(NotchAnimation.contentHug) {
+                for (i, item) in reordered.enumerated() {
+                    if let idx = items.firstIndex(where: { $0.id == item.id }) {
+                        items[idx].sortOrder = i
+                    }
                 }
             }
         }
         scheduleSave()
+    }
+
+    /// TD-11: keyboard-accessible reorder (⌥↑/⌥↓). Routes through `reorder`
+    /// so the keyboard and drag paths can never diverge — and so it works in
+    /// Today too.
+    func moveItem(_ id: UUID, by offset: Int) {
+        guard let collection = activeCollection else { return }
+        let ordered = openItems(in: collection)
+        guard let from = ordered.firstIndex(where: { $0.id == id }) else { return }
+        let to = from + offset
+        guard to >= 0, to < ordered.count else { return }
+        reorder(id, before: ordered[to].id)
     }
 
     // MARK: - Keyboard focus (KB-6)
@@ -455,12 +578,37 @@ final class TodoStore: ObservableObject {
 
     // MARK: - Persistence
 
+    private var backupURL: URL { Self.directory.appendingPathComponent("todos.backup.json") }
+
     private func load() {
-        guard let data = try? Data(contentsOf: fileURL),
-              let payload = try? JSONDecoder().decode(Payload.self, from: data) else { return }
+        // Reinstall safety: the app is NOT sandboxed, so this file lives in
+        //   ~/Library/Application Support/NotchSnap/Todo/todos.json
+        // which survives deleting and reinstalling the .app — data is only
+        // lost if that folder is manually removed. We additionally keep a
+        // .backup copy and fall back to it if the main file is missing or
+        // corrupt (e.g. a write interrupted by a crash or force-quit).
+        if let payload = decodePayload(at: fileURL) {
+            apply(payload)
+            return
+        }
+        if let payload = decodePayload(at: backupURL) {
+            print("[TodoStore] primary store unreadable — restored from backup")
+            apply(payload)
+            // Re-materialize the primary from the recovered data.
+            scheduleSave()
+        }
+    }
+
+    private func decodePayload(at url: URL) -> Payload? {
+        guard let data = try? Data(contentsOf: url), !data.isEmpty else { return nil }
+        return try? JSONDecoder().decode(Payload.self, from: data)
+    }
+
+    private func apply(_ payload: Payload) {
         collections = payload.collections.sorted { $0.sortOrder < $1.sortOrder }
         items = payload.items
         lastUsedCollectionID = payload.lastUsedCollectionID
+        defaultCollectionID = payload.defaultCollectionID
     }
 
     private func scheduleSave() {
@@ -471,11 +619,17 @@ final class TodoStore: ObservableObject {
             let payload = Payload(
                 collections: self.collections,
                 items: self.items,
-                lastUsedCollectionID: self.lastUsedCollectionID
+                lastUsedCollectionID: self.lastUsedCollectionID,
+                defaultCollectionID: self.defaultCollectionID
             )
-            if let data = try? JSONEncoder().encode(payload) {
-                try? data.write(to: self.fileURL)
+            guard let data = try? JSONEncoder().encode(payload) else { return }
+            // Promote the last-known-good primary to the backup BEFORE
+            // overwriting it, then write the new primary atomically so a
+            // crash mid-write can never leave a truncated file.
+            if let existing = try? Data(contentsOf: self.fileURL), !existing.isEmpty {
+                try? existing.write(to: self.backupURL, options: .atomic)
             }
+            try? data.write(to: self.fileURL, options: .atomic)
         }
     }
 }

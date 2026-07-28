@@ -25,7 +25,7 @@ struct NotchLivePreview: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            .cornerRadius(10)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
             // Simulated menu bar
             Rectangle()
@@ -66,7 +66,7 @@ struct NotchLivePreview: View {
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: cornerRadius)
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: width)
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: height)
-        .cornerRadius(8)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .clipped()
     }
 }

@@ -30,3 +30,7 @@ Carthage/Build/
 *.zip
 release/
 .claude/settings.local.json
+
+# graphify knowledge-graph output — a regenerable cache (~5MB of ASTs)
+NotchSnap/graphify-out/
+graphify-out/

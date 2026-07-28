@@ -183,6 +183,9 @@ class NotchController: ObservableObject {
 
         HapticManager.shared.expandTap()
 
+        // Opening the panel is the moment the data must be current.
+        CalendarStore.shared.refreshNow()
+
         expandTask = Task { @MainActor in
             // Allow key + accept mouse events so drag-and-drop works in expanded state
             (panel as? NotchPanel)?.allowKey = true
@@ -774,6 +777,10 @@ class NotchController: ObservableObject {
         // form, shortcuts overlay) pins the panel open — auto-collapse
         // mid-typing would destroy the draft.
         if TodoStore.shared.isPanelPinnedOpen { return true }
+        // A live meeting alert holds the panel too: it opened itself, so a
+        // stray mouse-out must not yank it away before it's been read. It
+        // still auto-collapses on its own timer (CalendarStore).
+        if CalendarStore.shared.activeAlert != nil { return true }
         guard let panel else { return false }
         if panel.isKeyWindow { return true }
         if let key = NSApp.keyWindow, key.parent === panel { return true }
@@ -790,6 +797,14 @@ class NotchController: ObservableObject {
         makeKeyForTyping()
     }
 
+    /// FB8: a GLOBAL "new to-do" shortcut (⌃⇧N / ⌥⌘N from anywhere) — opens
+    /// straight into the creation page on the user's default category, never
+    /// on whatever was last browsed.
+    func openCreateFresh() {
+        TodoStore.shared.prepareGlobalCreateDraft()
+        openCreate()
+    }
+
     /// ⌥Space toggles: already on the "+" tab → dismiss; otherwise open it.
     func toggleCreate() {
         if state == .expanded && TodoStore.shared.panelMode == .create {
@@ -799,6 +814,24 @@ class NotchController: ObservableObject {
         } else {
             openCreate()
         }
+    }
+
+    // MARK: - Meeting alerts (calendar PRD §3)
+
+    /// CA-3/CA-6: the notch opens ITSELF before a meeting. Deliberately routed
+    /// through the same `triggerExpand()` every click uses, so the
+    /// self-triggered open is indistinguishable in feel from a manual one —
+    /// same spring, same sequencing, no special "alert" animation.
+    func presentMeetingAlert() {
+        AppState.shared.pendingNotchFilter = .todos
+        triggerExpand()
+    }
+
+    /// Collapse after an alert unless the user is doing something else in the
+    /// panel (typing a to-do, mid-voice capture) — their work wins.
+    func dismissMeetingAlert() {
+        guard state == .expanded, !TodoStore.shared.isPanelPinnedOpen else { return }
+        triggerCollapse()
     }
 
     /// Give the panel key status immediately (mode switches from inside the
@@ -981,7 +1014,7 @@ private struct ScreenshotPreview: View {
 
             HStack(spacing: 8) {
                 Text(item.dimensions)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(.secondary)
                 Text("·").foregroundStyle(.secondary)
                 Text(item.relativeTime)
@@ -1036,7 +1069,7 @@ private struct ClipboardPreview: View {
                                     .stroke(.white.opacity(0.15), lineWidth: 1)
                             )
                         Text(item.previewText ?? "")
-                            .font(.system(size: 24, weight: .semibold, design: .monospaced))
+                            .font(.system(size: 24, weight: .semibold).monospacedDigit())
                         Spacer()
                     }
                 default:

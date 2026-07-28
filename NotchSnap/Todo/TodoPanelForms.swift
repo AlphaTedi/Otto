@@ -29,13 +29,37 @@ struct TodoCreateView: View {
     }
 
     private var assignable: [TodoCollection] {
-        store.collections.filter { !$0.isSystemToday }
+        // FB8: the user's default category appears FIRST in the picker; the
+        // rest follow tab order.
+        let all = store.collections.filter { !$0.isSystemToday }
+        guard let def = store.defaultCreationCollectionID else { return all }
+        return all.sorted { a, b in
+            (a.id == def ? 0 : 1, a.sortOrder) < (b.id == def ? 0 : 1, b.sortOrder)
+        }
     }
 
     private var canCreate: Bool {
         let title = parsed?.cleanedTitle ?? store.draftTitle
         return !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && store.draftCollectionID != nil
+    }
+
+    /// FB5: the field's height, recomputed from the draft on every keystroke.
+    /// Width is estimated slightly narrow (panel width minus paddings) so we
+    /// round UP the line count and never clip the last line; beyond the max
+    /// the field scrolls internally.
+    private var titleFieldHeight: CGFloat {
+        let panelWidth = CGFloat(NotchController.shared.expandedWidth)
+        let width = max(120, panelWidth - CGFloat(DSSpacing.panelPadding) * 2 - 24 - 24)
+        let text = store.draftTitle.isEmpty ? " " : store.draftTitle
+        let measured = NSAttributedString(
+            string: text, attributes: [.font: NSFont.systemFont(ofSize: 13)]
+        ).boundingRect(
+            with: NSSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        ).height
+        return max(HighlightingTitleField.lineHeight,
+                   min(ceil(measured), HighlightingTitleField.maxHeight))
     }
 
     var body: some View {
@@ -53,10 +77,12 @@ struct TodoCreateView: View {
                 highlightRange: parsed?.nsRange,
                 placeholder: L10n.t("todo.titlePlaceholder")
             )
-            // Hard height: without it the NSTextView stretches to whatever
-            // the panel proposes, the measurement grows the panel, and the
-            // field ballooned a little more on every visit (feedback loop).
-            .frame(height: 17)
+            // FB5: height is driven from SwiftUI (where draftTitle is
+            // observed) so it recomputes on every keystroke and the panel
+            // hugs it — an NSViewRepresentable's own sizeThatFits is NOT
+            // re-invoked on a pure content change, so relying on it left the
+            // field stuck at one line.
+            .frame(height: titleFieldHeight)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .background(
@@ -241,39 +267,81 @@ private struct OptionRow: View {
     }
 }
 
-// MARK: - HighlightingTitleField — NSTextView with inline NL date coloring
+// MARK: - HighlightingTitleField — auto-growing NSTextView w/ inline NL coloring
 //
-// TextField can't color a substring while editing; an NSTextView can. Single
-// line (Return/Esc are consumed by the mode-aware key monitor before they
-// reach the view), restyled after every edit: title in textPrimaryBright,
-// the recognized date phrase in the focus accent.
+// TextField can't color a substring while editing; an NSTextView can. The
+// field GROWS with its content (FB5): one line by default, wrapping and
+// getting taller as you type, up to `maxHeight`, then scrolling. Height is
+// always clamped to [lineHeight, maxHeight] and the field NEVER accepts the
+// panel's proposed height — that feedback loop is what made it balloon a
+// little more on every visit in the previous build. Return/Esc are consumed
+// by the mode-aware key monitor before they reach the view, so newlines only
+// ever arrive via paste (collapsed to spaces).
 
 struct HighlightingTitleField: NSViewRepresentable {
     @Binding var text: String
     let highlightRange: NSRange?
     let placeholder: String
 
-    func makeNSView(context: Context) -> NSTextView {
-        let view = FocusRequestingTextView()
+    static let lineHeight: CGFloat = 17
+    static let maxHeight: CGFloat = 102   // ~6 lines, then it scrolls
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scroll = NSScrollView()
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = false
+        scroll.hasHorizontalScroller = false
+        scroll.autohidesScrollers = true
+        scroll.verticalScrollElasticity = .allowed
+
+        let view = NSTextView()
         view.delegate = context.coordinator
         view.drawsBackground = false
         view.isRichText = false
         view.font = .systemFont(ofSize: 13)
         view.textContainerInset = .zero
         view.textContainer?.lineFragmentPadding = 0
+        view.isVerticallyResizable = true
+        view.isHorizontallyResizable = false
+        view.textContainer?.widthTracksTextView = true
+        view.autoresizingMask = [.width]
         view.string = text
         context.coordinator.restyle(view, highlight: highlightRange)
+
+        scroll.documentView = view
         // The creation surface exists to be typed into — grab focus once
         // the panel has become key.
         DispatchQueue.main.async { view.window?.makeFirstResponder(view) }
-        return view
+        return scroll
     }
 
-    func updateNSView(_ view: NSTextView, context: Context) {
+    func updateNSView(_ scroll: NSScrollView, context: Context) {
+        guard let view = scroll.documentView as? NSTextView else { return }
         if view.string != text {
             view.string = text
         }
         context.coordinator.restyle(view, highlight: highlightRange)
+    }
+
+    /// FB5: report the wrapped content height for the proposed width, clamped
+    /// so the field hugs its text and never stretches to the panel.
+    ///
+    /// Measures the CURRENT `text` directly with boundingRect rather than
+    /// reading the live text view's layout manager — the latter goes stale
+    /// (an updateNSView that just changed the string may not have re-laid-out
+    /// yet when SwiftUI asks for the size), so the field failed to grow.
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView,
+                      context: Context) -> CGSize? {
+        let width = (proposal.width.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }) ?? 200
+        let measured = NSAttributedString(
+            string: text.isEmpty ? " " : text,
+            attributes: [.font: NSFont.systemFont(ofSize: 13)]
+        ).boundingRect(
+            with: NSSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        ).height
+        let clamped = max(Self.lineHeight, min(ceil(measured), Self.maxHeight))
+        return CGSize(width: width, height: clamped)
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -284,7 +352,8 @@ struct HighlightingTitleField: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let view = notification.object as? NSTextView else { return }
-            // Single line: swallow pasted newlines.
+            // Newlines only arrive via paste — collapse them (single logical
+            // line of title text, even though it wraps visually).
             if view.string.contains("\n") {
                 view.string = view.string.replacingOccurrences(of: "\n", with: " ")
             }
@@ -309,22 +378,6 @@ struct HighlightingTitleField: NSViewRepresentable {
                 .font: NSFont.systemFont(ofSize: 13),
             ]
         }
-    }
-}
-
-/// Fixed-height, single-line text view that reports an intrinsic size so the
-/// hugging panel can measure it like any other row.
-final class FocusRequestingTextView: NSTextView {
-    override var intrinsicContentSize: NSSize {
-        NSSize(width: NSView.noIntrinsicMetric, height: 17)
-    }
-}
-
-extension HighlightingTitleField {
-    /// Single line, always — never accept the container's proposed height.
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextView,
-                      context: Context) -> CGSize? {
-        CGSize(width: proposal.width ?? 200, height: 17)
     }
 }
 
@@ -376,18 +429,21 @@ struct CategoryFormView: View {
                 .foregroundStyle(DSColor.textFaint)
                 .padding(.bottom, 8)
 
-            // 5-column grid; selection is a white border + check, never
-            // implied by position alone (CT-6, enforced by ColorSwatchButton).
-            HStack(spacing: 8) {
+            // 5 swatches; selection is a white border + check, never implied
+            // by position alone (CT-6, enforced by ColorSwatchButton). Each is
+            // an explicit 34pt square — big enough to see and to click.
+            HStack(spacing: 12) {
                 ForEach(Self.paletteHex, id: \.self) { hex in
                     Button {
                         withAnimation(NotchAnimation.hintFade) { colorHex = hex }
                     } label: {
                         ColorSwatchButton(color: Color(hex: hex), isSelected: colorHex == hex)
-                            .contentShape(Rectangle())
+                            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
+                    .help(hex)
                 }
+                Spacer(minLength: 0)
             }
             .padding(.bottom, 18)
 

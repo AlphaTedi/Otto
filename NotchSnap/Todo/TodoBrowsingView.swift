@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import AppKit
 
 // MARK: - TodoTabView — the whole to-do panel (design PRD §§1-7)
@@ -65,51 +66,26 @@ private extension View {
 
 struct TodoTabView: View {
     @ObservedObject private var store = TodoStore.shared
+    @ObservedObject private var calendar = CalendarStore.shared
 
-    private var modeTransition: AnyTransition {
-        .asymmetric(
-            insertion: .opacity.combined(with: .offset(y: 8)),
-            removal: .opacity
-        )
-    }
+    // FB2: one transition, every direction. A pure in-place crossfade —
+    // no y-offset, no edge-move — so switching tabs or modes never "slides
+    // in from the top" or bleeds over the tab row, and Work→Today looks
+    // identical to Today→Personal (Marcello 2026-07-23).
+    private var modeTransition: AnyTransition { .opacity }
 
     var body: some View {
         // §2.3: the shortcuts overlay sits ON TOP of the live content —
         // dismissing is instant, nothing re-renders underneath.
         ZStack(alignment: .topLeading) {
-            VStack(alignment: .leading, spacing: 0) {
-                // The tab row lives OUTSIDE the mode switch: its identity is
-                // stable across browsing ↔ create, so toggling "+" swaps only
-                // the content below — same motion as switching categories.
-                if store.panelMode == .browsing || store.panelMode == .create {
-                    TodoTabRow()
-                }
-                // ZStack, not bare switch: during a transition BOTH the
-                // outgoing and incoming views exist for a few frames — as
-                // VStack siblings they'd stack vertically and the whole
-                // panel visibly jumped (Marcello's Work→Today report).
-                // Overlapped, the swap reads as one in-place motion.
-                ZStack(alignment: .topLeading) {
-                    switch store.panelMode {
-                    case .browsing:
-                        TodoBrowsingView()
-                            .transition(modeTransition)
-                    case .create:
-                        TodoCreateView()
-                            .transition(modeTransition)
-                    case .newCategory:
-                        CategoryFormView()
-                            .transition(modeTransition)
-                    case .find:
-                        QuickFindView()
-                            .transition(modeTransition)
-                    }
-                }
-            }
-
-            if store.showShortcuts {
-                ShortcutsOverlay()
+            // CA-3: while a meeting alert is live it OWNS the panel — the
+            // notch opened itself for this, so it shouldn't compete with the
+            // to-do list underneath.
+            if let alert = calendar.activeAlert {
+                MeetingAlertView(meeting: alert)
                     .transition(.opacity)
+            } else {
+                todoPanelContent
             }
         }
         .padding(EdgeInsets(top: 14, leading: DSSpacing.panelPadding,
@@ -139,18 +115,67 @@ struct TodoTabView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(TodoBrowsingKeyHandler())
     }
+
+    /// The normal to-do panel: tab row + the active mode's surface, with the
+    /// on-demand shortcuts overlay on top.
+    private var todoPanelContent: some View {
+        ZStack(alignment: .topLeading) {
+            VStack(alignment: .leading, spacing: 0) {
+                // The tab row lives OUTSIDE the mode switch: its identity is
+                // stable across browsing ↔ create, so toggling "+" swaps only
+                // the content below — same motion as switching categories.
+                if store.panelMode == .browsing || store.panelMode == .create
+                    || store.panelMode == .voice {
+                    TodoTabRow()
+                        .notchEntry(index: 0)
+                }
+                // ZStack, not bare switch: during a transition BOTH the
+                // outgoing and incoming views exist for a few frames — as
+                // VStack siblings they'd stack vertically and the whole
+                // panel visibly jumped (Marcello's Work→Today report).
+                // Overlapped, the swap reads as one in-place motion.
+                ZStack(alignment: .topLeading) {
+                    switch store.panelMode {
+                    case .browsing:
+                        TodoBrowsingView()
+                            .transition(modeTransition)
+                    case .create:
+                        TodoCreateView()
+                            .transition(modeTransition)
+                    case .newCategory:
+                        CategoryFormView()
+                            .transition(modeTransition)
+                    case .find:
+                        QuickFindView()
+                            .transition(modeTransition)
+                    case .voice:
+                        VoiceCaptureView()
+                            .transition(modeTransition)
+                    }
+                }
+            }
+
+            if store.showShortcuts {
+                ShortcutsOverlay()
+                    .transition(.opacity)
+            }
+        }
+    }
 }
 
 // MARK: - Tab row — CreationTabChip + CategoryTabChips (design PRD §3.1)
 //
-// Drift table §10: a tab is label + optional ring, NOTHING else (#4); the
-// "+" tab is the only creation entry point (#5); badges exist only while ⌘
-// is held (#2); the active tab wears its own category color at regular
-// weight (#1). New-category creation lives in the tabs' context menu.
+// Drift table §10: a tab is label + its remaining count, NOTHING else (#4);
+// badges exist only while ⌘ is held (#2); the active tab wears its own
+// category color at regular weight (#1). The count replaced the progress
+// ring on 2026-07-23 — see CategoryTabChip. Tabs drag to reorder; the "+"
+// chips are structural and never move.
 
 private struct TodoTabRow: View {
     @ObservedObject private var store = TodoStore.shared
     @ObservedObject private var modifiers = ModifierMonitor.shared
+    /// The category tab currently being dragged (nil when idle).
+    @State private var draggedCollectionID: UUID?
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -165,7 +190,7 @@ private struct TodoTabRow: View {
                     }
                 } label: {
                     CreationTabChip(isActive: store.panelMode == .create)
-                        .contentShape(RoundedRectangle(cornerRadius: DSRadius.chipCorner))
+                        .contentShape(RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .help(L10n.t("todo.newTodo"))
@@ -179,13 +204,37 @@ private struct TodoTabRow: View {
                             categoryColor: collection.color,
                             isActive: store.panelMode == .browsing
                                 && collection.id == store.activeCollectionID,
-                            progress: store.progress(for: collection),
+                            remaining: store.remainingCount(for: collection),
                             numberBadge: (modifiers.commandHeld && index < 9) ? index + 1 : nil
                         )
-                        .contentShape(RoundedRectangle(cornerRadius: DSRadius.chipCorner))
+                        .contentShape(RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous))
                     }
                     .buttonStyle(.plain)
+                    // Drag a tab onto another to swap places. Only category
+                    // chips participate — the "+" chips are structural, never
+                    // movable (Marcello, 2026-07-23).
+                    .opacity(draggedCollectionID == collection.id ? 0.4 : 1)
+                    .onDrag {
+                        draggedCollectionID = collection.id
+                        return .notchSnapInternal(collection.id)
+                    }
+                    .onDrop(of: [.notchSnapInternalItem], delegate: CollectionReorderDropDelegate(
+                        targetID: collection.id,
+                        draggedID: $draggedCollectionID
+                    ))
                     .contextMenu {
+                        // FB8: explicit default for new to-dos (checkmark on
+                        // the current default). Today can't be a default —
+                        // it's a smart view, not a home.
+                        if !collection.isSystemToday {
+                            Button {
+                                store.setDefaultCollection(collection.id)
+                            } label: {
+                                let isDefault = store.defaultCreationCollectionID == collection.id
+                                Text((isDefault ? "\u{2713}  " : "") + L10n.t("todo.setDefault"))
+                            }
+                            Divider()
+                        }
                         Button(L10n.t("todo.newCollection") + "\u{2026}") {
                             store.setMode(.newCategory)
                             NotchController.shared.focusPanel()
@@ -207,16 +256,145 @@ private struct TodoTabRow: View {
                         }
                     }
                 }
+
+                // Voice brain-dump entry point (VC-1). Sits beside the "+"
+                // creation chip: same family of "start something" controls.
+                // SHELVED 2026-07-25 — hidden behind VoiceFeature.isEnabled;
+                // the implementation stays intact, just unreachable.
+                if VoiceFeature.isEnabled {
+                    VoiceChip(isActive: store.panelMode == .voice) {
+                        if store.panelMode == .voice {
+                            VoiceCaptureController.shared.toggle()
+                        } else {
+                            store.setMode(.voice)
+                            NotchController.shared.focusPanel()
+                            VoiceCaptureController.shared.start()
+                        }
+                    }
+                }
+
+                // CT-5: exactly ONE "+" in the tab row, and it always means
+                // "create a to-do". Category management lives behind this
+                // overflow control instead of a second plus, which read as
+                // ambiguous. Trailing-aligned per the mockup.
+                Spacer(minLength: 8)
+                CategoryOverflowMenu()
             }
             // Headroom so the ⌘-held badges (offset y:-8) render inside the
             // scroll container instead of being clipped.
             .padding(.top, 8)
         }
+        // No rule under the tab row (Marcello, 2026-07-26). The two paddings
+        // stay: they were the breathing room either side of the line, and
+        // together they are what now separates the tabs from the list.
         .padding(.bottom, DSSpacing.tabRowBottomPadding)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(DSColor.dividerSubtle).frame(height: 0.5)
-        }
         .padding(.bottom, DSSpacing.tabRowBottomMargin)
+    }
+}
+
+// MARK: - Category tab drag-to-reorder
+
+private struct CollectionReorderDropDelegate: DropDelegate {
+    let targetID: UUID
+    @Binding var draggedID: UUID?
+
+    func dropEntered(info: DropInfo) {
+        guard let dragged = draggedID, dragged != targetID else { return }
+        // Live re-slotting: the row reorders as the drag passes over it, so
+        // the drop itself is just "let go".
+        TodoStore.shared.moveCollection(dragged, before: targetID)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedID = nil
+        return true
+    }
+
+    func dropExited(info: DropInfo) {}
+}
+
+// MARK: - VoiceChip — voice brain-dump entry (VC-1)
+
+private struct VoiceChip: View {
+    let isActive: Bool
+    let action: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: isActive ? "waveform" : "mic.fill")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(isActive ? DSColor.primaryText : DSColor.textPrimaryBright)
+                .frame(width: 26, height: 24)
+                .background(
+                    RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous)
+                        .fill(isActive ? DSColor.focusAccent
+                                       : Color(hex: "#333333").opacity(hover ? 1 : 0.85))
+                )
+                .contentShape(RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .help(L10n.t("voice.start") + "  \u{2318}\u{21E7}V")
+    }
+}
+
+// MARK: - CategoryOverflowMenu — the "..." control (CT-5)
+//
+// Everything category-level lives here: creating one, reordering, choosing the
+// default, deleting. Keeping it out of the tab row means the row has exactly
+// one "+", which unambiguously means "new to-do".
+
+private struct CategoryOverflowMenu: View {
+    @ObservedObject private var store = TodoStore.shared
+    @State private var hover = false
+
+    var body: some View {
+        Menu {
+            Button(L10n.t("todo.newCollection") + "\u{2026}") {
+                store.setMode(.newCategory)
+                NotchController.shared.focusPanel()
+            }
+            if let active = store.activeCollection {
+                Divider()
+                Text(active.name)
+                if !active.isSystemToday {
+                    Button(L10n.t("todo.setDefault")) {
+                        store.setDefaultCollection(active.id)
+                    }
+                }
+                let index = store.collections.firstIndex { $0.id == active.id } ?? 0
+                Button(L10n.t("action.moveLeft")) {
+                    store.moveCollection(active.id, by: -1)
+                }
+                .disabled(index == 0)
+                Button(L10n.t("action.moveRight")) {
+                    store.moveCollection(active.id, by: 1)
+                }
+                .disabled(index == store.collections.count - 1)
+                if !active.isSystemToday {
+                    Divider()
+                    Button(L10n.t("action.delete"), role: .destructive) {
+                        store.deleteCollection(active.id)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(hover ? DSColor.textPrimary : DSColor.textSecondary)
+                .frame(width: 20, height: 20)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .onHover { hover = $0 }
+        .help(L10n.t("todo.manageCategories"))
     }
 }
 
@@ -225,19 +403,22 @@ private struct TodoTabRow: View {
 struct TodoBrowsingView: View {
     @ObservedObject private var store = TodoStore.shared
 
-    private static let listCap: CGFloat = 300
-    private static let completedCap: CGFloat = 120
-    /// Small lists render at natural height with NO ScrollView and no
-    /// measurement round-trip. The measured-scroll path lags one layout pass
-    /// behind, and on category switches that lag made the incoming list
-    /// start short and visibly expand — worst on the largest category
-    /// ("Personal slides in from the top", Marcello 2026-07-15).
-    private static let inlineRowThreshold = 10
-    private static let inlineCompletedThreshold = 4
+    /// FB3+4: ONE scroll region for the whole browsing body (open list +
+    /// Completed together), capped to the panel's budget. Two independent
+    /// caps (a 300px list + a 120px completed) could sum past the panel and
+    /// overflow — that's what pushed the tabs off the top and squeezed
+    /// Completed into a tiny window. Below the threshold everything renders
+    /// inline (natural height, no scroll, no switch-lag flash).
+    private static let maxRegion: CGFloat = 400
+    private static let inlineRowThreshold = 8
 
-    @State private var listNaturalHeight: CGFloat = 0
-    @State private var completedNaturalHeight: CGFloat = 0
+    @State private var regionNaturalHeight: CGFloat = 0
     @State private var draggedItemID: UUID?
+    /// The row the dragged item would land ABOVE. Arc-style: nothing moves
+    /// until the drop, we just draw the slot.
+    @State private var dropBeforeID: UUID?
+    /// True when the drop would land past the last row.
+    @State private var dropAtEnd = false
 
     var body: some View {
         // §8.3 category switch: the id() swap transitions the whole block
@@ -246,17 +427,41 @@ struct TodoBrowsingView: View {
             // Same jump guard as the mode switch: the id() swap keeps two
             // copies alive mid-transition; overlap them instead of stacking.
             ZStack(alignment: .topLeading) {
-                VStack(alignment: .leading, spacing: 0) {
-                    todoList(for: collection)
-                    completedSection(for: collection)
-                }
-                .id(collection.id)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .offset(y: 8)),
-                    removal: .opacity
-                ))
+                browsingBody(for: collection)
+                    .id(collection.id)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(.opacity)   // FB2: same in-place crossfade
             }
+        }
+    }
+
+    @ViewBuilder
+    private func browsingBody(for collection: TodoCollection) -> some View {
+        let openCount = store.openItems(in: collection).count
+        let completedCount = store.completedItems(in: collection).count
+        let visibleRows = openCount + (store.completedExpanded ? completedCount : 0)
+
+        let content = VStack(alignment: .leading, spacing: 0) {
+            // CT-1/CT-6: meetings (or the connect nudge) sit above the
+            // to-dos, in the Today tab only.
+            if collection.isSystemToday {
+                UpNextSection()
+            }
+            todoList(for: collection)
+            completedSection(for: collection)
+        }
+
+        if visibleRows <= Self.inlineRowThreshold {
+            // Fits comfortably: hug it, no scroll, no measurement round-trip.
+            content
+        } else {
+            // Tall: one capped ScrollView so list + Completed scroll as a
+            // single unit and the panel height stops at the budget.
+            ScrollView(showsIndicators: false) {
+                content.measureHeight(SectionHeightKey.self)
+            }
+            .onPreferenceChange(SectionHeightKey.self) { regionNaturalHeight = $0 }
+            .frame(height: min(regionNaturalHeight, Self.maxRegion))
         }
     }
 
@@ -266,45 +471,73 @@ struct TodoBrowsingView: View {
     private func todoList(for collection: TodoCollection) -> some View {
         let rows = store.openItems(in: collection)
         if rows.isEmpty {
-            Text(collection.isSystemToday ? L10n.t("todo.emptyToday") : L10n.t("todo.empty"))
-                .font(DSFont.checklistItem)
-                .foregroundStyle(DSColor.textHint)
-                .padding(.vertical, 6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        } else if rows.count <= Self.inlineRowThreshold {
-            // Natural height, zero lag — the panel hugs it directly.
-            openRows(rows, in: collection)
-        } else {
-            ScrollView(showsIndicators: false) {
-                openRows(rows, in: collection)
-                    .measureHeight(SectionHeightKey.self)
+            // Today says nothing when it is empty — an empty Today already
+            // means "you're done", and a sentence restating that is one more
+            // thing to read (Marcello, 2026-07-26). A user category still gets
+            // a line, because an empty one there looks broken rather than done.
+            if !collection.isSystemToday {
+                Text(L10n.t("todo.empty"))
+                    .font(DSFont.checklistItem)
+                    .foregroundStyle(DSColor.textHint)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .onPreferenceChange(SectionHeightKey.self) { listNaturalHeight = $0 }
-            .frame(height: min(listNaturalHeight, Self.listCap))
+        } else {
+            openRows(rows)
         }
     }
 
-    private func openRows(_ rows: [TodoItem], in collection: TodoCollection) -> some View {
+    private func openRows(_ rows: [TodoItem]) -> some View {
         VStack(alignment: .leading, spacing: DSSpacing.rowInternalGap) {
-            ForEach(rows) { item in
+            ForEach(Array(rows.enumerated()), id: \.element.id) { rowIndex, item in
                 TodoItemRow(
                     item: item,
                     accent: store.collection(id: item.collectionID)?.color ?? .accentColor,
                     isFocused: store.focusedItemID == item.id,
-                    isExpanded: store.expandedItemID == item.id
+                    isExpanded: store.expandedItemID == item.id,
+                    draggedItemID: $draggedItemID
                 )
                 .transition(rowTransition)
-                .onDrag {
-                    if !collection.isSystemToday { draggedItemID = item.id }
-                    return NSItemProvider(object: item.id.uuidString as NSString)
+                // Rows come in behind the tab row and the meeting cards, so
+                // the panel assembles top-down as the silhouette opens.
+                .notchEntry(index: rowIndex + 2)
+                // The dragged row dims in place while its copy travels.
+                .opacity(draggedItemID == item.id ? 0.4 : 1)
+                // The landing slot, drawn in the gap ABOVE this row so it
+                // never displaces anything — an inserted view would make the
+                // list jump under the cursor while dragging.
+                .overlay(alignment: .top) {
+                    if dropBeforeID == item.id {
+                        DropIndicator()
+                            .offset(y: -(DSSpacing.rowInternalGap / 2 + 3))
+                    }
                 }
-                .onDrop(of: [.text], delegate: TodoReorderDropDelegate(
+                .onDrop(of: [.notchSnapInternalItem], delegate: TodoReorderDropDelegate(
                     targetID: item.id,
                     draggedID: $draggedItemID,
-                    enabled: !collection.isSystemToday
+                    dropBeforeID: $dropBeforeID,
+                    dropAtEnd: $dropAtEnd
                 ))
             }
+
+            // Landing strip for the bottom slot. `reorder(_:before:)` can only
+            // insert in FRONT of a row, so without this the last position is
+            // unreachable by drag.
+            if draggedItemID != nil {
+                Color.clear
+                    .frame(height: 14)
+                    .overlay(alignment: .top) {
+                        if dropAtEnd { DropIndicator().offset(y: 3) }
+                    }
+                    .onDrop(of: [.notchSnapInternalItem], delegate: TodoEndDropDelegate(
+                        draggedID: $draggedItemID,
+                        dropBeforeID: $dropBeforeID,
+                        dropAtEnd: $dropAtEnd
+                    ))
+            }
         }
+        .animation(NotchAnimation.hintFade, value: dropBeforeID)
+        .animation(NotchAnimation.hintFade, value: dropAtEnd)
     }
 
     private var rowTransition: AnyTransition {
@@ -320,10 +553,9 @@ struct TodoBrowsingView: View {
     private func completedSection(for collection: TodoCollection) -> some View {
         let completed = store.completedItems(in: collection)
         if !completed.isEmpty {
+            // No rule above Completed (Marcello, 2026-07-26) — the gap and the
+            // dimmer label already separate it from the open list.
             VStack(alignment: .leading, spacing: 2) {
-                Rectangle().fill(DSColor.divider).frame(height: 0.5)
-                    .padding(.top, DSSpacing.tabRowBottomMargin)
-
                 Button {
                     withAnimation(NotchAnimation.contentHug) { store.completedExpanded.toggle() }
                 } label: {
@@ -341,24 +573,18 @@ struct TodoBrowsingView: View {
                             .contentTransition(.numericText())
                         Spacer()
                     }
-                    .padding(.top, 10)
+                    // Carries the separation the rule used to provide.
+                    .padding(.top, DSSpacing.tabRowBottomMargin + 10)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
 
                 if store.completedExpanded {
-                    if completed.count <= Self.inlineCompletedThreshold {
-                        completedRows(completed)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
-                    } else {
-                        ScrollView(showsIndicators: false) {
-                            completedRows(completed)
-                                .measureHeight(SectionHeightKey.self)
-                        }
-                        .onPreferenceChange(SectionHeightKey.self) { completedNaturalHeight = $0 }
-                        .frame(height: min(completedNaturalHeight, Self.completedCap))
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
+                    // Inline at natural height — the outer browsingBody region
+                    // provides scrolling when the combined content is tall, so
+                    // Completed opens fully instead of into a cramped window.
+                    completedRows(completed)
+                        .transition(.opacity)
                 }
             }
             .transition(.opacity)
@@ -372,7 +598,9 @@ struct TodoBrowsingView: View {
                     item: item,
                     accent: store.collection(id: item.collectionID)?.color ?? .gray,
                     isFocused: false,
-                    isExpanded: false
+                    isExpanded: false,
+                    // Completed rows aren't reorderable — the grip stays hidden.
+                    draggedItemID: .constant(nil)
                 )
                 .transition(rowTransition)
             }
@@ -383,24 +611,69 @@ struct TodoBrowsingView: View {
 
 // MARK: - Drag-to-reorder (TD-5)
 
+/// Arc's model: dragging only ever MOVES THE INDICATOR. The list itself is
+/// left alone until the drop lands, so rows never shuffle under the cursor
+/// mid-drag (the previous delegate reordered live inside `dropEntered`).
 private struct TodoReorderDropDelegate: DropDelegate {
     let targetID: UUID
     @Binding var draggedID: UUID?
-    let enabled: Bool
+    @Binding var dropBeforeID: UUID?
+    @Binding var dropAtEnd: Bool
 
     func dropEntered(info: DropInfo) {
-        guard enabled, let dragged = draggedID, dragged != targetID else { return }
-        TodoStore.shared.reorder(dragged, before: targetID)
+        guard let dragged = draggedID, dragged != targetID else { return }
+        dropBeforeID = targetID
+        dropAtEnd = false
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: enabled ? .move : .cancel)
+        DropProposal(operation: draggedID == nil ? .cancel : .move)
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        draggedID = nil
-        return enabled
+        defer { clear() }
+        guard let dragged = draggedID, dragged != targetID else { return false }
+        TodoStore.shared.reorder(dragged, before: targetID)
+        return true
     }
+
+    func dropExited(info: DropInfo) {
+        // Only retract the indicator if it is still ours — the next row's
+        // dropEntered may already have claimed it.
+        if dropBeforeID == targetID { dropBeforeID = nil }
+    }
+
+    private func clear() {
+        draggedID = nil
+        dropBeforeID = nil
+        dropAtEnd = false
+    }
+}
+
+/// The strip below the last row: drops here send the item to the bottom.
+private struct TodoEndDropDelegate: DropDelegate {
+    @Binding var draggedID: UUID?
+    @Binding var dropBeforeID: UUID?
+    @Binding var dropAtEnd: Bool
+
+    func dropEntered(info: DropInfo) {
+        guard draggedID != nil else { return }
+        dropBeforeID = nil
+        dropAtEnd = true
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: draggedID == nil ? .cancel : .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        defer { draggedID = nil; dropBeforeID = nil; dropAtEnd = false }
+        guard let dragged = draggedID else { return false }
+        TodoStore.shared.moveToEnd(dragged)
+        return true
+    }
+
+    func dropExited(info: DropInfo) { dropAtEnd = false }
 }
 
 // MARK: - TodoItemRow — live row (collapsed + NC expanded states)
@@ -416,6 +689,10 @@ private struct TodoItemRow: View {
     let accent: Color
     let isFocused: Bool
     let isExpanded: Bool
+    /// Shared with the list so the dragged row can dim itself.
+    @Binding var draggedItemID: UUID?
+    /// Hover on the urgency dot alone — drives the priority tooltip.
+    @State private var urgencyHover = false
     @State private var hover = false
     @State private var newStep = ""
 
@@ -444,8 +721,20 @@ private struct TodoItemRow: View {
         .contextMenu { contextMenuItems }
     }
 
+    // The first text line is ~17pt tall; the 14pt checkbox and the trailing
+    // indicators sit on THAT line via a small top inset, so a title that
+    // wraps to several lines keeps the checkbox pinned to the top-left
+    // instead of floating to the vertical middle (FB1, Marcello 2026-07-23).
+    private static let firstLineInset: CGFloat = 1.5
+
     private var titleRow: some View {
-        HStack(spacing: DSSpacing.rowInternalGap) {
+        HStack(alignment: .top, spacing: DSSpacing.rowInternalGap) {
+            // No grip handle. The row IS the drag handle now — see
+            // EntityTextView.hitTest, which makes the title transparent to the
+            // mouse everywhere except a link chip. The old six-dot grip had to
+            // reserve leading space on every row whether shown or not, which is
+            // what made the list "float in the middle, too distanced from the
+            // left side" (Marcello, 2026-07-26).
             Button {
                 TodoStore.shared.toggleComplete(item.id)
             } label: {
@@ -465,6 +754,7 @@ private struct TodoItemRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .padding(.top, Self.firstLineInset)
             // §8.3: near-instant fill; row exit + shrink follow on contentHug.
             .animation(.spring(response: 0.28, dampingFraction: 0.6), value: item.isCompleted)
 
@@ -486,32 +776,53 @@ private struct TodoItemRow: View {
 
             Spacer(minLength: 6)
 
-            // NC-2: collapsed rows with details wear a subtle indicator.
-            if item.hasDetails && !isExpanded {
-                Image(systemName: "text.alignleft")
-                    .font(.system(size: 8))
-                    .foregroundStyle(DSColor.textHint)
-            }
+            // Trailing indicators ride the first line too.
+            Group {
+                // NC-2: collapsed rows with details wear a subtle indicator.
+                if item.hasDetails && !isExpanded {
+                    Image(systemName: "text.alignleft")
+                        .font(.system(size: 8))
+                        .foregroundStyle(DSColor.textHint)
+                }
 
-            // UG-1/UG-5: 9px dot, Medium/High only — Low (the default)
-            // stays visually silent, so a dot always means "raised".
-            if item.urgency != .low && !item.isCompleted {
-                UrgencyDot(urgency: item.urgency)
+                // UG-1/UG-5: 9px dot, Medium/High only — Low (the default)
+                // stays visually silent, so a dot always means "raised".
+                if item.urgency != .low && !item.isCompleted {
+                    UrgencyDot(urgency: item.urgency) { hovering in
+                        withAnimation(NotchAnimation.hintFade) { urgencyHover = hovering }
+                    }
                     .anchorPreference(key: UrgencyTooltipKey.self, value: .bounds) { anchor in
-                        (hover || isFocused)
+                        // The DOT's own hover, not the row's.
+                        urgencyHover
                             ? [UrgencyTooltipInfo(text: item.urgency.fullLabel, anchor: anchor)]
                             : []
                     }
-            }
+                }
 
-            // §7.1: only the focused row shows its one relevant shortcut.
-            if isFocused && !item.isCompleted && !isExpanded {
-                ShortcutHintBadge(text: "\u{21A9}")
-                    .transition(.opacity)
+                // §7.1: only the focused row shows its one relevant shortcut.
+                if isFocused && !item.isCompleted && !isExpanded {
+                    ShortcutHintBadge(text: "\u{21A9}")
+                        .transition(.opacity)
+                }
             }
+            .padding(.top, Self.firstLineInset + 1)
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: activateRow)
+        // Reordering starts from anywhere on the row. Completed rows are
+        // fixed, so they stay undraggable.
+        .onDrag {
+            draggedItemID = item.id
+            return .notchSnapInternal(item.id)
+        } preview: {
+            Text(item.title)
+                .font(DSFont.todoTitle)
+                .foregroundStyle(DSColor.textPrimaryBright)
+                .lineLimit(1)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(DSShape.squircle(DSRadius.controlCorner).fill(DSColor.fieldBackground))
+        }
     }
 
     /// NC-1: deliberate open — clicking the row body (not the checkbox)
@@ -587,7 +898,7 @@ private struct TodoItemRow: View {
                     TextField(L10n.t("todo.addStep"), text: $newStep)
                         .textFieldStyle(.plain)
                         .font(DSFont.checklistItem)
-                        .foregroundStyle(Color(hex: "#AAAAAA"))
+                        .foregroundStyle(DSColor.textSecondary)
                         .onSubmit {
                             TodoStore.shared.addChecklistItem(newStep, to: item.id)
                             newStep = ""
@@ -653,7 +964,7 @@ private struct ShortcutsOverlay: View {
                 HStack {
                     Text(L10n.t(labelKey))
                         .font(DSFont.checklistItem)
-                        .foregroundStyle(Color(hex: "#CCCCCC"))
+                        .foregroundStyle(DSColor.textSecondary)
                     Spacer()
                     ShortcutHintBadge(text: keys)
                 }
@@ -665,5 +976,23 @@ private struct ShortcutsOverlay: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Color(hex: "#0A0A0A").opacity(0.94))
         )
+    }
+}
+
+// MARK: - Internal drag payload
+
+private extension NSItemProvider {
+    /// A reorder drag that never leaves the process, carrying a type nothing
+    /// else in the app (or the system) accepts — see UTType.notchSnapInternalItem.
+    static func notchSnapInternal(_ id: UUID) -> NSItemProvider {
+        let provider = NSItemProvider()
+        provider.registerDataRepresentation(
+            forTypeIdentifier: UTType.notchSnapInternalItem.identifier,
+            visibility: .ownProcess
+        ) { completion in
+            completion(Data(id.uuidString.utf8), nil)
+            return nil
+        }
+        return provider
     }
 }

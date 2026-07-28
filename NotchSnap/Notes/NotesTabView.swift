@@ -319,7 +319,7 @@ struct NotchControlLabel: View {
             Text(title)
                 .font(.system(size: 11, weight: .semibold))
             Text(keys)
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .font(.system(size: 10, weight: .semibold).monospacedDigit())
                 .padding(.horizontal, 4)
                 .padding(.vertical, 1)
                 .background(

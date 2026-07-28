@@ -29,7 +29,7 @@ struct ScreenshotThumbnailView: View {
                         .foregroundColor(.white.opacity(0.95))
                     Spacer(minLength: 2)
                     Text(item.dimensions)
-                        .font(.system(size: 8, design: .monospaced))
+                        .font(.system(size: 8).monospacedDigit())
                         .foregroundColor(.white.opacity(0.65))
                 }
                 .padding(.horizontal, 7)

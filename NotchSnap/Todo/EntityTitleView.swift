@@ -25,6 +25,14 @@ struct EntityTitleView: NSViewRepresentable {
         view.drawsBackground = false
         view.textContainerInset = .zero
         view.textContainer?.lineFragmentPadding = 0
+        // Wrap the DISPLAYED text to the view's width so a long title flows
+        // onto multiple lines (FB1) instead of clipping on one line. The
+        // container follows the view width; height grows with content.
+        view.isHorizontallyResizable = false
+        view.isVerticallyResizable = true
+        view.textContainer?.widthTracksTextView = true
+        view.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
+                              height: CGFloat.greatestFiniteMagnitude)
         return view
     }
 
@@ -55,10 +63,18 @@ struct EntityTitleView: NSViewRepresentable {
     // MARK: Attributed assembly
 
     static func attributedTitle(_ title: String, bright: Bool) -> NSAttributedString {
+        // Must equal DSFont.todoTitleSize — this is the same title, drawn
+        // through TextKit so chips can flow inline with the words.
+        let bodyFont = NSFont.systemFont(ofSize: DSFont.todoTitleSize)
         let bodyAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 13),
+            .font: bodyFont,
             .foregroundColor: NSColor(bright ? DSColor.textPrimaryBright : DSColor.textPrimary),
         ]
+        // Vertically centre the chip on the text rather than on the baseline.
+        // Derived from the font, not a magic number: the old hardcoded -4.5
+        // was correct for 13pt only, and silently drifted when the title grew.
+        let textCentre = (bodyFont.ascender + bodyFont.descender) / 2
+        let chipOffset = textCentre - EntityChipRenderer.chipHeight / 2
         let result = NSMutableAttributedString()
         for segment in EntityParser.parse(title) {
             switch segment {
@@ -68,9 +84,7 @@ struct EntityTitleView: NSViewRepresentable {
                 let attachment = NSTextAttachment()
                 let image = EntityChipRenderer.image(kind: kind, label: display)
                 attachment.image = image
-                // Drop the chip slightly below the baseline so it centers
-                // against the 13pt body text.
-                attachment.bounds = CGRect(x: 0, y: -4.5,
+                attachment.bounds = CGRect(x: 0, y: chipOffset,
                                            width: image.size.width,
                                            height: image.size.height)
                 let chip = NSMutableAttributedString(attachment: attachment)
@@ -96,24 +110,44 @@ final class EntityTextView: NSTextView {
 
     override var acceptsFirstResponder: Bool { false }
 
+    /// The view is INVISIBLE to the mouse except where a link chip actually
+    /// sits.
+    ///
+    /// This is what lets the row own its own drag. Previously this text view
+    /// swallowed every mouse event in the title area, so SwiftUI never saw the
+    /// press that starts a drag — which is why reordering needed a separate
+    /// grip handle beside the checkbox, and why that handle pushed every row
+    /// inward. Returning nil here hands plain clicks and drags back to the
+    /// SwiftUI row (which already has `.onTapGesture(perform: activateRow)`),
+    /// while a click on a link chip is still ours to handle.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // `point` arrives in the SUPERVIEW's coordinate space.
+        let local = convert(point, from: superview)
+        return linkURL(at: local) != nil ? self : nil
+    }
+
     override func mouseDown(with event: NSEvent) {
         // Deliberately no super: non-selectable label; we only route clicks.
+        // hitTest means we are only reached when the point is on a link.
         let point = convert(event.locationInWindow, from: nil)
-        if let layout = layoutManager, let container = textContainer,
-           let storage = textStorage, storage.length > 0 {
-            let glyphIndex = layout.glyphIndex(for: point, in: container)
-            let glyphRect = layout.boundingRect(forGlyphRange: NSRange(location: glyphIndex, length: 1),
-                                                in: container)
-            if glyphRect.contains(point) {
-                let charIndex = layout.characterIndexForGlyph(at: glyphIndex)
-                if charIndex < storage.length,
-                   let url = storage.attribute(.link, at: charIndex, effectiveRange: nil) as? URL {
-                    NSWorkspace.shared.open(url)   // EH-7
-                    return
-                }
-            }
+        if let url = linkURL(at: point) {
+            NSWorkspace.shared.open(url)   // EH-7
+        } else {
+            onPlainTap?()
         }
-        onPlainTap?()
+    }
+
+    /// The URL of the link chip under `point`, in this view's coordinates.
+    private func linkURL(at point: NSPoint) -> URL? {
+        guard let layout = layoutManager, let container = textContainer,
+              let storage = textStorage, storage.length > 0 else { return nil }
+        let glyphIndex = layout.glyphIndex(for: point, in: container)
+        let glyphRect = layout.boundingRect(forGlyphRange: NSRange(location: glyphIndex, length: 1),
+                                            in: container)
+        guard glyphRect.contains(point) else { return nil }
+        let charIndex = layout.characterIndexForGlyph(at: glyphIndex)
+        guard charIndex < storage.length else { return nil }
+        return storage.attribute(.link, at: charIndex, effectiveRange: nil) as? URL
     }
 }
 

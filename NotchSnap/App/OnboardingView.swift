@@ -153,7 +153,7 @@ struct OnboardingWelcomeView: View {
             Spacer().frame(height: 20)
 
             Text("NotchSnap")
-                .font(.system(size: 32, weight: .bold, design: .rounded))
+                .font(.system(size: 32, weight: .bold))
                 .foregroundStyle(.primary)
                 .opacity(textAppeared ? 1.0 : 0)
                 .offset(y: textAppeared ? 0 : 12)
@@ -219,7 +219,7 @@ struct OnboardingPermissionsView: View {
     var body: some View {
         VStack(spacing: 0) {
             Text("Set up NotchSnap")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.system(size: 28, weight: .bold))
                 .padding(.top, 40)
 
             Text("Grant permissions to use all features.")
@@ -482,7 +482,7 @@ struct OnboardingAllSetView: View {
             Spacer().frame(height: 16)
 
             Text("You're all set!")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.system(size: 28, weight: .bold))
                 .opacity(headerAppeared ? 1 : 0)
                 .offset(y: headerAppeared ? 0 : 8)
                 .animation(.spring(response: 0.5, dampingFraction: 0.85).delay(0.18), value: headerAppeared)
@@ -571,7 +571,7 @@ private struct AllSetTip: View {
 
             if let shortcut {
                 Text(shortcut)
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
@@ -613,6 +613,6 @@ struct TutorialCard: View {
             Spacer()
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.05)))
     }
 }

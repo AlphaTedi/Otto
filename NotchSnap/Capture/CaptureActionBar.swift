@@ -39,7 +39,7 @@ struct CaptureActionBar: View {
                     Text("Save")
                         .font(.system(size: 12, weight: .medium))
                     Text("\u{2318}S")
-                        .font(.system(size: 10, weight: .regular, design: .monospaced))
+                        .font(.system(size: 10, weight: .regular).monospacedDigit())
                         .foregroundStyle(.white.opacity(0.5))
                 }
                 .foregroundStyle(.white.opacity(0.85))
@@ -64,7 +64,7 @@ struct CaptureActionBar: View {
                     Text("Copy")
                         .font(.system(size: 12, weight: .medium))
                     Text("\u{2318}C")
-                        .font(.system(size: 10, weight: .regular, design: .monospaced))
+                        .font(.system(size: 10, weight: .regular).monospacedDigit())
                         .foregroundStyle(.white.opacity(0.6))
                 }
                 .foregroundStyle(.white)

@@ -144,12 +144,23 @@ class HotkeyManager {
             }
 
         case .openNotes:
-            print("[HotkeyManager] ⌃⇧N → Notch on Notes")
-            Task { @MainActor in
-                AppState.shared.pendingNotchFilter = .notes
-                AppState.shared.focusNotesComposer = true
-                NotchController.shared.triggerExpand()
-                NotchController.shared.makeKeyForTyping()
+            // FB8: ⌃⇧N is "new to-do" — open the creation page directly on
+            // the default category (was Notes, which fell through to the last
+            // browsed category once legacy panels were hidden). Notes stays
+            // on ⌃⇧N only if someone re-enables the legacy panels.
+            if AppState.shared.showLegacyPanels {
+                print("[HotkeyManager] ⌃⇧N → Notch on Notes (legacy)")
+                Task { @MainActor in
+                    AppState.shared.pendingNotchFilter = .notes
+                    AppState.shared.focusNotesComposer = true
+                    NotchController.shared.triggerExpand()
+                    NotchController.shared.makeKeyForTyping()
+                }
+            } else {
+                print("[HotkeyManager] ⌃⇧N → new to-do (creation)")
+                Task { @MainActor in
+                    NotchController.shared.openCreateFresh()
+                }
             }
 
         case .openTray:

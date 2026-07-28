@@ -72,6 +72,8 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             }
 
             switch store.panelMode {
+            case .voice:
+                return handleVoice(store, keyCode: keyCode)
             case .create:
                 return handleCreate(store, control: control, shift: shift, keyCode: keyCode, lower: lower)
             case .find:
@@ -83,6 +85,34 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             case .browsing:
                 return handleBrowsing(store, cmd: cmd, shift: shift, option: option,
                                       control: control, chars: chars, keyCode: keyCode, lower: lower)
+            }
+        }
+
+        // MARK: Voice mode (VC-1)
+
+        @MainActor
+        private static func handleVoice(_ store: TodoStore, keyCode: UInt16) -> Bool {
+            let voice = VoiceCaptureController.shared
+            switch keyCode {
+            case 53:                            // Esc — abandon the capture
+                voice.cancel()
+                store.setMode(.browsing)
+                return true
+            case 36:                            // Return
+                switch voice.phase {
+                case .listening: voice.finishListening()   // stop + parse
+                case .review:    voice.confirm()           // VC-6: create all
+                                 store.setMode(.browsing)
+                default:         break
+                }
+                return true
+            case 126:                           // ↑ move between drafts
+                voice.moveFocus(-1); return true
+            case 125:                           // ↓
+                voice.moveFocus(1); return true
+            default:
+                // Everything else flows to the focused draft's text field.
+                return false
             }
         }
 
@@ -178,6 +208,23 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 // Creation opened from a tab files into that tab by default.
                 store.presetDraftToActiveCollection()
                 NotchController.shared.openCreate()
+                return true
+            }
+
+            // VC-1: ⇧⌘V starts the voice brain-dump (panel-only, per
+            // Marcello — no global audio trigger).
+            if cmd, shift, lower == "v", VoiceFeature.isEnabled {
+                store.setMode(.voice)
+                NotchController.shared.focusPanel()
+                VoiceCaptureController.shared.start()
+                return true
+            }
+
+            // ⌘↩ joins the next meeting that has a link. Plain Return is
+            // already "complete the focused to-do", so the meeting action
+            // takes the modifier — the card advertises ⌘↩ on its Join button.
+            // Falls through when there is nothing to join.
+            if cmd, !shift, keyCode == 36, CalendarStore.shared.joinNextMeeting() {
                 return true
             }
 

@@ -102,6 +102,7 @@ struct NotchShapeView: View {
 
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @AppStorage("notchCornerRadius") private var userCornerRadius: Double = 10
+    @ObservedObject private var calendar = CalendarStore.shared
 
     // MARK: - Raccordatura radius per state
 
@@ -220,6 +221,18 @@ struct NotchShapeView: View {
                     runSquishAnimation(for: newState)
                 }
             }
+            // CA-2: ambient meeting signal — a small amber dot near the left
+            // edge of the COLLAPSED pill. Passive by design: visible at a
+            // glance, never interrupting.
+            .overlay(alignment: .topLeading) {
+                if state != .expanded, calendar.ambientMeeting != nil {
+                    AmbientMeetingDot()
+                        .padding(.leading, currentFilletRadius + 8)
+                        .padding(.top, max(4, (notchSize.height - 6) / 2))
+                        .allowsHitTesting(false)
+                }
+            }
+            .animation(NotchAnimation.hintFade, value: calendar.ambientMeeting?.id)
 
             // Content gallery — staggered fade-in.
             // The content is hard-clipped to the same NotchShape used for the
@@ -229,18 +242,29 @@ struct NotchShapeView: View {
             // they had been "cut").
             if state == .expanded {
                 content
+                    // TOP alignment (FB4): if the content is ever taller than
+                    // this window, the overflow must fall off the BOTTOM, never
+                    // bleed up into the notch strip / tab row and get clipped by
+                    // the screen top. The to-do view caps + scrolls its own body,
+                    // so this is a belt-and-suspenders guard.
                     .frame(width: expandedSize.width - 32,
-                           height: expandedSize.height + extraExpandedHeight - notchSize.height - 8)
+                           height: expandedSize.height + extraExpandedHeight - notchSize.height - 8,
+                           alignment: .top)
                     .padding(.top, notchSize.height + 4)
+                    // The block-level treatment is now deliberately light —
+                    // opacity plus a whisper of blur. The visible motion comes
+                    // from the CHILDREN, each on its own staggered spring via
+                    // `.notchEntry(index:)`. Scaling the whole slab was what
+                    // made a tall card look pasted-in rather than assembled.
                     .opacity(contentVisible ? 1.0 : 0.0)
-                    .scaleEffect(contentVisible ? 1.0 : 0.96)
-                    // Slight blur while appearing — the Dynamic Island "morph"
-                    // read: content resolves into focus rather than just fading.
-                    .blur(radius: contentVisible ? 0 : 6)
+                    .blur(radius: contentVisible ? 0 : 2)
                     .animation(
                         reduceMotion ? .easeInOut(duration: 0.1) : NotchAnimation.contentIn,
                         value: contentVisible
                     )
+                    // Children read this to time their own entry against the
+                    // silhouette's expansion.
+                    .environment(\.notchContentAppeared, contentVisible)
                     .frame(width: currentWidth, height: currentHeight, alignment: .top)
                     .mask(
                         NotchShape(

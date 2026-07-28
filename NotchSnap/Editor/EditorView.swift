@@ -133,7 +133,7 @@ struct EditorView: View {
 
             // Copy feedback flash
             if editorState.showCopyFeedback {
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(Color.green.opacity(0.2))
                     .allowsHitTesting(false)
                     .transition(.opacity)

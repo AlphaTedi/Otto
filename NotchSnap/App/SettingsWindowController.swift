@@ -13,6 +13,13 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     private static var sharedController: SettingsWindowController?
 
+    /// SU-6: the Today-tab nudge card opens Settings straight to Calendar,
+    /// so discovery is one click rather than "go find it in Settings".
+    static func showCalendarTab() {
+        AppState.shared.pendingSettingsSection = .calendar
+        show()
+    }
+
     static func show() {
         if sharedController == nil {
             sharedController = SettingsWindowController()
