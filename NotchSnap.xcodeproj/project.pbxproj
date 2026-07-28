@@ -180,6 +180,7 @@
 		A1B2C3D4E5F60004A2B3C4DD /* DebugDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugDriver.swift; sourceTree = "<group>"; };
 		A32063A8096DCB7171E34409 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		A54EE6536F83A25DC71266E2 /* AreaSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AreaSelector.swift; sourceTree = "<group>"; };
+		AA00BB11CC22DD33EE44FE01 /* GoogleOAuth.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = GoogleOAuth.xcconfig; path = Config/GoogleOAuth.xcconfig; sourceTree = "<group>"; };
 		A9AC6B6EB302353AFBED2BB8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA00BB11CC22DD33EE44FF11 /* screenshot_capture.aiff */ = {isa = PBXFileReference; lastKnownFileType = audio.aiff; path = screenshot_capture.aiff; sourceTree = "<group>"; };
 		AA00BB11CC22DD33EE44FF12 /* notch_expand.aiff */ = {isa = PBXFileReference; lastKnownFileType = audio.aiff; path = notch_expand.aiff; sourceTree = "<group>"; };
@@ -608,6 +609,7 @@
 /* Begin XCBuildConfiguration section */
 		4017D9F098F506504417B3DB /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = AA00BB11CC22DD33EE44FE01 /* GoogleOAuth.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -685,6 +687,7 @@
 		};
 		EF6E0ED8FF8EBBFE14B89A3D /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = AA00BB11CC22DD33EE44FE01 /* GoogleOAuth.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;

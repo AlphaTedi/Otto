@@ -55,16 +55,42 @@ final class GoogleOAuth {
 
     // MARK: Configuration
 
+    /// The credential the app ships with, registered once by whoever builds
+    /// NotchSnap. Populated from Config/GoogleOAuth.xcconfig through
+    /// Info.plist, so it never reaches the public repository.
+    ///
+    /// This is the whole point: a person using the app should press one button.
+    /// Asking them to create a Google Cloud project — as the first version of
+    /// this screen did — is developer setup wearing a user's clothes
+    /// (Marcello, 2026-07-26).
+    private static func bundled(_ key: String) -> String? {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        // An unfilled xcconfig leaves the variable literally unexpanded.
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("$(") else { return nil }
+        return trimmed
+    }
+
+    static var hasBundledCredentials: Bool {
+        bundled("GoogleOAuthClientID") != nil && bundled("GoogleOAuthClientSecret") != nil
+    }
+
+    /// A manually-entered override always wins, so a user who hits the shipped
+    /// client's quota — or just prefers their own project — has a way out.
     var clientID: String? {
-        get { KeychainStore.get(KeychainStore.Key.clientID) }
+        get { KeychainStore.get(KeychainStore.Key.clientID) ?? Self.bundled("GoogleOAuthClientID") }
         set { KeychainStore.set(newValue, for: KeychainStore.Key.clientID) }
     }
     var clientSecret: String? {
-        get { KeychainStore.get(KeychainStore.Key.clientSecret) }
+        get { KeychainStore.get(KeychainStore.Key.clientSecret) ?? Self.bundled("GoogleOAuthClientSecret") }
         set { KeychainStore.set(newValue, for: KeychainStore.Key.clientSecret) }
     }
     var isConfigured: Bool {
         !(clientID ?? "").isEmpty && !(clientSecret ?? "").isEmpty
+    }
+    /// True when the user typed their own, rather than using the shipped one.
+    var usesCustomCredentials: Bool {
+        KeychainStore.get(KeychainStore.Key.clientID) != nil
     }
     var isSignedIn: Bool {
         KeychainStore.get(KeychainStore.Key.refreshToken) != nil

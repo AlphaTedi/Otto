@@ -19,6 +19,7 @@ struct CalendarSettingsView: View {
     @State private var probeLines: [String] = []
     @State private var clientID = ""
     @State private var clientSecret = ""
+    @State private var showAdvanced = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -56,47 +57,36 @@ struct CalendarSettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                // The client ID is the one thing only the user can produce —
-                // it identifies THEIR Google Cloud project, so it cannot be
-                // shipped in the app.
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(L10n.t("gcal.setupTitle"))
-                        .font(.system(size: 11, weight: .semibold))
-                    Text(L10n.t("gcal.setupBody"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Link("console.cloud.google.com/apis/credentials",
-                         destination: URL(string: "https://console.cloud.google.com/apis/credentials")!)
-                        .font(.system(size: 11))
-                }
-
-                LabeledContent(L10n.t("gcal.clientID")) {
-                    TextField("", text: $clientID)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 11).monospacedDigit())
-                }
-                LabeledContent(L10n.t("gcal.clientSecret")) {
-                    SecureField("", text: $clientSecret)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 11).monospacedDigit())
-                }
-
+                // One button. The credential ships with the app, so there is
+                // nothing for a user to look up (Marcello, 2026-07-26).
                 Button {
                     saveCredentialsAndConnect()
                 } label: {
-                    Text(isConnecting ? "Connecting\u{2026}" : L10n.t("gcal.signIn"))
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color(hex: "#111111"))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(Color(hex: "#EEEEEE"))
-                        )
+                    HStack(spacing: 8) {
+                        Image(systemName: "calendar.badge.clock")
+                            .font(.system(size: 12, weight: .medium))
+                        Text(isConnecting ? "Connecting\u{2026}" : L10n.t("gcal.signIn"))
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundStyle(Color(hex: "#111111"))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(Color(hex: "#EEEEEE"))
+                    )
                 }
                 .buttonStyle(.plain)
-                .disabled(isConnecting || clientID.isEmpty || clientSecret.isEmpty)
+                .disabled(isConnecting || !canSignIn)
+
+                if !GoogleOAuth.hasBundledCredentials && !showAdvanced {
+                    // Only reachable in a build whose xcconfig was never
+                    // filled in — i.e. someone who cloned the repo.
+                    Text(L10n.t("gcal.noBundled"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(hex: "#E8C15A"))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 if let error = calendar.lastError {
                     Text(error)
@@ -104,17 +94,59 @@ struct CalendarSettingsView: View {
                         .foregroundStyle(Color(hex: "#E07A5F"))
                         .fixedSize(horizontal: false, vertical: true)
                 }
+
+                // The escape hatch: your own Google Cloud project, for anyone
+                // who hits the shipped client's quota or prefers their own.
+                DisclosureGroup(isExpanded: $showAdvanced) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(L10n.t("gcal.setupBody"))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Link("console.cloud.google.com/apis/credentials",
+                             destination: URL(string: "https://console.cloud.google.com/apis/credentials")!)
+                            .font(.system(size: 11))
+                        LabeledContent(L10n.t("gcal.clientID")) {
+                            TextField("", text: $clientID).textFieldStyle(.roundedBorder)
+                        }
+                        LabeledContent(L10n.t("gcal.clientSecret")) {
+                            SecureField("", text: $clientSecret).textFieldStyle(.roundedBorder)
+                        }
+                    }
+                    .padding(.top, 8)
+                } label: {
+                    Text(L10n.t("gcal.advanced"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .onAppear {
-            clientID = GoogleOAuth.shared.clientID ?? ""
-            clientSecret = GoogleOAuth.shared.clientSecret ?? ""
+            // Show only a user-entered override here, never the shipped
+            // credential — it is not theirs to edit or leak.
+            if GoogleOAuth.shared.usesCustomCredentials {
+                clientID = KeychainStore.get(KeychainStore.Key.clientID) ?? ""
+                clientSecret = KeychainStore.get(KeychainStore.Key.clientSecret) ?? ""
+                showAdvanced = true
+            }
         }
     }
 
+    /// Signing in needs a credential from somewhere: shipped, or typed in.
+    private var canSignIn: Bool {
+        GoogleOAuth.hasBundledCredentials
+            || (!clientID.isEmpty && !clientSecret.isEmpty)
+    }
+
     private func saveCredentialsAndConnect() {
-        GoogleOAuth.shared.clientID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
-        GoogleOAuth.shared.clientSecret = clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Only persist an override when one was actually typed; otherwise the
+        // shipped credential is used and nothing is written to the Keychain.
+        let id = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let secret = clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !id.isEmpty && !secret.isEmpty {
+            GoogleOAuth.shared.clientID = id
+            GoogleOAuth.shared.clientSecret = secret
+        }
         connect()
     }
 
