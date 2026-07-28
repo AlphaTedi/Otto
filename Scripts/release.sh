@@ -1,0 +1,119 @@
+#!/bin/bash
+# Build, sign, notarize and staple NotchSnap for distribution.
+#
+#   bash Scripts/release.sh
+#
+# Produces build/dist/NotchSnap.zip — the thing you put on a website. Someone
+# downloads it, double-clicks, and it opens: no Terminal, no xattr, no
+# Gatekeeper warning.
+#
+# Requires Config/Local.xcconfig to define CODE_SIGN_IDENTITY, DEVELOPMENT_TEAM
+# and NOTARY_PROFILE (see Local.xcconfig.example). Without them this stops
+# early and tells you what is missing rather than shipping something that
+# fails on the user's Mac — which is exactly how the ad-hoc builds went wrong.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+CONFIG="Config/Local.xcconfig"
+# Scoped to its own directory: `build/` already holds artifacts from earlier
+# work, and this script deletes its output directory on every run.
+OUT="build/dist"
+APP="$OUT/Release/NotchSnap.app"
+
+read_setting() {   # read_setting KEY -> value, ignoring commented-out lines
+    [ -f "$CONFIG" ] || return 0
+    grep -E "^[[:space:]]*$1[[:space:]]*=" "$CONFIG" 2>/dev/null \
+        | tail -1 | sed "s/^[^=]*=//" | xargs 2>/dev/null || true
+}
+
+IDENTITY=$(read_setting CODE_SIGN_IDENTITY)
+TEAM=$(read_setting DEVELOPMENT_TEAM)
+PROFILE=$(read_setting NOTARY_PROFILE)
+
+echo "NotchSnap release build"
+echo "======================="
+
+# --- Preconditions ---------------------------------------------------------
+MISSING=0
+if [ -z "$IDENTITY" ] || [ "$IDENTITY" = "-" ]; then
+    echo "  CODE_SIGN_IDENTITY is not set in $CONFIG"
+    echo "     Needs the Apple Developer Program. Find yours with:"
+    echo "       security find-identity -v -p codesigning"
+    MISSING=1
+fi
+if [ -z "$TEAM" ]; then
+    echo "  DEVELOPMENT_TEAM is not set in $CONFIG (the 10-character team id)"
+    MISSING=1
+fi
+if [ -z "$PROFILE" ]; then
+    echo "  NOTARY_PROFILE is not set in $CONFIG. Create it once with:"
+    echo "       xcrun notarytool store-credentials \"NotchSnap\" \\"
+    echo "         --apple-id you@example.com --team-id TEAMID --password APP-SPECIFIC-PW"
+    MISSING=1
+fi
+if [ "$MISSING" = "1" ]; then
+    echo
+    echo "Nothing was built. Fill those in and run this again."
+    exit 1
+fi
+
+if ! security find-identity -v -p codesigning | grep -q "$IDENTITY"; then
+    echo "  No certificate matching '$IDENTITY' is installed in your keychain."
+    echo "  Download it from developer.apple.com > Certificates, or let Xcode"
+    echo "  create one: Settings > Accounts > Manage Certificates > +"
+    exit 1
+fi
+
+# --- Build -----------------------------------------------------------------
+echo
+echo "1. Building Release"
+rm -rf "$OUT"
+mkdir -p "$OUT"
+xcodebuild -project NotchSnap.xcodeproj -scheme NotchSnap -configuration Release \
+    -derivedDataPath "$OUT/dd" CONFIGURATION_BUILD_DIR="$PWD/$OUT/Release" \
+    build > "$OUT/build.log" 2>&1 || { tail -30 "$OUT/build.log"; exit 1; }
+echo "   $APP"
+
+# --- Verify the signature BEFORE spending minutes on notarization ----------
+echo
+echo "2. Verifying signature"
+codesign --verify --deep --strict --verbose=2 "$APP" 2>&1 | sed 's/^/   /'
+if ! codesign -dv "$APP" 2>&1 | grep -q "^TeamIdentifier=$TEAM"; then
+    echo "   Signed, but not with team $TEAM. Check CODE_SIGN_IDENTITY."
+    exit 1
+fi
+# Hardened Runtime is non-negotiable for notarization; catch it here rather
+# than after a round trip to Apple.
+if ! codesign -dv --verbose=2 "$APP" 2>&1 | grep -q "flags=.*runtime"; then
+    echo "   Hardened Runtime is OFF. Notarization will be rejected."
+    echo "   Add to $CONFIG:  ENABLE_HARDENED_RUNTIME[config=Release] = YES"
+    exit 1
+fi
+echo "   Developer ID + Hardened Runtime confirmed."
+
+# --- Notarize --------------------------------------------------------------
+echo
+echo "3. Notarizing (Apple scans it; usually 1-5 minutes)"
+ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT/notarize.zip"
+xcrun notarytool submit "$OUT/notarize.zip" --keychain-profile "$PROFILE" --wait \
+    2>&1 | sed 's/^/   /'
+
+# --- Staple ----------------------------------------------------------------
+# Embeds the ticket so the app validates without a network round trip on the
+# user's Mac — the difference between "opens" and "opens once you're online".
+echo
+echo "4. Stapling the ticket"
+xcrun stapler staple "$APP" 2>&1 | sed 's/^/   /'
+xcrun stapler validate "$APP" 2>&1 | sed 's/^/   /'
+
+# --- Final check, as a user's Mac would see it -----------------------------
+echo
+echo "5. Gatekeeper assessment (what a downloader gets)"
+spctl -a -vvv -t exec "$APP" 2>&1 | sed 's/^/   /'
+
+ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT/NotchSnap.zip"
+rm -f "$OUT/notarize.zip"
+echo
+echo "Done: $OUT/NotchSnap.zip"
+echo "Upload that. Users download, double-click, and it opens."

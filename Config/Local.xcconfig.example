@@ -1,0 +1,46 @@
+// Local build settings for NotchSnap — copy to  Config/Local.xcconfig
+//
+// That copy is gitignored: this repository is public, so nothing here should
+// be committed. Everything is optional — with an empty file the app still
+// builds and runs ad-hoc signed, exactly as it does today.
+
+// ---------------------------------------------------------------- SIGNING --
+// Needed to distribute the app the way a normal Mac app is distributed:
+// download, double-click, it opens. Requires the Apple Developer Program
+// ($99/yr) — that is the only thing the fee buys you here.
+//
+// Find the exact string with:   security find-identity -v -p codesigning
+// It looks like: Developer ID Application: Your Name (ABCDE12345)
+// Use just the "Developer ID Application" part; Xcode matches the rest.
+//
+// Leave BLANK to keep building ad-hoc (works locally, needs xattr/tccutil on
+// other Macs, and resets permissions on every rebuild).
+
+// CODE_SIGN_IDENTITY = Developer ID Application
+// DEVELOPMENT_TEAM = ABCDE12345
+
+// Notarization needs a stored credential. Create it once with:
+//   xcrun notarytool store-credentials "NotchSnap" \
+//     --apple-id you@example.com --team-id ABCDE12345 --password <app-specific-password>
+// (app-specific password comes from appleid.apple.com > Sign-In and Security)
+// NOTARY_PROFILE = NotchSnap
+
+// ----------------------------------------------------------------- GOOGLE --
+// One free OAuth client, registered once by whoever builds the app. With these
+// filled in, users just press "Sign in with Google" — no client ID is ever
+// shown. Leave blank and the Google calendar source is hidden entirely.
+//
+//   1. https://console.cloud.google.com/apis/credentials  (create a project)
+//   2. APIs & Services > Library > enable "Google Calendar API"
+//   3. OAuth consent screen > fill it in > PUBLISH APP
+//      (leaving it in Testing makes Google expire your login every 7 days)
+//   4. Credentials > Create credentials > OAuth client ID > Desktop app
+
+GOOGLE_OAUTH_CLIENT_ID = 
+GOOGLE_OAUTH_CLIENT_SECRET = 
+
+// -------------------------------------------------------------- HARDENING --
+// Hardened Runtime is REQUIRED for notarization. Release-only so day-to-day
+// debug builds are unaffected.
+ENABLE_HARDENED_RUNTIME[config=Release] = YES
+OTHER_CODE_SIGN_FLAGS[config=Release] = --timestamp

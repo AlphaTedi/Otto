@@ -37,4 +37,4 @@ graphify-out/
 
 # Google OAuth credentials — public repo, so the real values stay local.
 # Copy Config/GoogleOAuth.xcconfig.example to set yours up.
-Config/GoogleOAuth.xcconfig
+Config/Local.xcconfig
