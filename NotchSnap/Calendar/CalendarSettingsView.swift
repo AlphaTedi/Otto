@@ -25,20 +25,25 @@ struct CalendarSettingsView: View {
             PageTitle(title: "Calendar",
                       subtitle: "Meetings in Today, and a heads-up before they start.")
 
-            Picker(L10n.t("gcal.source"), selection: Binding(
-                get: { calendar.source },
-                set: { calendar.source = $0 }
-            )) {
-                ForEach(CalendarStore.Source.allCases) { source in
-                    Text(source.label).tag(source)
+            // Only offered when there is more than one usable source; a
+            // one-option picker is just noise.
+            let sources = CalendarStore.Source.available
+            if sources.count > 1 {
+                Picker(L10n.t("gcal.source"), selection: Binding(
+                    get: { calendar.source },
+                    set: { calendar.source = $0 }
+                )) {
+                    ForEach(sources) { source in
+                        Text(source.label).tag(source)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
 
             if calendar.isConnected {
                 connected
-            } else if calendar.source == .google {
+            } else if calendar.source == .google, sources.contains(.google) {
                 googleDisconnected
             } else {
                 disconnected

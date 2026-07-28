@@ -41,6 +41,24 @@ final class CalendarStore: ObservableObject {
         var label: String {
             self == .macOS ? L10n.t("gcal.sourceMac") : L10n.t("gcal.sourceGoogle")
         }
+
+        /// Sources this build can actually use.
+        ///
+        /// A build with no OAuth credential compiled in cannot sign in to
+        /// Google, so offering it produces a dead end — a picker option whose
+        /// only outcome is a setup form (Marcello, 2026-07-28). It reappears
+        /// automatically once Config/GoogleOAuth.xcconfig is filled in, and
+        /// stays visible for anyone already signed in so they are never
+        /// stranded by a rebuild.
+        @MainActor
+        static var available: [Source] {
+            if GoogleOAuth.hasBundledCredentials
+                || GoogleOAuth.shared.isSignedIn
+                || GoogleOAuth.shared.usesCustomCredentials {
+                return allCases
+            }
+            return [.macOS]
+        }
     }
 
     @AppStorage("calendarSource") private var storedSource: String = Source.macOS.rawValue
@@ -62,7 +80,14 @@ final class CalendarStore: ObservableObject {
         source == .google ? GoogleCalendarProvider() : EventKitCalendarProvider()
     }
 
-    private lazy var provider: MeetingProvider = Self.makeProvider(source)
+    /// If a stored preference names a source this build cannot use — an old
+    /// setting carried into a build without Google credentials — fall back to
+    /// macOS rather than starting up with a provider that can never connect.
+    private var effectiveSource: Source {
+        Source.available.contains(source) ? source : .macOS
+    }
+
+    private lazy var provider: MeetingProvider = Self.makeProvider(effectiveSource)
     /// The concrete provider, for the EventKit-specific diagnostics shown in
     /// Settings. Nil while the Google provider is selected.
     private var eventKit: EventKitCalendarProvider? { provider as? EventKitCalendarProvider }
