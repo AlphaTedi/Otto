@@ -3,10 +3,19 @@ import SwiftUI
 
 // MARK: - SettingsWindowController
 //
-// Custom NSWindow that hosts SettingsView. The whole window is a single
-// frosted-glass surface with rounded corners — traffic-light buttons sit
-// at the standard top-left of THIS window, so they're inside the glass,
-// not floating in nowhere.
+// A standard macOS window hosting SettingsView.
+//
+// It used to fight the system for control of its own chrome: transparent
+// background, hidden title, the titlebar's visual-effect view reached into and
+// hidden, and a corner radius drawn by hand onto the hosting view. All of that
+// existed to make a hand-built frosted surface look like a window. It also
+// meant the window could never look like whatever macOS looks like next.
+//
+// Now it asks for the ordinary thing and gets the ordinary result — including
+// the material behind a `.sidebar` List, and Liquid Glass on macOS 26 — with
+// exactly two deviations, both standard practice for a sidebar app:
+// a transparent titlebar and full-size content, so the sidebar's material runs
+// up behind the traffic lights instead of stopping below them.
 
 @MainActor
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
@@ -35,72 +44,35 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 880, height: 620),
+            contentRect: NSRect(x: 0, y: 0, width: 860, height: 600),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
 
-        // Strip every bit of native title-bar chrome — the traffic lights
-        // remain visible at their default top-left position, but everything
-        // else (title, separator, toolbar) is gone.
+        window.title = "Settings"
+        // The two deviations: let the sidebar's material continue up behind the
+        // traffic lights, the way Finder and System Settings do.
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
-        window.titlebarSeparatorStyle = .none
-
-        // Transparent so our SwiftUI FrostedGlassBackground IS the window.
-        window.backgroundColor = .clear
-        window.isOpaque = false
-        window.hasShadow = true
+        // Unified so the toolbar area belongs to the split view rather than
+        // sitting on a separate strip above it.
+        window.toolbarStyle = .unified
         window.isMovableByWindowBackground = true
-
-        // Kill the system's titlebar blur so the glass is uniform top-to-bottom.
-        if let closeButton = window.standardWindowButton(.closeButton),
-           let titlebarContainer = closeButton.superview?.superview {
-            titlebarContainer.wantsLayer = true
-            titlebarContainer.layer?.backgroundColor = NSColor.clear.cgColor
-            for sibling in titlebarContainer.subviews {
-                sibling.wantsLayer = true
-                if String(describing: type(of: sibling)).contains("VisualEffect") {
-                    sibling.isHidden = true
-                }
-            }
-        }
-
-        window.standardWindowButton(.closeButton)?.isHidden = false
-        window.standardWindowButton(.miniaturizeButton)?.isHidden = false
-        window.standardWindowButton(.zoomButton)?.isHidden = false
+        window.minSize = NSSize(width: 760, height: 520)
 
         self.init(window: window)
         window.delegate = self
 
-        // Host SettingsView and apply the SINGLE rounded-corner mask of the
-        // whole window. The glass background, sidebar tint, and content all
-        // live inside this one shape.
-        let host = NSHostingView(
+        // A plain hosting view. No transparency, no hand-drawn corner radius —
+        // the window draws its own background and its own corners, correctly,
+        // on every OS version.
+        window.contentView = NSHostingView(
             rootView: SettingsView().environmentObject(AppState.shared)
         )
-        host.frame = NSRect(x: 0, y: 0, width: 880, height: 620)
-        host.autoresizingMask = [.width, .height]
-        host.wantsLayer = true
-        // Match the standard macOS window corner radius for the running OS.
-        // Tahoe (macOS 26+) uses larger continuous curves; earlier systems
-        // use the classic ~10pt radius.
-        host.layer?.cornerRadius = Self.systemWindowCornerRadius()
-        host.layer?.cornerCurve = .continuous
-        host.layer?.masksToBounds = true
-
-        window.contentView = host
     }
 
     // MARK: - NSWindowDelegate
-
-    /// Standard macOS window corner radius for the current OS version.
-    /// Tahoe (macOS 26+) → 12pt; earlier systems → 10pt.
-    private static func systemWindowCornerRadius() -> CGFloat {
-        if #available(macOS 26.0, *) { return 12 }
-        return 10
-    }
 
     nonisolated func windowWillClose(_ notification: Notification) {
         Task { @MainActor in

@@ -1,135 +1,75 @@
 import SwiftUI
 import ServiceManagement
 
-// MARK: - Settings View — Modern sidebar layout
+// MARK: - Settings View — standard macOS sidebar layout
 //
-// Adopts a Linear/Untitled-UI style: left rail with sectioned navigation,
-// right pane with rounded "card" sections. Adapts automatically to
-// system appearance + the user's chosen theme override.
+// Rebuilt on NavigationSplitView (Marcello, 2026-07-28), replacing a
+// hand-rolled HStack with its own frosted background, custom sidebar rows and
+// an inset "content sheet" with uneven corners.
+//
+// The point of using the system's split view rather than reproducing it: a
+// real `.sidebar`-styled List gets the window-blending material for free, and
+// gets whatever macOS decides that material should be. On macOS 26 that is the
+// Liquid Glass treatment, and it arrives without this file knowing anything
+// about it — the same reason Atlas looks native despite being SwiftUI. A
+// hand-drawn approximation can only ever match the OS it was drawn against.
+//
+// The sidebar deliberately extends under the titlebar (the window is
+// fullSizeContentView with a transparent titlebar), which is what puts the
+// traffic lights on the sidebar material instead of on a separate strip.
 
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
     @State private var selection: SettingsSection = .general
 
     var body: some View {
-        // Wispr-Flow-inspired layout:
-        //   • Outer frosted-glass surface fills the WHOLE window.
-        //     The traffic lights and the sidebar both sit on this surface,
-        //     so they share one continuous background top-to-bottom.
-        //   • The right "content" pane is an inset panel with its own
-        //     slightly different (lighter, more opaque) frosted tone, with
-        //     a rounded top-leading corner — visually the content sheet.
-        ZStack {
-            FrostedGlassBackground()
-                .ignoresSafeArea()
-
-            HStack(spacing: 0) {
-                // LEFT: sidebar lives directly on the outer frosted glass.
-                // No background of its own → same surface as the traffic lights.
-                SettingsSidebar(selection: $selection)
-                    .frame(width: 220)
-                    // SU-6: the Today nudge card deep-links straight here.
-                    .onChange(of: appState.pendingSettingsSection) { requested in
-                        guard let requested else { return }
-                        selection = requested
-                        appState.pendingSettingsSection = nil
+        NavigationSplitView {
+            List(SettingsSection.allCases, selection: $selection) { section in
+                Label(section.title, systemImage: section.icon)
+                    .tag(section)
+            }
+            .listStyle(.sidebar)
+            .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
+        } detail: {
+            ScrollView {
+                Group {
+                    switch selection {
+                    case .general:    GeneralSettingsView()
+                    case .appearance: AppearanceSettingsView()
+                    case .notch:      NotchSettingsView()
+                    case .capture:    CaptureSettingsView()
+                    case .calendar:   CalendarSettingsView()
+                    case .shortcuts:  ShortcutsSettingsView()
+                    case .about:      AboutSettingsView()
                     }
-                    .onAppear {
-                        if let requested = appState.pendingSettingsSection {
-                            selection = requested
-                            appState.pendingSettingsSection = nil
-                        }
-                    }
-
-                // RIGHT: content sheet — inset panel with its own tone.
-                ContentPane {
-                    ScrollView {
-                        Group {
-                            switch selection {
-                            case .general:    GeneralSettingsView()
-                            case .appearance: AppearanceSettingsView()
-                            case .notch:      NotchSettingsView()
-                            case .capture:    CaptureSettingsView()
-                            case .calendar:   CalendarSettingsView()
-                            case .shortcuts:  ShortcutsSettingsView()
-                            case .about:      AboutSettingsView()
-                            }
-                        }
-                        // Each section arrives with a soft rise + fade,
-                        // keyed by `id` so the switch actually transitions.
-                        .id(selection)
-                        .transition(
-                            .asymmetric(
-                                insertion: .opacity.combined(with: .offset(y: 8)),
-                                removal: .opacity
-                            )
-                        )
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 28)
-                        .padding(.top, 28)
-                        .padding(.bottom, 28)
-                    }
-                    .scrollContentBackground(.hidden)
-                    .animation(.spring(response: 0.32, dampingFraction: 0.85), value: selection)
                 }
-                // Leave a strip of outer glass above the content pane so the
-                // traffic lights breathe — like Wispr's top toolbar band.
-                .padding(.top, 44)
+                .id(selection)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 22)
+            }
+            .navigationTitle(selection.title)
+        }
+        .navigationSplitViewStyle(.balanced)
+        .frame(minWidth: 760, minHeight: 520)
+        .environmentObject(appState)
+        // SU-6: the Today nudge card deep-links straight to the Calendar pane.
+        .onChange(of: appState.pendingSettingsSection) { requested in
+            guard let requested else { return }
+            selection = requested
+            appState.pendingSettingsSection = nil
+        }
+        .onAppear {
+            if let requested = appState.pendingSettingsSection {
+                selection = requested
+                appState.pendingSettingsSection = nil
             }
         }
-        .frame(width: 880, height: 620)
-        .environmentObject(appState)
         .onDisappear {
             NotificationCenter.default.post(name: .settingsWindowClosed, object: nil)
         }
     }
 }
-
-// MARK: - Content Pane (right side inset sheet)
-
-private struct ContentPane<Content: View>: View {
-    @ViewBuilder var content: () -> Content
-
-    var body: some View {
-        content()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(
-                // Slightly lighter / more opaque tone than the outer glass,
-                // so the right pane reads as a distinct surface.
-                ZStack {
-                    Color.white.opacity(0.06)
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.04), Color.clear],
-                        startPoint: .top, endPoint: .bottom
-                    )
-                }
-            )
-            .clipShape(
-                UnevenRoundedRectangle(
-                    topLeadingRadius: 16,
-                    bottomLeadingRadius: 0,
-                    bottomTrailingRadius: 0,
-                    topTrailingRadius: 0,
-                    style: .continuous
-                )
-            )
-            .overlay(
-                // Hairline along the top + leading edges of the pane,
-                // outlining the seam where it meets the outer glass.
-                UnevenRoundedRectangle(
-                    topLeadingRadius: 16,
-                    bottomLeadingRadius: 0,
-                    bottomTrailingRadius: 0,
-                    topTrailingRadius: 0,
-                    style: .continuous
-                )
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                .allowsHitTesting(false)
-            )
-    }
-}
-
-// MARK: - Sidebar
 
 enum SettingsSection: String, CaseIterable, Identifiable {
     case general, appearance, notch, capture, calendar, shortcuts, about
@@ -157,84 +97,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .shortcuts:  return "keyboard"
         case .about:      return "info.circle"
         }
-    }
-}
-
-private struct SettingsSidebar: View {
-    @Binding var selection: SettingsSection
-    @Namespace private var selectionNamespace
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Top padding leaves room for the traffic lights.
-            Text("Settings")
-                .font(.system(size: 17, weight: .semibold))
-                .padding(.horizontal, 16)
-                .padding(.top, 18)
-                .padding(.bottom, 12)
-
-            VStack(spacing: 3) {
-                ForEach(SettingsSection.allCases) { section in
-                    SidebarRow(
-                        section: section,
-                        isActive: selection == section,
-                        namespace: selectionNamespace
-                    ) {
-                        withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
-                            selection = section
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal, 10)
-
-            Spacer()
-        }
-        .frame(maxHeight: .infinity)
-        // No background of its own — the sidebar shares the outer
-        // frosted-glass surface with the traffic lights area above it.
-    }
-}
-
-private struct SidebarRow: View {
-    let section: SettingsSection
-    let isActive: Bool
-    let namespace: Namespace.ID
-    let action: () -> Void
-    @State private var hover = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: section.icon)
-                    .font(.system(size: 13, weight: .medium))
-                    .frame(width: 18)
-                    .foregroundStyle(isActive ? Color.white : .secondary)
-                Text(section.title)
-                    .font(.system(size: 13, weight: isActive ? .semibold : .regular))
-                    .foregroundStyle(isActive ? Color.white : .primary)
-                Spacer()
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background {
-                // The active pill is ONE shared view that glides between
-                // rows (matchedGeometryEffect) instead of blinking off in
-                // one row and on in another.
-                if isActive {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(Color.accentColor)
-                        .matchedGeometryEffect(id: "sidebar.selection", in: namespace)
-                } else if hover {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(Color.primary.opacity(0.06))
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hover = $0 }
-        .animation(.easeOut(duration: 0.12), value: hover)
     }
 }
 
