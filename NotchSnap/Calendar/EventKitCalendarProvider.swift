@@ -208,7 +208,18 @@ final class EventKitCalendarProvider: MeetingProvider {
         // appear in it is a dead end (Marcello, 2026-07-26).
         if let blocked = LaunchIntegrity.permissionBlockReason() { return blocked }
         if status == .denied || status == .restricted {
-            return L10n.t("cal.err.denied")
+            // Ask anyway. A denial recorded while the app was translocated (or
+            // before it could be identified at all) sticks forever otherwise:
+            // this returned the same message on every attempt and never
+            // re-prompted, while the app stayed absent from the Calendars list
+            // — a dead end with no way out from inside the app
+            // (Marcello, 2026-07-28). macOS ignores the request when the
+            // denial is real, so the worst case is unchanged behaviour.
+            if #available(macOS 14.0, *),
+               let granted = try? await store.requestFullAccessToEvents(), granted {
+                return nil
+            }
+            return L10n.t("cal.err.deniedRecover")
         }
         do {
             let granted: Bool

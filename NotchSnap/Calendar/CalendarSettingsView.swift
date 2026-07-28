@@ -19,7 +19,6 @@ struct CalendarSettingsView: View {
     @State private var probeLines: [String] = []
     @State private var clientID = ""
     @State private var clientSecret = ""
-    @State private var showAdvanced = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -57,35 +56,21 @@ struct CalendarSettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                // One button. The credential ships with the app, so there is
-                // nothing for a user to look up (Marcello, 2026-07-26).
-                Button {
-                    saveCredentialsAndConnect()
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "calendar.badge.clock")
-                            .font(.system(size: 12, weight: .medium))
-                        Text(isConnecting ? "Connecting\u{2026}" : L10n.t("gcal.signIn"))
-                            .font(.system(size: 12, weight: .medium))
+                if GoogleOAuth.hasBundledCredentials {
+                    // The shipped-credential case: one button, nothing else.
+                    signInButton
+                } else {
+                    // No credential compiled in. Do NOT show a dead button
+                    // beside a hidden panel — that was the worst of both
+                    // (Marcello, 2026-07-28). Show the setup plainly instead.
+                    setupSteps
+                    LabeledContent(L10n.t("gcal.clientID")) {
+                        TextField("", text: $clientID).textFieldStyle(.roundedBorder)
                     }
-                    .foregroundStyle(Color(hex: "#111111"))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(Color(hex: "#EEEEEE"))
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(isConnecting || !canSignIn)
-
-                if !GoogleOAuth.hasBundledCredentials && !showAdvanced {
-                    // Only reachable in a build whose xcconfig was never
-                    // filled in — i.e. someone who cloned the repo.
-                    Text(L10n.t("gcal.noBundled"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color(hex: "#E8C15A"))
-                        .fixedSize(horizontal: false, vertical: true)
+                    LabeledContent(L10n.t("gcal.clientSecret")) {
+                        SecureField("", text: $clientSecret).textFieldStyle(.roundedBorder)
+                    }
+                    signInButton
                 }
 
                 if let error = calendar.lastError {
@@ -94,41 +79,66 @@ struct CalendarSettingsView: View {
                         .foregroundStyle(Color(hex: "#E07A5F"))
                         .fixedSize(horizontal: false, vertical: true)
                 }
-
-                // The escape hatch: your own Google Cloud project, for anyone
-                // who hits the shipped client's quota or prefers their own.
-                DisclosureGroup(isExpanded: $showAdvanced) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(L10n.t("gcal.setupBody"))
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Link("console.cloud.google.com/apis/credentials",
-                             destination: URL(string: "https://console.cloud.google.com/apis/credentials")!)
-                            .font(.system(size: 11))
-                        LabeledContent(L10n.t("gcal.clientID")) {
-                            TextField("", text: $clientID).textFieldStyle(.roundedBorder)
-                        }
-                        LabeledContent(L10n.t("gcal.clientSecret")) {
-                            SecureField("", text: $clientSecret).textFieldStyle(.roundedBorder)
-                        }
-                    }
-                    .padding(.top, 8)
-                } label: {
-                    Text(L10n.t("gcal.advanced"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
             }
         }
         .onAppear {
-            // Show only a user-entered override here, never the shipped
-            // credential — it is not theirs to edit or leak.
             if GoogleOAuth.shared.usesCustomCredentials {
                 clientID = KeychainStore.get(KeychainStore.Key.clientID) ?? ""
                 clientSecret = KeychainStore.get(KeychainStore.Key.clientSecret) ?? ""
-                showAdvanced = true
             }
+        }
+    }
+
+    private var signInButton: some View {
+        Button {
+            saveCredentialsAndConnect()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "calendar.badge.clock")
+                    .font(.system(size: 12, weight: .medium))
+                Text(isConnecting ? "Connecting\u{2026}" : L10n.t("gcal.signIn"))
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .foregroundStyle(Color(hex: "#111111"))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Color(hex: "#EEEEEE"))
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isConnecting || !canSignIn)
+    }
+
+    /// Shown only in a build with no credential compiled in — i.e. to whoever
+    /// is building the app, not to someone who was handed a finished copy.
+    private var setupSteps: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L10n.t("gcal.setupIntro"))
+                .font(.system(size: 11, weight: .semibold))
+            ForEach(Array([L10n.t("gcal.step1"), L10n.t("gcal.step2"),
+                           L10n.t("gcal.step3"), L10n.t("gcal.step4")].enumerated()),
+                    id: \.offset) { index, step in
+                HStack(alignment: .top, spacing: 6) {
+                    Text("\(index + 1).")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 14, alignment: .trailing)
+                    Text(step)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Button {
+                NSWorkspace.shared.open(
+                    URL(string: "https://console.cloud.google.com/apis/credentials")!)
+            } label: {
+                Text(L10n.t("gcal.openConsole"))
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .padding(.top, 2)
         }
     }
 
