@@ -214,7 +214,7 @@ final class CalendarStore: ObservableObject {
         // Opportunistic refreshes so the data is never stale at the exact
         // moments a person looks at it or comes back to the machine.
         NotificationCenter.default.addObserver(
-            self, selector: #selector(storeChanged),
+            self, selector: #selector(appBecameActive),
             name: NSApplication.didBecomeActiveNotification, object: nil
         )
         NSWorkspace.shared.notificationCenter.addObserver(
@@ -248,6 +248,17 @@ final class CalendarStore: ObservableObject {
 
     @objc private func storeChanged() {
         Task { @MainActor in await refresh() }
+    }
+
+    /// Returning to the app is the moment a permission change is most likely to
+    /// have just happened — the user went to System Settings, flipped the
+    /// switch, and came back. The EventKit store instance cannot see that
+    /// change, so replace it and re-read.
+    @objc private func appBecameActive() {
+        Task { @MainActor in
+            eventKit?.renewStore()
+            await refresh()
+        }
     }
 
     private func tick() {

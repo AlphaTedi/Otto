@@ -15,7 +15,22 @@ import Foundation
 @MainActor
 final class EventKitCalendarProvider: MeetingProvider {
 
-    private let store = EKEventStore()
+    private var store = EKEventStore()
+
+    /// Rebuild the EKEventStore.
+    ///
+    /// An EKEventStore instance is bound to the permission state it was created
+    /// under. If the user grants calendar access in System Settings WHILE the
+    /// app is running, this instance keeps refusing forever — even though the
+    /// class-level `EKEventStore.authorizationStatus` correctly reports
+    /// fullAccess. That is the "the toggle is on but NotchSnap still says
+    /// denied" case, and no amount of retrying through the old instance fixes
+    /// it (Marcello, 2026-08-04).
+    ///
+    /// Cheap: a fresh store is just a handle to the calendar database.
+    func renewStore() {
+        store = EKEventStore()
+    }
 
     var isConnected: Bool {
         Self.authorized(EKEventStore.authorizationStatus(for: .event))
@@ -201,6 +216,9 @@ final class EventKitCalendarProvider: MeetingProvider {
     /// Triggers the system permission prompt. Returns nil on success, or a
     /// human-readable reason on failure.
     func connect() async -> String? {
+        // Always from a fresh store: the user may have just flipped the switch
+        // in System Settings, which the existing instance would never see.
+        renewStore()
         let status = EKEventStore.authorizationStatus(for: .event)
         if Self.authorized(status) { return nil }
         // If macOS launched us in a way that makes a prompt impossible, say
