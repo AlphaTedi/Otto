@@ -142,6 +142,52 @@ spctl -a -vvv -t exec "$APP" 2>&1 | sed 's/^/   /'
 
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT/NotchSnap.zip"
 rm -f "$OUT/notarize.zip"
+
+# --- Disk image ------------------------------------------------------------
+# The .dmg is what people expect to download: it opens to a window with the app
+# beside a shortcut to /Applications, so installing is one drag. It has to be
+# signed and notarized in its own right — notarizing the app inside does not
+# cover the container it arrives in.
 echo
-echo "Done: $OUT/NotchSnap.zip"
-echo "Upload that. Users download, double-click, and it opens."
+echo "6. Building the disk image"
+STAGE="$OUT/dmg-stage"
+rm -rf "$STAGE"; mkdir -p "$STAGE"
+cp -R "$APP" "$STAGE/"
+ln -s /Applications "$STAGE/Applications"
+rm -f "$OUT/NotchSnap.dmg"
+hdiutil create -volname "NotchSnap" -srcfolder "$STAGE" -ov -format UDZO \
+    "$OUT/NotchSnap.dmg" > /dev/null
+codesign --force --sign "$IDENTITY" --timestamp "$OUT/NotchSnap.dmg"
+rm -rf "$STAGE"
+
+echo "7. Notarizing the disk image"
+xcrun notarytool submit "$OUT/NotchSnap.dmg" --keychain-profile "$PROFILE" --wait \
+    2>&1 | tail -4 | sed 's/^/   /'
+xcrun stapler staple "$OUT/NotchSnap.dmg" 2>&1 | tail -1 | sed 's/^/   /'
+
+# --- Publish ---------------------------------------------------------------
+# Uploading is part of releasing. Producing an artifact and stopping is how a
+# stale, unsigned build sat on the Releases page while a working one existed
+# only on this Mac (Marcello, 2026-08-04).
+# From the git tag, NOT CFBundleShortVersionString. The plist has said 1.0.0
+# since the beginning while the tags are at v1.5.x, so deriving the tag from it
+# would publish to a release that does not exist.
+TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+echo
+echo "8. Publishing to GitHub"
+if ! command -v gh > /dev/null; then
+    echo "   gh not installed — upload $OUT/NotchSnap.dmg manually."
+elif [ -z "$TAG" ]; then
+    echo "   No git tag found; tag the commit first, or upload manually."
+elif gh release view "$TAG" > /dev/null 2>&1; then
+    gh release upload "$TAG" "$OUT/NotchSnap.dmg" "$OUT/NotchSnap.zip" --clobber
+    echo "   Updated $TAG"
+else
+    echo "   No release $TAG yet. Create it, then re-run, or:"
+    echo "     gh release create $TAG $OUT/NotchSnap.dmg $OUT/NotchSnap.zip"
+fi
+
+echo
+echo "Done:"
+echo "  $OUT/NotchSnap.dmg   <- the download link"
+echo "  $OUT/NotchSnap.zip"
