@@ -50,3 +50,9 @@ CODE_SIGN_INJECT_BASE_ENTITLEMENTS[config=Release] = NO
 // Manual, because Developer ID distribution is not what automatic signing
 // picks on its own.
 CODE_SIGN_STYLE = Manual
+
+// ------------------------------------------------------------------ VERSION --
+// release.sh overrides these from the git tag. These are only the fallback for
+// a plain `xcodebuild` run.
+MARKETING_VERSION = 0.0.0
+CURRENT_PROJECT_VERSION = 1

@@ -19,9 +19,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.0</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>GoogleOAuthClientID</key>
 	<string>$(GOOGLE_OAUTH_CLIENT_ID)</string>
 	<key>GoogleOAuthClientSecret</key>
@@ -46,6 +46,14 @@
 	<string>NotchSnap ha bisogno di accesso allo schermo per catturare screenshot.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>NotchSnap turns your spoken brain-dump into to-dos using on-device speech recognition. Nothing is sent to Apple or any server.</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/AlphaTedi/Screenshot_app/main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>kcZvheYIHq5NOS3hoB4As0+TCzkyBxNRXn+BSRFJnA8=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>

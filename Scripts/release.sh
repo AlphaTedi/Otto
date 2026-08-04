@@ -68,6 +68,20 @@ case "$IDENTITIES" in
     exit 1 ;;
 esac
 
+# --- Version ---------------------------------------------------------------
+# Sparkle decides whether an update exists by COMPARING VERSIONS. If every build
+# reports the same number, installed copies conclude they are current and no
+# update ever appears — so this is not cosmetic.
+TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+if [ -z "$TAG" ]; then
+    echo "  No git tag found. Tag the release first:  git tag -a v1.6.0 -m '...'"
+    exit 1
+fi
+VERSION="${TAG#v}"
+# Monotonic build number: total commits. Sparkle needs this to always increase.
+BUILD=$(git rev-list --count HEAD)
+echo "  Version $VERSION (build $BUILD) from tag $TAG"
+
 # --- Build -----------------------------------------------------------------
 echo
 echo "1. Building Release"
@@ -75,6 +89,7 @@ rm -rf "$OUT"
 mkdir -p "$OUT"
 xcodebuild -project NotchSnap.xcodeproj -scheme NotchSnap -configuration Release \
     -derivedDataPath "$OUT/dd" CONFIGURATION_BUILD_DIR="$PWD/$OUT/Release" \
+    MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
     build > "$OUT/build.log" 2>&1 || { tail -30 "$OUT/build.log"; exit 1; }
 echo "   $APP"
 
@@ -169,10 +184,6 @@ xcrun stapler staple "$OUT/NotchSnap.dmg" 2>&1 | tail -1 | sed 's/^/   /'
 # Uploading is part of releasing. Producing an artifact and stopping is how a
 # stale, unsigned build sat on the Releases page while a working one existed
 # only on this Mac (Marcello, 2026-08-04).
-# From the git tag, NOT CFBundleShortVersionString. The plist has said 1.0.0
-# since the beginning while the tags are at v1.5.x, so deriving the tag from it
-# would publish to a release that does not exist.
-TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 echo
 echo "8. Publishing to GitHub"
 if ! command -v gh > /dev/null; then
@@ -187,7 +198,34 @@ else
     echo "     gh release create $TAG $OUT/NotchSnap.dmg $OUT/NotchSnap.zip"
 fi
 
+# --- Appcast ---------------------------------------------------------------
+# The feed installed copies poll. generate_appcast signs each update with the
+# EdDSA private key from the keychain; the app carries the matching public key
+# and refuses anything that does not verify — so a compromised host still
+# cannot push code to users.
+echo
+echo "9. Generating the update feed"
+SPARKLE_BIN=$(find ~/Library/Developer/Xcode/DerivedData -path "*artifacts/sparkle/Sparkle/bin" -type d 2>/dev/null | head -1)
+if [ -z "$SPARKLE_BIN" ]; then
+    echo "   Sparkle tools not found. Run: xcodebuild -resolvePackageDependencies"
+else
+    FEEDDIR="$OUT/feed"
+    rm -rf "$FEEDDIR"; mkdir -p "$FEEDDIR"
+    cp "$OUT/NotchSnap.zip" "$FEEDDIR/"
+    # generate_appcast reads every archive in the folder and emits appcast.xml.
+    "$SPARKLE_BIN/generate_appcast" \
+        --download-url-prefix "https://github.com/AlphaTedi/Screenshot_app/releases/download/$TAG/" \
+        "$FEEDDIR" 2>&1 | sed 's/^/   /'
+    if [ -f "$FEEDDIR/appcast.xml" ]; then
+        cp "$FEEDDIR/appcast.xml" appcast.xml
+        echo "   appcast.xml updated"
+    fi
+fi
+
 echo
 echo "Done:"
 echo "  $OUT/NotchSnap.dmg   <- the download link"
 echo "  $OUT/NotchSnap.zip"
+echo
+echo "Commit and push appcast.xml — that is what installed copies read:"
+echo "  git add appcast.xml && git commit -m \"Release $TAG\" && git push"

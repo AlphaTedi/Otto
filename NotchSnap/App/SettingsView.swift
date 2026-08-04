@@ -192,9 +192,52 @@ struct GeneralSettingsView: View {
     @AppStorage(L10n.storageKey) private var appLanguage = "system"
     @AppStorage("showLegacyPanels") private var showLegacyPanels = false
 
+    @ObservedObject private var updates = UpdateController.shared
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             PageTitle(title: "General", subtitle: "Startup, feedback and clipboard behavior.")
+
+            // Updates first: it is the thing a person looks for when they hear
+            // a fix exists, and it states the running version so "am I current?"
+            // is answerable without leaving the window.
+            SettingsSection_Card(title: L10n.t("update.section")) {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 12) {
+                        Button {
+                            updates.checkForUpdates()
+                        } label: {
+                            Text(updates.canCheck ? L10n.t("update.check")
+                                                  : L10n.t("update.checking"))
+                        }
+                        .disabled(!updates.canCheck)
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(String(format: L10n.t("update.version"),
+                                        UpdateController.currentVersion))
+                                .font(.system(size: 11))
+                            Text(String(format: L10n.t("update.lastChecked"),
+                                        updates.lastCheckDescription))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+
+                    Toggle(isOn: Binding(
+                        get: { updates.automaticallyChecks },
+                        set: { updates.automaticallyChecks = $0 }
+                    )) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L10n.t("update.automatic"))
+                            Text(L10n.t("update.automaticHelp"))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
 
             SettingsSection_Card(title: "Panels") {
                 Toggle(isOn: Binding(

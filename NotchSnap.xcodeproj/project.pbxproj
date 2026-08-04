@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA00BB11CC22DD33EE44SP03 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = AA00BB11CC22DD33EE44SP02 /* Sparkle */; };
 		052E2BE93470603BA50E64D2 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 81D795E8D65422C509CC0C9C /* AppKit.framework */; };
 		06FE3C740C45168B53D42F4C /* NotchController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDE65A9C4E12466ED5903603 /* NotchController.swift */; };
 		08284509974CD670AA69BB0B /* TextExtractionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F008497BB5485486B0CAEB8D /* TextExtractionView.swift */; };
@@ -60,6 +61,7 @@
 		632033CE689FB245AE1957C8 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E62FE9045233B6EA30ECEA08 /* SwiftUI.framework */; };
 		657AB5F9E15A081311DC817B /* Permissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E448751D10ABC85AA452AC3 /* Permissions.swift */; };
 		AA00BB11CC22DD33EE44FC01 /* LaunchIntegrity.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00BB11CC22DD33EE44FC02 /* LaunchIntegrity.swift */; };
+		AA00BB11CC22DD33EE44SP10 /* UpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00BB11CC22DD33EE44SP11 /* UpdateController.swift */; };
 		6DFF4051A955F718F70BFEF3 /* TextRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F6C4D5BA91552D77B47FB65 /* TextRecognizer.swift */; };
 		706C6696922089FAE411E786 /* ColorPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ACA56FC0C794EB815935EAF /* ColorPicker.swift */; };
 		76635109CFF94E37A9661940 /* AnnotationLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 736B76CF6EFCDDC5F75AF3FC /* AnnotationLayer.swift */; };
@@ -137,6 +139,7 @@
 		78624054F2656FBE20600A3C /* TempFileManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TempFileManager.swift; sourceTree = "<group>"; };
 		7E448751D10ABC85AA452AC3 /* Permissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Permissions.swift; sourceTree = "<group>"; };
 		AA00BB11CC22DD33EE44FC02 /* LaunchIntegrity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchIntegrity.swift; sourceTree = "<group>"; };
+		AA00BB11CC22DD33EE44SP11 /* UpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateController.swift; sourceTree = "<group>"; };
 		81D795E8D65422C509CC0C9C /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
 		832E446F8E89ED0271805F51 /* TextBlockOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TextBlockOverlay.swift; path = NotchSnap/Capture/TextBlockOverlay.swift; sourceTree = SOURCE_ROOT; };
 		84C92F197DAF6CED42810033 /* ServiceManagement.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ServiceManagement.framework; path = System/Library/Frameworks/ServiceManagement.framework; sourceTree = SDKROOT; };
@@ -217,6 +220,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA00BB11CC22DD33EE44SP03 /* Sparkle in Frameworks */,
 				052E2BE93470603BA50E64D2 /* AppKit.framework in Frameworks */,
 				632033CE689FB245AE1957C8 /* SwiftUI.framework in Frameworks */,
 				0C95DD96AE7700E58D54F005 /* ScreenCaptureKit.framework in Frameworks */,
@@ -396,6 +400,7 @@
 				9D58F1FF901A1783872C9729 /* AppState.swift */,
 				7E448751D10ABC85AA452AC3 /* Permissions.swift */,
 				AA00BB11CC22DD33EE44FC02 /* LaunchIntegrity.swift */,
+				AA00BB11CC22DD33EE44SP11 /* UpdateController.swift */,
 				2F1B783B764932999A1FEF0B /* SettingsView.swift */,
 				A32063A8096DCB7171E34409 /* OnboardingView.swift */,
 				FF46EE41AA42BB43CC44DD45 /* Localization.swift */,
@@ -455,12 +460,34 @@
 			);
 			dependencies = (
 			);
+			packageProductDependencies = (
+				AA00BB11CC22DD33EE44SP02 /* Sparkle */,
+			);
 			name = NotchSnap;
 			productName = NotchSnap;
 			productReference = 0750A568AF81D73916FDA1CD /* NotchSnap.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AA00BB11CC22DD33EE44SP01 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.6.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AA00BB11CC22DD33EE44SP02 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA00BB11CC22DD33EE44SP01 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin PBXProject section */
 		FE13AEBD50B0933B335D4428 /* Project object */ = {
@@ -479,6 +506,9 @@
 			buildConfigurationList = C192FD2CBF98FB898D54C781 /* Build configuration list for PBXProject "NotchSnap" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
+			packageReferences = (
+				AA00BB11CC22DD33EE44SP01 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
@@ -552,6 +582,7 @@
 				34206B5CC6892130A876AA8D /* AppState.swift in Sources */,
 				657AB5F9E15A081311DC817B /* Permissions.swift in Sources */,
 				AA00BB11CC22DD33EE44FC01 /* LaunchIntegrity.swift in Sources */,
+				AA00BB11CC22DD33EE44SP10 /* UpdateController.swift in Sources */,
 				1F1C19FC2912D0907E997C14 /* SettingsView.swift in Sources */,
 				0D99CA6FF0A3543AE50C6B61 /* OnboardingView.swift in Sources */,
 				C1D718E235EFE1AEDF61E840 /* AppSettings.swift in Sources */,
