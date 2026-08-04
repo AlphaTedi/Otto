@@ -29,6 +29,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Select the Xcode we actually ship with
+        # The runner defaults to Xcode 16.4. Releases are built with 26.2, and
+        # the two disagree about Swift 6 strict concurrency — 16.4 rejects code
+        # 26.2 accepts, so CI failed on a build that ships fine.
+        #
+        # The previous workflow papered over this with SWIFT_VERSION=5.0 and
+        # SWIFT_STRICT_CONCURRENCY=minimal, which meant CI was compiling the app
+        # under rules the real build never uses: green here proved nothing.
+        # Matching the toolchain is the honest fix.
+        run: |
+          set -e
+          for candidate in /Applications/Xcode_26.2.app /Applications/Xcode_26.3.app \
+                           /Applications/Xcode_26.1.1.app /Applications/Xcode_26.0.1.app; do
+            if [ -d "$candidate" ]; then
+              sudo xcode-select -s "$candidate"
+              break
+            fi
+          done
+          xcodebuild -version
+
       - name: Create empty local config
         # Config/Local.xcconfig is gitignored (it holds signing identity and
         # OAuth credentials). The project references it, so CI needs a stub.
