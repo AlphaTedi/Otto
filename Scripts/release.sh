@@ -93,6 +93,39 @@ xcodebuild -project NotchSnap.xcodeproj -scheme NotchSnap -configuration Release
     build > "$OUT/build.log" 2>&1 || { tail -30 "$OUT/build.log"; exit 1; }
 echo "   $APP"
 
+# --- Re-sign Sparkle's nested helpers --------------------------------------
+# Xcode signs the app and the framework, but NOT the executables nested inside
+# Sparkle.framework — Updater.app, Autoupdate, and the two XPC services. They
+# ship pre-signed by the Sparkle project, and Apple rejected the whole archive:
+# "The binary is not signed with a valid Developer ID certificate" plus "the
+# signature does not include a secure timestamp", once per architecture.
+#
+# They have to be signed inside-out: each nested item first, then the framework
+# that contains them, then the app — signing an outer bundle first is undone the
+# moment anything inside it changes.
+if [ -d "$APP/Contents/Frameworks/Sparkle.framework" ]; then
+    echo
+    echo "1b. Signing Sparkle's nested helpers"
+    SPK="$APP/Contents/Frameworks/Sparkle.framework"
+    VER=$(readlink "$SPK/Versions/Current" || echo "Current")
+    for nested in \
+        "$SPK/Versions/$VER/XPCServices/Downloader.xpc" \
+        "$SPK/Versions/$VER/XPCServices/Installer.xpc" \
+        "$SPK/Versions/$VER/Updater.app" \
+        "$SPK/Versions/$VER/Autoupdate"
+    do
+        [ -e "$nested" ] || continue
+        codesign --force --options runtime --timestamp --sign "$IDENTITY" "$nested" 2>&1 \
+            | sed 's/^/   /'
+    done
+    codesign --force --options runtime --timestamp --sign "$IDENTITY" "$SPK" 2>&1 | sed 's/^/   /'
+    # The app's own signature is invalidated by the above, so redo it last.
+    codesign --force --options runtime --timestamp \
+        --entitlements NotchSnap/Resources/NotchSnap.entitlements \
+        --sign "$IDENTITY" "$APP" 2>&1 | sed 's/^/   /'
+    echo "   nested helpers signed"
+fi
+
 # --- Verify the signature BEFORE spending minutes on notarization ----------
 echo
 echo "2. Verifying signature"
@@ -139,8 +172,20 @@ echo "   Developer ID + Hardened Runtime confirmed, no debug entitlements."
 echo
 echo "3. Notarizing (Apple scans it; usually 1-5 minutes)"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT/notarize.zip"
-xcrun notarytool submit "$OUT/notarize.zip" --keychain-profile "$PROFILE" --wait \
-    2>&1 | sed 's/^/   /'
+NOTARY_OUT=$(xcrun notarytool submit "$OUT/notarize.zip" \
+    --keychain-profile "$PROFILE" --wait 2>&1 || true)
+echo "$NOTARY_OUT" | sed 's/^/   /'
+# Do NOT continue on rejection. The script previously walked on to stapling,
+# which then failed with an opaque "Record not found" instead of showing why.
+case "$NOTARY_OUT" in
+    *"status: Accepted"*) ;;
+    *)  SUBID=$(echo "$NOTARY_OUT" | sed -n 's/.*id: \([0-9a-f-]\{36\}\).*/\1/p' | head -1)
+        echo
+        echo "   Notarization FAILED. Apple's reasons:"
+        [ -n "$SUBID" ] && xcrun notarytool log "$SUBID" --keychain-profile "$PROFILE" 2>/dev/null \
+            | grep -E '"(message|path)"' | sed 's/^/   /' | head -20
+        exit 1 ;;
+esac
 
 # --- Staple ----------------------------------------------------------------
 # Embeds the ticket so the app validates without a network round trip on the
