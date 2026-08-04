@@ -239,8 +239,13 @@ elif gh release view "$TAG" > /dev/null 2>&1; then
     gh release upload "$TAG" "$OUT/NotchSnap.dmg" "$OUT/NotchSnap.zip" --clobber
     echo "   Updated $TAG"
 else
-    echo "   No release $TAG yet. Create it, then re-run, or:"
-    echo "     gh release create $TAG $OUT/NotchSnap.dmg $OUT/NotchSnap.zip"
+    # CREATE it, do not print advice. Printing advice is how an appcast got
+    # published pointing at a release that did not exist — every installed copy
+    # would have been offered an update it could not download
+    # (Marcello, 2026-08-04).
+    gh release create "$TAG" "$OUT/NotchSnap.dmg" "$OUT/NotchSnap.zip" \
+        --title "NotchSnap ${TAG#v}" --generate-notes
+    echo "   Created $TAG"
 fi
 
 # --- Appcast ---------------------------------------------------------------
@@ -264,6 +269,23 @@ else
     if [ -f "$FEEDDIR/appcast.xml" ]; then
         cp "$FEEDDIR/appcast.xml" appcast.xml
         echo "   appcast.xml updated"
+    fi
+fi
+
+# --- Prove the feed points at something real -------------------------------
+# An appcast whose enclosure 404s is worse than no appcast: the app offers an
+# update, then fails to fetch it.
+if [ -f appcast.xml ]; then
+    FEED_URL=$(grep -o 'url="[^"]*NotchSnap.zip"' appcast.xml | head -1 | sed 's/url="//;s/"//')
+    if [ -n "$FEED_URL" ]; then
+        CODE=$(curl -sIL --max-time 30 -o /dev/null -w "%{http_code}" "$FEED_URL" || echo "000")
+        if [ "$CODE" = "200" ]; then
+            echo "   feed enclosure resolves (HTTP 200)"
+        else
+            echo "   WARNING: the appcast points at $FEED_URL which returns $CODE."
+            echo "   Installed copies would offer an update they cannot download."
+            exit 1
+        fi
     fi
 fi
 
