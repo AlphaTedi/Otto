@@ -58,12 +58,15 @@ if [ "$MISSING" = "1" ]; then
     exit 1
 fi
 
-if ! security find-identity -v -p codesigning | grep -q "$IDENTITY"; then
+IDENTITIES=$(security find-identity -v -p codesigning 2>&1 || true)
+case "$IDENTITIES" in
+    *"$IDENTITY"*) ;;
+    *)
     echo "  No certificate matching '$IDENTITY' is installed in your keychain."
     echo "  Download it from developer.apple.com > Certificates, or let Xcode"
     echo "  create one: Settings > Accounts > Manage Certificates > +"
-    exit 1
-fi
+    exit 1 ;;
+esac
 
 # --- Build -----------------------------------------------------------------
 echo
@@ -103,11 +106,18 @@ case "$SIGINFO" in
 esac
 
 # get-task-allow is injected by Xcode and rejected by notarization.
-if codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q "get-task-allow"; then
-    echo "   get-task-allow is embedded. Notarization will be rejected."
-    echo "   Add to $CONFIG:  CODE_SIGN_INJECT_BASE_ENTITLEMENTS[config=Release] = NO"
-    exit 1
-fi
+#
+# Captured, not piped into grep -q. Piping was worse here than in the checks
+# above: when the entitlement IS present, grep matches, codesign takes SIGPIPE,
+# pipefail makes the pipeline non-zero, and the `if` reads false — so the guard
+# went quiet in precisely the case it exists to catch.
+ENTS=$(codesign -d --entitlements - --xml "$APP" 2>/dev/null || true)
+case "$ENTS" in
+    *get-task-allow*)
+        echo "   get-task-allow is embedded. Notarization will be rejected."
+        echo "   Add to $CONFIG:  CODE_SIGN_INJECT_BASE_ENTITLEMENTS[config=Release] = NO"
+        exit 1 ;;
+esac
 echo "   Developer ID + Hardened Runtime confirmed, no debug entitlements."
 
 # --- Notarize --------------------------------------------------------------
