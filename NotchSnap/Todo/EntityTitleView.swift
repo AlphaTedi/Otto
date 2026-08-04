@@ -47,17 +47,27 @@ struct EntityTitleView: NSViewRepresentable {
     /// the panel measures chips-in-flow like any other content.
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: EntityTextView,
                       context: Context) -> CGSize? {
-        guard let container = nsView.textContainer,
-              let layout = nsView.layoutManager else { return nil }
         let width: CGFloat = {
             if let w = proposal.width, w.isFinite, w > 0 { return w }
             return 100_000   // unconstrained: natural single-line size
         }()
-        container.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
-        layout.ensureLayout(for: container)
-        let used = layout.usedRect(for: container)
-        return CGSize(width: proposal.width ?? ceil(used.width),
-                      height: ceil(used.height))
+
+        // Measure the CURRENT title directly, NOT the live text view's layout
+        // manager. SwiftUI can call this before updateNSView has re-laid-out,
+        // so the view still holds the previous string: a title that now wraps
+        // to two lines was measured as one, the row kept a one-line height, and
+        // the second line drew over the row beneath it (Marcello, 2026-08-04).
+        //
+        // Exactly the same trap as HighlightingTitleField, which carries the
+        // same warning — reading a live NSView's layout during SwiftUI's sizing
+        // pass is never safe.
+        let measured = Self.attributedTitle(title, bright: isBright)
+            .boundingRect(
+                with: NSSize(width: width, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading]
+            )
+        return CGSize(width: proposal.width ?? ceil(measured.width),
+                      height: ceil(measured.height))
     }
 
     // MARK: Attributed assembly

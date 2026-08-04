@@ -246,7 +246,20 @@ class NotchController: ObservableObject {
 
             // Step 2: after 80ms close the shape
             try? await Task.sleep(nanoseconds: 80_000_000) // 80ms
-            guard !Task.isCancelled else { return }
+            if Task.isCancelled {
+                // The collapse was called off inside this 80ms window — the
+                // cursor came back, or something cancelled it.
+                //
+                // Step 1 already hid the content. Returning here used to leave
+                // the panel EXPANDED with contentVisible == false: an open,
+                // black, empty notch that stayed that way until Escape
+                // (Marcello, 2026-08-04). Put the content back, since we are
+                // no longer collapsing, and release the task so a later
+                // collapse is not blocked by the `collapseTask == nil` guard.
+                withAnimation(NotchAnimation.contentIn) { contentVisible = true }
+                collapseTask = nil
+                return
+            }
 
             // Feedback only when the collapse actually happens — a collapse
             // cancelled by hovering back in must stay silent.

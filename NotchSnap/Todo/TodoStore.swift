@@ -493,6 +493,16 @@ final class TodoStore: ObservableObject {
     /// leaving every other list untouched.
     /// Drop past the last row. `reorder(_:before:)` can only ever land an item
     /// in front of another one, so without this the bottom slot is unreachable.
+    /// Sweep: drop every completed item in a category. The pile is history,
+    /// not data — it accumulates forever otherwise, and Marcello had 19 sitting
+    /// in Work (2026-08-04). Only ever removes items already marked done.
+    func clearCompleted(in collectionID: UUID) {
+        let before = items.count
+        items.removeAll { $0.collectionID == collectionID && $0.isCompleted }
+        guard items.count != before else { return }
+        scheduleSave()
+    }
+
     func moveToEnd(_ id: UUID) {
         guard let collection = activeCollection,
               let sourceIdx = items.firstIndex(where: { $0.id == id }) else { return }

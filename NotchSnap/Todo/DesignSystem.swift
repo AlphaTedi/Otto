@@ -108,11 +108,18 @@ enum DSShape {
 }
 
 enum DSFont {
-    /// 15pt, not 13 (Marcello, 2026-07-26). A to-do title is the primary
-    /// content of the whole panel; at 13 it read as secondary. Anything that
-    /// renders a to-do title must match: EntityTitleView's TextKit body
-    /// attributes and the meeting card's title both key off this size.
-    static let todoTitleSize: CGFloat = 15
+    /// The scale has two steps, deliberately (Marcello, 2026-08-04):
+    ///
+    ///   cardTitleSize 15  — the meeting card. One item, needs to carry.
+    ///   todoTitleSize 13  — a to-do row. There are twenty of these; at 15 they
+    ///                       dominated the panel and ate the vertical space.
+    ///
+    /// They were briefly the same size, which flattened the hierarchy and made
+    /// the list feel oversized. Anything rendering a to-do title must use
+    /// todoTitleSize — EntityTitleView's TextKit body attributes included, or
+    /// the measured row height stops matching the drawn text.
+    static let cardTitleSize: CGFloat = 15
+    static let todoTitleSize: CGFloat = 13
     static let todoTitle: Font = .system(size: todoTitleSize)
     static let tabLabel: Font = .system(size: 11)
     static let sectionLabel: Font = .system(size: 10, weight: .regular)

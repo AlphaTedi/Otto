@@ -217,6 +217,30 @@ private struct TodoTabRow: View {
                     .onDrag {
                         draggedCollectionID = collection.id
                         return .notchSnapInternal(collection.id)
+                    } preview: {
+                        // Without an explicit preview SwiftUI snapshots the
+                        // chip itself — and an INACTIVE chip has a clear
+                        // background, so the dragged tab was a few floating
+                        // words with nothing behind them and read as a glitch
+                        // (Marcello, 2026-08-04). Give it a surface.
+                        HStack(spacing: 5) {
+                            Circle()
+                                .fill(collection.color)
+                                .frame(width: 7, height: 7)
+                            Text(collection.name)
+                                .font(DSFont.tabLabel)
+                                .foregroundStyle(DSColor.textPrimaryBright)
+                        }
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 6)
+                        .background(
+                            DSShape.squircle(DSRadius.chipCorner)
+                                .fill(DSColor.fieldBackground)
+                        )
+                        .overlay(
+                            DSShape.squircle(DSRadius.chipCorner)
+                                .strokeBorder(DSColor.panelBorder, lineWidth: 0.5)
+                        )
                     }
                     .onDrop(of: [.notchSnapInternalItem], delegate: CollectionReorderDropDelegate(
                         targetID: collection.id,
@@ -409,7 +433,21 @@ struct TodoBrowsingView: View {
     /// overflow — that's what pushed the tabs off the top and squeezed
     /// Completed into a tiny window. Below the threshold everything renders
     /// inline (natural height, no scroll, no switch-lag flash).
-    private static let maxRegion: CGFloat = 400
+    /// Height budget for the scrolling region.
+    ///
+    /// This was a flat 400. With a long list the frame was already pinned at
+    /// the cap, so opening Completed grew the CONTENT but not the panel — the
+    /// notch did not move and the completed rows appeared only if you thought
+    /// to scroll (Marcello, 2026-08-04). Opening a section has to be visible.
+    ///
+    /// So: derived from the actual screen rather than a magic number, and
+    /// allowed to grow when Completed is open. It stays bounded — the panel
+    /// hangs from the top of the display and must not run off the bottom.
+    private static func maxRegion(completedExpanded: Bool) -> CGFloat {
+        let available = NSScreen.main?.visibleFrame.height ?? 800
+        let ceiling = completedExpanded ? available * 0.62 : available * 0.45
+        return min(max(320, ceiling), completedExpanded ? 720 : 460)
+    }
     private static let inlineRowThreshold = 8
 
     @State private var regionNaturalHeight: CGFloat = 0
@@ -461,7 +499,11 @@ struct TodoBrowsingView: View {
                 content.measureHeight(SectionHeightKey.self)
             }
             .onPreferenceChange(SectionHeightKey.self) { regionNaturalHeight = $0 }
-            .frame(height: min(regionNaturalHeight, Self.maxRegion))
+            .frame(height: min(regionNaturalHeight,
+                               Self.maxRegion(completedExpanded: store.completedExpanded)))
+            // The panel must animate to the new budget, or opening Completed
+            // snaps instead of growing.
+            .animation(NotchAnimation.contentHug, value: store.completedExpanded)
         }
     }
 
@@ -572,6 +614,16 @@ struct TodoBrowsingView: View {
                             .foregroundStyle(DSColor.textHint)
                             .contentTransition(.numericText())
                         Spacer()
+                        // Sweep: clear the completed pile in one go. Only
+                        // offered while the section is open — clearing a list
+                        // you cannot see is not something to make easy.
+                        if store.completedExpanded {
+                            SweepButton {
+                                withAnimation(NotchAnimation.contentHug) {
+                                    store.clearCompleted(in: collection.id)
+                                }
+                            }
+                        }
                     }
                     // Carries the separation the rule used to provide.
                     .padding(.top, DSSpacing.tabRowBottomMargin + 10)
@@ -994,5 +1046,37 @@ private extension NSItemProvider {
             return nil
         }
         return provider
+    }
+}
+
+// MARK: - SweepButton — clear the completed pile (Marcello, 2026-08-04)
+//
+// Sits at the right of the Completed header. Deliberately quiet: it only
+// appears while the section is open, and it fades up on hover rather than
+// advertising itself, because it throws work away and should not be the most
+// obvious thing in the row.
+
+private struct SweepButton: View {
+    let action: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "wind")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(hover ? DSColor.textPrimaryBright : DSColor.textHint)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(
+                    DSShape.squircle(DSRadius.chipCorner)
+                        .fill(hover ? DSColor.fieldBackground : .clear)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(NotchAnimation.hintFade) { hover = hovering }
+        }
+        .help(L10n.t("todo.clearCompleted"))
     }
 }

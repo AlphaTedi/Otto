@@ -93,8 +93,9 @@ private struct MeetingCard: View {
                 }
 
                 Text(event.title.isEmpty ? L10n.t("cal.untitled") : event.title)
-                    // Matches a to-do title: the card sits in the same list.
-                    .font(.system(size: DSFont.todoTitleSize, weight: .medium))
+                    // One step ABOVE a to-do row: the card is a single item
+                    // that has to carry, the rows are many.
+                    .font(.system(size: DSFont.cardTitleSize, weight: .medium))
                     .foregroundStyle(isNext ? DSColor.textPrimaryBright : DSColor.textSecondary)
                     .lineLimit(1)
                     .padding(.top, 2)
