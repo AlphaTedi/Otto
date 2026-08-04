@@ -79,18 +79,36 @@ echo "   $APP"
 echo
 echo "2. Verifying signature"
 codesign --verify --deep --strict --verbose=2 "$APP" 2>&1 | sed 's/^/   /'
-if ! codesign -dv "$APP" 2>&1 | grep -q "^TeamIdentifier=$TEAM"; then
-    echo "   Signed, but not with team $TEAM. Check CODE_SIGN_IDENTITY."
-    exit 1
-fi
+
+# Capture once, then match against the string. NOT `codesign | grep -q`:
+# grep -q exits the moment it matches, codesign takes SIGPIPE and returns
+# non-zero, and `set -o pipefail` turns that into a failed check — so a
+# CORRECT build reported "Hardened Runtime is OFF" and refused to continue.
+SIGINFO=$(codesign -dv --verbose=2 "$APP" 2>&1 || true)
+
+case "$SIGINFO" in
+    *"TeamIdentifier=$TEAM"*) ;;
+    *) echo "   Signed, but not with team $TEAM. Check CODE_SIGN_IDENTITY."
+       echo "$SIGINFO" | grep -E "^Authority|^TeamIdentifier" | sed 's/^/     /'
+       exit 1 ;;
+esac
+
 # Hardened Runtime is non-negotiable for notarization; catch it here rather
 # than after a round trip to Apple.
-if ! codesign -dv --verbose=2 "$APP" 2>&1 | grep -q "flags=.*runtime"; then
-    echo "   Hardened Runtime is OFF. Notarization will be rejected."
-    echo "   Add to $CONFIG:  ENABLE_HARDENED_RUNTIME[config=Release] = YES"
+case "$SIGINFO" in
+    *"(runtime)"*|*",runtime)"*) ;;
+    *) echo "   Hardened Runtime is OFF. Notarization will be rejected."
+       echo "   Add to $CONFIG:  ENABLE_HARDENED_RUNTIME[config=Release] = YES"
+       exit 1 ;;
+esac
+
+# get-task-allow is injected by Xcode and rejected by notarization.
+if codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q "get-task-allow"; then
+    echo "   get-task-allow is embedded. Notarization will be rejected."
+    echo "   Add to $CONFIG:  CODE_SIGN_INJECT_BASE_ENTITLEMENTS[config=Release] = NO"
     exit 1
 fi
-echo "   Developer ID + Hardened Runtime confirmed."
+echo "   Developer ID + Hardened Runtime confirmed, no debug entitlements."
 
 # --- Notarize --------------------------------------------------------------
 echo
