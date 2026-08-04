@@ -1,36 +1,44 @@
-name: Build & Release NotchSnap
+name: Build check
+
+# Verification only. It does NOT create releases and does NOT sign anything.
+#
+# It used to run `xcodegen generate` (overwriting the committed .xcodeproj with
+# one built from project.yml, last updated in March), build UNSIGNED, and then
+# upload that zip to the GitHub release for the tag. So every tag push quietly
+# replaced a Developer ID-signed, notarized build with an unsigned one — which
+# is why the Releases page served an ad-hoc binary with a broken signature and
+# the wrong bundle identifier, and why it could never get calendar permission
+# on another Mac.
+#
+# Releases are produced by Scripts/release.sh, which signs, notarizes, staples,
+# builds the DMG and publishes. CI cannot do that: the Developer ID certificate
+# is not here and should not be. All CI can usefully do is catch a build that
+# does not compile on a clean machine.
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: macos-15
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode 16
+      - name: Create empty local config
+        # Config/Local.xcconfig is gitignored (it holds signing identity and
+        # OAuth credentials). The project references it, so CI needs a stub.
         run: |
-          ls /Applications | grep -i xcode
-          sudo xcode-select -s /Applications/Xcode_16.app 2>/dev/null \
-            || sudo xcode-select -s "$(ls -d /Applications/Xcode_16* | head -1)" 2>/dev/null \
-            || sudo xcode-select -s /Applications/Xcode.app
-          xcodebuild -version
-
-      - name: Install XcodeGen
-        run: brew install xcodegen
-
-      - name: Generate Xcode project
-        run: xcodegen generate
+          mkdir -p Config
+          printf 'MARKETING_VERSION = 0.0.0\nCURRENT_PROJECT_VERSION = 1\n' > Config/Local.xcconfig
 
       - name: Build (Release, unsigned)
+        # The COMMITTED project — no xcodegen. project.yml drifted months out of
+        # date and regenerating from it tests a project nobody ships.
         run: |
           set -e
           xcodebuild \
@@ -38,34 +46,7 @@ jobs:
             -scheme NotchSnap \
             -configuration Release \
             -derivedDataPath build \
-            CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            SWIFT_STRICT_CONCURRENCY=minimal \
-            SWIFT_VERSION=5.0 \
-            clean build
-
-      - name: Package .app into zip
-        run: |
-          set -e
-          APP_PATH="build/Build/Products/Release/NotchSnap.app"
-          if [ ! -d "$APP_PATH" ]; then
-            echo "App non trovata in $APP_PATH"
-            find build -name "*.app" -print
-            exit 1
-          fi
-          mkdir -p release
-          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "release/NotchSnap.zip"
-
-      - name: Upload artifact (per workflow_dispatch)
-        uses: actions/upload-artifact@v4
-        with:
-          name: NotchSnap-app
-          path: release/NotchSnap.zip
-
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: release/NotchSnap.zip
-          generate_release_notes: true
+            ENABLE_HARDENED_RUNTIME=NO \
+            build
