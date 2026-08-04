@@ -36,6 +36,25 @@ final class EventKitCalendarProvider: MeetingProvider {
         Self.authorized(EKEventStore.authorizationStatus(for: .event))
     }
 
+    /// Spell out what macOS actually reports. "Access was denied" with no
+    /// value behind it sent us guessing repeatedly — at a stale TCC record, at
+    /// two copies of the app, at the store instance — while the answer was one
+    /// enum away (Marcello, 2026-08-05).
+    static func statusDescription(_ status: EKAuthorizationStatus) -> String {
+        switch status {
+        case .notDetermined: return "notDetermined"
+        case .restricted:    return "restricted"
+        case .denied:        return "denied"
+        case .authorized:    return "authorized"
+        @unknown default:
+            if #available(macOS 14.0, *) {
+                if status == .fullAccess { return "fullAccess" }
+                if status == .writeOnly  { return "writeOnly" }
+            }
+            return "unknown(\(status.rawValue))"
+        }
+    }
+
     private static func authorized(_ status: EKAuthorizationStatus) -> Bool {
         if #available(macOS 14.0, *) {
             return status == .fullAccess
@@ -237,7 +256,9 @@ final class EventKitCalendarProvider: MeetingProvider {
                let granted = try? await store.requestFullAccessToEvents(), granted {
                 return nil
             }
-            return L10n.t("cal.err.deniedRecover")
+            return String(format: L10n.t("cal.err.deniedRecoverDetail"),
+                          Self.statusDescription(status),
+                          Bundle.main.bundleIdentifier ?? "?")
         }
         do {
             let granted: Bool
@@ -246,7 +267,15 @@ final class EventKitCalendarProvider: MeetingProvider {
             } else {
                 granted = try await store.requestAccess(to: .event)
             }
-            guard granted else { return L10n.t("cal.err.denied") }
+            guard granted else {
+                // Report what macOS actually said, and under which identity —
+                // a Developer ID re-sign changes the app's TCC subject, so an
+                // older grant for the same bundle id does not carry over.
+                let after = EKEventStore.authorizationStatus(for: .event)
+                return String(format: L10n.t("cal.err.deniedDetail"),
+                              Self.statusDescription(after),
+                              Bundle.main.bundleIdentifier ?? "?")
+            }
             if store.calendars(for: .event).isEmpty {
                 // Access granted but nothing to read — the most likely real
                 // situation on a fresh Mac, so say what to do about it.

@@ -166,7 +166,25 @@ case "$ENTS" in
         echo "   Add to $CONFIG:  CODE_SIGN_INJECT_BASE_ENTITLEMENTS[config=Release] = NO"
         exit 1 ;;
 esac
-echo "   Developer ID + Hardened Runtime confirmed, no debug entitlements."
+# Hardened Runtime gates access to calendars, contacts, mic and camera behind
+# entitlements. Without them macOS refuses the resource with NO prompt and NO
+# entry in the Privacy list — indistinguishable from the user denying it. That
+# shipped for five releases: calendar access worked in Debug (no hardened
+# runtime) and was silently dead in every signed build (Marcello, 2026-08-05).
+for required in \
+    "com.apple.security.personal-information.calendars" \
+    "com.apple.security.personal-information.addressbook" \
+    "com.apple.security.device.audio-input"
+do
+    case "$ENTS" in
+        *"$required"*) ;;
+        *) echo "   MISSING entitlement: $required"
+           echo "   Hardened Runtime will deny that resource silently at runtime."
+           echo "   Add it to NotchSnap/Resources/NotchSnap.entitlements"
+           exit 1 ;;
+    esac
+done
+echo "   Developer ID + Hardened Runtime confirmed, entitlements present."
 
 # --- Notarize --------------------------------------------------------------
 echo
