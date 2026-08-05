@@ -68,9 +68,32 @@ class AppState: ObservableObject {
     @Published var notchBarHeight: CGFloat = 38
 
     /// Headroom available inside the pre-sized panel window — the hugging
-    /// height is clamped to this so the shape never outgrows its NSPanel
-    /// (NotchController sizes the window to expandedSize.height + 380).
-    static let maxExtraHeight: CGFloat = 372
+    /// height is clamped to this so the shape never outgrows its NSPanel.
+    /// NotchController sizes the window from this SAME value, so the window
+    /// and the shape cannot drift apart.
+    ///
+    /// Screen-derived rather than the old fixed 372, which put the ceiling in
+    /// the same place on a 13" laptop and a 27" display and made a long list
+    /// unreachable for no reason. Still bounded: a panel that runs most of the
+    /// way down the screen stops reading as a notch.
+    static var maxExtraHeight: CGFloat {
+        let available = NSScreen.main?.visibleFrame.height ?? 800
+        return min(max(372, available * 0.42), 520)
+    }
+
+    /// The tallest the MEASURED to-do content may be before it has to scroll.
+    ///
+    /// Anything past this is laid out below the silhouette's bottom edge and
+    /// is therefore invisible — not clipped with a scrollbar, just gone. That
+    /// is exactly how the end of a long list and the whole Completed section
+    /// went missing: the scroll region allowed itself up to 720pt while the
+    /// shape could only ever show ~539pt of content, and nothing reconciled
+    /// the two (Marcello, 2026-08-05). The scroll region now derives its own
+    /// ceiling from this value so they can never disagree again.
+    var maxTodoContentHeight: CGFloat {
+        let filterBar: CGFloat = showsNotchFilterBar ? 34 : 0
+        return expandedBaseHeight + Self.maxExtraHeight - notchBarHeight - 8 - filterBar
+    }
 
     /// The user's gallery height preset — the baseline `extraHeight` is
     /// measured against. Same key as NotchController's @AppStorage.

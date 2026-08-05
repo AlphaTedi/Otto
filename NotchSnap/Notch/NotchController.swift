@@ -963,7 +963,10 @@ class NotchController: ObservableObject {
         let notchRect = calculateNotchRect(screen: screen)
         // VW-1: fixed width. Height headroom covers the tallest tab (Notes
         // with a full to-do list) so the shape can grow without clipping.
-        let height = expandedSize.height + 380
+        // Taken from the SAME value the hugging height clamps against, plus a
+        // small margin — a window smaller than the shape's own ceiling would
+        // silently clip the bottom of the panel.
+        let height = expandedSize.height + AppState.maxExtraHeight + 24
         return NSRect(
             x: notchRect.midX - expandedSize.width / 2,
             y: screen.frame.maxY - height,

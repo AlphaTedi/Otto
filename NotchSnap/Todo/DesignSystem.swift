@@ -56,6 +56,39 @@ enum DSColor {
         static let all: [Color] = [blue, purple, amber, green, coral]
     }
 
+    /// Attendee avatars. A separate family from CategoryPalette, which is
+    /// tuned to carry meaning at 7pt as a category dot — at 24pt behind a
+    /// letter those same colours were "too pushy" (Marcello, 2026-08-05).
+    ///
+    /// Each entry is a PAIR: a pastel ground and a saturated letter of the
+    /// same hue. That relationship is what makes the reference set read as one
+    /// system rather than ten unrelated chips — the letter is never black, it
+    /// is the ground turned up.
+    enum AvatarPalette {
+        struct Tone {
+            let background: Color
+            let foreground: Color
+        }
+
+        static let all: [Tone] = [
+            Tone(background: Color(hex: "#C9D6FB"), foreground: Color(hex: "#22409E")), // blue
+            Tone(background: Color(hex: "#F6EDC8"), foreground: Color(hex: "#8A6A12")), // gold
+            Tone(background: Color(hex: "#CBE8D2"), foreground: Color(hex: "#22683C")), // green
+            Tone(background: Color(hex: "#FAD6CC"), foreground: Color(hex: "#A94526")), // coral
+            Tone(background: Color(hex: "#E1D4F6"), foreground: Color(hex: "#5A34A0")), // violet
+            Tone(background: Color(hex: "#C8E7E6"), foreground: Color(hex: "#166C69")), // teal
+            Tone(background: Color(hex: "#F8D3E2"), foreground: Color(hex: "#9C2F68")), // pink
+            Tone(background: Color(hex: "#FADFC3"), foreground: Color(hex: "#95530F")), // amber
+            Tone(background: Color(hex: "#E3EFC2"), foreground: Color(hex: "#566E1C")), // lime
+            Tone(background: Color(hex: "#D7DEE7"), foreground: Color(hex: "#3D4B5C")), // slate
+        ]
+
+        /// The hairline inside every avatar's edge. Dark and nearly invisible
+        /// on its own — it exists so a pale disc still has a defined boundary
+        /// against a pale photo or a neighbouring disc.
+        static let innerStroke = Color.black.opacity(0.10)
+    }
+
     // Urgency (see TodoUrgency in notchsnap_todo_pivot_prd.md Section 10)
     static let urgencyLow = Color(hex: "#8FBF7A")
     static let urgencyMedium = Color(hex: "#E8C15A")
@@ -176,7 +209,6 @@ struct CategoryTabChip: View {
     /// directly, the way Reminders/Things do. Supersedes drift-table item #3
     /// in notchsnap_design_reference_prd.md §10.
     let remaining: Int?
-    let numberBadge: Int?           // shown only while a modifier key is held
 
     var body: some View {
         HStack(spacing: 5) {
@@ -205,19 +237,9 @@ struct CategoryTabChip: View {
         .padding(.vertical, 5)
         .background(isActive ? categoryColor : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous))
-        .overlay(alignment: .topTrailing) {
-            if let numberBadge {
-                Text("\(numberBadge)")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundColor(isActive ? DSColor.primaryText : Color(hex: "#AAAAAA"))
-                    .padding(.horizontal, 3)
-                    .background(isActive ? DSColor.primaryFill : Color(hex: "#333333"))
-                    .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
-                    .offset(x: 6, y: -8)
-                    .transition(.opacity)
-            }
-        }
-        .animation(DSAnimation.secondary, value: numberBadge)
+        // No ⌘-held index badge (Marcello, 2026-08-05). ⌘1-9 still jumps
+        // between categories; it is documented in the "?" shortcuts overlay
+        // like every other shortcut, rather than printed over the tabs.
     }
 }
 
@@ -696,6 +718,9 @@ struct AttendeeAvatar: View {
 
     @ObservedObject private var photos = AttendeePhotoStore.shared
 
+    /// Separator width between overlapping discs.
+    private var ringWidth: CGFloat { diameter > 20 ? 2 : 1.5 }
+
     var body: some View {
         Group {
             if let email, let image = photos.photo(for: email) {
@@ -709,18 +734,33 @@ struct AttendeeAvatar: View {
                 // Prefer the contact's real name for the initial — an
                 // address-only attendee would otherwise read as its domain.
                 let display = email.flatMap { photos.name(for: $0) } ?? name
+                let tone = Self.tone(for: display)
                 Circle()
-                    .fill(Self.color(for: display).opacity(isMuted ? 0.55 : 1))
+                    .fill(tone.background.opacity(isMuted ? 0.55 : 1))
                     .frame(width: diameter, height: diameter)
                     .overlay(
+                        // Proportions from Marcello's spec: a 14pt letter on a
+                        // 32pt disc, medium weight, line-height 100%.
                         Text(Self.initial(for: display))
-                            .font(.system(size: diameter * 0.42, weight: .bold))
-                            .foregroundStyle(Color(hex: "#111111"))
+                            .font(.system(size: diameter * 0.4375, weight: .medium))
+                            .foregroundStyle(tone.foreground.opacity(isMuted ? 0.7 : 1))
                     )
             }
         }
+        // Inside the edge, under the ring: a pale disc or a light photo would
+        // otherwise dissolve into whatever sits behind it.
         .overlay(
-            Circle().strokeBorder(ringColor, lineWidth: diameter > 20 ? 2 : 1.5)
+            Circle().strokeBorder(DSColor.AvatarPalette.innerStroke, lineWidth: 1)
+        )
+        // The separator sits OUTSIDE the disc rather than on top of it, so it
+        // cannot eat into the artwork or hide the hairline above. Drawn as a
+        // background it adds no layout size — neighbours still overlap by the
+        // stack's own ratio.
+        .background(
+            Circle()
+                .fill(ringColor)
+                .frame(width: diameter + ringWidth * 2,
+                       height: diameter + ringWidth * 2)
         )
     }
 
@@ -732,11 +772,11 @@ struct AttendeeAvatar: View {
         return String(first).uppercased()
     }
 
-    /// AV-5: stable per-person colour from the category palette family.
+    /// AV-5: stable per-person tone from the pastel avatar family.
     /// Hash is computed by hand — Swift's `hashValue` is randomly seeded per
     /// process, so a person's colour would change on every launch.
-    static func color(for name: String) -> Color {
-        let palette = DSColor.CategoryPalette.all
+    static func tone(for name: String) -> DSColor.AvatarPalette.Tone {
+        let palette = DSColor.AvatarPalette.all
         var hash: UInt64 = 5381
         for byte in name.lowercased().utf8 {
             hash = (hash &* 33) &+ UInt64(byte)
@@ -774,6 +814,9 @@ struct AvatarStack: View {
                                isMuted: isMuted, ringColor: ringColor)
             }
             if extra > 0 {
+                // Deliberately NOT pastel: this disc is a count, not a person,
+                // and the dark ground is what separates "and 3 more" from the
+                // faces beside it.
                 Circle()
                     .fill(Color(hex: "#3A3A3A"))
                     .frame(width: diameter, height: diameter)
@@ -790,7 +833,15 @@ struct AvatarStack: View {
                             .minimumScaleFactor(0.6)
                             .padding(.horizontal, diameter * 0.1)
                     )
-                    .overlay(Circle().strokeBorder(ringColor, lineWidth: diameter > 20 ? 2 : 1.5))
+                    .overlay(
+                        Circle().strokeBorder(DSColor.AvatarPalette.innerStroke, lineWidth: 1)
+                    )
+                    .background(
+                        Circle()
+                            .fill(ringColor)
+                            .frame(width: diameter + (diameter > 20 ? 4 : 3),
+                                   height: diameter + (diameter > 20 ? 4 : 3))
+                    )
             }
         }
     }

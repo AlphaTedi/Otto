@@ -30,6 +30,12 @@ final class GoogleOAuth {
     /// Settings could only say "connected" without saying to what.
     private static let scope = [
         "https://www.googleapis.com/auth/calendar.events.readonly",
+        // Workspace directory profiles — read-only, and only ever queried for
+        // the addresses already listed on a meeting the user was invited to.
+        // This is what puts colleagues' faces on the attendee avatars; without
+        // it EventKit and the Calendar API both hand over bare addresses and
+        // every colleague renders as a letter (Marcello, 2026-08-05).
+        "https://www.googleapis.com/auth/directory.readonly",
         "openid", "email",
     ].joined(separator: " ")
     private static let authEndpoint = "https://accounts.google.com/o/oauth2/v2/auth"

@@ -29,6 +29,49 @@ private struct TodoContentHeightKey: PreferenceKey {
     }
 }
 
+/// How far the capped to-do region has scrolled, in points from the top.
+private struct ScrollOffsetKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+/// Softens whichever edge of a scrolling region has content past it.
+///
+/// A capped ScrollView crops on a hard line, which reads as "the list ends
+/// here" — the reason to-dos below the fold and the whole Completed section
+/// looked missing rather than scrolled away. A fade says "this continues"
+/// without adding a control or a label to read, and it disappears at each end
+/// so a fully-scrolled list still terminates cleanly.
+private struct ScrollEdgeFade: ViewModifier {
+    let scrollOffset: CGFloat
+    let contentHeight: CGFloat
+    let viewportHeight: CGFloat
+
+    private let fade: CGFloat = 22
+    /// 2pt of slack: sub-pixel offsets must not leave a permanent haze on a
+    /// list that is actually at its end.
+    private var hasAbove: Bool { scrollOffset > 2 }
+    private var hasBelow: Bool { contentHeight - scrollOffset - viewportHeight > 2 }
+
+    func body(content: Content) -> some View {
+        content.mask(
+            VStack(spacing: 0) {
+                LinearGradient(colors: [.black.opacity(hasAbove ? 0 : 1), .black],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(height: fade)
+                Color.black
+                LinearGradient(colors: [.black, .black.opacity(hasBelow ? 0 : 1)],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(height: fade)
+            }
+            .animation(NotchAnimation.hintFade, value: hasAbove)
+            .animation(NotchAnimation.hintFade, value: hasBelow)
+        )
+    }
+}
+
 private struct SectionHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
@@ -173,7 +216,6 @@ struct TodoTabView: View {
 
 private struct TodoTabRow: View {
     @ObservedObject private var store = TodoStore.shared
-    @ObservedObject private var modifiers = ModifierMonitor.shared
     /// The category tab currently being dragged (nil when idle).
     @State private var draggedCollectionID: UUID?
 
@@ -204,8 +246,7 @@ private struct TodoTabRow: View {
                             categoryColor: collection.color,
                             isActive: store.panelMode == .browsing
                                 && collection.id == store.activeCollectionID,
-                            remaining: store.remainingCount(for: collection),
-                            numberBadge: (modifiers.commandHeld && index < 9) ? index + 1 : nil
+                            remaining: store.remainingCount(for: collection)
                         )
                         .contentShape(RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous))
                     }
@@ -304,8 +345,6 @@ private struct TodoTabRow: View {
                 Spacer(minLength: 8)
                 CategoryOverflowMenu()
             }
-            // Headroom so the ⌘-held badges (offset y:-8) render inside the
-            // scroll container instead of being clipped.
             .padding(.top, 8)
         }
         // No rule under the tab row (Marcello, 2026-07-26). The two paddings
@@ -443,14 +482,25 @@ struct TodoBrowsingView: View {
     /// So: derived from the actual screen rather than a magic number, and
     /// allowed to grow when Completed is open. It stays bounded — the panel
     /// hangs from the top of the display and must not run off the bottom.
-    private static func maxRegion(completedExpanded: Bool) -> CGFloat {
-        let available = NSScreen.main?.visibleFrame.height ?? 800
-        let ceiling = completedExpanded ? available * 0.62 : available * 0.45
-        return min(max(320, ceiling), completedExpanded ? 720 : 460)
+    /// The scroll region's ceiling, derived from the notch's OWN budget minus
+    /// the chrome above and below it. It used to be an independent screen
+    /// fraction capped at 720, while the silhouette could only show ~539pt of
+    /// content — so the region cheerfully laid out rows the notch could never
+    /// display (Marcello, 2026-08-05). One source now, two consumers.
+    private static var maxRegion: CGFloat {
+        // Panel top inset + tab row + its top padding + the two paddings under
+        // it + the panel's bottom inset.
+        let chrome: CGFloat = 14 + 34 + 8
+            + DSSpacing.tabRowBottomPadding + DSSpacing.tabRowBottomMargin
+            + DSSpacing.panelPadding
+        return max(240, AppState.shared.maxTodoContentHeight - chrome)
     }
     private static let inlineRowThreshold = 8
+    private static let scrollSpace = "todoScrollRegion"
 
     @State private var regionNaturalHeight: CGFloat = 0
+    /// How far the capped region has been scrolled. Drives the edge fades.
+    @State private var scrollOffset: CGFloat = 0
     @State private var draggedItemID: UUID?
     /// The row the dragged item would land ABOVE. Arc-style: nothing moves
     /// until the drop, we just draw the slot.
@@ -495,12 +545,32 @@ struct TodoBrowsingView: View {
         } else {
             // Tall: one capped ScrollView so list + Completed scroll as a
             // single unit and the panel height stops at the budget.
-            ScrollView(showsIndicators: false) {
-                content.measureHeight(SectionHeightKey.self)
+            let viewport = min(regionNaturalHeight, Self.maxRegion)
+            // Indicators ON. They were hidden, so a capped region gave the eye
+            // nothing at all to say "there is more" — rows below the fold and
+            // the entire Completed section read as missing rather than
+            // scrolled away (Marcello, 2026-08-05).
+            ScrollView(showsIndicators: true) {
+                content
+                    .measureHeight(SectionHeightKey.self)
+                    .background(
+                        GeometryReader { geo in
+                            Color.clear.preference(
+                                key: ScrollOffsetKey.self,
+                                value: -geo.frame(in: .named(Self.scrollSpace)).minY
+                            )
+                        }
+                    )
             }
+            .coordinateSpace(name: Self.scrollSpace)
             .onPreferenceChange(SectionHeightKey.self) { regionNaturalHeight = $0 }
-            .frame(height: min(regionNaturalHeight,
-                               Self.maxRegion(completedExpanded: store.completedExpanded)))
+            .onPreferenceChange(ScrollOffsetKey.self) { scrollOffset = $0 }
+            .frame(height: viewport)
+            // The edge that is cut off softens, so the list visibly continues
+            // past it instead of ending on a hard crop.
+            .modifier(ScrollEdgeFade(scrollOffset: scrollOffset,
+                                     contentHeight: regionNaturalHeight,
+                                     viewportHeight: viewport))
             // The panel must animate to the new budget, or opening Completed
             // snaps instead of growing.
             .animation(NotchAnimation.contentHug, value: store.completedExpanded)

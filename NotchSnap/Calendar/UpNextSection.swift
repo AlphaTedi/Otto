@@ -52,11 +52,26 @@ struct UpNextSection: View {
 // Figma file: the Dev Mode MCP server was off, so exact tokens could not be
 // read. If it gets enabled, re-check the numbers marked "sketch-derived".
 
-private struct MeetingCard: View {
+struct MeetingCard: View {
+    /// The same card in two situations. The alert used to be a SEPARATE view
+    /// with its own filled background, plain (non-squircle) corners, a blue
+    /// Join button and a different element order — so the thing that appears
+    /// two minutes before a meeting looked like it came from another app than
+    /// the list you had been reading all morning (Marcello, 2026-08-05).
+    /// One component, one look; the variant only adds Snooze and leads with
+    /// the countdown.
+    enum Variant {
+        case listed
+        case alert
+    }
+
     let event: DetectedMeeting
     /// Later events in the day are dimmed rather than restyled, so the list
     /// still reads as one component (CT-2).
-    let isNext: Bool
+    var isNext: Bool = true
+    var variant: Variant = .listed
+    /// Supplied by the alert only.
+    var onSnooze: (() -> Void)? = nil
     @State private var hover = false
 
     // Sized against the panel's OWN scale, not the sketch's canvas: a to-do
@@ -84,10 +99,16 @@ private struct MeetingCard: View {
                         .foregroundStyle(isNext ? DSColor.CategoryPalette.amber
                                                 : DSColor.textFaint)
                     Spacer(minLength: 8)
+                    // The alert leads with the countdown — it is the reason
+                    // the panel opened by itself — but in the same slot and at
+                    // the same size as the list's, so the card is recognisably
+                    // the same object.
                     Text(countdownLabel)
-                        .font(.system(size: 11))
+                        .font(.system(size: 11,
+                                      weight: variant == .alert ? .semibold : .regular))
                         .monospacedDigit()
-                        .foregroundStyle(DSColor.textSecondary)
+                        .foregroundStyle(variant == .alert ? DSColor.CategoryPalette.amber
+                                                           : DSColor.textSecondary)
                         .lineLimit(1)
                         .layoutPriority(1)
                 }
@@ -100,11 +121,15 @@ private struct MeetingCard: View {
                     .lineLimit(1)
                     .padding(.top, 2)
 
-                HStack(alignment: .center, spacing: 10) {
+                HStack(alignment: .center, spacing: 8) {
                     // JOIN only exists when there is actually a link to open —
                     // a dead button would be worse than no button.
                     if event.videoURL != nil {
                         JoinButton(showsShortcut: isNext) { open() }
+                    }
+                    if let onSnooze {
+                        SnoozeButton(minutes: CalendarStore.shared.snoozeMinutes,
+                                     action: onSnooze)
                     }
                     Spacer(minLength: 8)
                     AvatarStack(
@@ -147,6 +172,13 @@ private struct MeetingCard: View {
     /// Long meetings later in the day would otherwise read "in 380 min".
     private var countdownLabel: String {
         let minutes = event.minutesUntilStart
+        if variant == .alert {
+            // Spelled out, because this card arrives unannounced and has to
+            // say what is happening on its own.
+            return minutes <= 0
+                ? L10n.t("cal.startingNow")
+                : String(format: L10n.t("cal.startingIn"), minutes)
+        }
         if minutes <= 0 { return L10n.t("cal.now") }
         if minutes < 60 { return String(format: L10n.t("cal.inMinutes"), minutes) }
         return String(format: L10n.t("cal.inHours"), minutes / 60, minutes % 60)
@@ -180,6 +212,34 @@ private struct JoinButton: View {
             withAnimation(NotchAnimation.hintFade) { hover = hovering }
         }
         .help(L10n.t("cal.joinHelp"))
+    }
+}
+
+// MARK: - SnoozeButton
+
+/// Join's quiet sibling. Same capsule and the same compact metrics, outlined
+/// instead of filled — the alert offers two ways out and only one of them is
+/// the point.
+private struct SnoozeButton: View {
+    let minutes: Int
+    let action: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(String(format: L10n.t("cal.snooze"), minutes))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(hover ? DSColor.textPrimaryBright : DSColor.textSecondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .overlay(DSShape.action.strokeBorder(DSColor.panelBorder,
+                                                     lineWidth: 0.5))
+                .contentShape(DSShape.action)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(NotchAnimation.hintFade) { hover = hovering }
+        }
     }
 }
 

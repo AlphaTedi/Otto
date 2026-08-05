@@ -3,6 +3,13 @@ import SwiftUI
 
 // MARK: - ModifierMonitor — ⌘-held shortcut reveal (KB-4 / PRD §7.2)
 //
+// CURRENTLY UNUSED. Its only consumer was the index badge over each category
+// tab, removed on Marcello's request (2026-08-05). Kept because the reveal
+// mechanism is sound and may return for another surface; costs nothing while
+// dormant, since the singleton is lazy and nothing touches `.shared`, so the
+// flagsChanged monitor is never installed. Delete the file if it is still
+// unreferenced next time this area is touched.
+//
 // Holding ⌘ temporarily surfaces the small shortcut badges (number badges on
 // category tabs, combo-box key hints in quick entry); releasing hides them.
 // One shared app-wide flagsChanged monitor rather than per-view monitors, so
