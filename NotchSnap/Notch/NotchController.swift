@@ -41,7 +41,21 @@ class NotchController: ObservableObject {
     // (files, text, images) anywhere on screen. While a drag is in flight
     // the notch NEVER auto-collapses, and touching the notch zone with a
     // drag expands it straight onto the file tray.
-    private var isDragSessionActive = false
+    private var isDragSessionActive = false {
+        didSet {
+            // Whatever ended the drag — drop, mouse-up, a stray move — a
+            // pending "open the tray" must not survive it.
+            if !isDragSessionActive {
+                dragDwellTask?.cancel()
+                dragDwellTask = nil
+            }
+        }
+    }
+    private var dragDwellTask: Task<Void, Never>?
+    /// How long a drag must be HELD over the notch before the tray opens.
+    /// Long enough that crossing the top of the screen never triggers it,
+    /// short enough that aiming at the notch still feels immediate.
+    private let dragDwellNanos: UInt64 = 450_000_000
 
     // Tuned parameters — hoverDebounce is read from settings (0-500ms, configurable)
     private var hoverDebounceNanos: UInt64 {
@@ -605,23 +619,56 @@ class NotchController: ObservableObject {
 
         // ── Drag in flight ─────────────────────────────────────────────
         // Carrying a file/text/image changes the rules entirely:
-        //   • touching the notch zone opens it straight onto the Tray
-        //     (no hover debounce, no velocity gate — intent is obvious)
+        //   • HOLDING the drag over the notch opens it straight onto the Tray
         //   • the notch NEVER collapses mid-drag, so the user can wander
         //     to another window and back, or drag a tray item out.
+        //
+        // This used to fire the instant a drag touched a zone 120pt wider than
+        // the notch and 2.5x its height, reasoning that while carrying
+        // something the intent is obvious. It isn't. Dragging a browser or
+        // Figma tab across the screen fills the drag pasteboard and passes
+        // straight through the top centre, so the notch flew open mid-drag
+        // (Marcello, 2026-08-05). Passing over a thing is not aiming at it:
+        // the target is now the notch itself plus a small forgiveness margin,
+        // and it has to be held there.
         if isDragSessionActive {
-            // Generous target while carrying something: wider than the notch
-            // and a little below the menu bar, so "approaching" is enough.
-            let notchRect = calculateNotchRect(screen: screen)
-            let dragZone = NSRect(
-                x: notchRect.minX - 60,
-                y: screen.frame.maxY - notchRect.height * 2.5,
-                width: notchRect.width + 120,
-                height: notchRect.height * 2.5
-            )
-            if dragZone.contains(location) && state != .expanded {
-                AppState.shared.pendingNotchFilter = .tray
-                triggerExpand()
+            if state != .expanded && dragTargetRect().contains(location) {
+                if dragDwellTask == nil {
+                    // Polls its own clock rather than waiting on mouse events.
+                    // A hand held still emits NO events, so an event-driven
+                    // timer can never confirm the one thing it needs to know —
+                    // that the pointer stopped.
+                    dragDwellTask = Task { @MainActor in
+                        defer { self.dragDwellTask = nil }
+                        var anchor = NSEvent.mouseLocation
+                        var settled: UInt64 = 0
+                        let tick: UInt64 = 50_000_000
+                        while !Task.isCancelled {
+                            try? await Task.sleep(nanoseconds: tick)
+                            guard !Task.isCancelled, self.isDragSessionActive,
+                                  self.state != .expanded else { return }
+                            let now = NSEvent.mouseLocation
+                            guard self.dragTargetRect().contains(now) else { return }
+                            if hypot(now.x - anchor.x, now.y - anchor.y) > 24 {
+                                // Still travelling — a drag crossing the top of
+                                // the screen never accumulates settled time, no
+                                // matter how slowly it passes through.
+                                anchor = now
+                                settled = 0
+                            } else {
+                                settled += tick
+                                if settled >= self.dragDwellNanos {
+                                    AppState.shared.pendingNotchFilter = .tray
+                                    self.triggerExpand()
+                                    return
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                dragDwellTask?.cancel()
+                dragDwellTask = nil
             }
             cancelCollapse()
             return
@@ -743,6 +790,13 @@ class NotchController: ObservableObject {
                       y: screen.frame.maxY - height,
                       width: width,
                       height: height)
+    }
+
+    /// Where a drag has to be HELD to open the tray: the drawn notch plus a
+    /// small forgiveness margin. Big enough to hit while carrying something,
+    /// nowhere near big enough to catch a drag crossing the top of the screen.
+    private func dragTargetRect() -> NSRect {
+        visibleShapeScreenRect().insetBy(dx: -16, dy: -8)
     }
 
     // MARK: - Trigger Zone
