@@ -3,12 +3,12 @@
     <channel>
         <title>NotchSnap</title>
         <item>
-            <title>1.6.2</title>
-            <pubDate>Wed, 05 Aug 2026 00:43:08 +0200</pubDate>
-            <sparkle:version>50</sparkle:version>
-            <sparkle:shortVersionString>1.6.2</sparkle:shortVersionString>
+            <title>1.6.3</title>
+            <pubDate>Wed, 05 Aug 2026 10:11:37 +0200</pubDate>
+            <sparkle:version>52</sparkle:version>
+            <sparkle:shortVersionString>1.6.3</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/AlphaTedi/Screenshot_app/releases/download/v1.6.2/NotchSnap.zip" length="3025741" type="application/octet-stream" sparkle:edSignature="OC1COZiBKAM1cpr4BuTftAiEUrBVnC1StjhPQqZpuOLsz55o3SEVSk5BpXkyOpXnMYNcuFai0RRB6Ar/qvvFAQ=="/>
+            <enclosure url="https://github.com/AlphaTedi/Screenshot_app/releases/download/v1.6.3/NotchSnap.zip" length="3027156" type="application/octet-stream" sparkle:edSignature="rseIgYioMDud3KCIv/dqVLTqKDL7q1sX9KgLeXjAscWDrQrtYnOSdeS4GYP/kk5DG3aBirzaM6ylsolJDcUdCw=="/>
         </item>
     </channel>
 </rss>
