@@ -4,7 +4,12 @@ A single portable dump of everything a new reader (human or tool) needs to reaso
 this codebase: what it is, how it's organised, every decision that was made and why,
 the platform constraints that shaped it, and the traps that cost real time.
 
-Written 2026-07-25. Entities are named explicitly so this can be graphed or indexed.
+Written 2026-07-25, updated 2026-08-05 (v1.6.3). Entities are named explicitly so this
+can be graphed or indexed.
+
+**Companion document:** `docs/DISTRIBUTION.md` covers signing, notarization, the release
+pipeline, Sparkle auto-updates, and the distribution failure modes. This file covers the
+product, its architecture, and its design decisions.
 
 ---
 
@@ -16,7 +21,9 @@ interactive panel in/below the MacBook notch. It began as a screenshot utility a
 
 - Bundle id: `com.notchsnap.app`
 - Repo: `github.com/AlphaTedi/Screenshot_app`, branch `main`
-- Latest tag: **v1.1.0** (commit `9368510`, "To-do pivot")
+- Latest tag: **v1.6.3** (2026-08-05) — signed with Developer ID, notarized, distributed
+  as a `.dmg` on GitHub Releases with in-app Sparkle updates
+- Team ID `5N7QPZ6H87`; Hardened Runtime on in Release
 - Build: `xcodebuild -project NotchSnap.xcodeproj -scheme NotchSnap` —
   **`Package.swift` is a decoy with empty targets; never build with SwiftPM**
 - Deployment target macOS 13.0; built with Xcode 26.2 / macOS 26.2 SDK
@@ -40,13 +47,15 @@ interactive panel in/below the MacBook notch. It began as a screenshot utility a
 
 ```
 NotchSnap/
-├── App/          AppState, SettingsView, Localization (EN+IT), DebugDriver, hotkeys glue
+├── App/          AppState, SettingsView, Localization (EN+IT), DebugDriver, hotkeys glue,
+│                 UpdateController (Sparkle), LaunchIntegrity
 ├── Notch/        NotchController (panel + state machine), NotchShapeView (the shape),
 │                 NotchAnimation (all springs), NotchExpandedView (legacy gallery)
 ├── Todo/         The product: TodoStore, TodoBrowsingView, TodoPanelForms,
 │                 DesignSystem, EntityParser/EntityTitleView, NLDateParser
 ├── Calendar/     CalendarStore, EventKitCalendarProvider, UpNextSection,
-│                 MeetingAlertView, CalendarSettingsView
+│                 MeetingAlertView, CalendarSettingsView,
+│                 GoogleOAuth + LoopbackListener + GoogleCalendarProvider + KeychainStore
 ├── Voice/        SHELVED behind VoiceFeatureFlag — transcriber, parser, review UI
 ├── Capture/ Editor/ Notes/ Shelf/   Legacy screenshot/clipboard/notes stack
 └── Resources/    Info.plist (usage descriptions), sounds

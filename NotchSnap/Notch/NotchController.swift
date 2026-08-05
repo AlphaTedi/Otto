@@ -94,10 +94,14 @@ class NotchController: ObservableObject {
         panel.acceptsMouseMovedEvents = true
 
         // SwiftUI content — NotchRootView with the animated shape
-        let hostingView = NSHostingView(rootView:
+        // NotchHostingView, not NSHostingView: the panel is far bigger than the
+        // shape drawn inside it, and the transparent remainder must not eat
+        // clicks meant for the app underneath.
+        let hostingView = NotchHostingView(rootView: AnyView(
             NotchRootView(controller: self)
                 .environmentObject(AppState.shared)
-        )
+        ))
+        hostingView.controller = self
         hostingView.frame = panel.contentView?.bounds ?? .zero
         hostingView.autoresizingMask = [.width, .height]
         panel.contentView = hostingView
@@ -664,13 +668,16 @@ class NotchController: ObservableObject {
     }
 
     private func handleClick() {
+        // Tested against the DRAWN shape, not the trigger zone: the trigger
+        // zone is a deliberately forgiving hover target, and "I was near it"
+        // must not mean "I clicked it". Opening the notch requires landing on
+        // the notch (Marcello, 2026-08-05).
+        let onNotch = visibleShapeScreenRect().contains(NSEvent.mouseLocation)
         switch state {
         case .idle, .hovering:
-            if isInTriggerZone(NSEvent.mouseLocation, screen: NSScreen.main!) {
-                triggerExpand()
-            }
+            if onNotch { triggerExpand() }
         case .captureNotification:
-            if isInTriggerZone(NSEvent.mouseLocation, screen: NSScreen.main!) {
+            if onNotch {
                 // Interrupt notification → expand to full gallery
                 notificationTask?.cancel()
                 notificationContentVisible = false
@@ -682,7 +689,7 @@ class NotchController: ObservableObject {
     }
 
     private func handleRightClick(_ event: NSEvent) {
-        guard isInTriggerZone(NSEvent.mouseLocation, screen: NSScreen.main!) else { return }
+        guard visibleShapeScreenRect().contains(NSEvent.mouseLocation) else { return }
         showContextMenu(at: event.locationInWindow)
     }
 
@@ -692,6 +699,50 @@ class NotchController: ObservableObject {
         if !paddedRect.contains(point) {
             triggerCollapse()
         }
+    }
+
+    // MARK: - Hit Region
+
+    /// The rectangle the notch is ACTUALLY drawing right now, in screen
+    /// coordinates — mirroring NotchShapeView's per-state geometry exactly.
+    ///
+    /// The panel window is deliberately huge (`calculateMaxPanelFrame`: the
+    /// full expanded width by the tallest possible height) so the shape can
+    /// animate without clipping. That leaves the great majority of the window
+    /// transparent at any given moment. Anything that decides "did the user
+    /// mean the notch?" has to test against THIS rect, never the window frame:
+    /// a 680×580 invisible rectangle sitting over the top of the screen was
+    /// swallowing clicks aimed at whatever was underneath — Figma's tab bar,
+    /// a browser's tabs (Marcello, 2026-08-05).
+    ///
+    /// Same single geometry source as the renderer, so the hit region and the
+    /// visible shape cannot drift apart.
+    func visibleShapeScreenRect() -> NSRect {
+        guard let screen = NSScreen.main else { return .zero }
+        let notchRect = calculateNotchRect(screen: screen)
+
+        // Matches NotchShapeView.currentFilletRadius.
+        let fillet: CGFloat = (state == .hovering) ? 14 : 12
+        let width: CGFloat
+        let height: CGFloat
+        switch state {
+        case .idle:
+            width = notchSize.width + fillet * 2
+            height = notchSize.height
+        case .hovering:
+            width = notchSize.width + 28 + fillet * 2
+            height = notchSize.height + 6
+        case .captureNotification:
+            width = notificationWide ? 320 : notchSize.width + 80 + fillet * 2
+            height = notchSize.height
+        case .expanded:
+            width = expandedSize.width
+            height = expandedSize.height + currentExtraExpandedHeight
+        }
+        return NSRect(x: notchRect.midX - width / 2,
+                      y: screen.frame.maxY - height,
+                      width: width,
+                      height: height)
     }
 
     // MARK: - Trigger Zone
@@ -879,6 +930,32 @@ class NotchPanel: NSPanel {
 
     override var canBecomeKey: Bool { allowKey }
     override var canBecomeMain: Bool { false }
+}
+
+// MARK: - NotchHostingView — clicks land on the notch, or on nothing at all
+//
+// `ignoresMouseEvents` is all-or-nothing per window, and the window is far
+// larger than the shape inside it (see visibleShapeScreenRect). The moment the
+// notch went from idle to hovering the whole 680×580 rectangle started
+// accepting clicks, so pressing a Figma tab or a browser tab near the top of
+// the screen hit an invisible panel instead of the app that was visibly there.
+//
+// Returning nil from hitTest is the AppKit way to say "not mine" — the event
+// falls through to whatever is underneath, exactly as if the panel were not
+// there. Only points inside the drawn shape reach SwiftUI.
+final class NotchHostingView: NSHostingView<AnyView> {
+    weak var controller: NotchController?
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let controller, let window else { return super.hitTest(point) }
+        // For a window's contentView the incoming point is in window
+        // coordinates, which share the window's bottom-left origin.
+        let screenPoint = NSPoint(x: window.frame.minX + point.x,
+                                  y: window.frame.minY + point.y)
+        let shape = MainActor.assumeIsolated { controller.visibleShapeScreenRect() }
+        guard shape.contains(screenPoint) else { return nil }
+        return super.hitTest(point)
+    }
 }
 // MARK: - QuickLookPreviewController
 // (QuickLookItem is defined in AppState.swift so it's always in scope.)
