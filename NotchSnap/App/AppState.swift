@@ -72,13 +72,28 @@ class AppState: ObservableObject {
     /// NotchController sizes the window from this SAME value, so the window
     /// and the shape cannot drift apart.
     ///
-    /// Screen-derived rather than the old fixed 372, which put the ceiling in
-    /// the same place on a 13" laptop and a 27" display and made a long list
-    /// unreachable for no reason. Still bounded: a panel that runs most of the
-    /// way down the screen stops reading as a notch.
+    /// The panel grows until it is `bottomInset` short of the usable screen —
+    /// i.e. just above the Dock, or just above the screen edge when the Dock
+    /// is hidden. `visibleFrame` already excludes the Dock and the menu bar,
+    /// so this tracks the Dock moving, hiding, or changing size for free.
+    ///
+    /// An arbitrary fraction of the screen was the wrong rule: it still left a
+    /// long list unreachable while a third of the display sat empty below the
+    /// panel (Marcello, 2026-08-05). The limit people actually expect is
+    /// "as far down as it can go without touching the Dock".
+    static let bottomInset: CGFloat = 40
+
     static var maxExtraHeight: CGFloat {
-        let available = NSScreen.main?.visibleFrame.height ?? 800
-        return min(max(372, available * 0.42), 520)
+        guard let screen = NSScreen.main else { return 372 }
+        let floor = screen.visibleFrame.minY + bottomInset
+        return max(372, screen.frame.maxY - floor - expandedBaseHeight)
+    }
+
+    /// The user's gallery height preset. Static because the height ceiling is
+    /// itself static — both read the same @AppStorage key NotchController uses.
+    fileprivate static var expandedBaseHeight: CGFloat {
+        let stored = UserDefaults.standard.double(forKey: "notchExpandedHeight")
+        return stored > 0 ? CGFloat(stored) : 200
     }
 
     /// The tallest the MEASURED to-do content may be before it has to scroll.
@@ -92,14 +107,7 @@ class AppState: ObservableObject {
     /// ceiling from this value so they can never disagree again.
     var maxTodoContentHeight: CGFloat {
         let filterBar: CGFloat = showsNotchFilterBar ? 34 : 0
-        return expandedBaseHeight + Self.maxExtraHeight - notchBarHeight - 8 - filterBar
-    }
-
-    /// The user's gallery height preset — the baseline `extraHeight` is
-    /// measured against. Same key as NotchController's @AppStorage.
-    private var expandedBaseHeight: CGFloat {
-        let stored = UserDefaults.standard.double(forKey: "notchExpandedHeight")
-        return stored > 0 ? CGFloat(stored) : 200
+        return Self.expandedBaseHeight + Self.maxExtraHeight - notchBarHeight - 8 - filterBar
     }
 
     /// VW-2: extra HEIGHT (never width) for the expanded panel.
@@ -117,8 +125,8 @@ class AppState: ObservableObject {
             // and bezel margins are inside the measurement) + filter bar
             // when legacy panels are shown.
             let desiredTotal = notchBarHeight + 8 + todoContentHeight + filterBar
-            let cappedTotal = min(desiredTotal, expandedBaseHeight + Self.maxExtraHeight)
-            return cappedTotal - expandedBaseHeight
+            let cappedTotal = min(desiredTotal, Self.expandedBaseHeight + Self.maxExtraHeight)
+            return cappedTotal - Self.expandedBaseHeight
         case .notes:
             return filterBar + 44   // composer layout, stable height — no jumping
         default:

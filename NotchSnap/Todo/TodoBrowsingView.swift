@@ -72,6 +72,44 @@ private struct ScrollEdgeFade: ViewModifier {
     }
 }
 
+/// "More below" — a small floating control at the foot of a list that still
+/// overflows once the panel has grown as far as it can.
+///
+/// The fade tells you the list continues; this tells you what to do about it
+/// and does it for you. It only appears while there is genuinely something
+/// below, so it is never a permanent piece of furniture.
+private struct MoreBelowPill: View {
+    let action: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                Text(L10n.t("todo.moreBelow"))
+                    .font(.system(size: 10, weight: .medium))
+            }
+            .foregroundStyle(hover ? DSColor.textPrimaryBright : DSColor.textSecondary)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(
+                Capsule().fill(DSColor.fieldBackground)
+            )
+            .overlay(
+                Capsule().strokeBorder(DSColor.panelBorder, lineWidth: 0.5)
+            )
+            // Lifts off the rows sliding underneath it.
+            .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(NotchAnimation.hintFade) { hover = hovering }
+        }
+    }
+}
+
 private struct SectionHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
@@ -497,6 +535,7 @@ struct TodoBrowsingView: View {
     }
     private static let inlineRowThreshold = 8
     private static let scrollSpace = "todoScrollRegion"
+    private static let bottomAnchor = "todoScrollBottom"
 
     @State private var regionNaturalHeight: CGFloat = 0
     /// How far the capped region has been scrolled. Drives the edge fades.
@@ -546,31 +585,51 @@ struct TodoBrowsingView: View {
             // Tall: one capped ScrollView so list + Completed scroll as a
             // single unit and the panel height stops at the budget.
             let viewport = min(regionNaturalHeight, Self.maxRegion)
+            let hasBelow = regionNaturalHeight - scrollOffset - viewport > 2
             // Indicators ON. They were hidden, so a capped region gave the eye
             // nothing at all to say "there is more" — rows below the fold and
             // the entire Completed section read as missing rather than
             // scrolled away (Marcello, 2026-08-05).
-            ScrollView(showsIndicators: true) {
-                content
-                    .measureHeight(SectionHeightKey.self)
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: ScrollOffsetKey.self,
-                                value: -geo.frame(in: .named(Self.scrollSpace)).minY
-                            )
+            ScrollViewReader { proxy in
+                ScrollView(showsIndicators: true) {
+                    content
+                        .measureHeight(SectionHeightKey.self)
+                        .background(
+                            GeometryReader { geo in
+                                Color.clear.preference(
+                                    key: ScrollOffsetKey.self,
+                                    value: -geo.frame(in: .named(Self.scrollSpace)).minY
+                                )
+                            }
+                        )
+                    // Anchor for the "more below" pill to jump to.
+                    Color.clear.frame(height: 1).id(Self.bottomAnchor)
+                }
+                .coordinateSpace(name: Self.scrollSpace)
+                .onPreferenceChange(SectionHeightKey.self) { regionNaturalHeight = $0 }
+                .onPreferenceChange(ScrollOffsetKey.self) { scrollOffset = $0 }
+                .frame(height: viewport)
+                // The edge that is cut off softens, so the list visibly
+                // continues past it instead of ending on a hard crop.
+                .modifier(ScrollEdgeFade(scrollOffset: scrollOffset,
+                                         contentHeight: regionNaturalHeight,
+                                         viewportHeight: viewport))
+                // A fade says "there is more"; this says how to get there, and
+                // takes you. Even at full height a long enough list still
+                // overflows, and the fade alone is easy to miss on a first run.
+                .overlay(alignment: .bottom) {
+                    if hasBelow {
+                        MoreBelowPill {
+                            withAnimation(NotchAnimation.contentHug) {
+                                proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
+                            }
                         }
-                    )
+                        .padding(.bottom, 4)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    }
+                }
+                .animation(NotchAnimation.hintFade, value: hasBelow)
             }
-            .coordinateSpace(name: Self.scrollSpace)
-            .onPreferenceChange(SectionHeightKey.self) { regionNaturalHeight = $0 }
-            .onPreferenceChange(ScrollOffsetKey.self) { scrollOffset = $0 }
-            .frame(height: viewport)
-            // The edge that is cut off softens, so the list visibly continues
-            // past it instead of ending on a hard crop.
-            .modifier(ScrollEdgeFade(scrollOffset: scrollOffset,
-                                     contentHeight: regionNaturalHeight,
-                                     viewportHeight: viewport))
             // The panel must animate to the new budget, or opening Completed
             // snaps instead of growing.
             .animation(NotchAnimation.contentHug, value: store.completedExpanded)

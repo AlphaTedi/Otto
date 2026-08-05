@@ -750,6 +750,26 @@ class NotchController: ObservableObject {
 
     // MARK: - Hit Region
 
+    /// A band of live area just BELOW the drawn notch — the one place the hit
+    /// region is deliberately allowed to exceed the shape.
+    ///
+    /// On a MacBook with a real notch the collapsed pill occupies exactly the
+    /// hardware cutout, so triggering it meant parking the pointer inside the
+    /// cutout, where the display physically ends and the cursor is chopped in
+    /// half. It looked like NotchSnap was clipping the cursor; nothing in
+    /// software was, there are simply no pixels there (Marcello, 2026-08-05).
+    ///
+    /// The apron gives the pointer somewhere to rest a few points lower, on
+    /// real display, while still counting as "on the notch". It is small
+    /// enough that a click aimed at a browser tab still passes through — the
+    /// tab bar sits far below this.
+    ///
+    /// The system cursor is NOT hidden. Doing that reliably means
+    /// CGDisplayHideCursor, which is process-global and survives a crash: a
+    /// bug there leaves the user with no pointer at all until they log out.
+    /// Not a trade worth making for a cosmetic clip.
+    private static let cursorApron: CGFloat = 8
+
     /// The rectangle the notch is ACTUALLY drawing right now, in screen
     /// coordinates — mirroring NotchShapeView's per-state geometry exactly.
     ///
@@ -775,10 +795,10 @@ class NotchController: ObservableObject {
         switch state {
         case .idle:
             width = notchSize.width + fillet * 2
-            height = notchSize.height
+            height = notchSize.height + Self.cursorApron
         case .hovering:
             width = notchSize.width + 28 + fillet * 2
-            height = notchSize.height + 6
+            height = notchSize.height + 6 + Self.cursorApron
         case .captureNotification:
             width = notificationWide ? 320 : notchSize.width + 80 + fillet * 2
             height = notchSize.height

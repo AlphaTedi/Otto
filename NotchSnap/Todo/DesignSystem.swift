@@ -367,44 +367,43 @@ struct Keycap: View {
     var tone: Tone = .onDark
     var size: CGFloat = 10
 
-    private var cap: Color {
-        tone == .onLight ? Color.black.opacity(0.10) : Color.white.opacity(0.13)
+    /// Flat, not glass. The cap used to carry a gradient edge, a top
+    /// highlight, a bottom shade and a drop shadow — a tiny glossy button
+    /// stuck onto a real button, which read as "fake and clumsy"
+    /// (Marcello, 2026-08-05). Every design system that shows shortcuts well
+    /// — Stripe, Linear, Raycast — draws them as a quiet tint of the surface
+    /// they sit on and nothing more. The hint belongs to the control; it
+    /// should not compete with it.
+    private var capFill: Color {
+        tone == .onLight ? Color.black.opacity(0.08) : Color.white.opacity(0.10)
     }
     private var label: Color {
-        tone == .onLight ? DSColor.primaryText : DSColor.textPrimaryBright
-    }
-    private var topEdge: Color {
-        tone == .onLight ? Color.white.opacity(0.85) : Color.white.opacity(0.22)
-    }
-    private var bottomEdge: Color {
-        tone == .onLight ? Color.black.opacity(0.22) : Color.black.opacity(0.55)
+        tone == .onLight ? DSColor.primaryText.opacity(0.62)
+                         : DSColor.textPrimaryBright.opacity(0.72)
     }
 
+    /// "⌘↩" is TWO keys, so it draws as two caps. One wide cap containing
+    /// both glyphs is the thing that looked homemade — and at 9pt a pair of
+    /// symbols crammed into one box is genuinely hard to read.
+    private var keys: [String] { text.map(String.init) }
+
     var body: some View {
-        Text(text)
-            .font(.system(size: size, weight: .semibold))
-            // Symbol glyphs (⌘ ⇧ ⌥ ↩) have wildly different widths; tabular
-            // spacing keeps a row of caps from jittering.
-            .monospacedDigit()
-            .foregroundStyle(label)
-            .fixedSize(horizontal: true, vertical: false)
-            .frame(minWidth: size + 6)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 2)
-            .background(
-                RoundedRectangle(cornerRadius: 4, style: .continuous).fill(cap)
-            )
-            .overlay(
-                // Top highlight + bottom shade, drawn as one stroke gradient:
-                // the cheap way to get a lit edge and a grounded one.
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .strokeBorder(
-                        LinearGradient(colors: [topEdge, bottomEdge],
-                                       startPoint: .top, endPoint: .bottom),
-                        lineWidth: 0.75
+        HStack(spacing: 2) {
+            ForEach(Array(keys.enumerated()), id: \.offset) { _, key in
+                Text(key)
+                    .font(.system(size: size, weight: .medium))
+                    .foregroundStyle(label)
+                    // Symbol glyphs (⌘ ⇧ ⌥ ↩) have wildly different widths;
+                    // a floor keeps a row of caps from jittering.
+                    .frame(minWidth: size + 3)
+                    .padding(.horizontal, 3)
+                    .padding(.vertical, 1.5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                            .fill(capFill)
                     )
-            )
-            .shadow(color: bottomEdge.opacity(0.5), radius: 0, y: 0.5)
+            }
+        }
     }
 }
 
