@@ -148,10 +148,10 @@ final class LoopbackListener: @unchecked Sendable {
     }
 
     private static func responsePage(success: Bool) -> String {
-        let title = success ? "NotchSnap is connected" : "Sign-in was not completed"
+        let title = success ? "Otto is connected" : "Sign-in was not completed"
         let detail = success
-            ? "You can close this tab and go back to NotchSnap."
-            : "Nothing was changed. Close this tab and try again from NotchSnap."
+            ? "You can close this tab and go back to Otto."
+            : "Nothing was changed. Close this tab and try again from Otto."
         return """
         <!doctype html><html><head><meta charset="utf-8"><title>\(title)</title></head>
         <body style="font: 15px -apple-system, sans-serif; background:#111; color:#eee;

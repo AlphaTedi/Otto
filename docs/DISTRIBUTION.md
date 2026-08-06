@@ -1,4 +1,4 @@
-# NotchSnap — Distribution, Signing, and Auto-Update
+# Otto — Distribution, Signing, and Auto-Update
 
 How a build on Marcello's Mac becomes an app a stranger can download, open, and keep
 updated. Written 2026-08-05, covering v1.2.0 → v1.6.3.
@@ -23,6 +23,13 @@ This is why the Apple Developer Program subscription was necessary — not to sh
 Mac App Store, but so that a downloaded app opens by double-clicking.
 
 Team ID: `5N7QPZ6H87` · Bundle id: `com.notchsnap.app`
+
+> **The app was renamed NotchSnap → Otto on 2026-08-06.** The bundle id was
+> deliberately NOT changed: it is the app's TCC identity (renaming it re-locks
+> calendar access, which took days to recover) and the key its data directory
+> hangs off. Users never see it. The Xcode target, scheme and source folders
+> are also still called NotchSnap — only `PRODUCT_NAME` changed, so the shipped
+> bundle is `Otto.app`.
 
 ---
 
@@ -234,7 +241,7 @@ git add appcast.xml && git commit -m "Release 1.6.4 to the update feed" && git p
 ```
 
 Then verify as a stranger would: download the DMG from the Releases page, and check
-`spctl -a -vvv -t open --context context:primary-signature NotchSnap.dmg` reports
+`spctl -a -vvv -t open --context context:primary-signature Otto.dmg` reports
 `accepted` / `Notarized Developer ID`.
 
 ---

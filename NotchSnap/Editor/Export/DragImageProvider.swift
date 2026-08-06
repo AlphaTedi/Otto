@@ -44,7 +44,7 @@ class DragImageProvider {
             visibility: .all
         ) { completion in
             let tempDir = FileManager.default.temporaryDirectory
-            let tempURL = tempDir.appendingPathComponent("NotchSnap-\(item.id.uuidString).png")
+            let tempURL = tempDir.appendingPathComponent("Otto-\(item.id.uuidString).png")
 
             if let data = item.flattenedPNGData {
                 try? data.write(to: tempURL)

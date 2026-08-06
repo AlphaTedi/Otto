@@ -45,7 +45,7 @@ class ExportManager {
         formatter.dateFormat = "yyyy-MM-dd-HH.mm.ss"
         let timestamp = formatter.string(from: item.capturedAt)
         let ext = settings.fileFormat == .png ? "png" : "jpg"
-        let filename = "NotchSnap-\(timestamp).\(ext)"
+        let filename = "Otto-\(timestamp).\(ext)"
         let fileURL = dir.appendingPathComponent(filename)
 
         let data = try imageData(for: item, format: settings.fileFormat, quality: settings.jpegQuality)
@@ -107,6 +107,6 @@ class ExportManager {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd-HH.mm.ss"
         let timestamp = formatter.string(from: item.capturedAt)
-        return "NotchSnap-\(timestamp).png"
+        return "Otto-\(timestamp).png"
     }
 }

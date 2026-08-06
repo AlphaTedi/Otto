@@ -3,7 +3,7 @@
 #
 #   bash Scripts/release.sh
 #
-# Produces build/dist/NotchSnap.zip — the thing you put on a website. Someone
+# Produces build/dist/Otto.zip — the thing you put on a website. Someone
 # downloads it, double-clicks, and it opens: no Terminal, no xattr, no
 # Gatekeeper warning.
 #
@@ -19,7 +19,7 @@ CONFIG="Config/Local.xcconfig"
 # Scoped to its own directory: `build/` already holds artifacts from earlier
 # work, and this script deletes its output directory on every run.
 OUT="build/dist"
-APP="$OUT/Release/NotchSnap.app"
+APP="$OUT/Release/Otto.app"
 
 read_setting() {   # read_setting KEY -> value, ignoring commented-out lines
     [ -f "$CONFIG" ] || return 0
@@ -31,7 +31,7 @@ IDENTITY=$(read_setting CODE_SIGN_IDENTITY)
 TEAM=$(read_setting DEVELOPMENT_TEAM)
 PROFILE=$(read_setting NOTARY_PROFILE)
 
-echo "NotchSnap release build"
+echo "Otto release build"
 echo "======================="
 
 # --- Preconditions ---------------------------------------------------------
@@ -218,7 +218,7 @@ echo
 echo "5. Gatekeeper assessment (what a downloader gets)"
 spctl -a -vvv -t exec "$APP" 2>&1 | sed 's/^/   /'
 
-ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT/NotchSnap.zip"
+ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT/Otto.zip"
 rm -f "$OUT/notarize.zip"
 
 # --- Disk image ------------------------------------------------------------
@@ -232,16 +232,16 @@ STAGE="$OUT/dmg-stage"
 rm -rf "$STAGE"; mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
-rm -f "$OUT/NotchSnap.dmg"
-hdiutil create -volname "NotchSnap" -srcfolder "$STAGE" -ov -format UDZO \
-    "$OUT/NotchSnap.dmg" > /dev/null
-codesign --force --sign "$IDENTITY" --timestamp "$OUT/NotchSnap.dmg"
+rm -f "$OUT/Otto.dmg"
+hdiutil create -volname "Otto" -srcfolder "$STAGE" -ov -format UDZO \
+    "$OUT/Otto.dmg" > /dev/null
+codesign --force --sign "$IDENTITY" --timestamp "$OUT/Otto.dmg"
 rm -rf "$STAGE"
 
 echo "7. Notarizing the disk image"
-xcrun notarytool submit "$OUT/NotchSnap.dmg" --keychain-profile "$PROFILE" --wait \
+xcrun notarytool submit "$OUT/Otto.dmg" --keychain-profile "$PROFILE" --wait \
     2>&1 | tail -4 | sed 's/^/   /'
-xcrun stapler staple "$OUT/NotchSnap.dmg" 2>&1 | tail -1 | sed 's/^/   /'
+xcrun stapler staple "$OUT/Otto.dmg" 2>&1 | tail -1 | sed 's/^/   /'
 
 # --- Publish ---------------------------------------------------------------
 # Uploading is part of releasing. Producing an artifact and stopping is how a
@@ -250,18 +250,18 @@ xcrun stapler staple "$OUT/NotchSnap.dmg" 2>&1 | tail -1 | sed 's/^/   /'
 echo
 echo "8. Publishing to GitHub"
 if ! command -v gh > /dev/null; then
-    echo "   gh not installed — upload $OUT/NotchSnap.dmg manually."
+    echo "   gh not installed — upload $OUT/Otto.dmg manually."
 elif [ -z "$TAG" ]; then
     echo "   No git tag found; tag the commit first, or upload manually."
 elif gh release view "$TAG" > /dev/null 2>&1; then
-    gh release upload "$TAG" "$OUT/NotchSnap.dmg" "$OUT/NotchSnap.zip" --clobber
+    gh release upload "$TAG" "$OUT/Otto.dmg" "$OUT/Otto.zip" --clobber
     echo "   Updated $TAG"
 else
     # CREATE it, do not print advice. Printing advice is how an appcast got
     # published pointing at a release that did not exist — every installed copy
     # would have been offered an update it could not download
     # (Marcello, 2026-08-04).
-    gh release create "$TAG" "$OUT/NotchSnap.dmg" "$OUT/NotchSnap.zip" \
+    gh release create "$TAG" "$OUT/Otto.dmg" "$OUT/Otto.zip" \
         --title "NotchSnap ${TAG#v}" --generate-notes
     echo "   Created $TAG"
 fi
@@ -279,7 +279,7 @@ if [ -z "$SPARKLE_BIN" ]; then
 else
     FEEDDIR="$OUT/feed"
     rm -rf "$FEEDDIR"; mkdir -p "$FEEDDIR"
-    cp "$OUT/NotchSnap.zip" "$FEEDDIR/"
+    cp "$OUT/Otto.zip" "$FEEDDIR/"
     # generate_appcast reads every archive in the folder and emits appcast.xml.
     "$SPARKLE_BIN/generate_appcast" \
         --download-url-prefix "https://github.com/AlphaTedi/Screenshot_app/releases/download/$TAG/" \
@@ -294,7 +294,7 @@ fi
 # An appcast whose enclosure 404s is worse than no appcast: the app offers an
 # update, then fails to fetch it.
 if [ -f appcast.xml ]; then
-    FEED_URL=$(grep -o 'url="[^"]*NotchSnap.zip"' appcast.xml | head -1 | sed 's/url="//;s/"//')
+    FEED_URL=$(grep -o 'url="[^"]*Otto.zip"' appcast.xml | head -1 | sed 's/url="//;s/"//')
     if [ -n "$FEED_URL" ]; then
         CODE=$(curl -sIL --max-time 30 -o /dev/null -w "%{http_code}" "$FEED_URL" || echo "000")
         if [ "$CODE" = "200" ]; then
@@ -309,8 +309,8 @@ fi
 
 echo
 echo "Done:"
-echo "  $OUT/NotchSnap.dmg   <- the download link"
-echo "  $OUT/NotchSnap.zip"
+echo "  $OUT/Otto.dmg   <- the download link"
+echo "  $OUT/Otto.zip"
 echo
 echo "Commit and push appcast.xml — that is what installed copies read:"
 echo "  git add appcast.xml && git commit -m \"Release $TAG\" && git push"

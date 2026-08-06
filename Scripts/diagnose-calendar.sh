@@ -11,23 +11,24 @@
 set -u
 BUNDLE_ID="com.notchsnap.app"
 
-echo "NotchSnap calendar diagnosis"
+echo "Otto calendar diagnosis"
 echo "============================"
 sw_vers | sed 's/^/  /'
 echo
 
 # --- Where is the app, and is it the one that's running? -------------------
-RUNNING_PATH=$(ps -Ao comm= | grep -i "NotchSnap.app/Contents/MacOS" | head -1)
+RUNNING_PATH=$(ps -Ao comm= | grep -iE "(Otto|NotchSnap).app/Contents/MacOS" | head -1)
 APP=""
-for candidate in "$RUNNING_PATH" /Applications/NotchSnap.app ~/Applications/NotchSnap.app \
-                 ~/Downloads/NotchSnap.app ~/Desktop/NotchSnap.app; do
+for candidate in "$RUNNING_PATH" /Applications/Otto.app ~/Applications/Otto.app \
+                 ~/Downloads/Otto.app ~/Desktop/Otto.app \
+                 /Applications/NotchSnap.app ~/Applications/NotchSnap.app; do
     [ -z "$candidate" ] && continue
     p="${candidate%%/Contents/MacOS*}"
     if [ -d "$p" ]; then APP="$p"; break; fi
 done
 
 if [ -z "$APP" ]; then
-    echo "  Could not find NotchSnap.app. Pass its path:  bash $0 /path/to/NotchSnap.app"
+    echo "  Could not find Otto.app. Pass its path:  bash $0 /path/to/NotchSnap.app"
     [ $# -ge 1 ] && APP="$1" || exit 1
 fi
 echo "1. Location"
@@ -113,7 +114,7 @@ echo "VERDICT"
 echo "-------"
 if [ -z "$VERDICT" ]; then
     echo "  Nothing structurally wrong. If access is still refused, the denial is"
-    echo "  a stale TCC record. Quit NotchSnap fully, then:"
+    echo "  a stale TCC record. Quit Otto fully, then:"
     echo "    tccutil reset Calendar ${REAL_ID:-$BUNDLE_ID}"
     echo "  and reopen it from /Applications."
 else
@@ -121,7 +122,7 @@ else
     echo
     echo "  Fix, in this order:"
     [[ "$VERDICT" == *TRANSLOCATED* || "$VERDICT" == *QUARANTINED* ]] && {
-        echo "    1. Quit NotchSnap."
+        echo "    1. Quit Otto."
         echo "    2. mv \"$APP\" /Applications/       # if not already there"
         echo "    3. xattr -dr com.apple.quarantine /Applications/NotchSnap.app"
         echo "       (note the -d: without it, xattr only LISTS attributes)"
@@ -129,5 +130,5 @@ else
     [[ "$VERDICT" == *BADSIG* ]] && \
         echo "    4. codesign --force --deep --sign - /Applications/NotchSnap.app"
     echo "    5. tccutil reset Calendar ${REAL_ID:-$BUNDLE_ID}"
-    echo "    6. Open NotchSnap from /Applications and press Connect."
+    echo "    6. Open Otto from /Applications and press Connect."
 fi

@@ -152,7 +152,7 @@ struct OnboardingWelcomeView: View {
 
             Spacer().frame(height: 20)
 
-            Text("NotchSnap")
+            Text("Otto")
                 .font(.system(size: 32, weight: .bold))
                 .foregroundStyle(.primary)
                 .opacity(textAppeared ? 1.0 : 0)
@@ -218,7 +218,7 @@ struct OnboardingPermissionsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("Set up NotchSnap")
+            Text("Set up Otto")
                 .font(.system(size: 28, weight: .bold))
                 .padding(.top, 40)
 
@@ -237,14 +237,14 @@ struct OnboardingPermissionsView: View {
                     iconColor: .blue,
                     title: "Screen Recording",
                     description: screenRecordingGranted
-                        ? "You're all set. NotchSnap can capture screenshots."
+                        ? "You're all set. Otto can capture screenshots."
                         : "Needed to capture screenshots. We never record or save your screen.",
                     isGranted: screenRecordingGranted,
                     onGrant: requestScreenRecording
                 )
 
                 if hasAskedOnce && !screenRecordingGranted {
-                    Text("Flip the NotchSnap toggle in System Settings — this window updates by itself.")
+                    Text("Flip the Otto toggle in System Settings — this window updates by itself.")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .transition(.opacity)
@@ -293,7 +293,7 @@ struct OnboardingPermissionsView: View {
     }
 
     /// The Wispr-style grant flow:
-    /// 1. CGRequestScreenCaptureAccess() registers NotchSnap in the Screen
+    /// 1. CGRequestScreenCaptureAccess() registers Otto in the Screen
     ///    Recording list (without this the toggle doesn't exist to flip!)
     ///    and shows the system dialog the very first time.
     /// 2. Deep-link to the exact Settings pane as well, so the user lands
@@ -456,7 +456,7 @@ struct NotchMiniPreview: View {
     }
 }
 
-// MARK: - All Set View (Step 3) — How to use NotchSnap
+// MARK: - All Set View (Step 3) — How to use Otto
 
 struct OnboardingAllSetView: View {
     var onFinish: () -> Void
@@ -487,7 +487,7 @@ struct OnboardingAllSetView: View {
                 .offset(y: headerAppeared ? 0 : 8)
                 .animation(.spring(response: 0.5, dampingFraction: 0.85).delay(0.18), value: headerAppeared)
 
-            Text("Here's how to make the most of NotchSnap.")
+            Text("Here's how to make the most of Otto.")
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
                 .padding(.top, 4)
@@ -522,7 +522,7 @@ struct OnboardingAllSetView: View {
             Spacer()
 
             Button(action: onFinish) {
-                Text("Start using NotchSnap")
+                Text("Start using Otto")
                     .fontWeight(.semibold)
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)

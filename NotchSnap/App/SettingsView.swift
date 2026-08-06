@@ -269,7 +269,7 @@ struct GeneralSettingsView: View {
                         }
                     }
                 )) {
-                    rowText("Launch at login", "Open NotchSnap automatically when you sign in.")
+                    rowText("Launch at login", "Open Otto automatically when you sign in.")
                 }
                 Divider()
                 Toggle(isOn: Binding(
@@ -279,7 +279,7 @@ struct GeneralSettingsView: View {
                         NSApp.setActivationPolicy(newValue ? .regular : .accessory)
                     }
                 )) {
-                    rowText("Show in Dock", "Hide to keep NotchSnap as a menu-bar-only app.")
+                    rowText("Show in Dock", "Hide to keep Otto as a menu-bar-only app.")
                 }
             }
 
@@ -334,7 +334,7 @@ struct AppearanceSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            PageTitle(title: "Appearance", subtitle: "Choose how NotchSnap looks. Follows your system by default.")
+            PageTitle(title: "Appearance", subtitle: "Choose how Otto looks. Follows your system by default.")
 
             SettingsSection_Card(
                 title: "Theme",
@@ -735,7 +735,7 @@ struct CaptureSettingsView: View {
                 }
                 Divider()
                 Toggle(isOn: settingsBinding(appState, \.clearSessionOnLaunch)) {
-                    rowText("Clear session on launch", "Start fresh every time NotchSnap opens.")
+                    rowText("Clear session on launch", "Start fresh every time Otto opens.")
                 }
             }
         }
@@ -833,7 +833,7 @@ struct AboutSettingsView: View {
         VStack(alignment: .leading, spacing: 18) {
             PageTitle(title: "About")
 
-            SettingsSection_Card(title: "NotchSnap") {
+            SettingsSection_Card(title: "Otto") {
                 HStack(spacing: 16) {
                     Image(systemName: "camera.viewfinder")
                         .font(.system(size: 38))
@@ -845,7 +845,7 @@ struct AboutSettingsView: View {
                         )
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("NotchSnap").font(.system(size: 17, weight: .semibold))
+                        Text("Otto").font(.system(size: 17, weight: .semibold))
                         Text("Version 1.0").font(.system(size: 12)).foregroundStyle(.secondary)
                         Text("Screenshot tool that lives in your Mac's notch.")
                             .font(.system(size: 12))
@@ -857,7 +857,7 @@ struct AboutSettingsView: View {
                 Divider()
 
                 HStack {
-                    Text("\u{00A9} 2026 NotchSnap")
+                    Text("\u{00A9} 2026 Otto")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                     Spacer()

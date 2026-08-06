@@ -459,7 +459,7 @@ class NotchController: ObservableObject {
         menu.autoenablesItems = false
 
         let settingsItem = NSMenuItem(
-            title: "NotchSnap Settings\u{2026}",
+            title: "Otto Settings\u{2026}",
             action: #selector(AppDelegate.openSettingsAction),
             keyEquivalent: ","
         )
@@ -471,7 +471,7 @@ class NotchController: ObservableObject {
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
-            title: "Quit NotchSnap",
+            title: "Quit Otto",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         )

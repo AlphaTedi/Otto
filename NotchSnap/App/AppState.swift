@@ -237,7 +237,7 @@ class AppState: ObservableObject {
         formatter.dateFormat = "yyyy-MM-dd-HH.mm.ss"
         let timestamp = formatter.string(from: item.capturedAt)
         let ext = settings.fileFormat == .png ? "png" : "jpg"
-        let filename = "NotchSnap-\(timestamp).\(ext)"
+        let filename = "Otto-\(timestamp).\(ext)"
         let fileURL = dir.appendingPathComponent(filename)
 
         let image = item.flattenedImage

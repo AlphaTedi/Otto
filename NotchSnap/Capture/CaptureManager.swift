@@ -227,10 +227,10 @@ class CaptureManager: ObservableObject {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = "Screen Recording permission needed"
-        alert.informativeText = "NotchSnap can't take screenshots until you allow Screen Recording in System Settings. If you just granted it, relaunch NotchSnap for it to take effect."
+        alert.informativeText = "Otto can't take screenshots until you allow Screen Recording in System Settings. If you just granted it, relaunch Otto for it to take effect."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Open System Settings")
-        alert.addButton(withTitle: "Relaunch NotchSnap")
+        alert.addButton(withTitle: "Relaunch Otto")
         alert.addButton(withTitle: "Cancel")
         switch alert.runModal() {
         case .alertFirstButtonReturn:

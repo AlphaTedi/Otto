@@ -203,7 +203,7 @@ struct CalendarSettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Text("Uses the calendars already in the macOS Calendar app — including Google accounts you've added in System Settings \u{203A} Internet Accounts. NotchSnap only ever reads them.")
+                Text("Uses the calendars already in the macOS Calendar app — including Google accounts you've added in System Settings \u{203A} Internet Accounts. Otto only ever reads them.")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -236,7 +236,7 @@ struct CalendarSettingsView: View {
             if calendar.syncLooksStale, let last = calendar.lastSyncedAt {
                 SettingsSection_Card(title: "\u{26A0} macOS isn't syncing your calendars") {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("The newest event on this Mac is from \(last.formatted(date: .abbreviated, time: .shortened)). Anything created in Google since then hasn't arrived, so NotchSnap can't show it.")
+                        Text("The newest event on this Mac is from \(last.formatted(date: .abbreviated, time: .shortened)). Anything created in Google since then hasn't arrived, so Otto can't show it.")
                             .font(.system(size: 11))
                             .foregroundStyle(Color(hex: "#E07A5F"))
                             .fixedSize(horizontal: false, vertical: true)
@@ -259,7 +259,7 @@ struct CalendarSettingsView: View {
             // synced to this Mac. Listing exactly what NotchSnap can read
             // makes a missing calendar obvious instead of silent.
             SettingsSection_Card(
-                title: "Calendars NotchSnap can read",
+                title: "Calendars Otto can read",
                 subtitle: "Only these are checked for meetings. A calendar missing here isn't synced to this Mac."
             ) {
                 let calendars = calendar.visibleCalendars
@@ -291,7 +291,7 @@ struct CalendarSettingsView: View {
 
             SettingsSection_Card(
                 title: "Today's events",
-                subtitle: "What NotchSnap sees right now, and why anything is hidden."
+                subtitle: "What Otto sees right now, and why anything is hidden."
             ) {
                 let rows = calendar.diagnoseToday()
                 if rows.isEmpty {
@@ -340,7 +340,7 @@ struct CalendarSettingsView: View {
 
             SettingsSection_Card(
                 title: "Alert timing",
-                subtitle: "How far ahead NotchSnap warns you about a meeting."
+                subtitle: "How far ahead Otto warns you about a meeting."
             ) {
                 leadTimeRow(
                     label: "Ambient dot",

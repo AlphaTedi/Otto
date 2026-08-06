@@ -134,7 +134,7 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Text("NotchSnap")
+            Text("Otto")
                 .font(.headline)
 
             Divider()
@@ -174,7 +174,7 @@ struct MenuBarView: View {
             }
             .keyboardShortcut(",", modifiers: .command)
 
-            Button("Esci da NotchSnap") {
+            Button("Esci da Otto") {
                 NSApplication.shared.terminate(nil)
             }
             .keyboardShortcut("q", modifiers: .command)
