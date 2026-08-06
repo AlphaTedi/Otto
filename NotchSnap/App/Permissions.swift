@@ -49,7 +49,11 @@ class PermissionManager: ObservableObject {
     }
 
     var shouldShowOnboarding: Bool {
-        !onboardingCompleted && !allPermissionsGranted
+        // Was `&& !allPermissionsGranted`, from when onboarding existed to ask
+        // for Screen Recording: a user who already had it never saw the flow.
+        // Onboarding now just introduces the app, so completing it is the only
+        // thing that should retire it (2026-08-06).
+        !onboardingCompleted
     }
 
     // MARK: - Request Permissions

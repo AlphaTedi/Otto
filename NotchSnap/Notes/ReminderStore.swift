@@ -35,7 +35,10 @@ final class ReminderStore: ObservableObject {
     @Published private(set) var upcoming: [UpcomingReminder] = []
 
     private let eventStore = EKEventStore()
-    private let listName = "NotchSnap"    // fixed for v1
+    private let listName = "Otto"    // renamed with the app, 2026-08-06.
+    // Reminders already filed under the old "NotchSnap" list stay there;
+    // Apple Reminders has no rename-in-place API and moving them would mean
+    // recreating each one, losing its completion history.
 
     private init() {
         refreshAccessState()

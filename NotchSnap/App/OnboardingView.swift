@@ -1,14 +1,18 @@
 import SwiftUI
-import ScreenCaptureKit
 
-// MARK: - OnboardingFlowView — 3-step onboarding (Welcome → Permissions → All Set)
+// MARK: - OnboardingFlowView — 2-step onboarding (Welcome → All Set)
+//
+// The Permissions step is gone along with the screenshot feature: it asked only
+// for Screen Recording. Nothing Otto does now needs a permission up front —
+// calendar access is requested in context, the moment you press Connect, which
+// is also the only place a denial is actionable.
 
 struct OnboardingFlowView: View {
     @State private var currentStep = 0
     @AppStorage("onboardingVersion") var onboardingVersion: Int = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let totalSteps = 3
+    private let totalSteps = 2
 
     var body: some View {
         ZStack {
@@ -20,9 +24,6 @@ struct OnboardingFlowView: View {
                 switch currentStep {
                 case 0:
                     OnboardingWelcomeView(onAdvance: advanceStep)
-                        .transition(stepTransition)
-                case 1:
-                    OnboardingPermissionsView(onContinue: advanceStep)
                         .transition(stepTransition)
                 default:
                     OnboardingAllSetView(onFinish: completeOnboarding)
@@ -62,8 +63,6 @@ struct OnboardingFlowView: View {
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
         onboardingVersion = 1
         OnboardingWindowController.dismiss()
-        // Warm the capture cache now that permission may have been granted
-        CaptureManager.shared.warmContentCache()
     }
 }
 
@@ -142,7 +141,7 @@ struct OnboardingWelcomeView: View {
     var body: some View {
         VStack(spacing: 0) {
             // App icon with bounce
-            Image(systemName: "camera.viewfinder")
+            Image(systemName: "checklist")
                 .font(.system(size: 56))
                 .foregroundStyle(.tint)
                 .scaleEffect(iconAppeared ? 1.0 : 0.5)
@@ -159,7 +158,7 @@ struct OnboardingWelcomeView: View {
                 .offset(y: textAppeared ? 0 : 12)
                 .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.2), value: textAppeared)
 
-            Text("Your screenshots, always within reach of the notch.")
+            Text("Your to-dos and today's meetings, always in reach of the notch.")
                 .font(.system(size: 16))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -205,184 +204,6 @@ struct OnboardingWelcomeView: View {
             previewAppeared = true
             buttonAppeared = true
         }
-    }
-}
-
-// MARK: - Permissions View (Step 2)
-
-struct OnboardingPermissionsView: View {
-    var onContinue: () -> Void
-    @State private var screenRecordingGranted = false
-    @State private var hasAskedOnce = false
-    @State private var pollTimer: Timer?
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Text("Set up Otto")
-                .font(.system(size: 28, weight: .bold))
-                .padding(.top, 40)
-
-            Text("Grant permissions to use all features.")
-                .font(.system(size: 15))
-                .foregroundStyle(.secondary)
-                .padding(.top, 8)
-                .padding(.horizontal, 48)
-
-            Spacer().frame(height: 32)
-
-            // Permission card
-            VStack(spacing: 12) {
-                PermissionCard(
-                    icon: "camera.viewfinder",
-                    iconColor: .blue,
-                    title: "Screen Recording",
-                    description: screenRecordingGranted
-                        ? "You're all set. Otto can capture screenshots."
-                        : "Needed to capture screenshots. We never record or save your screen.",
-                    isGranted: screenRecordingGranted,
-                    onGrant: requestScreenRecording
-                )
-
-                if hasAskedOnce && !screenRecordingGranted {
-                    Text("Flip the Otto toggle in System Settings — this window updates by itself.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .transition(.opacity)
-                }
-            }
-            .padding(.horizontal, 32)
-
-            Spacer()
-
-            // Footer buttons
-            VStack(spacing: 10) {
-                Button(action: onContinue) {
-                    Text(screenRecordingGranted ? "Continue \u{2192}" : "Continue anyway \u{2192}")
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .keyboardShortcut(.return, modifiers: [])
-                .padding(.horizontal, 48)
-
-                if !screenRecordingGranted {
-                    Button("Skip for now") { onContinue() }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .font(.system(size: 13))
-                }
-            }
-            .padding(.bottom, 36)
-        }
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: screenRecordingGranted)
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: hasAskedOnce)
-        .onAppear {
-            checkScreenRecording()
-            startPolling()
-        }
-        .onDisappear {
-            pollTimer?.invalidate()
-            pollTimer = nil
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            // User came back from System Settings — re-check immediately.
-            checkScreenRecording()
-        }
-    }
-
-    /// The Wispr-style grant flow:
-    /// 1. CGRequestScreenCaptureAccess() registers Otto in the Screen
-    ///    Recording list (without this the toggle doesn't exist to flip!)
-    ///    and shows the system dialog the very first time.
-    /// 2. Deep-link to the exact Settings pane as well, so the user lands
-    ///    on the right screen even if they dismiss the system dialog.
-    /// 3. The poll below picks up the grant and flips the card live.
-    private func requestScreenRecording() {
-        hasAskedOnce = true
-        CGRequestScreenCaptureAccess()
-        NSWorkspace.shared.open(
-            URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!
-        )
-    }
-
-    private func startPolling() {
-        pollTimer?.invalidate()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            Task { @MainActor in checkScreenRecording() }
-        }
-    }
-
-    private func checkScreenRecording() {
-        // CGPreflightScreenCaptureAccess is the passive check — instant,
-        // synchronous, and never shows a prompt.
-        let granted = CGPreflightScreenCaptureAccess()
-        if granted && !screenRecordingGranted {
-            screenRecordingGranted = true
-            pollTimer?.invalidate()
-            pollTimer = nil
-            SoundManager.shared.play(.permissionGranted)
-            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
-        }
-    }
-}
-
-// MARK: - Permission Card
-
-struct PermissionCard: View {
-    let icon: String
-    let iconColor: Color
-    let title: String
-    let description: String
-    let isGranted: Bool
-    let onGrant: () -> Void
-
-    var body: some View {
-        HStack(spacing: 16) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(iconColor.opacity(0.15))
-                    .frame(width: 48, height: 48)
-                Image(systemName: isGranted ? "checkmark" : icon)
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(isGranted ? .green : iconColor)
-            }
-            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: isGranted)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: 14, weight: .semibold))
-                Text(description)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer()
-
-            if isGranted {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                    .font(.system(size: 22))
-                    .transition(.scale.combined(with: .opacity))
-            } else {
-                Button("Grant") { onGrant() }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-            }
-        }
-        .padding(16)
-        .background(GlassTile(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(
-                    isGranted ? Color.green.opacity(0.45) : Color.white.opacity(0.10),
-                    lineWidth: 1
-                )
-        )
-        .shadow(color: .black.opacity(0.15), radius: 14, y: 6)
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isGranted)
     }
 }
 
@@ -434,10 +255,10 @@ struct NotchMiniPreview: View {
 
     var phaseLabel: String {
         switch phase {
-        case 0: return "Press \u{2303}\u{21E7}4 to capture"
-        case 1: return "Screenshot captured"
-        case 2: return "It appears in the notch"
-        case 3: return "Drag it anywhere"
+        case 0: return "Press \u{2325}\u{2318}N from anywhere"
+        case 1: return "The notch opens"
+        case 2: return "Type what needs doing"
+        case 3: return "It\u{2019}s on your list"
         default: return ""
         }
     }
@@ -456,7 +277,7 @@ struct NotchMiniPreview: View {
     }
 }
 
-// MARK: - All Set View (Step 3) — How to use Otto
+// MARK: - All Set View (Step 2) — How to use Otto
 
 struct OnboardingAllSetView: View {
     var onFinish: () -> Void
@@ -497,21 +318,21 @@ struct OnboardingAllSetView: View {
             Spacer().frame(height: 22)
 
             VStack(spacing: 10) {
-                AllSetTip(icon: "selection.pin.in.out", iconTint: .blue,
-                          title: "Capture an area",
-                          detail: "Press \u{2303}\u{21E7}4 anywhere on macOS.",
-                          shortcut: "\u{2303}\u{21E7}4")
-                AllSetTip(icon: "rectangle.dashed.badge.record", iconTint: .purple,
-                          title: "Capture & edit",
-                          detail: "Open the editor with annotations & OCR.",
-                          shortcut: "\u{2303}\u{21E7}5")
-                AllSetTip(icon: "display", iconTint: .orange,
-                          title: "Full screen",
-                          detail: "Capture the entire display in one shot.",
-                          shortcut: "\u{2303}\u{21E7}3")
+                AllSetTip(icon: "bolt", iconTint: .blue,
+                          title: "Add a to-do from anywhere",
+                          detail: "Works even when Otto isn't the active app.",
+                          shortcut: "\u{2325}\u{2318}N")
+                AllSetTip(icon: "text.cursor", iconTint: .purple,
+                          title: "Quick Find",
+                          detail: "Just start typing to search across every category.",
+                          shortcut: "a\u{2026}z")
+                AllSetTip(icon: "calendar", iconTint: .orange,
+                          title: "See today's meetings",
+                          detail: "Connect a calendar in Settings and Today shows what's next.",
+                          shortcut: nil)
                 AllSetTip(icon: "macbook", iconTint: .pink,
                           title: "Reach the notch",
-                          detail: "Hover the notch to browse, drag thumbnails out, or press Space to Quick Look.",
+                          detail: "Hover to peek, click to open. Press ? inside for every shortcut.",
                           shortcut: nil)
             }
             .padding(.horizontal, 32)

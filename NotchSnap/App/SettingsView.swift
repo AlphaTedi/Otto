@@ -37,7 +37,6 @@ struct SettingsView: View {
                     case .general:    GeneralSettingsView()
                     case .appearance: AppearanceSettingsView()
                     case .notch:      NotchSettingsView()
-                    case .capture:    CaptureSettingsView()
                     case .calendar:   CalendarSettingsView()
                     case .shortcuts:  ShortcutsSettingsView()
                     case .about:      AboutSettingsView()
@@ -72,7 +71,7 @@ struct SettingsView: View {
 }
 
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case general, appearance, notch, capture, calendar, shortcuts, about
+    case general, appearance, notch, calendar, shortcuts, about
     var id: String { rawValue }
 
     var title: String {
@@ -80,7 +79,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .general:    return "General"
         case .appearance: return "Appearance"
         case .notch:      return "Notch"
-        case .capture:    return "Capture"
         case .calendar:   return "Calendar"
         case .shortcuts:  return "Shortcuts"
         case .about:      return "About"
@@ -92,7 +90,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .general:    return "gearshape"
         case .appearance: return "paintpalette"
         case .notch:      return "macbook"
-        case .capture:    return "camera.viewfinder"
         case .calendar:   return "calendar"
         case .shortcuts:  return "keyboard"
         case .about:      return "info.circle"
@@ -284,22 +281,12 @@ struct GeneralSettingsView: View {
             }
 
             SettingsSection_Card(title: "Feedback") {
-                Toggle(isOn: settingsBinding(appState, \.playSound)) {
-                    rowText("Capture sound", "Play the system shutter sound on capture.")
-                }
-                Divider()
                 Toggle(isOn: $soundEffectsEnabled) {
                     rowText("Interface sound effects", "Subtle clicks for the notch and clipboard tiles.")
                 }
                 Divider()
                 Toggle(isOn: $hapticFeedback) {
                     rowText("Haptic feedback", "Trackpad taps when the notch expands or you copy.")
-                }
-            }
-
-            SettingsSection_Card(title: "Clipboard") {
-                Toggle(isOn: settingsBinding(appState, \.autoCopyToClipboard)) {
-                    rowText("Auto-copy to clipboard", "Copy every new screenshot automatically.")
                 }
             }
 
@@ -567,14 +554,6 @@ struct NotchSettingsView: View {
                     .labelsHidden()
                     .frame(width: 160)
                 }
-                Divider()
-                Toggle(isOn: settingsBinding(appState, \.showBadgeCounter)) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Counter badge").font(.system(size: 13))
-                        Text("Show how many screenshots are in the session.")
-                            .font(.system(size: 11)).foregroundStyle(.secondary)
-                    }
-                }
             }
 
             HStack {
@@ -659,125 +638,12 @@ private struct SizePresetRow: View {
     }
 }
 
-// MARK: - Capture
-
-struct CaptureSettingsView: View {
-    @EnvironmentObject var appState: AppState
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            PageTitle(title: "Capture", subtitle: "How screenshots are taken and saved.")
-
-            SettingsSection_Card(title: "Defaults") {
-                SettingsRow(title: "Default mode") {
-                    Picker("", selection: settingsBinding(appState, \.defaultCaptureMode)) {
-                        Text("Area").tag(CaptureMode.area)
-                        Text("Window").tag(CaptureMode.window)
-                        Text("Full screen").tag(CaptureMode.fullscreen)
-                    }
-                    .labelsHidden()
-                    .frame(width: 160)
-                }
-                Divider()
-                Toggle(isOn: settingsBinding(appState, \.playSound)) {
-                    rowText("Screenshot sound", "Play the standard system shutter sound.")
-                }
-                Divider()
-                Toggle(isOn: settingsBinding(appState, \.windowShadow)) {
-                    rowText("Window shadow", "Include the macOS drop shadow on window captures.")
-                }
-            }
-
-            SettingsSection_Card(title: "Saving") {
-                Toggle(isOn: settingsBinding(appState, \.autoSaveFile)) {
-                    rowText("Auto-save to file", "Write each capture straight to disk.")
-                }
-
-                if appState.settings.autoSaveFile {
-                    Divider()
-                    SettingsRow(title: "Folder", subtitle: appState.settings.saveDirectory.path) {
-                        Button("Choose\u{2026}") { chooseSaveDirectory() }
-                    }
-                }
-
-                Divider()
-                SettingsRow(title: "File format") {
-                    Picker("", selection: settingsBinding(appState, \.fileFormat)) {
-                        Text("PNG").tag(FileFormat.png)
-                        Text("JPEG").tag(FileFormat.jpeg)
-                    }
-                    .labelsHidden()
-                    .frame(width: 120)
-                }
-
-                if appState.settings.fileFormat == .jpeg {
-                    Divider()
-                    SettingsRow(
-                        title: "JPEG quality",
-                        subtitle: "\(Int(appState.settings.jpegQuality * 100))%"
-                    ) {
-                        Slider(value: settingsBinding(appState, \.jpegQuality), in: 0.1...1.0, step: 0.05)
-                            .frame(width: 200)
-                    }
-                }
-            }
-
-            SettingsSection_Card(title: "Session") {
-                SettingsRow(title: "Screenshots in memory") {
-                    Picker("", selection: settingsBinding(appState, \.maxSessionScreenshots)) {
-                        Text("5").tag(5)
-                        Text("10").tag(10)
-                        Text("20").tag(20)
-                        Text("50").tag(50)
-                    }
-                    .labelsHidden()
-                    .frame(width: 100)
-                }
-                Divider()
-                Toggle(isOn: settingsBinding(appState, \.clearSessionOnLaunch)) {
-                    rowText("Clear session on launch", "Start fresh every time Otto opens.")
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func rowText(_ title: String, _ subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.system(size: 13))
-            Text(subtitle).font(.system(size: 11)).foregroundStyle(.secondary)
-        }
-    }
-
-    private func chooseSaveDirectory() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        if panel.runModal() == .OK, let url = panel.url {
-            appState.updateSettings { $0.saveDirectory = url }
-        }
-    }
-}
-
 // MARK: - Shortcuts
 
 struct ShortcutsSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             PageTitle(title: "Shortcuts", subtitle: "Global keyboard shortcuts available system-wide.")
-
-            SettingsSection_Card(title: "Capture") {
-                ShortcutRow(label: "Capture area", keys: "\u{2303}\u{21E7}4")
-                Divider()
-                ShortcutRow(label: "Capture window", keys: "\u{2303}\u{21E7}2")
-                Divider()
-                ShortcutRow(label: "Capture screen", keys: "\u{2303}\u{21E7}3")
-                Divider()
-                ShortcutRow(label: "Capture area + Editor", keys: "\u{2303}\u{21E7}5")
-                Divider()
-                ShortcutRow(label: "Repeat last capture", keys: "\u{2303}\u{21E7}Space")
-            }
 
             SettingsSection_Card(title: "Notch") {
                 ShortcutRow(label: "Open To-dos", keys: "\u{2303}\u{21E7}T")
@@ -847,7 +713,7 @@ struct AboutSettingsView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Otto").font(.system(size: 17, weight: .semibold))
                         Text("Version 1.0").font(.system(size: 12)).foregroundStyle(.secondary)
-                        Text("Screenshot tool that lives in your Mac's notch.")
+                        Text("Your to-dos and today's meetings, in the notch.")
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                     }

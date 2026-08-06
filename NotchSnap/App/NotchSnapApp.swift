@@ -45,7 +45,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         CaptureManager.shared.setupHotkeyObservers()
 
         // Pre-warm SCShareableContent cache — eliminates 1-3s delay on first capture
-        CaptureManager.shared.warmContentCache()
 
         // Setup notch controller
         notchController = NotchController.shared
