@@ -306,12 +306,18 @@ class NotchController: ObservableObject {
     /// Give the notch panel keyboard focus so typing works immediately
     /// (used by the ⌃⇧N hotkey — the panel is non-activating, so making it
     /// key doesn't steal the whole app's activation).
+    /// The global-hotkey path into typing. Same contract as `focusPanel()`,
+    /// just deferred until the expand animation has the panel in a key-able
+    /// state — and it MUST activate the app for the same reason: a
+    /// nonactivating panel never takes focus from the frontmost application on
+    /// its own, so ⌥⌘N used to open the creation field with a focus ring while
+    /// every keystroke continued on into Chrome (Marcello's testers,
+    /// 2026-08-06).
     func makeKeyForTyping() {
         Task { @MainActor in
             // Let the expand animation put the panel into its key-able state.
             try? await Task.sleep(nanoseconds: 80_000_000)
-            (panel as? NotchPanel)?.allowKey = true
-            panel?.makeKey()
+            focusPanel()
         }
     }
 
@@ -974,9 +980,26 @@ class NotchController: ObservableObject {
 
     /// Give the panel key status immediately (mode switches from inside the
     /// already-expanded panel, e.g. tapping the "+" tab).
+    /// Give the panel real keyboard focus — not just "key within our process".
+    ///
+    /// The panel is a `.nonactivatingPanel` in an LSUIElement app, which by
+    /// design does NOT bring the app forward. So `makeKey()` alone marked the
+    /// panel key inside Otto while macOS kept delivering keystrokes to whatever
+    /// was actually frontmost: the creation field drew its focus ring, and
+    /// every character went to Chrome. Clicking the field appeared to "fix" it
+    /// only because clicking is what activated the app.
+    ///
+    /// That one omission also swallowed Escape and every other shortcut routed
+    /// through `addLocalMonitorForEvents`, which only fires while the app is
+    /// active — so "Esc doesn't close it" and "the interactions are broken" had
+    /// the same cause (Marcello's testers, 2026-08-06).
+    ///
+    /// Pressing a global creation hotkey is an unambiguous request to type
+    /// here, so taking focus is correct. Nothing calls this on plain hover.
     func focusPanel() {
         (panel as? NotchPanel)?.allowKey = true
-        panel?.makeKey()
+        NSApp.activate(ignoringOtherApps: true)
+        panel?.makeKeyAndOrderFront(nil)
     }
 
     private func calculateMaxPanelFrame(screen: NSScreen) -> NSRect {

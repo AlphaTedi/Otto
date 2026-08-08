@@ -87,11 +87,31 @@ echo
 echo "1. Building Release"
 rm -rf "$OUT"
 mkdir -p "$OUT"
+# ARCHS is pinned to BOTH architectures, and ONLY_ACTIVE_ARCH forced off.
+#
+# Without this the build inherits the host architecture. Every release up to
+# v1.7.1 was built on Marcello's 2018 Intel Mac and shipped x86_64-only, so
+# every Apple Silicon user was told to install Rosetta before Otto would open
+# at all — "this does not happen with normal Apps", and they were right
+# (Marcello's testers, 2026-08-06). Cross-compiling arm64 from Intel is fine;
+# the toolchain ships both.
 xcodebuild -project NotchSnap.xcodeproj -scheme NotchSnap -configuration Release \
     -derivedDataPath "$OUT/dd" CONFIGURATION_BUILD_DIR="$PWD/$OUT/Release" \
     MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
+    ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
     build > "$OUT/build.log" 2>&1 || { tail -30 "$OUT/build.log"; exit 1; }
 echo "   $APP"
+
+# Prove it, rather than trusting the flags. A silently thin binary is exactly
+# the kind of defect that only shows up on someone else's machine.
+SLICES=$(lipo -archs "$APP/Contents/MacOS/Otto" 2>/dev/null || echo "")
+case "$SLICES" in
+    *arm64*x86_64*|*x86_64*arm64*)
+        echo "   universal: $SLICES" ;;
+    *)  echo "   NOT UNIVERSAL — built only: ${SLICES:-unknown}"
+        echo "   Apple Silicon users would be prompted to install Rosetta."
+        exit 1 ;;
+esac
 
 # --- Re-sign Sparkle's nested helpers --------------------------------------
 # Xcode signs the app and the framework, but NOT the executables nested inside
@@ -232,16 +252,17 @@ STAGE="$OUT/dmg-stage"
 rm -rf "$STAGE"; mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
-rm -f "$OUT/Otto.dmg"
+DMG="$OUT/Otto-$VERSION.dmg"
+rm -f "$DMG"
 hdiutil create -volname "Otto" -srcfolder "$STAGE" -ov -format UDZO \
-    "$OUT/Otto.dmg" > /dev/null
-codesign --force --sign "$IDENTITY" --timestamp "$OUT/Otto.dmg"
+    "$DMG" > /dev/null
+codesign --force --sign "$IDENTITY" --timestamp "$DMG"
 rm -rf "$STAGE"
 
 echo "7. Notarizing the disk image"
-xcrun notarytool submit "$OUT/Otto.dmg" --keychain-profile "$PROFILE" --wait \
+xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --wait \
     2>&1 | tail -4 | sed 's/^/   /'
-xcrun stapler staple "$OUT/Otto.dmg" 2>&1 | tail -1 | sed 's/^/   /'
+xcrun stapler staple "$DMG" 2>&1 | tail -1 | sed 's/^/   /'
 
 # --- Publish ---------------------------------------------------------------
 # Uploading is part of releasing. Producing an artifact and stopping is how a
@@ -250,19 +271,19 @@ xcrun stapler staple "$OUT/Otto.dmg" 2>&1 | tail -1 | sed 's/^/   /'
 echo
 echo "8. Publishing to GitHub"
 if ! command -v gh > /dev/null; then
-    echo "   gh not installed — upload $OUT/Otto.dmg manually."
+    echo "   gh not installed — upload $DMG manually."
 elif [ -z "$TAG" ]; then
     echo "   No git tag found; tag the commit first, or upload manually."
 elif gh release view "$TAG" > /dev/null 2>&1; then
-    gh release upload "$TAG" "$OUT/Otto.dmg" "$OUT/Otto.zip" --clobber
+    gh release upload "$TAG" "$DMG" "$OUT/Otto.zip" --clobber
     echo "   Updated $TAG"
 else
     # CREATE it, do not print advice. Printing advice is how an appcast got
     # published pointing at a release that did not exist — every installed copy
     # would have been offered an update it could not download
     # (Marcello, 2026-08-04).
-    gh release create "$TAG" "$OUT/Otto.dmg" "$OUT/Otto.zip" \
-        --title "NotchSnap ${TAG#v}" --generate-notes
+    gh release create "$TAG" "$DMG" "$OUT/Otto.zip" \
+        --title "Otto ${TAG#v}" --generate-notes
     echo "   Created $TAG"
 fi
 
@@ -309,7 +330,7 @@ fi
 
 echo
 echo "Done:"
-echo "  $OUT/Otto.dmg   <- the download link"
+echo "  $DMG   <- the download link"
 echo "  $OUT/Otto.zip"
 echo
 echo "Commit and push appcast.xml — that is what installed copies read:"
