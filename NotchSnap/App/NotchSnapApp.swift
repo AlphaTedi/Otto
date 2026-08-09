@@ -36,6 +36,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyManager = HotkeyManager.shared
         hotkeyManager?.start()
 
+        // A user can revoke Otto from their Apple ID's own settings without
+        // telling this app — check once per launch so a stale sign-in never
+        // lingers in the tab-row avatar or Settings.
+        AppleSignIn.shared.refreshCredentialState()
+
         #if DEBUG
         // Scriptable side door for agent/CI verification (see DebugDriver).
         DebugDriver.install()

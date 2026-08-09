@@ -930,11 +930,14 @@ private struct TrustLine: View {
 //   * Google works end to end. GoogleOAuth already runs PKCE + loopback and
 //     already asks for openid/email, so the token response carries an id_token
 //     it reads the address out of. Signing in gives a genuine account.
-//   * Apple is UI + the correct button, but it CANNOT complete until "Sign in
-//     with Apple" is enabled on the App ID at developer.apple.com and the
-//     com.apple.developer.applesignin entitlement is added. That is Marcello's
-//     to do in the portal; shipping the button wired to nothing would be worse
-//     than shipping it honest, so it says so on the screen.
+//   * Apple works end to end too (added 2026-08-09), via AppleSignIn in
+//     KeychainStore.swift — real ASAuthorizationController, real Keychain
+//     storage, real Touch ID / Apple Watch on a Mac already signed into
+//     iCloud. It needs one one-time portal step only Marcello can do: "Sign
+//     In with Apple" enabled on the com.notchsnap.app identifier at
+//     developer.apple.com. Until that is flipped, the request reaches Apple's
+//     servers and comes back with a permission error, which SignInError
+//     surfaces as readable text rather than a raw OSStatus.
 //
 // Neither one syncs anything yet — there is no Otto server. The screen claims
 // only what is true: it identifies you, and it is what future sync will hang
@@ -942,9 +945,9 @@ private struct TrustLine: View {
 
 private struct OnboardingSignInView: View {
     var onAdvance: () -> Void
-    @State private var busy = false
+    @State private var busyProvider: SignInButton.Provider?
     @State private var error: String?
-    @State private var signedInAs: String? = GoogleOAuth.shared.account
+    @State private var signedInAs: String? = GoogleOAuth.shared.account ?? AppleSignIn.shared.account
 
     var body: some View {
         OnboardingScaffold {
@@ -968,8 +971,8 @@ private struct OnboardingSignInView: View {
                     Spacer(minLength: 22)
 
                     VStack(spacing: 10) {
-                        SignInButton(provider: .google, busy: busy) { signInWithGoogle() }
-                        SignInButton(provider: .apple, busy: false) { }
+                        SignInButton(provider: .google, busy: busyProvider == .google) { signInWithGoogle() }
+                        SignInButton(provider: .apple, busy: busyProvider == .apple) { signInWithApple() }
                     }
                     .frame(maxWidth: 320)
 
@@ -1005,7 +1008,7 @@ private struct OnboardingSignInView: View {
     }
 
     private func signInWithGoogle() {
-        busy = true
+        busyProvider = .google
         error = nil
         Task {
             do {
@@ -1014,7 +1017,23 @@ private struct OnboardingSignInView: View {
             } catch {
                 self.error = error.localizedDescription
             }
-            busy = false
+            busyProvider = nil
+        }
+    }
+
+    private func signInWithApple() {
+        busyProvider = .apple
+        error = nil
+        Task {
+            do {
+                try await AppleSignIn.shared.signIn()
+                signedInAs = AppleSignIn.shared.account
+            } catch AppleSignIn.SignInError.cancelled {
+                // A changed mind is not a failure worth a red line of text.
+            } catch {
+                self.error = error.localizedDescription
+            }
+            busyProvider = nil
         }
     }
 }
@@ -1040,8 +1059,9 @@ private struct SignInButton: View {
                         .font(.system(size: 16))
                         .foregroundStyle(.white)
                 }
-                Text(busy ? "Waiting for the browser\u{2026}"
-                          : (provider == .google ? "Continue with Google" : "Continue with Apple"))
+                Text(busy
+                     ? (provider == .google ? "Waiting for the browser\u{2026}" : "Waiting for Touch ID\u{2026}")
+                     : (provider == .google ? "Continue with Google" : "Continue with Apple"))
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(provider == .google ? Color.black.opacity(0.82) : .white)
             }
@@ -1062,7 +1082,7 @@ private struct SignInButton: View {
         .disabled(busy)
         .onHover { hover = $0 }
         .help(provider == .apple
-              ? "Needs Sign in with Apple enabled on the App ID before it can complete."
+              ? "Sign in with your Apple ID — Touch ID or Apple Watch if this Mac is signed into iCloud"
               : "Sign in with your Google account")
     }
 }

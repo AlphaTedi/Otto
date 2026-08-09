@@ -525,7 +525,9 @@ private struct AccountButton: View {
 
     /// Read at render time rather than observed: sign-in state changes only
     /// through onboarding or Settings, both of which rebuild this row.
-    private var account: String? { GoogleOAuth.shared.account }
+    /// Google is checked first only because it was wired first — nothing
+    /// stops both being signed in, the row just shows whichever exists.
+    private var account: String? { GoogleOAuth.shared.account ?? AppleSignIn.shared.account }
 
     var body: some View {
         Button {

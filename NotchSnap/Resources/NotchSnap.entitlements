@@ -14,5 +14,16 @@
 	<true/>
 	<key>com.apple.security.personal-information.calendars</key>
 	<true/>
+	<!-- com.apple.developer.applesignin intentionally NOT declared yet.
+         See AppleSignIn in Calendar/KeychainStore.swift for why: adding it
+         here made `xcodebuild build` fail outright — "requires a provisioning
+         profile with the Sign In with Apple feature" — because this project
+         signs Manual/Developer ID with no profile at all (Config/Local.xcconfig),
+         and Xcode enforces the profile check for ANY entitlement tied to an
+         App ID capability regardless of signing style. That broke Debug AND
+         Release in one step, since release.sh's `xcodebuild ... build` hits
+         the identical check before it ever reaches the script's own manual
+         codesign. Re-add this entitlement only together with the portal +
+         profile step below (Marcello, 2026-08-09). -->
 </dict>
 </plist>
