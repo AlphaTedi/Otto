@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Otto — Privacy Policy</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0a0a0c;
+    --panel: #141417;
+    --border: rgba(255,255,255,0.08);
+    --text: #f2f2f4;
+    --text-secondary: #9a9aa2;
+    --accent: #7fb8e0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.65;
+  }
+  .wrap { max-width: 680px; margin: 0 auto; padding: 72px 24px 64px; }
+  a { color: var(--accent); }
+  .back { font-size: 13px; color: var(--text-secondary); text-decoration: none; }
+  .back:hover { color: var(--text); }
+  h1 { font-size: 28px; font-weight: 700; margin: 24px 0 6px; letter-spacing: -0.02em; }
+  .updated { font-size: 13px; color: var(--text-secondary); margin-bottom: 40px; }
+  h2 { font-size: 16px; font-weight: 600; margin: 40px 0 12px; }
+  p, li { font-size: 14.5px; color: #d8d8dc; }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 8px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 18px; margin: 16px 0;
+  }
+  .card p { margin: 0; color: var(--text-secondary); font-size: 13.5px; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-secondary); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+  td { color: #d8d8dc; }
+  footer {
+    margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border);
+    font-size: 12.5px; color: var(--text-secondary);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="index.html">&larr; Otto</a>
+  <h1>Privacy Policy</h1>
+  <p class="updated">Last updated August 9, 2026</p>
+
+  <div class="card">
+    <p>The short version: Otto stores your to-dos on your own Mac. It does not have a server, a
+    database, or an account system to store them in even if it wanted to. The only data that
+    leaves your Mac is the minimum needed to read your calendar, and it goes directly to Apple's
+    or Google's own servers under your own account — never to Otto or anyone else.</p>
+  </div>
+
+  <h2>Who this is</h2>
+  <p>
+    Otto is developed by Marcello Zanetta as an individual developer, not a company.
+    Contact: <a href="mailto:marcello.zanetta1@gmail.com">marcello.zanetta1@gmail.com</a>.
+    Source code: <a href="https://github.com/AlphaTedi/Screenshot_app">github.com/AlphaTedi/Screenshot_app</a>.
+  </p>
+
+  <h2>Data Otto stores</h2>
+  <table>
+    <tr><th>Data</th><th>Where it lives</th><th>Ever transmitted?</th></tr>
+    <tr>
+      <td>To-dos, categories, notes, checklists</td>
+      <td>A JSON file in your Mac's Application Support folder</td>
+      <td>No</td>
+    </tr>
+    <tr>
+      <td>Settings and preferences</td>
+      <td>macOS user defaults, on your Mac</td>
+      <td>No</td>
+    </tr>
+    <tr>
+      <td>Calendar events</td>
+      <td>Read live from macOS Calendar (EventKit) or the Google Calendar API — not copied or cached beyond what is needed to render the current view</td>
+      <td>Only the request to fetch your own events, sent directly to Apple's or Google's servers under your account</td>
+    </tr>
+    <tr>
+      <td>Contact photos for meeting attendees</td>
+      <td>Read live from your Mac's Contacts app when a meeting has attendees</td>
+      <td>No — this lookup is entirely local and nothing is sent anywhere</td>
+    </tr>
+    <tr>
+      <td>Voice recordings (optional feature, off by default)</td>
+      <td>Transcribed on-device using Apple's Speech framework</td>
+      <td>No — audio never leaves the Mac and nothing is sent to Apple or any server for this feature</td>
+    </tr>
+  </table>
+
+  <h2>Google Account access</h2>
+  <p>
+    If you choose to connect a Google account, Otto requests exactly two permissions, and asks
+    for nothing beyond what each is used for:
+  </p>
+  <ul>
+    <li>
+      <strong>See your calendar events (read-only)</strong> — used to show today's meetings in
+      the notch and warn you before they start. Otto never creates, edits, or deletes a calendar
+      event, and never requests write access.
+    </li>
+    <li>
+      <strong>Your name and email address</strong> — used only to show which account is connected
+      in Settings (for example, "Connected as you@gmail.com"). Not used for anything else.
+    </li>
+  </ul>
+  <p>
+    This exchange happens directly between your Mac and Google's own servers, using Google's
+    standard OAuth sign-in in your browser. Otto never sees or stores your Google password. The
+    access token is kept in the macOS Keychain and is never transmitted to any server operated by
+    Otto or its developer — because no such server exists.
+  </p>
+  <p>
+    You can revoke this access at any time from
+    <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">
+      your Google Account's third-party access settings</a>, or by disconnecting the calendar
+    from within Otto's Settings.
+  </p>
+
+  <h2>What Otto does not do</h2>
+  <ul>
+    <li>No analytics, tracking, or telemetry of any kind.</li>
+    <li>No advertising, and no data is ever sold or shared with advertisers.</li>
+    <li>No user accounts — there is nothing to sign up for and nothing tied to a central identity.</li>
+    <li>No third-party services receive your to-dos, notes, or calendar data. There is no backend server at all.</li>
+  </ul>
+
+  <h2>Automatic updates</h2>
+  <p>
+    Otto checks GitHub for new versions using Sparkle, an open-source updater. This check
+    contacts GitHub's servers directly (not a server operated by Otto) to read a public update
+    feed, and downloads the update package if you choose to install it. No personal data is sent
+    as part of this check.
+  </p>
+
+  <h2>Data deletion</h2>
+  <p>
+    Uninstalling Otto removes the app; to also remove its stored to-dos and settings, delete
+    <code>~/Library/Application Support/NotchSnap</code>. Disconnecting a Google account (in
+    Settings, or via your Google Account permissions page) immediately revokes Otto's access —
+    Otto retains no copy of your calendar data once disconnected, since it was never stored, only
+    read live.
+  </p>
+
+  <h2>Children's privacy</h2>
+  <p>Otto is not directed at children and does not knowingly collect data from anyone under 13.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>
+    If this policy changes, the "Last updated" date above will change accordingly. Material
+    changes affecting how Google Account data is used will be reflected here before they take
+    effect.
+  </p>
+
+  <footer>
+    <a href="index.html">&larr; Back to Otto</a>
+  </footer>
+</div>
+</body>
+</html>

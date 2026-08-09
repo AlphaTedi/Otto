@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Otto — your to-dos and today's meetings, in the notch</title>
+<meta name="description" content="Otto is a macOS menu-bar app that puts your to-dos and today's meetings in the Mac notch. No window, no clutter, one glance.">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0a0a0c;
+    --panel: #141417;
+    --border: rgba(255,255,255,0.08);
+    --text: #f2f2f4;
+    --text-secondary: #9a9aa2;
+    --accent: #7fb8e0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 96px 24px 64px; }
+  header { text-align: center; margin-bottom: 56px; }
+  .icon {
+    width: 112px; height: 112px; border-radius: 26px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    margin-bottom: 28px;
+  }
+  h1 { font-size: 34px; font-weight: 700; margin: 0 0 12px; letter-spacing: -0.02em; }
+  .tagline { font-size: 17px; color: var(--text-secondary); max-width: 460px; margin: 0 auto; }
+  .cta {
+    display: inline-flex; gap: 12px; margin-top: 32px;
+  }
+  .btn {
+    display: inline-block; padding: 11px 22px; border-radius: 10px;
+    font-size: 14px; font-weight: 600; text-decoration: none;
+    transition: opacity 0.15s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary { background: #eee; color: #111; }
+  .btn-secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+
+  section { margin-top: 64px; }
+  h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+       color: var(--text-secondary); margin-bottom: 20px; }
+
+  .features { display: grid; gap: 14px; }
+  .feature {
+    display: flex; gap: 14px; align-items: flex-start;
+    padding: 16px 18px; border-radius: 12px;
+    background: var(--panel); border: 1px solid var(--border);
+  }
+  .feature .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+    margin-top: 7px; flex-shrink: 0;
+  }
+  .feature h3 { font-size: 14px; font-weight: 600; margin: 0 0 3px; }
+  .feature p { font-size: 13px; color: var(--text-secondary); margin: 0; }
+
+  footer {
+    margin-top: 80px; padding-top: 24px; border-top: 1px solid var(--border);
+    font-size: 12.5px; color: var(--text-secondary);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+  }
+  footer a { color: var(--text-secondary); }
+  footer a:hover { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img class="icon" src="assets/icon.png" alt="Otto app icon">
+    <h1>Otto</h1>
+    <p class="tagline">Your to-dos and today's meetings, always one glance away — in the notch, never in a window.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/AlphaTedi/Screenshot_app/releases/latest">Download for Mac</a>
+      <a class="btn btn-secondary" href="https://github.com/AlphaTedi/Screenshot_app">View on GitHub</a>
+    </div>
+  </header>
+
+  <section>
+    <h2>What it does</h2>
+    <div class="features">
+      <div class="feature">
+        <span class="dot"></span>
+        <div>
+          <h3>To-dos that stay out of the way</h3>
+          <p>Press a shortcut from any app, type, done. No floating window, no app to switch to.</p>
+        </div>
+      </div>
+      <div class="feature">
+        <span class="dot"></span>
+        <div>
+          <h3>Meetings before they start</h3>
+          <p>Today's calendar sits above your list, with a quiet nudge and a join link before each one begins.</p>
+        </div>
+      </div>
+      <div class="feature">
+        <span class="dot"></span>
+        <div>
+          <h3>Silent the rest of the time</h3>
+          <p>No Dock icon, no badge, no notifications you didn't ask for. It opens when you look at it and nowhere else.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Your data</h2>
+    <div class="features">
+      <div class="feature">
+        <span class="dot"></span>
+        <div>
+          <h3>Local by default</h3>
+          <p>To-dos, notes and settings are stored on your Mac. There is no Otto account and no Otto server they sync through.</p>
+        </div>
+      </div>
+      <div class="feature">
+        <span class="dot"></span>
+        <div>
+          <h3>Calendar access is read-only</h3>
+          <p>Whether you connect via macOS Calendar or Google, Otto only ever reads events — it never creates, edits or deletes one.</p>
+        </div>
+      </div>
+    </div>
+    <p style="margin-top:16px;font-size:13px;">
+      Full details: <a href="privacy.html" style="color:var(--accent);">Privacy Policy</a>
+    </p>
+  </section>
+
+  <footer>
+    <span>&copy; 2026 Otto</span>
+    <span>
+      <a href="privacy.html">Privacy</a> ·
+      <a href="https://github.com/AlphaTedi/Screenshot_app/issues">Support</a> ·
+      <a href="mailto:marcello.zanetta1@gmail.com">Contact</a>
+    </span>
+  </footer>
+</div>
+</body>
+</html>

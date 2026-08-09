@@ -28,14 +28,16 @@ final class GoogleOAuth {
     /// Read-only calendar, plus openid/email purely so the token response
     /// carries an id_token we can read the account address out of — otherwise
     /// Settings could only say "connected" without saying to what.
+    ///
+    /// directory.readonly (Workspace attendee photos) was dropped 2026-08-09.
+    /// It is a Google "restricted" scope, which gates OAuth verification behind
+    /// a paid third-party CASA security assessment — a real cost and a real
+    /// delay, for a feature that only decorates avatars. calendar.events.readonly
+    /// is merely "sensitive": verifiable through Google's ordinary review, which
+    /// is what unblocks the 100-total-user cap unverified apps carry. Contacts
+    /// photos and coloured initials still work with no directory scope at all.
     private static let scope = [
         "https://www.googleapis.com/auth/calendar.events.readonly",
-        // Workspace directory profiles — read-only, and only ever queried for
-        // the addresses already listed on a meeting the user was invited to.
-        // This is what puts colleagues' faces on the attendee avatars; without
-        // it EventKit and the Calendar API both hand over bare addresses and
-        // every colleague renders as a letter (Marcello, 2026-08-05).
-        "https://www.googleapis.com/auth/directory.readonly",
         "openid", "email",
     ].joined(separator: " ")
     private static let authEndpoint = "https://accounts.google.com/o/oauth2/v2/auth"
