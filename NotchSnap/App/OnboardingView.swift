@@ -35,7 +35,7 @@ enum OnboardingFocus: String, CaseIterable {
 }
 
 private enum OnboardingStep {
-    case welcome, value, focus, whereItLives, practice, celebrate, calendar, allSet
+    case welcome, value, focus, whereItLives, practice, celebrate, calendar, signIn, allSet
 }
 
 struct OnboardingFlowView: View {
@@ -53,6 +53,7 @@ struct OnboardingFlowView: View {
     private var steps: [OnboardingStep] {
         var s: [OnboardingStep] = [.welcome, .value, .focus, .whereItLives, .practice, .celebrate]
         if focus.wantsCalendar { s.append(.calendar) }
+        s.append(.signIn)
         s.append(.allSet)
         return s
     }
@@ -84,6 +85,8 @@ struct OnboardingFlowView: View {
                     OnboardingCelebrateView(onAdvance: advanceStep)
                 case .calendar:
                     OnboardingCalendarView(onAdvance: advanceStep)
+                case .signIn:
+                    OnboardingSignInView(onAdvance: advanceStep)
                 case .allSet:
                     OnboardingAllSetView(onFinish: completeOnboarding)
                 }
@@ -91,10 +94,13 @@ struct OnboardingFlowView: View {
             .transition(stepTransition)
             .animation(.spring(response: 0.45, dampingFraction: 0.85), value: stepIndex)
         }
-        .frame(width: 600, height: 540)
-        .overlay(alignment: .bottom) {
+        .frame(width: 600, height: 560)
+        // Its own strip, below everything — never on top of a button.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             StepDotIndicator(current: stepIndex, total: steps.count)
-                .padding(.bottom, 14)
+                .padding(.top, 2)
+                .padding(.bottom, 16)
+                .frame(maxWidth: .infinity)
         }
         // Reduce Motion: flatten every staggered spring in the flow into a
         // quick fade — one override here instead of gating each subview.
@@ -122,6 +128,94 @@ struct OnboardingFlowView: View {
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
         onboardingVersion = 1
         OnboardingWindowController.dismiss()
+    }
+}
+
+
+// MARK: - OnboardingScaffold — one layout every screen shares
+//
+// The page dots used to be an .overlay(alignment: .bottom) on the whole flow,
+// floating over whatever each screen happened to put at its own bottom edge —
+// which is why they collided with the footer buttons (Marcello, 2026-08-06).
+// Overlays do not reserve space; that is the entire bug.
+//
+// Here the window is one vertical stack: a content region that takes what is
+// left, a footer that is as tall as it needs to be, and a dot rail with its own
+// fixed strip underneath. Nothing can overlap anything, on any screen, because
+// no two things are ever in the same space.
+private struct OnboardingScaffold<Content: View, Footer: View>: View {
+    @ViewBuilder var content: Content
+    @ViewBuilder var footer: Footer
+
+    var body: some View {
+        VStack(spacing: 0) {
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 44)
+
+            footer
+                .padding(.horizontal, 44)
+                .padding(.top, 8)
+                .padding(.bottom, 20)
+        }
+    }
+}
+
+/// The standard header: one strong line, one quiet line, consistent rhythm.
+private struct OnboardingHeader: View {
+    let title: String
+    var subtitle: String? = nil
+    var topPadding: CGFloat = 52
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Text(title)
+                .font(.system(size: 25, weight: .bold))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            if let subtitle {
+                Text(subtitle)
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 12)
+            }
+        }
+        .padding(.top, topPadding)
+    }
+}
+
+/// The one primary button shape used on every screen, so the eye lands in the
+/// same place each time instead of hunting for a differently-sized control.
+private struct OnboardingPrimaryButton: View {
+    let title: String
+    var isEnabled: Bool = true
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .fontWeight(.semibold)
+                .frame(maxWidth: .infinity)
+                .frame(height: 42)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .disabled(!isEnabled)
+        .keyboardShortcut(.return, modifiers: [])
+    }
+}
+
+private struct OnboardingQuietButton: View {
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) { Text(title) }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .font(.system(size: 12.5))
     }
 }
 
@@ -516,99 +610,127 @@ private struct OnboardingNotchView: View {
 // MARK: - Act 2 · Practice (Step 5) — the core of the whole flow
 //
 // The user performs the app's actual core action, for real, before onboarding
-// ends. Pressing ⌥⌘N here does exactly what it does forever after: the Carbon
-// hot key fires, the notch opens on its creation tab, and a to-do typed now is
-// a to-do saved now. This screen only watches for it.
+// ends. Two stages, because opening the panel is only half the lesson:
 //
-// It cannot be completed with a "Next" button, because the entire point is that
-// someone leaves onboarding having already summoned Otto once with the keyboard.
-// A skip is offered after 12s so a power user — or anyone whose keyboard is
-// intercepted by another launcher — is never trapped.
+//   1. press ⌃⇧N          → the real Carbon hot key, the real notch opens
+//   2. type it and ⏎      → the real to-do is really saved
+//
+// Stage 2 exists because the first version stopped at stage 1: the notch
+// appeared and onboarding moved on, so nobody was ever shown the part where
+// you actually write something (Marcello, 2026-08-06). Someone who finishes
+// this screen has created a to-do, not watched a panel open.
+//
+// Neither stage can be completed with a "Next" button. A skip appears after
+// 15s so a user whose keyboard is intercepted by a launcher is never trapped.
 
 private struct OnboardingPracticeView: View {
     var onAdvance: () -> Void
+
+    private enum Stage { case awaitingShortcut, awaitingTodo }
+    @State private var stage: Stage = .awaitingShortcut
     @State private var pulse = false
     @State private var showSkip = false
-    @State private var fired = false
+    @State private var done = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer().frame(height: 54)
+        OnboardingScaffold {
+            VStack(spacing: 0) {
+                OnboardingHeader(
+                    title: stage == .awaitingShortcut
+                        ? "Add your first to-do"
+                        : "Now type it",
+                    subtitle: stage == .awaitingShortcut
+                        ? "Press the shortcut. It works from any app — you don't have to be in Otto."
+                        : "Otto is open at the notch with the cursor already in the field. Write anything and press Return."
+                )
 
-            Text("Try it: add your first to-do")
-                .font(.system(size: 24, weight: .bold))
+                Spacer(minLength: 20)
 
-            Text("Press the shortcut below. It works from any app — you don't have to be in Otto.")
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 56)
-                .padding(.top, 8)
+                if stage == .awaitingShortcut {
+                    ShortcutKeys(keys: ["\u{2303}", "\u{21E7}", "N"])
+                        .scaleEffect(pulse ? 1.03 : 1)
+                        .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true),
+                                   value: pulse)
+                } else {
+                    ShortcutKeys(keys: ["\u{21A9}"])
+                        .scaleEffect(pulse ? 1.03 : 1)
+                        .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true),
+                                   value: pulse)
+                }
 
-            Spacer().frame(height: 34)
+                Spacer(minLength: 18)
 
-            // The shortcut itself, as the hero of the screen.
-            HStack(spacing: 8) {
-                ForEach(["\u{2325}", "\u{2318}", "N"], id: \.self) { key in
-                    Text(key)
-                        .font(.system(size: 22, weight: .medium))
-                        .frame(minWidth: 52, minHeight: 52)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Color.primary.opacity(0.07))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
-                        )
+                Label(stage == .awaitingShortcut
+                        ? "Waiting for the shortcut\u{2026}"
+                        : "Waiting for your first to-do\u{2026}",
+                      systemImage: stage == .awaitingShortcut ? "keyboard" : "pencil.line")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity)
+
+                Spacer(minLength: 12)
+            }
+        } footer: {
+            // The footer keeps its height whether or not the skip is showing,
+            // so the screen does not jump when it appears.
+            Group {
+                if showSkip {
+                    OnboardingQuietButton(title: "Skip this step", action: onAdvance)
+                        .transition(.opacity)
+                } else {
+                    Color.clear
                 }
             }
-            .scaleEffect(pulse ? 1.04 : 1)
-            .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true), value: pulse)
-
-            Spacer().frame(height: 26)
-
-            Label("Waiting for the shortcut\u{2026}", systemImage: "keyboard")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-
-            Text("Otto will open at the notch with the cursor already in the field. Type anything and press \u{21A9}.")
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 64)
-                .padding(.top, 10)
-
-            Spacer()
-
-            if showSkip {
-                Button("Skip this step") { onAdvance() }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .font(.system(size: 13))
-                    .padding(.bottom, 40)
-                    .transition(.opacity)
-            } else {
-                Color.clear.frame(height: 20).padding(.bottom, 40)
-            }
+            .frame(height: 20)
         }
         .onAppear {
             pulse = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 12) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
                 withAnimation { showSkip = true }
             }
         }
-        // The real hot key, not a simulation: HotkeyManager posts this from the
-        // same handler the shipped shortcut runs through.
+        // Stage 1 → 2. The real hot key: HotkeyManager posts this from the same
+        // handler the shipped shortcut runs through.
         .onReceive(NotificationCenter.default.publisher(for: .quickEntryFired)) { _ in
-            guard !fired else { return }
-            fired = true
-            // Let the notch finish opening before the window changes under it.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { onAdvance() }
+            guard stage == .awaitingShortcut else { return }
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                stage = .awaitingTodo
+            }
+        }
+        // Stage 2 → done. A real row in the real store.
+        .onReceive(NotificationCenter.default.publisher(for: .todoCreated)) { _ in
+            guard !done else { return }
+            done = true
+            // Let the row land in the notch before the window moves on.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { onAdvance() }
         }
     }
 }
 
+/// Keycaps at hero size — the shortcut is the subject of the screen, not a hint.
+private struct ShortcutKeys: View {
+    let keys: [String]
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(keys, id: \.self) { key in
+                Text(key)
+                    .font(.system(size: 21, weight: .medium))
+                    .frame(minWidth: 50, minHeight: 50)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color.primary.opacity(0.06))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.09), lineWidth: 1)
+                    )
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(keys.joined(separator: " "))
+    }
+}
 // MARK: - Act 2 · Celebrate (Step 6)
 
 private struct OnboardingCelebrateView: View {
@@ -776,6 +898,180 @@ private struct TrustLine: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
+        }
+    }
+}
+
+
+// MARK: - Act 3 · Sign in (Step 8) — after the value is felt, never before
+//
+// Placed last because nothing above it needed an account: Otto's to-dos are
+// local JSON and work signed out forever. "Set up later" is therefore a real
+// escape hatch, not a dark pattern — skipping costs the user nothing today.
+//
+// WHAT IS REAL HERE, precisely:
+//
+//   * Google works end to end. GoogleOAuth already runs PKCE + loopback and
+//     already asks for openid/email, so the token response carries an id_token
+//     it reads the address out of. Signing in gives a genuine account.
+//   * Apple is UI + the correct button, but it CANNOT complete until "Sign in
+//     with Apple" is enabled on the App ID at developer.apple.com and the
+//     com.apple.developer.applesignin entitlement is added. That is Marcello's
+//     to do in the portal; shipping the button wired to nothing would be worse
+//     than shipping it honest, so it says so on the screen.
+//
+// Neither one syncs anything yet — there is no Otto server. The screen claims
+// only what is true: it identifies you, and it is what future sync will hang
+// off. Promising "your to-dos everywhere" today would be a lie.
+
+private struct OnboardingSignInView: View {
+    var onAdvance: () -> Void
+    @State private var busy = false
+    @State private var error: String?
+    @State private var signedInAs: String? = GoogleOAuth.shared.account
+
+    var body: some View {
+        OnboardingScaffold {
+            VStack(spacing: 0) {
+                OnboardingHeader(
+                    title: signedInAs == nil ? "Make it yours" : "Signed in",
+                    subtitle: signedInAs == nil
+                        ? "Optional. Your to-dos are stored on this Mac and work perfectly without an account."
+                        : nil
+                )
+
+                if let signedInAs {
+                    Spacer(minLength: 18)
+                    VStack(spacing: 10) {
+                        AccountAvatar(email: signedInAs, diameter: 56)
+                        Text(signedInAs)
+                            .font(.system(size: 13, weight: .medium))
+                    }
+                    Spacer(minLength: 18)
+                } else {
+                    Spacer(minLength: 22)
+
+                    VStack(spacing: 10) {
+                        SignInButton(provider: .google, busy: busy) { signInWithGoogle() }
+                        SignInButton(provider: .apple, busy: false) { }
+                    }
+                    .frame(maxWidth: 320)
+
+                    if let error {
+                        Text(error)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 12)
+                            .padding(.horizontal, 20)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 16)
+
+                    Text("Signing in identifies you — it does not upload your to-dos. There is no Otto server yet.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        } footer: {
+            VStack(spacing: 10) {
+                if signedInAs != nil {
+                    OnboardingPrimaryButton(title: "Continue", action: onAdvance)
+                } else {
+                    OnboardingQuietButton(title: "Set up later", action: onAdvance)
+                }
+            }
+        }
+    }
+
+    private func signInWithGoogle() {
+        busy = true
+        error = nil
+        Task {
+            do {
+                try await GoogleOAuth.shared.signIn()
+                signedInAs = GoogleOAuth.shared.account
+            } catch {
+                self.error = error.localizedDescription
+            }
+            busy = false
+        }
+    }
+}
+
+/// Provider buttons drawn to each vendor's shape conventions: Google's is the
+/// light pill with the four-colour G, Apple's the black pill with the logo
+/// glyph. Both use the vendor's own mark rather than a generic SF Symbol,
+/// which is a branding requirement for real sign-in buttons, not a nicety.
+private struct SignInButton: View {
+    enum Provider { case google, apple }
+    let provider: Provider
+    let busy: Bool
+    let action: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                switch provider {
+                case .google: GoogleGlyph().frame(width: 17, height: 17)
+                case .apple:
+                    Image(systemName: "apple.logo")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.white)
+                }
+                Text(busy ? "Waiting for the browser\u{2026}"
+                          : (provider == .google ? "Continue with Google" : "Continue with Apple"))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(provider == .google ? Color.black.opacity(0.82) : .white)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 42)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(provider == .google ? Color.white : Color.black)
+                    .opacity(hover ? 0.92 : 1)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Color.black.opacity(provider == .google ? 0.16 : 0), lineWidth: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(busy)
+        .onHover { hover = $0 }
+        .help(provider == .apple
+              ? "Needs Sign in with Apple enabled on the App ID before it can complete."
+              : "Sign in with your Google account")
+    }
+}
+
+/// Google's "G", drawn as its four arcs rather than shipped as a bitmap, so it
+/// stays crisp and carries no asset.
+private struct GoogleGlyph: View {
+    var body: some View {
+        GeometryReader { geo in
+            let s = min(geo.size.width, geo.size.height)
+            ZStack {
+                Circle().trim(from: 0.0,  to: 0.25).stroke(Color(hex: "#EA4335"), lineWidth: s * 0.26)
+                    .rotationEffect(.degrees(-135))
+                Circle().trim(from: 0.0,  to: 0.25).stroke(Color(hex: "#FBBC05"), lineWidth: s * 0.26)
+                    .rotationEffect(.degrees(135))
+                Circle().trim(from: 0.0,  to: 0.25).stroke(Color(hex: "#34A853"), lineWidth: s * 0.26)
+                    .rotationEffect(.degrees(45))
+                Circle().trim(from: 0.0,  to: 0.28).stroke(Color(hex: "#4285F4"), lineWidth: s * 0.26)
+                    .rotationEffect(.degrees(-45))
+                Rectangle()
+                    .fill(Color(hex: "#4285F4"))
+                    .frame(width: s * 0.42, height: s * 0.24)
+                    .offset(x: s * 0.20, y: s * 0.02)
+            }
+            .frame(width: s, height: s)
         }
     }
 }

@@ -382,7 +382,8 @@ private struct TodoTabRow: View {
                 // ambiguous. Trailing-aligned per the mockup.
                 Spacer(minLength: 8)
                 CategoryOverflowMenu()
-                SettingsButton()
+                AccountButton()
+                    .padding(.leading, 6)
             }
             .padding(.top, 8)
         }
@@ -513,24 +514,27 @@ private struct CategoryOverflowMenu: View {
 // foreground tones — so the two read as a pair of row-level actions rather than
 // one chip and one afterthought. The context menu stays for anyone who learned
 // it.
-private struct SettingsButton: View {
+private struct AccountButton: View {
     @State private var hover = false
+
+    /// Read at render time rather than observed: sign-in state changes only
+    /// through onboarding or Settings, both of which rebuild this row.
+    private var account: String? { GoogleOAuth.shared.account }
 
     var body: some View {
         Button {
             SettingsWindowController.show()
         } label: {
-            Image(systemName: "gearshape")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(hover ? DSColor.textPrimary : DSColor.textSecondary)
-                .frame(width: 20, height: 20)
-                .contentShape(Rectangle())
+            AccountAvatar(email: account, diameter: 22)
+                .opacity(hover ? 0.82 : 1)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .onHover { hovering in
             withAnimation(NotchAnimation.hintFade) { hover = hovering }
         }
-        .help(L10n.t("settings.open"))
+        .help(account ?? L10n.t("settings.open"))
+        .accessibilityLabel(L10n.t("settings.open"))
     }
 }
 

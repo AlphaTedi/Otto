@@ -785,6 +785,55 @@ struct AttendeeAvatar: View {
 }
 
 /// AV-6: overlapping stack, capped, with a "+N" disc for the remainder.
+// MARK: - AccountAvatar — the signed-in user, wherever they are shown
+//
+// One implementation for the onboarding sign-in screen and the notch's tab
+// row, so the face in the corner and the face in onboarding can never be two
+// different treatments of the same person.
+//
+// Falls back to the first letter of the address on the same pastel tones the
+// attendee avatars use — a signed-out user gets a neutral glyph rather than a
+// stock silhouette.
+struct AccountAvatar: View {
+    /// nil ⇒ nobody is signed in.
+    var email: String?
+    var diameter: CGFloat = 20
+
+    @ObservedObject private var photos = AttendeePhotoStore.shared
+
+    var body: some View {
+        Group {
+            if let email, let image = photos.photo(for: email) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: diameter, height: diameter)
+                    .clipShape(Circle())
+            } else if let email, !email.isEmpty {
+                let tone = AttendeeAvatar.tone(for: email)
+                Circle()
+                    .fill(tone.background)
+                    .frame(width: diameter, height: diameter)
+                    .overlay(
+                        Text(AttendeeAvatar.initial(for: email))
+                            .font(.system(size: diameter * 0.4375, weight: .medium))
+                            .foregroundStyle(tone.foreground)
+                    )
+            } else {
+                Circle()
+                    .fill(Color.white.opacity(0.08))
+                    .frame(width: diameter, height: diameter)
+                    .overlay(
+                        Image(systemName: "person.fill")
+                            .font(.system(size: diameter * 0.46))
+                            .foregroundStyle(DSColor.textSecondary)
+                    )
+            }
+        }
+        .overlay(Circle().strokeBorder(DSColor.AvatarPalette.innerStroke, lineWidth: 1))
+    }
+}
+
 struct AvatarStack: View {
     let names: [String]
     /// Parallel to `names` where known — drives the Contacts photo lookup.

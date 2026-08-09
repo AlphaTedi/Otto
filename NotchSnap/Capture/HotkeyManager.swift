@@ -160,6 +160,7 @@ class HotkeyManager {
                 print("[HotkeyManager] ⌃⇧N → new to-do (creation)")
                 Task { @MainActor in
                     NotchController.shared.openCreateFresh()
+                    NotificationCenter.default.post(name: .quickEntryFired, object: nil)
                 }
             }
 

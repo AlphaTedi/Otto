@@ -32,6 +32,9 @@ extension Notification.Name {
     /// rather than a "Next" button — the user performs the app's core action
     /// for real before onboarding ends.
     static let quickEntryFired = Notification.Name("otto.quickEntryFired")
+    /// Posted when a to-do is actually committed. Onboarding uses it to know
+    /// the user finished the job, not just opened the panel.
+    static let todoCreated = Notification.Name("otto.todoCreated")
 }
 
 // MARK: - CaptureManager

@@ -417,6 +417,10 @@ final class TodoStore: ObservableObject {
         activeCollectionID = target
         HapticManager.shared.copyConfirmed()
         scheduleSave()
+        // Onboarding's practice step waits for this: the shortcut opening the
+        // notch is only half the lesson, and someone who stops there has not
+        // yet made anything. See OnboardingPracticeView.
+        NotificationCenter.default.post(name: .todoCreated, object: nil)
         return item
     }
 
