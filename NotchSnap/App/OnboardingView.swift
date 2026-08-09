@@ -58,12 +58,22 @@ struct OnboardingFlowView: View {
     private var steps: [OnboardingStep] {
         var s: [OnboardingStep] = [.welcome, .value, .focus, .whereItLives, .practice, .celebrate]
         if focus.wantsCalendar { s.append(.calendar) }
-        // Only offer sign-in when it can actually complete. With no bundled
-        // OAuth client the Google button could only ever surface
-        // "Add your Google OAuth client ID and secret first" — a message meant
-        // for whoever builds Otto, shown to someone trying to use it
-        // (Marcello, 2026-08-06). A missing step beats a broken one.
-        if GoogleOAuth.hasBundledCredentials { s.append(.signIn) }
+        // Only offer sign-in when it can actually complete, AND only when it
+        // is not already redundant. Connecting Google Calendar on the
+        // previous step IS signing in with Google — both go through the same
+        // GoogleOAuth.shared singleton and the same account — so a user who
+        // just connected their calendar was being asked to "Continue with
+        // Google" a second time for an identity the app already had
+        // (Marcello, 2026-08-09: "it shouldn't be prompting me again"). This
+        // is a computed property, re-evaluated on every render, so the moment
+        // a connection completes — even mid-flow — this step drops out of the
+        // array on the very next advance. With no bundled OAuth client the
+        // Google button could only ever surface "Add your Google OAuth client
+        // ID and secret first" — a message meant for whoever builds Otto, not
+        // shown to someone trying to use it (Marcello, 2026-08-06). A missing
+        // step beats a broken or a redundant one.
+        let alreadySignedIn = GoogleOAuth.shared.isSignedIn || AppleSignIn.shared.isSignedIn
+        if GoogleOAuth.hasBundledCredentials, !alreadySignedIn { s.append(.signIn) }
         s.append(.allSet)
         return s
     }
@@ -1013,6 +1023,17 @@ private struct OnboardingSignInView: View {
                     OnboardingQuietButton(title: "Set up later", action: onAdvance)
                 }
             }
+        }
+        // Belt-and-suspenders alongside the `steps` array skipping this
+        // screen entirely once signed in: `signedInAs` is a `@State` initial
+        // value, captured once when this view is constructed, not something
+        // that re-reads GoogleOAuth on its own. If a sign-in from the
+        // previous (calendar) step is still finishing its async token
+        // exchange at the exact moment this view happens to render, that
+        // snapshot could be stale for one frame. Re-checking on appear costs
+        // nothing and closes that gap completely.
+        .onAppear {
+            signedInAs = GoogleOAuth.shared.account ?? AppleSignIn.shared.account
         }
     }
 

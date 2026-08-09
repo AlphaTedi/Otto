@@ -76,7 +76,16 @@ class OnboardingWindowController: NSWindowController {
         window.titleVisibility = .hidden
         window.backgroundColor = .clear
         window.isOpaque = false
-        window.level = .floating
+        // Plain .normal — same as Settings, which never had this problem.
+        // .floating pins a window ABOVE every other app's windows regardless
+        // of which app is active, not just above Otto's own; the calendar
+        // step opens a real browser tab for Google's consent screen, and a
+        // floating onboarding window sat permanently on top of it with no way
+        // to bring the browser forward (Marcello, 2026-08-09: "you cannot
+        // move it behind another window"). NSApp.activate + makeKeyAndOrderFront
+        // in show() already bring this window to the front on its own when it
+        // opens; nothing here needed .floating to begin with.
+        window.level = .normal
         window.isMovableByWindowBackground = true
         // A hard safety envelope around setCompact's two real target sizes
         // (520x300 / 600x560). macOS enforces minSize/maxSize on EVERY
