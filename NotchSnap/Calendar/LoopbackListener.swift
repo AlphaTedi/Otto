@@ -1,5 +1,5 @@
+import Darwin
 import Foundation
-import Network
 
 // MARK: - LoopbackListener — catches Google's OAuth redirect
 //
@@ -12,87 +12,106 @@ import Network
 // answers with a short HTML page, and stops. It is not an HTTP server and must
 // never grow into one; nothing outside this machine can reach it (loopback
 // only) and it exists for a few seconds.
+//
+// BUILT ON RAW POSIX SOCKETS, NOT Network.framework — this is the second
+// implementation, and that switch is the actual fix, not a stylistic choice.
+//
+// The first version used NWListener with `requiredInterfaceType = .loopback`,
+// which threw "NWError 22 - Invalid argument" on every attempt
+// (Marcello, 2026-08-09) — and had been doing so since the very first release
+// with Google sign-in; the ORIGINAL code discarded the listener's
+// `.failed(error)` payload and reported a generic "could not bind" message
+// regardless of cause, so the real error was never visible until that
+// swallowing was fixed first. The second attempt swapped in
+// `requiredLocalEndpoint` pinned to 127.0.0.1 instead — the documented
+// listener-appropriate alternative — and it failed with the IDENTICAL error.
+//
+// Standalone testing (swiftc, no app, no signing) isolated why: EVERY
+// NWListener configuration failed with the same EINVAL, including one with
+// zero parameters set at all — while a plain POSIX `socket()`/`bind()`/
+// `listen()` on the exact same loopback address succeeded immediately, from
+// both Python and Swift. Network.framework's listener path runs through
+// Apple's NECP (Network Extension Control Policy) subsystem, which plain BSD
+// sockets never touch — and something about NECP client registration is
+// unavailable in at least one real execution context, ad-hoc signing making
+// no difference. Rather than gamble on a third Network.framework variant
+// against an API surface that has now failed two different ways for reasons
+// neither attempt could actually observe, this drops NECP entirely for a job
+// that never needed its extra machinery: bind, listen, accept one connection,
+// read one request, respond, close.
+//
+// Bonus: bind()/listen() are synchronous syscalls, not an async state machine
+// waiting on a `.ready` callback — the whole "how long do we wait, and on
+// which thread" question that produced the ORIGINAL main-actor-blocking bug
+// no longer exists. `create()` stays `async throws` only so GoogleOAuth's
+// call site didn't need to change.
 
 final class LoopbackListener: @unchecked Sendable {
     let port: UInt16
 
-    private let listener: NWListener
-    private let queue: DispatchQueue
+    private let fd: Int32
+    private let queue = DispatchQueue(label: "com.notchsnap.oauth.loopback")
     private var continuation: CheckedContinuation<String, Error>?
     private var finished = false
+    private var stopped = false
     private let lock = NSLock()
 
-    /// Async factory rather than a throwing `init` — the original blocked the
-    /// CALLING thread on a `DispatchSemaphore` while waiting for the kernel to
-    /// hand back a port, and `GoogleOAuth` (the only caller) is `@MainActor`,
-    /// so that wait ran on the main actor: up to 5 seconds of a frozen app on
-    /// every single sign-in attempt, worse on a fresh install where the
-    /// network stack's first touch is slower to spin up. "Could not bind a
-    /// loopback port" (Marcello, 2026-08-09) is that 5s timeout firing, not a
-    /// real bind failure — `.any` already asks the kernel for a free port, so
-    /// a genuine collision is close to impossible. `withCheckedThrowingContinuation`
-    /// suspends the calling Task instead of blocking a thread, and the timeout
-    /// is now generous enough to survive a cold start.
     static func create() async throws -> LoopbackListener {
-        let parameters = NWParameters.tcp
-        // Loopback only: never expose this to the network.
-        parameters.requiredInterfaceType = .loopback
-        parameters.allowLocalEndpointReuse = true
-
-        let listener: NWListener
-        do {
-            // Port 0 asks the kernel for a free one, so we never collide with
-            // whatever else the user is running.
-            listener = try NWListener(using: parameters, on: .any)
-        } catch {
-            throw GoogleOAuth.AuthError.listenerFailed(error.localizedDescription)
+        let socketFD = socket(AF_INET, SOCK_STREAM, 0)
+        guard socketFD >= 0 else {
+            throw GoogleOAuth.AuthError.listenerFailed(
+                "could not create a socket (\(String(cString: strerror(errno))))")
         }
 
-        let queue = DispatchQueue(label: "com.notchsnap.oauth.loopback")
-        let port: UInt16 = try await withCheckedThrowingContinuation { continuation in
-            let box = ContinuationBox(continuation)
-            listener.stateUpdateHandler = { state in
-                switch state {
-                case .ready:
-                    box.resume(.success(listener.port?.rawValue ?? 0))
-                case .failed(let error):
-                    box.resume(.failure(GoogleOAuth.AuthError.listenerFailed(error.localizedDescription)))
-                case .cancelled:
-                    box.resume(.failure(GoogleOAuth.AuthError.listenerFailed("listener was cancelled")))
-                default:
-                    break
-                }
-            }
-            listener.start(queue: queue)
-            // 10s, not 5: generous enough for a cold network stack on a
-            // freshly launched, freshly notarized app to still succeed rather
-            // than time out on what would otherwise be a working bind.
-            queue.asyncAfter(deadline: .now() + 10) {
-                // Tear down rather than leave a listener dangling if `.ready`
-                // shows up just after this fires — harmless either way since
-                // ContinuationBox only lets the first resume count, but a
-                // menu-bar app that runs all day shouldn't leak a listener on
-                // the rare slow-start case.
-                listener.cancel()
-                box.resume(.failure(GoogleOAuth.AuthError.listenerFailed(
-                    "timed out waiting for the sign-in listener to start")))
+        var reuse: Int32 = 1
+        setsockopt(socketFD, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
+
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = 0  // ask the kernel for a free ephemeral port
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")  // loopback ONLY, never 0.0.0.0
+
+        let bindResult = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                bind(socketFD, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
             }
         }
-        guard port != 0 else {
-            listener.cancel()
-            throw GoogleOAuth.AuthError.listenerFailed("could not bind a loopback port")
+        guard bindResult == 0 else {
+            let message = String(cString: strerror(errno))
+            Darwin.close(socketFD)
+            throw GoogleOAuth.AuthError.listenerFailed("could not bind a loopback port (\(message))")
         }
 
-        let result = LoopbackListener(listener: listener, queue: queue, port: port)
-        listener.newConnectionHandler = { [weak result] connection in
-            result?.handle(connection)
+        var boundAddr = sockaddr_in()
+        var len = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let nameResult = withUnsafeMutablePointer(to: &boundAddr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                getsockname(socketFD, $0, &len)
+            }
         }
+        guard nameResult == 0 else {
+            Darwin.close(socketFD)
+            throw GoogleOAuth.AuthError.listenerFailed("could not read back the bound port")
+        }
+        let boundPort = UInt16(bigEndian: boundAddr.sin_port)
+        guard boundPort != 0 else {
+            Darwin.close(socketFD)
+            throw GoogleOAuth.AuthError.listenerFailed("kernel returned port 0")
+        }
+
+        guard listen(socketFD, 4) == 0 else {
+            let message = String(cString: strerror(errno))
+            Darwin.close(socketFD)
+            throw GoogleOAuth.AuthError.listenerFailed("could not listen on the loopback port (\(message))")
+        }
+
+        let result = LoopbackListener(fd: socketFD, port: boundPort)
+        result.acceptLoop()
         return result
     }
 
-    private init(listener: NWListener, queue: DispatchQueue, port: UInt16) {
-        self.listener = listener
-        self.queue = queue
+    private init(fd: Int32, port: UInt16) {
+        self.fd = fd
         self.port = port
     }
 
@@ -112,34 +131,56 @@ final class LoopbackListener: @unchecked Sendable {
     }
 
     func stop() {
-        listener.cancel()
+        lock.lock()
+        guard !stopped else { lock.unlock(); return }
+        stopped = true
+        lock.unlock()
+        // shutdown() before close(): the reliable way to unblock a thread
+        // parked in accept() on this fd from another thread, rather than
+        // relying on close() alone to do it.
+        shutdown(fd, SHUT_RDWR)
+        Darwin.close(fd)
     }
 
     // MARK: Plumbing
 
-    private func handle(_ connection: NWConnection) {
-        connection.start(queue: queue)
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { [weak self] data, _, _, _ in
-            guard let self else { return }
-            let request = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
-            let result = Self.parse(requestLine: request)
-
-            let body = Self.responsePage(success: {
-                if case .success = result { return true } else { return false }
-            }())
-            let response = """
-            HTTP/1.1 200 OK\r
-            Content-Type: text/html; charset=utf-8\r
-            Content-Length: \(body.utf8.count)\r
-            Connection: close\r
-            \r
-            \(body)
-            """
-            connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in
-                connection.cancel()
-            })
-            self.finish(result)
+    /// One blocking `accept()` loop on its own queue. Not Network.framework's
+    /// per-connection callback model, but the same effect: each real
+    /// connection is handled in turn, and closing `fd` from `stop()` is what
+    /// ends the loop (`accept()` returns -1 once the fd is gone).
+    private func acceptLoop() {
+        queue.async { [weak self] in
+            while let self {
+                var clientAddr = sockaddr()
+                var clientLen = socklen_t(MemoryLayout<sockaddr>.size)
+                let clientFD = accept(self.fd, &clientAddr, &clientLen)
+                guard clientFD >= 0 else { return }  // fd closed via stop(), or a real error either way
+                self.handle(clientFD)
+            }
         }
+    }
+
+    private func handle(_ clientFD: Int32) {
+        defer { Darwin.close(clientFD) }
+        var buffer = [UInt8](repeating: 0, count: 8192)
+        let received = recv(clientFD, &buffer, buffer.count, 0)
+        guard received > 0 else { return }
+        let request = String(bytes: buffer[0..<received], encoding: .utf8) ?? ""
+        let result = Self.parse(requestLine: request)
+
+        let success: Bool
+        if case .success = result { success = true } else { success = false }
+        let body = Self.responsePage(success: success)
+        let response = """
+        HTTP/1.1 200 OK\r
+        Content-Type: text/html; charset=utf-8\r
+        Content-Length: \(body.utf8.count)\r
+        Connection: close\r
+        \r
+        \(body)
+        """
+        _ = response.withCString { send(clientFD, $0, strlen($0), 0) }
+        finish(result)
     }
 
     /// Pulls `code` (or `error`) out of "GET /?code=… HTTP/1.1".
@@ -190,31 +231,5 @@ final class LoopbackListener: @unchecked Sendable {
           </div>
         </body></html>
         """
-    }
-}
-
-/// Resumes a `CheckedContinuation` exactly once, whichever of two racing
-/// closures gets there first. `create()` arms both the listener's own ready
-/// handler and a timeout fallback on the same continuation — resuming twice
-/// is a hard crash, so this is the difference between "first one wins" and
-/// "first one wins, unless the second one lands mid-flight and takes the
-/// whole app down with it."
-private final class ContinuationBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuation: CheckedContinuation<UInt16, Error>?
-
-    init(_ continuation: CheckedContinuation<UInt16, Error>) {
-        self.continuation = continuation
-    }
-
-    func resume(_ result: Result<UInt16, Error>) {
-        lock.lock()
-        let cont = continuation
-        continuation = nil
-        lock.unlock()
-        switch result {
-        case .success(let value): cont?.resume(returning: value)
-        case .failure(let error): cont?.resume(throwing: error)
-        }
     }
 }
