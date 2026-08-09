@@ -14,12 +14,44 @@ class OnboardingWindowController: NSWindowController {
         // The app may be running as an accessory (no Dock icon) — become a
         // regular app first, or the window can silently stay behind others
         // on a fresh install.
+        NotchController.shared.attentionLeft()
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         sharedController?.showWindow(nil)
         sharedController?.window?.center()
         sharedController?.window?.makeKeyAndOrderFront(nil)
         sharedController?.window?.orderFrontRegardless()
+    }
+
+    /// Shrink and drop the window to the lower part of the screen for the
+    /// practice steps.
+    ///
+    /// Those two steps ask the user to open the notch — and the notch expands
+    /// DOWNWARD from the top of the screen, straight over a window centred in
+    /// the middle of it. The instructions were being covered by the very thing
+    /// they were instructing about, and it got worse the moment a to-do was
+    /// added and the panel grew (Marcello, 2026-08-06).
+    ///
+    /// So the window gets out of the way instead: shorter, and parked near the
+    /// bottom edge where the notch cannot reach it. Every other step keeps the
+    /// full-size centred window.
+    static func setCompact(_ compact: Bool) {
+        guard let window = sharedController?.window,
+              let screen = window.screen ?? NSScreen.main else { return }
+        let size = compact ? NSSize(width: 520, height: 300)
+                           : NSSize(width: 600, height: 560)
+        let vis = screen.visibleFrame
+        let origin: NSPoint
+        if compact {
+            // Sit just above the Dock, well clear of anything the notch can
+            // grow into.
+            origin = NSPoint(x: vis.midX - size.width / 2, y: vis.minY + 48)
+        } else {
+            origin = NSPoint(x: vis.midX - size.width / 2,
+                             y: vis.midY - size.height / 2)
+        }
+        window.setFrame(NSRect(origin: origin, size: size),
+                        display: true, animate: true)
     }
 
     static func dismiss() {

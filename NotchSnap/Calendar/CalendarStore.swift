@@ -332,6 +332,7 @@ final class CalendarStore: ObservableObject {
               let next = upcomingToday.first(where: { $0.videoURL != nil }),
               let url = next.videoURL else { return false }
         NSWorkspace.shared.open(url)
+        NotchController.shared.attentionLeft()
         return true
     }
 
@@ -340,6 +341,8 @@ final class CalendarStore: ObservableObject {
         guard let url = activeAlert?.videoURL else { return }
         NSWorkspace.shared.open(url)
         dismissAlert()
+        // Policy rule 7: the browser is taking over, so the notch is done.
+        NotchController.shared.attentionLeft()
     }
 
     /// CA-5 — re-trigger after the snooze delay.

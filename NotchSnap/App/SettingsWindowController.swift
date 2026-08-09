@@ -35,6 +35,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         }
         guard let controller = sharedController else { return }
 
+        // Policy rule 3: a real window is taking over, so the notch has to
+        // get out from on top of it.
+        NotchController.shared.attentionLeft()
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         controller.showWindow(nil)

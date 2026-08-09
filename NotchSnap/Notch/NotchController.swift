@@ -125,6 +125,7 @@ class NotchController: ObservableObject {
 
         // Start mouse tracking
         startMouseTracking()
+        installAutoCollapsePolicy()
 
         // Observe screen parameter changes (resolution change, display (dis)connect,
         // fullscreen toggles that alter the menu bar) so the panel stays glued to the top.
@@ -508,6 +509,83 @@ class NotchController: ObservableObject {
         // Restore previous key status after menu closes
         notchPanel.allowKey = wasAllowed
         if !wasAllowed { notchPanel.resignKey() }
+    }
+
+    // MARK: - Auto-collapse policy
+    //
+    // The panel floats at .statusBar + 1, above every other window on the
+    // machine. Left open it sits on top of whatever the user moved on to, and
+    // an open notch during a screen share or a call is worse than useless
+    // (Marcello, 2026-08-06).
+    //
+    // The governing idea: THE NOTCH IS A GLANCE, NOT A WINDOW. It should be
+    // open only while it is the thing being looked at. Everything below follows
+    // from that, and each rule answers "has the user's attention demonstrably
+    // gone somewhere else?"
+    //
+    // CLOSE IMMEDIATELY — attention has moved; overrides the typing/modal pin,
+    // because a draft is preserved anyway and a panel stuck over another app is
+    // the worse failure:
+    //   1. Another application becomes frontmost.
+    //   2. Otto itself resigns active.
+    //   3. One of Otto's own windows takes over — Settings, onboarding.
+    //   4. The Space changes, or a fullscreen app takes the screen.
+    //   5. The Mac sleeps, the screens sleep, or the session is locked.
+    //   6. The display arrangement changes (the panel's geometry is now stale).
+    //   7. A link is opened out of the notch — joining a meeting hands over to
+    //      the browser, so the notch has finished its job.
+    //   8. A to-do is captured through the GLOBAL shortcut: quick entry means
+    //      "note it and get back to work", the same as Things' or Alfred's.
+    //      Adding from the "+" tab while already browsing does NOT close.
+    //
+    // CLOSE POLITELY — existing rules, which respect a drag in flight and an
+    // active typing surface: pointer leaves while browsing, an explicit outside
+    // click, Escape, the auto-collapse timer.
+    //
+    // NEVER CLOSE, even for rules 1-8:
+    //   * while a drag is in flight — the user may be carrying a file to the
+    //     tray, and switching apps mid-drag is normal.
+    //   * while a meeting alert is up. It opened itself because something is
+    //     about to start and it already has its own dismissal timer; killing it
+    //     on an app switch would silently drop the one notification that
+    //     matters most.
+    private func installAutoCollapsePolicy() {
+        let ws = NSWorkspace.shared.notificationCenter
+        ws.addObserver(self, selector: #selector(anotherAppTookOver(_:)),
+                       name: NSWorkspace.didActivateApplicationNotification, object: nil)
+        for name: NSNotification.Name in [
+            NSWorkspace.willSleepNotification,
+            NSWorkspace.screensDidSleepNotification,
+            NSWorkspace.sessionDidResignActiveNotification,
+            NSWorkspace.activeSpaceDidChangeNotification,
+        ] {
+            ws.addObserver(self, selector: #selector(attentionLeft), name: name, object: nil)
+        }
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(attentionLeft),
+            name: NSApplication.didResignActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(attentionLeft),
+            name: NSApplication.didChangeScreenParametersNotification, object: nil)
+    }
+
+    @objc private func anotherAppTookOver(_ note: Notification) {
+        guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey]
+                as? NSRunningApplication else { return }
+        // Otto activating itself — which focusPanel does on purpose so the user
+        // can type — must not close the panel it just opened.
+        guard app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+        attentionLeft()
+    }
+
+    /// Rule 1-8's single implementation.
+    @objc func attentionLeft() {
+        Task { @MainActor in
+            guard self.state == .expanded else { return }
+            guard !self.isDragSessionActive else { return }
+            guard CalendarStore.shared.activeAlert == nil else { return }
+            self.forceCollapse()
+        }
     }
 
     // MARK: - Mouse Tracking
@@ -946,7 +1024,25 @@ class NotchController: ObservableObject {
     /// on whatever was last browsed.
     func openCreateFresh() {
         TodoStore.shared.prepareGlobalCreateDraft()
+        cameFromGlobalShortcut = true
         openCreate()
+    }
+
+    /// True while the current creation surface was summoned by the global
+    /// shortcut, so committing can close the panel (policy rule 8). Cleared on
+    /// any collapse, so a later "+" tab creation does not inherit it.
+    private var cameFromGlobalShortcut = false
+
+    /// Rule 8. Called when a to-do is actually committed.
+    func todoWasCaptured() {
+        guard cameFromGlobalShortcut, state == .expanded else { return }
+        cameFromGlobalShortcut = false
+        Task { @MainActor in
+            // Let the row land and the confirmation haptic register first.
+            try? await Task.sleep(nanoseconds: 550_000_000)
+            guard !isDragSessionActive else { return }
+            forceCollapse()
+        }
     }
 
     /// ⌥Space toggles: already on the "+" tab → dismiss; otherwise open it.

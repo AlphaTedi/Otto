@@ -12,21 +12,26 @@ import SwiftUI
 // The centre of gravity is Act 2. A notch app cannot rely on a visible window to
 // teach itself: if onboarding never physically walks someone through summoning
 // Otto, they close it once and never look up at the notch again. So the practice
-// step listens for the REAL ⌥⌘N — the same Carbon hot key the shipped app
-// registers, firing the same code path — and refuses to advance on anything
-// else. No "Next" button, no simulation.
+// step listens for the REAL ⌃⇧N — the same Carbon hot key the shipped app
+// registers, firing the same code path — and then waits again for the to-do to
+// actually be committed. No "Next" button, no simulation.
 //
-// Three things in the plan are deliberately NOT built, because the app they
-// describe is not the app that exists:
+// The practice step also SHRINKS the window and parks it near the bottom of the
+// screen, because the notch expands downward over anything centred and would
+// otherwise cover the very instructions it is following.
+//
+// Two things in the plan are deliberately NOT built:
 //
 //   * An Accessibility permission screen. Otto's global shortcut is a Carbon
 //     RegisterEventHotKey, which needs no permission at all — HotkeyManager
 //     even logs "No Accessibility permission needed." Asking would have trained
 //     users to grant something Otto never uses.
-//   * Act 3's account step (Google / Apple / Email sign-in). Otto has no
-//     backend and no user accounts; data is local JSON. The only real sign-in
-//     is Google Calendar, which is what the calendar step offers.
-//   * The plan's ⌘⇧N. The registered shortcut is ⌥⌘N.
+//   * Email sign-in, and any promise of sync. There is no Otto server; to-dos
+//     are local JSON. Sign-in exists for the calendar, and says so.
+//
+// The sign-in step appears ONLY when a bundled OAuth client exists. Without one
+// the Google button can only produce a developer-facing error, so the step is
+// omitted rather than shown broken.
 
 enum OnboardingFocus: String, CaseIterable {
     case tasks, meetings, both
@@ -53,7 +58,12 @@ struct OnboardingFlowView: View {
     private var steps: [OnboardingStep] {
         var s: [OnboardingStep] = [.welcome, .value, .focus, .whereItLives, .practice, .celebrate]
         if focus.wantsCalendar { s.append(.calendar) }
-        s.append(.signIn)
+        // Only offer sign-in when it can actually complete. With no bundled
+        // OAuth client the Google button could only ever surface
+        // "Add your Google OAuth client ID and secret first" — a message meant
+        // for whoever builds Otto, shown to someone trying to use it
+        // (Marcello, 2026-08-06). A missing step beats a broken one.
+        if GoogleOAuth.hasBundledCredentials { s.append(.signIn) }
         s.append(.allSet)
         return s
     }
@@ -94,13 +104,19 @@ struct OnboardingFlowView: View {
             .transition(stepTransition)
             .animation(.spring(response: 0.45, dampingFraction: 0.85), value: stepIndex)
         }
-        .frame(width: 600, height: 560)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         // Its own strip, below everything — never on top of a button.
         .safeAreaInset(edge: .bottom, spacing: 0) {
             StepDotIndicator(current: stepIndex, total: steps.count)
                 .padding(.top, 2)
                 .padding(.bottom, 16)
                 .frame(maxWidth: .infinity)
+        }
+        .onAppear { OnboardingWindowController.setCompact(step == .practice) }
+        // Single-parameter form: the two-parameter onChange is macOS 14+, and
+        // Otto's deployment target is 13.0.
+        .onChange(of: stepIndex) { _ in
+            OnboardingWindowController.setCompact(step == .practice)
         }
         // Reduce Motion: flatten every staggered spring in the flow into a
         // quick fade — one override here instead of gating each subview.
@@ -934,9 +950,9 @@ private struct OnboardingSignInView: View {
         OnboardingScaffold {
             VStack(spacing: 0) {
                 OnboardingHeader(
-                    title: signedInAs == nil ? "Make it yours" : "Signed in",
+                    title: signedInAs == nil ? "Bring your calendar with you" : "Signed in",
                     subtitle: signedInAs == nil
-                        ? "Optional. Your to-dos are stored on this Mac and work perfectly without an account."
+                        ? "Connect Google and Otto shows today's meetings, the join link, and who else is coming — with their faces, not their initials."
                         : nil
                 )
 
@@ -969,7 +985,7 @@ private struct OnboardingSignInView: View {
 
                     Spacer(minLength: 16)
 
-                    Text("Signing in identifies you — it does not upload your to-dos. There is no Otto server yet.")
+                    Text("Read-only, and nothing leaves this Mac. Your to-dos stay local either way — this is about your calendar.")
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                         .multilineTextAlignment(.center)

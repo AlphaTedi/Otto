@@ -258,6 +258,19 @@ private struct TodoTabRow: View {
     @State private var draggedCollectionID: UUID?
 
     var body: some View {
+        HStack(spacing: 10) {
+            tabScroller
+            // Outside the scroller: the account is not a tab.
+            AccountButton()
+        }
+        // No rule under the tab row (Marcello, 2026-07-26). The two paddings
+        // stay: they were the breathing room either side of the line, and
+        // together they are what now separates the tabs from the list.
+        .padding(.bottom, DSSpacing.tabRowBottomPadding)
+        .padding(.bottom, DSSpacing.tabRowBottomMargin)
+    }
+
+    private var tabScroller: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 Button {
@@ -382,16 +395,9 @@ private struct TodoTabRow: View {
                 // ambiguous. Trailing-aligned per the mockup.
                 Spacer(minLength: 8)
                 CategoryOverflowMenu()
-                AccountButton()
-                    .padding(.leading, 6)
             }
             .padding(.top, 8)
         }
-        // No rule under the tab row (Marcello, 2026-07-26). The two paddings
-        // stay: they were the breathing room either side of the line, and
-        // together they are what now separates the tabs from the list.
-        .padding(.bottom, DSSpacing.tabRowBottomPadding)
-        .padding(.bottom, DSSpacing.tabRowBottomMargin)
     }
 }
 

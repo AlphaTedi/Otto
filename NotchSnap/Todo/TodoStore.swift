@@ -421,6 +421,7 @@ final class TodoStore: ObservableObject {
         // notch is only half the lesson, and someone who stops there has not
         // yet made anything. See OnboardingPracticeView.
         NotificationCenter.default.post(name: .todoCreated, object: nil)
+        NotchController.shared.todoWasCaptured()
         return item
     }
 

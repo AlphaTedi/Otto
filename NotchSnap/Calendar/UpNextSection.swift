@@ -165,7 +165,10 @@ struct MeetingCard: View {
     }
 
     private func open() {
-        if let url = event.videoURL { NSWorkspace.shared.open(url) }
+        guard let url = event.videoURL else { return }
+        NSWorkspace.shared.open(url)
+        // Policy rule 7 — see NotchController's auto-collapse policy.
+        NotchController.shared.attentionLeft()
     }
 
     /// Short form for the top-right corner: "in 34 min" / "in 2h 10m" / "now".
