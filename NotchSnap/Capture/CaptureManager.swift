@@ -27,6 +27,11 @@ extension Notification.Name {
     static let captureAreaWithEditor = Notification.Name("notchsnap.captureAreaWithEditor")
     static let openSettingsRequest = Notification.Name("notchsnap.openSettings")
     static let settingsWindowClosed = Notification.Name("notchsnap.settingsClosed")
+    /// Posted whenever the global quick-entry hotkey actually fires. Onboarding
+    /// listens for this so its practice step advances on the REAL keypress
+    /// rather than a "Next" button — the user performs the app's core action
+    /// for real before onboarding ends.
+    static let quickEntryFired = Notification.Name("otto.quickEntryFired")
 }
 
 // MARK: - CaptureManager

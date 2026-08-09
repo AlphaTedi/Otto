@@ -175,6 +175,7 @@ class HotkeyManager {
             Task { @MainActor in
                 // Design PRD §3: one creation surface — the panel's "+" tab.
                 NotchController.shared.toggleCreate()
+                NotificationCenter.default.post(name: .quickEntryFired, object: nil)
             }
 
         case .openTodos:

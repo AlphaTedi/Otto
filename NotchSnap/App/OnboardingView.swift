@@ -1,18 +1,66 @@
 import SwiftUI
 
-// MARK: - OnboardingFlowView — 2-step onboarding (Welcome → All Set)
+// MARK: - Otto onboarding
 //
-// The Permissions step is gone along with the screenshot feature: it asked only
-// for Screen Recording. Nothing Otto does now needs a permission up front —
-// calendar access is requested in context, the moment you press Connect, which
-// is also the only place a denial is actionable.
+// Four acts, following the plan (Marcello, 2026-08-06):
+//
+//   Act 1  value, nothing asked   — Meet Otto → what it does → what you want first
+//   Act 2  learn by doing         — where it lives → PRESS THE SHORTCUT → nice
+//   Act 3  calendar, if wanted    — trust copy, then the real prompt
+//   Act 4  send-off               — "Otto will stay quiet until you need it."
+//
+// The centre of gravity is Act 2. A notch app cannot rely on a visible window to
+// teach itself: if onboarding never physically walks someone through summoning
+// Otto, they close it once and never look up at the notch again. So the practice
+// step listens for the REAL ⌥⌘N — the same Carbon hot key the shipped app
+// registers, firing the same code path — and refuses to advance on anything
+// else. No "Next" button, no simulation.
+//
+// Three things in the plan are deliberately NOT built, because the app they
+// describe is not the app that exists:
+//
+//   * An Accessibility permission screen. Otto's global shortcut is a Carbon
+//     RegisterEventHotKey, which needs no permission at all — HotkeyManager
+//     even logs "No Accessibility permission needed." Asking would have trained
+//     users to grant something Otto never uses.
+//   * Act 3's account step (Google / Apple / Email sign-in). Otto has no
+//     backend and no user accounts; data is local JSON. The only real sign-in
+//     is Google Calendar, which is what the calendar step offers.
+//   * The plan's ⌘⇧N. The registered shortcut is ⌥⌘N.
+
+enum OnboardingFocus: String, CaseIterable {
+    case tasks, meetings, both
+
+    var wantsCalendar: Bool { self != .tasks }
+}
+
+private enum OnboardingStep {
+    case welcome, value, focus, whereItLives, practice, celebrate, calendar, allSet
+}
 
 struct OnboardingFlowView: View {
-    @State private var currentStep = 0
+    @State private var stepIndex = 0
     @AppStorage("onboardingVersion") var onboardingVersion: Int = 0
+    @AppStorage("onboardingFocus") private var focusRaw: String = OnboardingFocus.both.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let totalSteps = 2
+    private var focus: OnboardingFocus {
+        OnboardingFocus(rawValue: focusRaw) ?? .both
+    }
+
+    /// The calendar step only exists for someone who said meetings matter, so
+    /// a pure to-do user is never asked for a permission they will not use.
+    private var steps: [OnboardingStep] {
+        var s: [OnboardingStep] = [.welcome, .value, .focus, .whereItLives, .practice, .celebrate]
+        if focus.wantsCalendar { s.append(.calendar) }
+        s.append(.allSet)
+        return s
+    }
+
+    private var step: OnboardingStep {
+        let all = steps
+        return all[min(stepIndex, all.count - 1)]
+    }
 
     var body: some View {
         ZStack {
@@ -21,20 +69,31 @@ struct OnboardingFlowView: View {
                 .ignoresSafeArea()
 
             Group {
-                switch currentStep {
-                case 0:
+                switch step {
+                case .welcome:
                     OnboardingWelcomeView(onAdvance: advanceStep)
-                        .transition(stepTransition)
-                default:
+                case .value:
+                    OnboardingValueView(onAdvance: advanceStep)
+                case .focus:
+                    OnboardingFocusView(selection: $focusRaw, onAdvance: advanceStep)
+                case .whereItLives:
+                    OnboardingNotchView(onAdvance: advanceStep)
+                case .practice:
+                    OnboardingPracticeView(onAdvance: advanceStep)
+                case .celebrate:
+                    OnboardingCelebrateView(onAdvance: advanceStep)
+                case .calendar:
+                    OnboardingCalendarView(onAdvance: advanceStep)
+                case .allSet:
                     OnboardingAllSetView(onFinish: completeOnboarding)
-                        .transition(stepTransition)
                 }
             }
-            .animation(.spring(response: 0.45, dampingFraction: 0.85), value: currentStep)
+            .transition(stepTransition)
+            .animation(.spring(response: 0.45, dampingFraction: 0.85), value: stepIndex)
         }
         .frame(width: 600, height: 540)
         .overlay(alignment: .bottom) {
-            StepDotIndicator(current: currentStep, total: totalSteps)
+            StepDotIndicator(current: stepIndex, total: steps.count)
                 .padding(.bottom, 14)
         }
         // Reduce Motion: flatten every staggered spring in the flow into a
@@ -55,7 +114,7 @@ struct OnboardingFlowView: View {
 
     func advanceStep() {
         SoundManager.shared.play(.stepAdvance)
-        withAnimation { currentStep += 1 }
+        withAnimation { stepIndex = min(stepIndex + 1, steps.count - 1) }
     }
 
     func completeOnboarding() {
@@ -63,6 +122,197 @@ struct OnboardingFlowView: View {
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
         onboardingVersion = 1
         OnboardingWindowController.dismiss()
+    }
+}
+
+// MARK: - Act 1 · Value (Step 2) — what Otto is for, nothing asked
+
+private struct OnboardingValueView: View {
+    var onAdvance: () -> Void
+    @State private var appeared = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer().frame(height: 56)
+
+            Text("Never a window in your way")
+                .font(.system(size: 26, weight: .bold))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 48)
+
+            Text("Your tasks and today's meetings live in the notch. One glance up, and back to what you were doing.")
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 56)
+                .padding(.top, 10)
+
+            Spacer().frame(height: 30)
+
+            VStack(spacing: 10) {
+                ValueRow(icon: "checklist", tint: .blue,
+                         title: "To-dos that stay out of the way",
+                         detail: "Capture one in a second, from any app.")
+                ValueRow(icon: "calendar", tint: .orange,
+                         title: "Meetings before they start",
+                         detail: "A quiet nudge, then a card with the join link.")
+                ValueRow(icon: "moon.zzz", tint: .purple,
+                         title: "Silent the rest of the time",
+                         detail: "No dock icon, no badge, no noise.")
+            }
+            .padding(.horizontal, 40)
+            .opacity(appeared ? 1 : 0)
+            .offset(y: appeared ? 0 : 12)
+            .animation(.spring(response: 0.5, dampingFraction: 0.85).delay(0.15), value: appeared)
+
+            Spacer()
+
+            Button(action: onAdvance) {
+                Text("Continue \u{2192}")
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .keyboardShortcut(.return, modifiers: [])
+            .padding(.horizontal, 48)
+            .padding(.bottom, 40)
+        }
+        .onAppear { appeared = true }
+    }
+}
+
+private struct ValueRow: View {
+    let icon: String
+    let tint: Color
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 15))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(tint.opacity(0.14)))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 13, weight: .medium))
+                Text(detail).font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(GlassTile())
+    }
+}
+
+// MARK: - Act 1 · Focus (Step 3) — self-identification, non-blocking
+//
+// Lightweight personalisation that also primes someone to see themselves as
+// a person who needs this. Its only mechanical effect is whether the calendar
+// step appears at all — nobody is asked for a permission they said they did
+// not want.
+
+private struct OnboardingFocusView: View {
+    @Binding var selection: String
+    var onAdvance: () -> Void
+
+    private let options: [(OnboardingFocus, String, String, String)] = [
+        (.tasks,    "checklist",       "Tasks",    "Keep a list I can reach instantly"),
+        (.meetings, "calendar",        "Meetings", "Know what's next without opening my calendar"),
+        (.both,     "sparkles",        "Both",     "The whole day, in one place"),
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer().frame(height: 58)
+
+            Text("What should Otto help with first?")
+                .font(.system(size: 24, weight: .bold))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 48)
+
+            Text("You can change this later — it just decides what we set up now.")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .padding(.top, 8)
+
+            Spacer().frame(height: 28)
+
+            VStack(spacing: 10) {
+                ForEach(options, id: \.0) { option in
+                    FocusOptionRow(
+                        icon: option.1, title: option.2, detail: option.3,
+                        isSelected: selection == option.0.rawValue
+                    ) {
+                        selection = option.0.rawValue
+                    }
+                }
+            }
+            .padding(.horizontal, 40)
+
+            Spacer()
+
+            Button(action: onAdvance) {
+                Text("Continue \u{2192}")
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .keyboardShortcut(.return, modifiers: [])
+            .padding(.horizontal, 48)
+            .padding(.bottom, 40)
+        }
+    }
+}
+
+private struct FocusOptionRow: View {
+    let icon: String
+    let title: String
+    let detail: String
+    let isSelected: Bool
+    let action: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 15))
+                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                    .frame(width: 26)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.system(size: 13, weight: .medium))
+                    Text(detail).font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 15))
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary.opacity(0.4))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.primary.opacity(isSelected ? 0.10 : (hover ? 0.06 : 0.03)))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(isSelected ? Color.accentColor.opacity(0.7)
+                                             : Color.primary.opacity(0.08),
+                                  lineWidth: isSelected ? 1.5 : 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
     }
 }
 
@@ -207,6 +457,329 @@ struct OnboardingWelcomeView: View {
     }
 }
 
+// MARK: - Act 2 · Where Otto lives (Step 4)
+//
+// Show the gesture before asking for it. The animation is the same
+// NotchMiniPreview loop the welcome screen uses, so by the time someone is
+// asked to press the shortcut they have watched the notch open twice.
+
+private struct OnboardingNotchView: View {
+    var onAdvance: () -> Void
+    @State private var appeared = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer().frame(height: 50)
+
+            Text("Otto lives in the notch")
+                .font(.system(size: 24, weight: .bold))
+
+            Text("Not in the Dock, not in a window. Move your cursor up to the notch and it opens.")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 60)
+                .padding(.top, 8)
+
+            Spacer().frame(height: 24)
+
+            NotchMiniPreview()
+                .frame(width: 340, height: 170)
+                .opacity(appeared ? 1 : 0)
+                .scaleEffect(appeared ? 1 : 0.96)
+                .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.1), value: appeared)
+
+            Spacer().frame(height: 20)
+
+            Text("There's a keyboard way too — that's next.")
+                .font(.system(size: 12))
+                .foregroundStyle(.tertiary)
+
+            Spacer()
+
+            Button(action: onAdvance) {
+                Text("Show me \u{2192}")
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .keyboardShortcut(.return, modifiers: [])
+            .padding(.horizontal, 48)
+            .padding(.bottom, 40)
+        }
+        .onAppear { appeared = true }
+    }
+}
+
+// MARK: - Act 2 · Practice (Step 5) — the core of the whole flow
+//
+// The user performs the app's actual core action, for real, before onboarding
+// ends. Pressing ⌥⌘N here does exactly what it does forever after: the Carbon
+// hot key fires, the notch opens on its creation tab, and a to-do typed now is
+// a to-do saved now. This screen only watches for it.
+//
+// It cannot be completed with a "Next" button, because the entire point is that
+// someone leaves onboarding having already summoned Otto once with the keyboard.
+// A skip is offered after 12s so a power user — or anyone whose keyboard is
+// intercepted by another launcher — is never trapped.
+
+private struct OnboardingPracticeView: View {
+    var onAdvance: () -> Void
+    @State private var pulse = false
+    @State private var showSkip = false
+    @State private var fired = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer().frame(height: 54)
+
+            Text("Try it: add your first to-do")
+                .font(.system(size: 24, weight: .bold))
+
+            Text("Press the shortcut below. It works from any app — you don't have to be in Otto.")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 56)
+                .padding(.top, 8)
+
+            Spacer().frame(height: 34)
+
+            // The shortcut itself, as the hero of the screen.
+            HStack(spacing: 8) {
+                ForEach(["\u{2325}", "\u{2318}", "N"], id: \.self) { key in
+                    Text(key)
+                        .font(.system(size: 22, weight: .medium))
+                        .frame(minWidth: 52, minHeight: 52)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color.primary.opacity(0.07))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+                        )
+                }
+            }
+            .scaleEffect(pulse ? 1.04 : 1)
+            .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true), value: pulse)
+
+            Spacer().frame(height: 26)
+
+            Label("Waiting for the shortcut\u{2026}", systemImage: "keyboard")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+
+            Text("Otto will open at the notch with the cursor already in the field. Type anything and press \u{21A9}.")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 64)
+                .padding(.top, 10)
+
+            Spacer()
+
+            if showSkip {
+                Button("Skip this step") { onAdvance() }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 13))
+                    .padding(.bottom, 40)
+                    .transition(.opacity)
+            } else {
+                Color.clear.frame(height: 20).padding(.bottom, 40)
+            }
+        }
+        .onAppear {
+            pulse = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 12) {
+                withAnimation { showSkip = true }
+            }
+        }
+        // The real hot key, not a simulation: HotkeyManager posts this from the
+        // same handler the shipped shortcut runs through.
+        .onReceive(NotificationCenter.default.publisher(for: .quickEntryFired)) { _ in
+            guard !fired else { return }
+            fired = true
+            // Let the notch finish opening before the window changes under it.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { onAdvance() }
+        }
+    }
+}
+
+// MARK: - Act 2 · Celebrate (Step 6)
+
+private struct OnboardingCelebrateView: View {
+    var onAdvance: () -> Void
+    @State private var appeared = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 54))
+                .foregroundStyle(.green)
+                .scaleEffect(appeared ? 1 : 0.5)
+                .animation(.spring(response: 0.5, dampingFraction: 0.6), value: appeared)
+
+            Text("Nice — that's it.")
+                .font(.system(size: 26, weight: .bold))
+                .padding(.top, 18)
+
+            Text("That's the whole interaction. Anything you typed is already saved in your list, and the same shortcut works from any app, any time.")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 60)
+                .padding(.top, 10)
+
+            Spacer()
+
+            Button(action: onAdvance) {
+                Text("Continue \u{2192}")
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .keyboardShortcut(.return, modifiers: [])
+            .padding(.horizontal, 48)
+            .padding(.bottom, 40)
+        }
+        .onAppear { appeared = true }
+    }
+}
+
+// MARK: - Act 3 · Calendar (Step 7) — trust copy BEFORE the system dialog
+//
+// Two macOS realities shape this screen:
+//
+//   * A permission prompt often fires only once per install. If someone
+//     dismisses it, relaunching does NOT reliably re-ask — so the "Open System
+//     Settings" link is permanent, not a fallback that appears after failure.
+//   * Otto cannot detect a grant that happens in System Settings while it sits
+//     here, so the state is re-checked every time the app regains focus.
+//
+// Only reached when the user said meetings matter to them.
+
+private struct OnboardingCalendarView: View {
+    var onAdvance: () -> Void
+    @ObservedObject private var calendar = CalendarStore.shared
+    @State private var asking = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer().frame(height: 50)
+
+            Image(systemName: calendar.isConnected ? "calendar.badge.checkmark" : "calendar")
+                .font(.system(size: 40))
+                .foregroundStyle(calendar.isConnected ? .green : .orange)
+
+            Text(calendar.isConnected ? "Calendar connected" : "See today's meetings")
+                .font(.system(size: 24, weight: .bold))
+                .padding(.top, 14)
+
+            Text(calendar.isConnected
+                 ? "Today's events will show at the top of the notch, with a nudge before each one starts."
+                 : "Otto reads the calendars already on this Mac so it can show what's next and warn you before it starts.")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 56)
+                .padding(.top, 8)
+
+            Spacer().frame(height: 22)
+
+            if !calendar.isConnected {
+                // The trade, stated plainly, BEFORE macOS asks.
+                VStack(alignment: .leading, spacing: 8) {
+                    TrustLine(icon: "eye.slash", text: "Read-only. Otto never creates, edits or deletes an event.")
+                    TrustLine(icon: "laptopcomputer", text: "Nothing leaves this Mac. There is no Otto server.")
+                    TrustLine(icon: "hand.raised", text: "Skip it and everything else still works.")
+                }
+                .padding(.horizontal, 22)
+                .padding(.vertical, 14)
+                .background(GlassTile())
+                .padding(.horizontal, 44)
+            }
+
+            Spacer()
+
+            VStack(spacing: 10) {
+                if calendar.isConnected {
+                    Button(action: onAdvance) {
+                        Text("Continue \u{2192}").fontWeight(.semibold)
+                            .frame(maxWidth: .infinity).frame(height: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .keyboardShortcut(.return, modifiers: [])
+                    .padding(.horizontal, 48)
+                } else {
+                    Button {
+                        asking = true
+                        Task { await calendar.connect(); asking = false }
+                    } label: {
+                        Text(asking ? "Waiting for macOS\u{2026}" : "Connect calendar")
+                            .fontWeight(.semibold)
+                            .frame(maxWidth: .infinity).frame(height: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(asking)
+                    .keyboardShortcut(.return, modifiers: [])
+                    .padding(.horizontal, 48)
+
+                    // Permanent, not conditional: macOS may never prompt again.
+                    Button("Open System Settings") {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 12))
+
+                    Button("Not now") { onAdvance() }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.tertiary)
+                        .font(.system(size: 12))
+                }
+            }
+            .padding(.bottom, 34)
+        }
+        // A grant made in System Settings is invisible to us until we look
+        // again, and coming back to the app is exactly when to look.
+        .onReceive(NotificationCenter.default.publisher(
+            for: NSApplication.didBecomeActiveNotification)) { _ in
+            calendar.refreshNow()
+        }
+    }
+}
+
+private struct TrustLine: View {
+    let icon: String
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: icon)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            Text(text)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+    }
+}
+
 // MARK: - GlassTile — reusable liquid-glass background pane
 
 struct GlassTile: View {
@@ -302,13 +875,13 @@ struct OnboardingAllSetView: View {
 
             Spacer().frame(height: 16)
 
-            Text("You're all set!")
+            Text("You\u{2019}re set")
                 .font(.system(size: 28, weight: .bold))
                 .opacity(headerAppeared ? 1 : 0)
                 .offset(y: headerAppeared ? 0 : 8)
                 .animation(.spring(response: 0.5, dampingFraction: 0.85).delay(0.18), value: headerAppeared)
 
-            Text("Here's how to make the most of Otto.")
+            Text("Otto will stay quiet until you need it.")
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
                 .padding(.top, 4)
@@ -343,7 +916,7 @@ struct OnboardingAllSetView: View {
             Spacer()
 
             Button(action: onFinish) {
-                Text("Start using Otto")
+                Text("Done")
                     .fontWeight(.semibold)
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
