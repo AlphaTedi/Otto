@@ -17,17 +17,29 @@ final class LoopbackListener: @unchecked Sendable {
     let port: UInt16
 
     private let listener: NWListener
-    private let queue = DispatchQueue(label: "com.notchsnap.oauth.loopback")
+    private let queue: DispatchQueue
     private var continuation: CheckedContinuation<String, Error>?
     private var finished = false
     private let lock = NSLock()
 
-    init() throws {
+    /// Async factory rather than a throwing `init` — the original blocked the
+    /// CALLING thread on a `DispatchSemaphore` while waiting for the kernel to
+    /// hand back a port, and `GoogleOAuth` (the only caller) is `@MainActor`,
+    /// so that wait ran on the main actor: up to 5 seconds of a frozen app on
+    /// every single sign-in attempt, worse on a fresh install where the
+    /// network stack's first touch is slower to spin up. "Could not bind a
+    /// loopback port" (Marcello, 2026-08-09) is that 5s timeout firing, not a
+    /// real bind failure — `.any` already asks the kernel for a free port, so
+    /// a genuine collision is close to impossible. `withCheckedThrowingContinuation`
+    /// suspends the calling Task instead of blocking a thread, and the timeout
+    /// is now generous enough to survive a cold start.
+    static func create() async throws -> LoopbackListener {
         let parameters = NWParameters.tcp
         // Loopback only: never expose this to the network.
         parameters.requiredInterfaceType = .loopback
         parameters.allowLocalEndpointReuse = true
 
+        let listener: NWListener
         do {
             // Port 0 asks the kernel for a free one, so we never collide with
             // whatever else the user is running.
@@ -36,36 +48,52 @@ final class LoopbackListener: @unchecked Sendable {
             throw GoogleOAuth.AuthError.listenerFailed(error.localizedDescription)
         }
 
-        // Wait for the kernel to hand us a port. `listener` is a local `let`
-        // here (the stored property isn't initialised until `port` is), so the
-        // closure captures the value, not self — and the port is published
-        // through a lock rather than a captured var so strict concurrency is
-        // satisfied.
-        let ready = DispatchSemaphore(value: 0)
-        let boundPort = PortBox()
-        let handle = listener
-        handle.stateUpdateHandler = { state in
-            switch state {
-            case .ready:
-                boundPort.value = handle.port?.rawValue ?? 0
-                ready.signal()
-            case .failed, .cancelled:
-                ready.signal()
-            default:
-                break
+        let queue = DispatchQueue(label: "com.notchsnap.oauth.loopback")
+        let port: UInt16 = try await withCheckedThrowingContinuation { continuation in
+            let box = ContinuationBox(continuation)
+            listener.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    box.resume(.success(listener.port?.rawValue ?? 0))
+                case .failed(let error):
+                    box.resume(.failure(GoogleOAuth.AuthError.listenerFailed(error.localizedDescription)))
+                case .cancelled:
+                    box.resume(.failure(GoogleOAuth.AuthError.listenerFailed("listener was cancelled")))
+                default:
+                    break
+                }
+            }
+            listener.start(queue: queue)
+            // 10s, not 5: generous enough for a cold network stack on a
+            // freshly launched, freshly notarized app to still succeed rather
+            // than time out on what would otherwise be a working bind.
+            queue.asyncAfter(deadline: .now() + 10) {
+                // Tear down rather than leave a listener dangling if `.ready`
+                // shows up just after this fires — harmless either way since
+                // ContinuationBox only lets the first resume count, but a
+                // menu-bar app that runs all day shouldn't leak a listener on
+                // the rare slow-start case.
+                listener.cancel()
+                box.resume(.failure(GoogleOAuth.AuthError.listenerFailed(
+                    "timed out waiting for the sign-in listener to start")))
             }
         }
-        handle.start(queue: queue)
-        _ = ready.wait(timeout: .now() + 5)
-        guard boundPort.value != 0 else {
-            handle.cancel()
+        guard port != 0 else {
+            listener.cancel()
             throw GoogleOAuth.AuthError.listenerFailed("could not bind a loopback port")
         }
-        port = boundPort.value
 
-        listener.newConnectionHandler = { [weak self] connection in
-            self?.handle(connection)
+        let result = LoopbackListener(listener: listener, queue: queue, port: port)
+        listener.newConnectionHandler = { [weak result] connection in
+            result?.handle(connection)
         }
+        return result
+    }
+
+    private init(listener: NWListener, queue: DispatchQueue, port: UInt16) {
+        self.listener = listener
+        self.queue = queue
+        self.port = port
     }
 
     /// Resolves with the authorization code, or throws if the user denied or
@@ -165,13 +193,28 @@ final class LoopbackListener: @unchecked Sendable {
     }
 }
 
-/// A lock-guarded box so the port can cross from NWListener's queue back to
-/// the initializer without tripping strict concurrency.
-private final class PortBox: @unchecked Sendable {
+/// Resumes a `CheckedContinuation` exactly once, whichever of two racing
+/// closures gets there first. `create()` arms both the listener's own ready
+/// handler and a timeout fallback on the same continuation — resuming twice
+/// is a hard crash, so this is the difference between "first one wins" and
+/// "first one wins, unless the second one lands mid-flight and takes the
+/// whole app down with it."
+private final class ContinuationBox: @unchecked Sendable {
     private let lock = NSLock()
-    private var stored: UInt16 = 0
-    var value: UInt16 {
-        get { lock.lock(); defer { lock.unlock() }; return stored }
-        set { lock.lock(); stored = newValue; lock.unlock() }
+    private var continuation: CheckedContinuation<UInt16, Error>?
+
+    init(_ continuation: CheckedContinuation<UInt16, Error>) {
+        self.continuation = continuation
+    }
+
+    func resume(_ result: Result<UInt16, Error>) {
+        lock.lock()
+        let cont = continuation
+        continuation = nil
+        lock.unlock()
+        switch result {
+        case .success(let value): cont?.resume(returning: value)
+        case .failure(let error): cont?.resume(throwing: error)
+        }
     }
 }

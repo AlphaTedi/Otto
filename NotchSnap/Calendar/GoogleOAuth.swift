@@ -117,7 +117,7 @@ final class GoogleOAuth {
         let verifier = Self.randomURLSafeString(64)
         let challenge = Self.codeChallenge(for: verifier)
 
-        let listener = try LoopbackListener()
+        let listener = try await LoopbackListener.create()
         defer { listener.stop() }
         let redirectURI = "http://127.0.0.1:\(listener.port)"
 
