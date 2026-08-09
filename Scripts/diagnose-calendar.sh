@@ -4,7 +4,7 @@
 # Run it on the machine that is failing:
 #   bash Scripts/diagnose-calendar.sh
 # or, if you only have the app:
-#   curl -sL https://raw.githubusercontent.com/AlphaTedi/Screenshot_app/main/Scripts/diagnose-calendar.sh | bash
+#   curl -sL https://raw.githubusercontent.com/AlphaTedi/Otto/main/Scripts/diagnose-calendar.sh | bash
 #
 # Reads only. Changes nothing. Prints a verdict at the end.
 

@@ -113,7 +113,7 @@ prints the command but does not run it.
 ## 5. Auto-update — Sparkle
 
 - Sparkle 2.9.5 via SPM; `UpdateController` in `NotchSnap/App/`.
-- Feed: `SUFeedURL` → `https://raw.githubusercontent.com/AlphaTedi/Screenshot_app/main/appcast.xml`
+- Feed: `SUFeedURL` → `https://raw.githubusercontent.com/AlphaTedi/Otto/main/appcast.xml`
 - `SUPublicEDKey` = `kcZvheYIHq5NOS3hoB4As0+TCzkyBxNRXn+BSRFJnA8=`; the matching private
   key lives in Marcello's keychain. The app **refuses any update that does not verify**,
   so a compromised host still cannot push code to users.

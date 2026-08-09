@@ -20,7 +20,7 @@ interactive panel in/below the MacBook notch. It began as a screenshot utility a
 **pivoted to a focused to-do app** that lives in the notch.
 
 - Bundle id: `com.notchsnap.app`
-- Repo: `github.com/AlphaTedi/Screenshot_app`, branch `main`
+- Repo: `github.com/AlphaTedi/Otto`, branch `main`
 - Latest tag: **v1.6.3** (2026-08-05) — signed with Developer ID, notarized, distributed
   as a `.dmg` on GitHub Releases with in-app Sparkle updates
 - Team ID `5N7QPZ6H87`; Hardened Runtime on in Release

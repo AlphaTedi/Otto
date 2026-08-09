@@ -327,7 +327,7 @@ else
     cp "$OUT/Otto.zip" "$FEEDDIR/"
     # generate_appcast reads every archive in the folder and emits appcast.xml.
     "$SPARKLE_BIN/generate_appcast" \
-        --download-url-prefix "https://github.com/AlphaTedi/Screenshot_app/releases/download/$TAG/" \
+        --download-url-prefix "https://github.com/AlphaTedi/Otto/releases/download/$TAG/" \
         "$FEEDDIR" 2>&1 | sed 's/^/   /'
     if [ -f "$FEEDDIR/appcast.xml" ]; then
         cp "$FEEDDIR/appcast.xml" appcast.xml
