@@ -382,6 +382,7 @@ private struct TodoTabRow: View {
                 // ambiguous. Trailing-aligned per the mockup.
                 Spacer(minLength: 8)
                 CategoryOverflowMenu()
+                SettingsButton()
             }
             .padding(.top, 8)
         }
@@ -496,6 +497,40 @@ private struct CategoryOverflowMenu: View {
         .fixedSize()
         .onHover { hover = $0 }
         .help(L10n.t("todo.manageCategories"))
+    }
+}
+
+// MARK: - SettingsButton — the visible way into Settings
+//
+// Until now the ONLY route was right-clicking the collapsed notch, which
+// testers simply never found: "people don't really understand that they have to
+// double-click on the notch" (Marcello, 2026-08-06). An app with no Dock icon
+// and no menu-bar item has no other affordance, so a hidden context menu was
+// the whole discovery story.
+//
+// It sits at the trailing edge of the tab row beside the overflow control, and
+// borrows that control's exact metrics — 12pt glyph in a 20x20 box, same two
+// foreground tones — so the two read as a pair of row-level actions rather than
+// one chip and one afterthought. The context menu stays for anyone who learned
+// it.
+private struct SettingsButton: View {
+    @State private var hover = false
+
+    var body: some View {
+        Button {
+            SettingsWindowController.show()
+        } label: {
+            Image(systemName: "gearshape")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(hover ? DSColor.textPrimary : DSColor.textSecondary)
+                .frame(width: 20, height: 20)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(NotchAnimation.hintFade) { hover = hovering }
+        }
+        .help(L10n.t("settings.open"))
     }
 }
 
