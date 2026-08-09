@@ -695,29 +695,54 @@ struct ShortcutRow: View {
 // MARK: - About
 
 struct AboutSettingsView: View {
+    /// "Version 1.8.0 (72)" — marketing version plus build, both straight from
+    /// the bundle so a screenshot of this row identifies the exact build.
+    static var versionText: String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = info?["CFBundleVersion"] as? String ?? "—"
+        return "Version \(short) (\(build))"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             PageTitle(title: "About")
 
             SettingsSection_Card(title: "Otto") {
                 HStack(spacing: 16) {
-                    Image(systemName: "camera.viewfinder")
-                        .font(.system(size: 38))
-                        .foregroundStyle(Color.accentColor)
+                    // The app's real icon, so About cannot drift from the
+                    // artwork the way a hardcoded SF Symbol did — it was still
+                    // showing a screenshot camera after the pivot.
+                    Image(nsImage: NSApp.applicationIconImage)
+                        .resizable()
                         .frame(width: 56, height: 56)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Color.accentColor.opacity(0.12))
-                        )
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Otto").font(.system(size: 17, weight: .semibold))
-                        Text("Version 1.0").font(.system(size: 12)).foregroundStyle(.secondary)
+                        // Read from the bundle. This said "Version 1.0" through
+                        // twenty releases, which made every bug report ambiguous
+                        // about which build it came from.
+                        Text(Self.versionText)
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
                         Text("Your to-dos and today's meetings, in the notch.")
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
+                }
+
+                Divider()
+
+                // Onboarding is the only part of the app a user cannot get
+                // back to on their own — it runs once and never again. Being
+                // able to replay it is how the flow gets reviewed without
+                // reinstalling or editing defaults by hand.
+                SettingsRow(title: "Onboarding",
+                            subtitle: "Walk through the welcome flow again.") {
+                    Button("Show again") {
+                        UserDefaults.standard.set(0, forKey: "onboardingVersion")
+                        OnboardingWindowController.show()
+                    }
                 }
 
                 Divider()
