@@ -248,69 +248,38 @@ rm -f "$OUT/notarize.zip"
 # cover the container it arrives in.
 echo
 echo "6. Building the disk image"
-# The install window is the very first thing anyone sees of Otto, and the
-# generic Finder listing said nothing — people were left to guess that the app
-# has to be dragged to Applications (Marcello, 2026-08-06). It now opens on a
-# designed sheet: artwork behind, the app on the left, Applications on the
-# right, an arrow between them.
+# NO custom install window, and this is a deliberate retreat.
+#
+# The designed sheet (artwork + positioned icons, like Wispr Flow's) is built
+# and the artwork is committed at Scripts/assets/dmg-background.png — but
+# Finder will not apply it from this machine. Driving it through AppleScript
+# fails at every step that touches volume contents:
+#
+#   set position of item "Otto.app" ...  -> -10006, can't set
+#   get name of every item of disk ...   -> returns nothing
+#   get item 1 of disk ...               -> -1728, can't get
+#
+# and a run that only sets the background reports success while writing no
+# .DS_Store at all, so nothing persists. Finder can open the window but cannot
+# see or arrange what is inside it: an Automation/Full Disk Access limitation
+# of whatever process runs this script, not a scripting error.
+#
+# Shipping it anyway meant a warning on every release and an unstyled DMG
+# regardless — v1.9.0 shipped exactly that. Better a plain window that works.
+#
+# TO ENABLE IT: grant Full Disk Access (and Finder automation) to the app that
+# runs release.sh — Terminal, or Claude Code — in System Settings > Privacy &
+# Security, then restore the styling block from git history. `brew install
+# create-dmg` is the other route, but it drives Finder the same way and will
+# hit the same wall until that permission exists.
 STAGE="$OUT/dmg-stage"
-rm -rf "$STAGE"; mkdir -p "$STAGE/.background"
+rm -rf "$STAGE"; mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
-cp Scripts/assets/dmg-background.png "$STAGE/.background/background.png"
 
 DMG="$OUT/Otto-$VERSION.dmg"
-RW="$OUT/rw.dmg"
-rm -f "$DMG" "$RW"
-
-# Read-write and HFS+ first: Finder's window settings are stored as volume
-# attributes, so they cannot be written into a compressed image directly.
-hdiutil create -volname "Otto" -srcfolder "$STAGE" -ov \
-    -format UDRW -fs HFS+ "$RW" > /dev/null
-MOUNT=$(hdiutil attach "$RW" -nobrowse -noverify -noautoopen \
-        | grep -oE '/Volumes/.*$' | tail -1)
-
-if [ -n "$MOUNT" ]; then
-    # Non-fatal and time-boxed. Driving Finder needs Automation permission, and
-    # a release must never hang on a consent dialog or fail because a headless
-    # run cannot show one — worst case the DMG is plain, which still installs.
-    /usr/bin/osascript - "$MOUNT" <<'APPLESCRIPT' > /dev/null 2>&1 &
-on run argv
-    set volPath to item 1 of argv
-    set volName to do shell script "basename " & quoted form of volPath
-    tell application "Finder"
-        tell disk volName
-            open
-            set current view of container window to icon view
-            set toolbar visible of container window to false
-            set statusbar visible of container window to false
-            set the bounds of container window to {200, 140, 840, 540}
-            set opts to the icon view options of container window
-            set arrangement of opts to not arranged
-            set icon size of opts to 112
-            set background picture of opts to file ".background:background.png"
-            set position of item "Otto.app" of container window to {170, 250}
-            set position of item "Applications" of container window to {470, 250}
-            close
-            open
-            update without registering applications
-            delay 1
-            close
-        end tell
-    end tell
-end run
-APPLESCRIPT
-    OSA_PID=$!
-    ( sleep 25; kill "$OSA_PID" 2>/dev/null ) & WATCHDOG=$!
-    wait "$OSA_PID" 2>/dev/null && echo "   install window styled" \
-        || echo "   (Finder styling skipped — DMG still installs normally)"
-    kill "$WATCHDOG" 2>/dev/null || true
-    sync
-    hdiutil detach "$MOUNT" -quiet || hdiutil detach "$MOUNT" -force -quiet || true
-fi
-
-hdiutil convert "$RW" -format UDZO -imagekey zlib-level=9 -o "$DMG" > /dev/null
-rm -f "$RW"
+rm -f "$DMG"
+hdiutil create -volname "Otto" -srcfolder "$STAGE" -ov -format UDZO "$DMG" > /dev/null
 codesign --force --sign "$IDENTITY" --timestamp "$DMG"
 rm -rf "$STAGE"
 
