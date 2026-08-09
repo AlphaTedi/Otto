@@ -78,6 +78,14 @@ class OnboardingWindowController: NSWindowController {
         window.isOpaque = false
         window.level = .floating
         window.isMovableByWindowBackground = true
+        // A hard safety envelope around setCompact's two real target sizes
+        // (520x300 / 600x560). macOS enforces minSize/maxSize on EVERY
+        // setFrame call, programmatic or not — so no computation error here,
+        // in setCompact, or in the hosting view's own layout can ever again
+        // produce a window that swallows the screen the way it did on
+        // 2026-08-09 (Marcello: "I cannot go through the onboarding").
+        window.minSize = NSSize(width: 480, height: 260)
+        window.maxSize = NSSize(width: 640, height: 620)
         window.center()
 
         // Hide traffic lights

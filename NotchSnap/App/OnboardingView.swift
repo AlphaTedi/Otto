@@ -104,7 +104,16 @@ struct OnboardingFlowView: View {
             .transition(stepTransition)
             .animation(.spring(response: 0.45, dampingFraction: 0.85), value: stepIndex)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Bounded, not `maxWidth/maxHeight: .infinity`. This view sits in a
+        // plain NSHostingView (not NSHostingController, which would manage
+        // sizing safely) — telling it "I can be arbitrarily large" is what
+        // made the window balloon to fill the screen the moment setCompact's
+        // setFrame competed with the hosting view's own intrinsic-size-driven
+        // layout, hiding the footer off the bottom of every screen below it
+        // (Marcello, 2026-08-09: "I cannot go through the onboarding"). The
+        // two real sizes are 520x300 and 600x560; these bounds cover both with
+        // a margin and nothing more.
+        .frame(minWidth: 480, maxWidth: 640, minHeight: 260, maxHeight: 620)
         // Its own strip, below everything — never on top of a button.
         .safeAreaInset(edge: .bottom, spacing: 0) {
             StepDotIndicator(current: stepIndex, total: steps.count)
