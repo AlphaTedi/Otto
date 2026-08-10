@@ -40,7 +40,7 @@ enum OnboardingFocus: String, CaseIterable {
 }
 
 private enum OnboardingStep {
-    case welcome, value, focus, whereItLives, practice, celebrate, calendar, signIn, allSet
+    case welcome, value, focus, whereItLives, practice, calendar, signIn, allSet
 }
 
 struct OnboardingFlowView: View {
@@ -53,10 +53,20 @@ struct OnboardingFlowView: View {
         OnboardingFocus(rawValue: focusRaw) ?? .both
     }
 
+    /// A confirmation that rides on top of the current screen instead of
+    /// stopping the flow for one. nil = nothing showing.
+    @State private var toast: String?
+
     /// The calendar step only exists for someone who said meetings matter, so
     /// a pure to-do user is never asked for a permission they will not use.
+    ///
+    /// `.celebrate` is gone: a full screen whose only job was to say "that
+    /// worked" cost a click to deliver information the user had just watched
+    /// happen. It is a toast on the practice screen now, and the flow
+    /// auto-advances underneath it — two fewer screens across the flow once
+    /// the calendar confirmation moved the same way.
     private var steps: [OnboardingStep] {
-        var s: [OnboardingStep] = [.welcome, .value, .focus, .whereItLives, .practice, .celebrate]
+        var s: [OnboardingStep] = [.welcome, .value, .focus, .whereItLives, .practice]
         if focus.wantsCalendar { s.append(.calendar) }
         // Only offer sign-in when it can actually complete, AND only when it
         // is not already redundant. Connecting Google Calendar on the
@@ -100,11 +110,9 @@ struct OnboardingFlowView: View {
                 case .whereItLives:
                     OnboardingNotchView(onAdvance: advanceStep)
                 case .practice:
-                    OnboardingPracticeView(onAdvance: advanceStep)
-                case .celebrate:
-                    OnboardingCelebrateView(onAdvance: advanceStep)
+                    OnboardingPracticeView(onAdvance: advanceStep, onToast: showToast)
                 case .calendar:
-                    OnboardingCalendarView(onAdvance: advanceStep)
+                    OnboardingCalendarView(onAdvance: advanceStep, onToast: showToast)
                 case .signIn:
                     OnboardingSignInView(onAdvance: advanceStep)
                 case .allSet:
@@ -113,7 +121,22 @@ struct OnboardingFlowView: View {
             }
             .transition(stepTransition)
             .animation(.spring(response: 0.45, dampingFraction: 0.85), value: stepIndex)
+
+            // Non-blocking, bottom-left, above whatever screen is showing.
+            if let toast {
+                VStack {
+                    Spacer()
+                    HStack {
+                        SuccessToast(text: toast)
+                        Spacer()
+                    }
+                }
+                .padding(.leading, 22)
+                .padding(.bottom, 18)
+                .allowsHitTesting(false)
+            }
         }
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: toast)
         // Bounded, not `maxWidth/maxHeight: .infinity`. This view sits in a
         // plain NSHostingView (not NSHostingController, which would manage
         // sizing safely) — telling it "I can be arbitrarily large" is what
@@ -158,6 +181,15 @@ struct OnboardingFlowView: View {
         withAnimation { stepIndex = min(stepIndex + 1, steps.count - 1) }
     }
 
+    /// Show a confirmation without stopping the flow. Auto-dismisses; the
+    /// screen underneath is free to advance while it is still fading.
+    private func showToast(_ text: String) {
+        toast = text
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
+            if toast == text { toast = nil }
+        }
+    }
+
     func completeOnboarding() {
         SoundManager.shared.play(.onboardingComplete)
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
@@ -196,14 +228,22 @@ private struct OnboardingScaffold<Content: View, Footer: View>: View {
     }
 }
 
-/// The standard header: one strong line, one quiet line, consistent rhythm.
+/// The standard header: category chip, one strong line, one quiet line.
+/// Same rhythm on every screen so the eye lands in the same place each time.
 private struct OnboardingHeader: View {
+    /// Category chip above the headline — "Welcome", "Setup", "Shortcut".
+    /// Declared first so call sites read in the order the user sees them.
+    var eyebrow: String? = nil
     let title: String
     var subtitle: String? = nil
     var topPadding: CGFloat = 52
 
     var body: some View {
         VStack(spacing: 10) {
+            if let eyebrow {
+                OnboardingEyebrowPill(text: eyebrow)
+                    .padding(.bottom, 2)
+            }
             Text(title)
                 .font(.system(size: 25, weight: .bold))
                 .multilineTextAlignment(.center)
@@ -262,7 +302,10 @@ private struct OnboardingValueView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Spacer().frame(height: 56)
+            Spacer().frame(height: 46)
+
+            OnboardingEyebrowPill(text: "Why Otto")
+                .padding(.bottom, 12)
 
             Text("Never a window in your way")
                 .font(.system(size: 26, weight: .bold))
@@ -276,16 +319,19 @@ private struct OnboardingValueView: View {
                 .padding(.horizontal, 56)
                 .padding(.top, 10)
 
-            Spacer().frame(height: 30)
+            Spacer().frame(height: 26)
 
+            // Each row shows its benefit happening rather than labelling it
+            // with an icon — the one change that turns this from a feature
+            // list into a demo reel.
             VStack(spacing: 10) {
-                ValueRow(icon: "checklist", tint: .blue,
+                ValueRow(demo: .todoAppears,
                          title: "To-dos that stay out of the way",
                          detail: "Capture one in a second, from any app.")
-                ValueRow(icon: "calendar", tint: .orange,
+                ValueRow(demo: .meetingNudge,
                          title: "Meetings before they start",
                          detail: "A quiet nudge, then a card with the join link.")
-                ValueRow(icon: "moon.zzz", tint: .purple,
+                ValueRow(demo: .goesQuiet,
                          title: "Silent the rest of the time",
                          detail: "No dock icon, no badge, no noise.")
             }
@@ -313,18 +359,13 @@ private struct OnboardingValueView: View {
 }
 
 private struct ValueRow: View {
-    let icon: String
-    let tint: Color
+    let demo: FeatureDemo
     let title: String
     let detail: String
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 15))
-                .foregroundStyle(tint)
-                .frame(width: 30, height: 30)
-                .background(Circle().fill(tint.opacity(0.14)))
+            FeatureDemoLoop(demo: demo)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: 13, weight: .medium))
@@ -358,6 +399,9 @@ private struct OnboardingFocusView: View {
     var body: some View {
         VStack(spacing: 0) {
             Spacer().frame(height: 58)
+
+            OnboardingEyebrowPill(text: "Setup")
+                .padding(.bottom, 12)
 
             Text("What should Otto help with first?")
                 .font(.system(size: 24, weight: .bold))
@@ -448,6 +492,11 @@ private struct FocusOptionRow: View {
 // MARK: - Frosted Glass Background — heavy blur + soft tint, used by onboarding & settings
 
 struct FrostedGlassBackground: View {
+    /// Drives the slow drift of the ambient glows. One shared phase so the
+    /// two blobs move in a loose, non-synchronised way rather than in lockstep.
+    @State private var drift = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         ZStack {
             // Layer 1: behind-window blur of the wallpaper
@@ -463,7 +512,36 @@ struct FrostedGlassBackground: View {
                 endPoint: .bottomTrailing
             )
 
-            // Layer 3: faint vignette to anchor the floating cards
+            // Layer 3: ambient colour wash — the single cheapest thing that
+            // makes a flow read as "premium" rather than "a form". Two large,
+            // heavily blurred radial gradients anchored off-canvas at opposite
+            // corners, drifting slowly against each other so the light never
+            // sits still but never draws the eye either. No assets, no video.
+            //
+            // Saturated at the edges, nothing in the centre: content always
+            // sits on calm background, which is the rule that keeps this from
+            // competing with the copy.
+            GeometryReader { geo in
+                ZStack {
+                    ambientBlob(
+                        colors: [Color(hex: "#7C5CFF"), Color(hex: "#C86DD7")],
+                        size: geo.size.width * 0.95
+                    )
+                    .offset(x: -geo.size.width * 0.30,
+                            y: drift ? -geo.size.height * 0.34 : -geo.size.height * 0.22)
+
+                    ambientBlob(
+                        colors: [Color(hex: "#FF8A4C"), Color(hex: "#4C8DFF")],
+                        size: geo.size.width * 0.85
+                    )
+                    .offset(x: geo.size.width * 0.34,
+                            y: drift ? geo.size.height * 0.30 : geo.size.height * 0.18)
+                }
+                .blur(radius: 90)
+                .allowsHitTesting(false)
+            }
+
+            // Layer 4: faint vignette to anchor the floating cards
             RadialGradient(
                 colors: [Color.clear, Color.black.opacity(0.10)],
                 center: .center,
@@ -471,6 +549,81 @@ struct FrostedGlassBackground: View {
                 endRadius: 700
             )
         }
+        .onAppear {
+            // Reduce Motion: keep the colour, drop the drift. The glow is
+            // decorative, so holding it still costs nothing.
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 11).repeatForever(autoreverses: true)) {
+                drift = true
+            }
+        }
+    }
+
+    private func ambientBlob(colors: [Color], size: CGFloat) -> some View {
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: colors.map { $0.opacity(0.55) } + [.clear],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: size / 2
+                )
+            )
+            .frame(width: size, height: size)
+    }
+}
+
+// MARK: - OnboardingEyebrowPill — what kind of step this is, before you read
+//
+// A small category chip above every headline. It does more work than its size
+// suggests: it tells someone whether they are being sold to, set up, or asked
+// for something, before they have read a single word of the actual copy.
+
+private struct OnboardingEyebrowPill: View {
+    let text: String
+
+    var body: some View {
+        Text(text.uppercased())
+            .font(.system(size: 10, weight: .semibold))
+            .kerning(0.6)
+            .foregroundStyle(Color(hex: "#FF7A4D"))
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(
+                Capsule().fill(Color(hex: "#FF7A4D").opacity(0.15))
+            )
+            .accessibilityHidden(true)   // decorative; the headline carries meaning
+    }
+}
+
+// MARK: - SuccessToast — confirmation that does not cost a whole screen
+//
+// Replaces two full-screen "it worked!" steps. A dedicated screen to say
+// "Nice, that happened" is two extra clicks for information the user already
+// has — they just watched it happen. This says the same thing without
+// stopping them, and the flow keeps moving underneath it.
+
+private struct SuccessToast: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(Color.green)
+                .frame(width: 7, height: 7)
+            Text(text)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.primary)
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 9)
+        .background(
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 1))
+        )
+        .shadow(color: .black.opacity(0.28), radius: 12, y: 4)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }
 
@@ -483,10 +636,20 @@ struct StepDotIndicator: View {
     var body: some View {
         HStack(spacing: 6) {
             ForEach(0..<total, id: \.self) { i in
+                let isCurrent = i == current
+                let isDone = i < current
                 Capsule()
-                    .fill(i == current ? Color.accentColor : Color.secondary.opacity(0.3))
-                    .frame(width: i == current ? 20 : 8, height: 8)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: current)
+                    // Three states, not two: done reads slightly brighter than
+                    // upcoming, so the bar shows how far along you are without
+                    // ever printing "4 of 8" and making anyone count.
+                    .fill(isCurrent ? Color.accentColor
+                                    : Color.secondary.opacity(isDone ? 0.55 : 0.25))
+                    .frame(width: isCurrent ? 22 : 8, height: 6)
+                    // The glow is what makes "you are here" read instantly at a
+                    // glance, rather than being a slightly wider grey dash.
+                    .shadow(color: isCurrent ? Color.accentColor.opacity(0.55) : .clear,
+                            radius: 5)
+                    .animation(.spring(response: 0.42, dampingFraction: 0.7), value: current)
             }
         }
     }
@@ -529,6 +692,9 @@ struct OnboardingWelcomeView: View {
                 .padding(.top, 48)
 
             Spacer().frame(height: 20)
+
+            OnboardingEyebrowPill(text: "Welcome")
+                .padding(.bottom, 12)
 
             Text("Otto")
                 .font(.system(size: 32, weight: .bold))
@@ -600,6 +766,9 @@ private struct OnboardingNotchView: View {
         VStack(spacing: 0) {
             Spacer().frame(height: 50)
 
+            OnboardingEyebrowPill(text: "Where it lives")
+                .padding(.bottom, 12)
+
             Text("Otto lives in the notch")
                 .font(.system(size: 24, weight: .bold))
 
@@ -660,6 +829,7 @@ private struct OnboardingNotchView: View {
 
 private struct OnboardingPracticeView: View {
     var onAdvance: () -> Void
+    var onToast: (String) -> Void
 
     private enum Stage { case awaitingShortcut, awaitingTodo }
     @State private var stage: Stage = .awaitingShortcut
@@ -671,6 +841,7 @@ private struct OnboardingPracticeView: View {
         OnboardingScaffold {
             VStack(spacing: 0) {
                 OnboardingHeader(
+                    eyebrow: "Shortcut",
                     title: stage == .awaitingShortcut
                         ? "Add your first to-do"
                         : "Now type it",
@@ -736,81 +907,118 @@ private struct OnboardingPracticeView: View {
         .onReceive(NotificationCenter.default.publisher(for: .todoCreated)) { _ in
             guard !done else { return }
             done = true
+            // Confirmation rides along instead of taking a screen of its own.
+            onToast("Nice \u{2014} that\u{2019}s it.")
             // Let the row land in the notch before the window moves on.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { onAdvance() }
         }
     }
 }
 
-/// Keycaps at hero size — the shortcut is the subject of the screen, not a hint.
+/// The shortcut as physical keys, not a text string — the subject of the
+/// screen, not a hint printed on it.
+///
+/// Three things separate this from flat evenly-spaced rectangles: each cap
+/// has a lit top edge and a shadow so it reads as a physical object; caps sit
+/// at slight alternating rotations and overlap so the group looks placed
+/// rather than laid out; and ghost caps sit behind at low opacity implying a
+/// whole keyboard around them. They settle in on the app's own contentHug
+/// spring (response 0.45 / damping 0.60), the same spring the notch itself
+/// animates on, so the moment feels like Otto rather than a generic modal.
 private struct ShortcutKeys: View {
     let keys: [String]
+    /// Ghost caps and rotation are for the practice moment, where the keys ARE
+    /// the screen. A plain inline row (a settings hint, say) sets this false
+    /// and gets flat, upright, evenly spaced caps.
+    var isHero: Bool = true
+
+    @State private var landed = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Alternating tilt, deterministic per position rather than random, so the
+    /// composition is the same every time the screen is shown.
+    private func rotation(_ index: Int) -> Double {
+        guard isHero else { return 0 }
+        let pattern: [Double] = [-6, 3.5, -2.5, 5]
+        return pattern[index % pattern.count]
+    }
 
     var body: some View {
-        HStack(spacing: 8) {
-            ForEach(keys, id: \.self) { key in
-                Text(key)
-                    .font(.system(size: 21, weight: .medium))
-                    .frame(minWidth: 50, minHeight: 50)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color.primary.opacity(0.06))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(Color.primary.opacity(0.09), lineWidth: 1)
-                    )
+        ZStack {
+            if isHero {
+                // Faint keys behind, implying the rest of a keyboard. Purely
+                // atmospheric — hidden from accessibility, never announced.
+                HStack(spacing: 26) {
+                    ghostCap("K", rotation: -14, size: 44)
+                    ghostCap("O", rotation: 10, size: 52)
+                    ghostCap("\u{2713}", rotation: -7, size: 40)
+                }
+                .offset(y: 6)
+                .accessibilityHidden(true)
+            }
+
+            HStack(spacing: isHero ? -6 : 8) {
+                ForEach(Array(keys.enumerated()), id: \.offset) { index, key in
+                    keycap(key)
+                        .rotationEffect(.degrees(landed ? rotation(index) : 0))
+                        .offset(y: landed ? 0 : 14)
+                        .opacity(landed ? 1 : 0)
+                        .zIndex(Double(keys.count - index))
+                        .animation(
+                            reduceMotion
+                                ? .easeOut(duration: 0.2)
+                                : .spring(response: 0.45, dampingFraction: 0.60)
+                                    .delay(Double(index) * 0.07),
+                            value: landed
+                        )
+                }
             }
         }
+        .onAppear { landed = true }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(keys.joined(separator: " "))
     }
-}
-// MARK: - Act 2 · Celebrate (Step 6)
 
-private struct OnboardingCelebrateView: View {
-    var onAdvance: () -> Void
-    @State private var appeared = false
+    private func keycap(_ key: String) -> some View {
+        Text(key)
+            .font(.system(size: 21, weight: .medium))
+            .frame(minWidth: 52, minHeight: 52)
+            .background(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(
+                        // Top-lit: brighter at the top edge, darker at the
+                        // bottom, which is what sells "object" over "rectangle".
+                        LinearGradient(
+                            colors: [Color.primary.opacity(0.14), Color.primary.opacity(0.05)],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.28), Color.white.opacity(0.06)],
+                            startPoint: .top, endPoint: .bottom
+                        ),
+                        lineWidth: 1
+                    )
+            )
+            .shadow(color: .black.opacity(isHero ? 0.42 : 0), radius: 12, y: 6)
+    }
 
-    var body: some View {
-        VStack(spacing: 0) {
-            Spacer()
-
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 54))
-                .foregroundStyle(.green)
-                .scaleEffect(appeared ? 1 : 0.5)
-                .animation(.spring(response: 0.5, dampingFraction: 0.6), value: appeared)
-
-            Text("Nice — that's it.")
-                .font(.system(size: 26, weight: .bold))
-                .padding(.top, 18)
-
-            Text("That's the whole interaction. Anything you typed is already saved in your list, and the same shortcut works from any app, any time.")
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 60)
-                .padding(.top, 10)
-
-            Spacer()
-
-            Button(action: onAdvance) {
-                Text("Continue \u{2192}")
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .keyboardShortcut(.return, modifiers: [])
-            .padding(.horizontal, 48)
-            .padding(.bottom, 40)
-        }
-        .onAppear { appeared = true }
+    private func ghostCap(_ key: String, rotation: Double, size: CGFloat) -> some View {
+        Text(key)
+            .font(.system(size: size * 0.38, weight: .medium))
+            .foregroundStyle(Color.primary.opacity(0.10))
+            .frame(width: size, height: size)
+            .background(
+                RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                    .fill(Color.primary.opacity(0.035))
+            )
+            .rotationEffect(.degrees(rotation))
     }
 }
-
 // MARK: - Act 3 · Calendar (Step 7) — trust copy BEFORE the system dialog
 //
 // Two macOS realities shape this screen:
@@ -825,12 +1033,16 @@ private struct OnboardingCelebrateView: View {
 
 private struct OnboardingCalendarView: View {
     var onAdvance: () -> Void
+    var onToast: (String) -> Void
     @ObservedObject private var calendar = CalendarStore.shared
     @State private var asking = false
 
     var body: some View {
         VStack(spacing: 0) {
             Spacer().frame(height: 50)
+
+            OnboardingEyebrowPill(text: "Permission")
+                .padding(.bottom, 14)
 
             Image(systemName: calendar.isConnected ? "calendar.badge.checkmark" : "calendar")
                 .font(.system(size: 40))
@@ -879,7 +1091,16 @@ private struct OnboardingCalendarView: View {
                 } else {
                     Button {
                         asking = true
-                        Task { await calendar.connect(); asking = false }
+                        Task {
+                            await calendar.connect()
+                            asking = false
+                            // Confirm inline and keep moving, rather than
+                            // spending a whole screen on "it worked".
+                            if calendar.isConnected {
+                                onToast("Calendar connected")
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { onAdvance() }
+                            }
+                        }
                     } label: {
                         Text(asking ? "Waiting for macOS\u{2026}" : "Connect calendar")
                             .fontWeight(.semibold)
@@ -972,6 +1193,7 @@ private struct OnboardingSignInView: View {
         OnboardingScaffold {
             VStack(spacing: 0) {
                 OnboardingHeader(
+                    eyebrow: "Account",
                     title: signedInAs == nil ? "Bring your calendar with you" : "Signed in",
                     subtitle: signedInAs == nil
                         ? "Connect Google and Otto shows today's meetings, the join link, and who else is coming — with their faces, not their initials."
@@ -1156,59 +1378,229 @@ struct GlassTile: View {
 
 // MARK: - NotchMiniPreview (animated loop for Welcome screen)
 
+/// A miniature of the real interaction: a cursor travels to the notch, the
+/// notch opens, and a to-do lands in it.
+///
+/// This screen exists to demonstrate a SPATIAL behaviour that words genuinely
+/// cannot carry — "it lives up there, and it grows downward when you need it."
+/// The previous version animated a bare black rounded rectangle with nothing
+/// inside, which read as an unfinished placeholder rather than a demo
+/// (Marcello, 2026-08-09). The fix is not more motion, it is CONTENT: a
+/// pretend menu bar for context, a cursor that moves on its own, and a real-
+/// looking row appearing inside the opened panel.
+///
+/// Built in SwiftUI rather than as a recorded screen capture on purpose: no
+/// asset to ship or keep in sync with the UI, crisp at any size, adapts to
+/// light and dark, and no AVPlayer burning CPU behind an onboarding window.
 struct NotchMiniPreview: View {
     @State private var phase = 0
+    @State private var loop: DispatchWorkItem?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// phase 0 idle · 1 cursor arriving · 2 notch open · 3 to-do landed
+    private var isOpen: Bool { phase >= 2 }
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
             .fill(.ultraThinMaterial)
-            .overlay {
-                VStack(spacing: 0) {
-                    ZStack(alignment: .top) {
-                        Rectangle()
-                            .fill(Color(NSColor.windowBackgroundColor).opacity(0.7))
-                            .frame(height: 24)
-
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(Color.black)
-                            .frame(width: phase >= 2 ? 160 : 60, height: phase >= 2 ? 44 : 20)
-                            .animation(.spring(response: 0.45, dampingFraction: 0.7), value: phase)
-                    }
-                    .frame(height: 44)
-
-                    Spacer()
-
-                    Text(phaseLabel)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .padding(.bottom, 12)
-                        .animation(.easeInOut(duration: 0.2), value: phase)
-                }
-            }
+            .overlay { screen }
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .onAppear { startLoop() }
+            .onDisappear { loop?.cancel(); loop = nil }
+            .accessibilityHidden(true)   // decorative; the copy explains it
     }
 
-    var phaseLabel: String {
-        switch phase {
-        case 0: return "Press \u{2325}\u{2318}N from anywhere"
-        case 1: return "The notch opens"
-        case 2: return "Type what needs doing"
-        case 3: return "It\u{2019}s on your list"
-        default: return ""
+    private var screen: some View {
+        GeometryReader { geo in
+            let notchWidth: CGFloat = isOpen ? min(geo.size.width * 0.62, 190) : 54
+            let notchHeight: CGFloat = isOpen ? 62 : 16
+
+            ZStack(alignment: .top) {
+                // A hint of desktop, so the notch has something to sit against
+                // and the whole thing reads as "a Mac screen" immediately.
+                VStack(spacing: 0) {
+                    Rectangle()
+                        .fill(Color.primary.opacity(0.07))
+                        .frame(height: 16)
+                    Spacer()
+                }
+
+                // The notch itself.
+                VStack(spacing: 0) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: isOpen ? 13 : 7, style: .continuous)
+                            .fill(Color.black)
+                            .frame(width: notchWidth, height: notchHeight)
+
+                        if phase >= 3 {
+                            miniTodoRow
+                                .frame(width: notchWidth - 22)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+                    }
+                    Spacer()
+                }
+                // The app's own contentHug spring — the miniature opens with
+                // exactly the motion the real notch uses.
+                .animation(.spring(response: 0.45, dampingFraction: 0.60), value: phase)
+
+                // Cursor travelling up to the notch, then resting there.
+                Image(systemName: "cursorarrow")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.primary)
+                    .shadow(color: .black.opacity(0.4), radius: 2)
+                    .position(
+                        x: geo.size.width * (phase == 0 ? 0.30 : 0.5),
+                        y: phase == 0 ? geo.size.height * 0.72 : 30
+                    )
+                    .opacity(phase >= 2 ? 0 : 1)
+                    .animation(.easeInOut(duration: 0.75), value: phase)
+            }
         }
     }
 
-    func startLoop() {
-        let delays: [Double] = [0, 1.2, 2.0, 3.0]
+    private var miniTodoRow: some View {
+        HStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 3)
+                .strokeBorder(Color.accentColor, lineWidth: 1.4)
+                .frame(width: 9, height: 9)
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.white.opacity(0.85))
+                .frame(height: 5)
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 26)
+    }
+
+    private func startLoop() {
+        // Reduce Motion: settle on the finished frame and stop. The point of
+        // the demo is the end state; the journey is the decorative part.
+        guard !reduceMotion else { phase = 3; return }
+
+        let delays: [Double] = [0, 0.9, 1.9, 2.7]
         for (i, delay) in delays.enumerated() {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                 withAnimation { phase = i }
             }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+        // Held in a cancellable work item so leaving the screen actually stops
+        // the loop — the old version rescheduled itself forever, outliving the
+        // view that started it.
+        let next = DispatchWorkItem { [self] in
             phase = 0
             startLoop()
         }
+        loop = next
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.6, execute: next)
+    }
+}
+
+// MARK: - FeatureDemoLoop — a value row that shows instead of tells
+//
+// Replaces the static icon beside each benefit line with a small looping
+// animation of the thing actually happening, badged with a play triangle so it
+// reads as a demo rather than decoration.
+//
+// SwiftUI animation rather than recorded video, for the same reasons as
+// NotchMiniPreview: nothing to ship, nothing to re-record when the UI moves,
+// and it stays sharp at any size.
+
+private enum FeatureDemo {
+    case todoAppears, meetingNudge, goesQuiet
+}
+
+private struct FeatureDemoLoop: View {
+    let demo: FeatureDemo
+    @State private var t = 0
+    @State private var loop: DispatchWorkItem?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.primary.opacity(0.06))
+
+            content
+                .padding(6)
+
+            // Play badge — Raycast's tell that a tile is a demo, not an icon.
+            Image(systemName: "play.fill")
+                .font(.system(size: 5))
+                .foregroundStyle(.white.opacity(0.85))
+                .padding(3)
+                .background(Circle().fill(Color.black.opacity(0.45)))
+                .padding(3)
+        }
+        .frame(width: 46, height: 34)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .onAppear { start() }
+        .onDisappear { loop?.cancel(); loop = nil }
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch demo {
+        case .todoAppears:
+            // A row drops into a short list.
+            VStack(alignment: .leading, spacing: 3) {
+                miniRow(filled: true)
+                miniRow(filled: true).opacity(0.5)
+                miniRow(filled: false)
+                    .opacity(t >= 1 ? 1 : 0)
+                    .offset(y: t >= 1 ? 0 : -5)
+            }
+            .animation(.spring(response: 0.45, dampingFraction: 0.60), value: t)
+
+        case .meetingNudge:
+            // A card slides in from the top edge, the way an alert arrives.
+            VStack(spacing: 0) {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Color(hex: "#E8C15A").opacity(0.9))
+                    .frame(height: 9)
+                    .overlay(alignment: .leading) {
+                        Circle().fill(.black.opacity(0.5))
+                            .frame(width: 4, height: 4).padding(.leading, 3)
+                    }
+                    .offset(y: t >= 1 ? 0 : -14)
+                    .opacity(t >= 1 ? 1 : 0)
+                Spacer(minLength: 0)
+            }
+            .animation(.spring(response: 0.45, dampingFraction: 0.60), value: t)
+
+        case .goesQuiet:
+            // The panel shrinks back to a resting pill.
+            VStack {
+                RoundedRectangle(cornerRadius: t >= 1 ? 2 : 4, style: .continuous)
+                    .fill(Color.black.opacity(0.65))
+                    .frame(width: t >= 1 ? 16 : 34, height: t >= 1 ? 5 : 18)
+                Spacer(minLength: 0)
+            }
+            .animation(.spring(response: 0.45, dampingFraction: 0.60), value: t)
+        }
+    }
+
+    private func miniRow(filled: Bool) -> some View {
+        HStack(spacing: 3) {
+            RoundedRectangle(cornerRadius: 1.5)
+                .strokeBorder(Color.accentColor.opacity(filled ? 0.5 : 1), lineWidth: 1)
+                .frame(width: 5, height: 5)
+            RoundedRectangle(cornerRadius: 1)
+                .fill(Color.primary.opacity(filled ? 0.25 : 0.55))
+                .frame(height: 3)
+        }
+    }
+
+    private func start() {
+        guard !reduceMotion else { t = 1; return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { withAnimation { t = 1 } }
+        let next = DispatchWorkItem { t = 0; start() }
+        loop = next
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.6, execute: next)
     }
 }
 
@@ -1236,6 +1628,9 @@ struct OnboardingAllSetView: View {
             .padding(.top, 36)
 
             Spacer().frame(height: 16)
+
+            OnboardingEyebrowPill(text: "Done")
+                .padding(.bottom, 12)
 
             Text("You\u{2019}re set")
                 .font(.system(size: 28, weight: .bold))
