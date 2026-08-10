@@ -29,15 +29,24 @@ final class GoogleOAuth {
     /// carries an id_token we can read the account address out of — otherwise
     /// Settings could only say "connected" without saying to what.
     ///
-    /// directory.readonly (Workspace attendee photos) was dropped 2026-08-09.
-    /// It is a Google "restricted" scope, which gates OAuth verification behind
-    /// a paid third-party CASA security assessment — a real cost and a real
-    /// delay, for a feature that only decorates avatars. calendar.events.readonly
-    /// is merely "sensitive": verifiable through Google's ordinary review, which
-    /// is what unblocks the 100-total-user cap unverified apps carry. Contacts
-    /// photos and coloured initials still work with no directory scope at all.
+    /// directory.readonly (Workspace-wide attendee photos) was dropped
+    /// 2026-08-09. It is a Google "restricted" scope, which gates OAuth
+    /// verification behind a paid third-party CASA security assessment — a
+    /// real cost and a real delay, for a feature that only decorates avatars.
+    ///
+    /// contacts.readonly / contacts.other.readonly (added back the same day)
+    /// are a DIFFERENT thing: the signed-in user's OWN People API contacts —
+    /// people they've saved, plus "other contacts" auto-collected from Gmail
+    /// interactions — never the organization-wide directory. Both are
+    /// "sensitive" tier, the same tier calendar.events.readonly already sits
+    /// at: ordinary Google review, no CASA. This is the piece that actually
+    /// answers "most of my colleagues have a photo, why doesn't Otto show it"
+    /// (Marcello, 2026-08-09) — colleagues someone has actually emailed or met
+    /// with land in "other contacts" even when never explicitly saved.
     private static let scope = [
         "https://www.googleapis.com/auth/calendar.events.readonly",
+        "https://www.googleapis.com/auth/contacts.readonly",
+        "https://www.googleapis.com/auth/contacts.other.readonly",
         "openid", "email",
     ].joined(separator: " ")
     private static let authEndpoint = "https://accounts.google.com/o/oauth2/v2/auth"

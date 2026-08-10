@@ -396,7 +396,12 @@ private struct TodoTabRow: View {
                 Spacer(minLength: 8)
                 CategoryOverflowMenu()
             }
-            .padding(.top, 8)
+            // No top padding here. It used to reserve headroom for the
+            // ⌘-held index badges (offset y:-8) drawn above each chip; the
+            // badges are gone, but the padding stayed and pushed every chip
+            // 8pt below AccountButton, which sits in the outer row with no
+            // matching offset — the avatar visibly floating above the tabs'
+            // midline (Marcello, 2026-08-09).
         }
     }
 }

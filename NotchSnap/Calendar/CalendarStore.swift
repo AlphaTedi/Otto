@@ -323,6 +323,30 @@ final class CalendarStore: ObservableObject {
 
     // MARK: Alert actions
 
+    /// Hints Google Meet toward the account Otto is actually connected to,
+    /// rather than whichever Google session the browser happens to have
+    /// active. A browser signed into several Google accounts otherwise joins
+    /// with the wrong one — not the identity that was actually invited to the
+    /// meeting (Marcello, 2026-08-09). `authuser` is Google's own, documented
+    /// mechanism for this across every one of its own properties (Meet,
+    /// Calendar, Drive, Docs); it is meaningless outside google.com and left
+    /// untouched there, so a Zoom or Teams link is never rewritten.
+    ///
+    /// Exact host match, not a suffix check: `"x.evil-google.com".hasSuffix(
+    /// "google.com")` would also be true, which is the wrong kind of "close
+    /// enough" for something that decides which account a browser signs
+    /// requests as.
+    static func urlForJoining(_ url: URL) -> URL {
+        guard url.host == "meet.google.com",
+              let account = GoogleOAuth.shared.account,
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return url }
+        var items = (components.queryItems ?? []).filter { $0.name != "authuser" }
+        items.append(URLQueryItem(name: "authuser", value: account))
+        components.queryItems = items
+        return components.url ?? url
+    }
+
     /// ⌘↩ from the panel: open the next meeting that actually has a link.
     /// Returns false when there is nothing to join, so the key handler can let
     /// the keystroke fall through instead of swallowing it.
@@ -331,7 +355,7 @@ final class CalendarStore: ObservableObject {
         guard isConnected,
               let next = upcomingToday.first(where: { $0.videoURL != nil }),
               let url = next.videoURL else { return false }
-        NSWorkspace.shared.open(url)
+        NSWorkspace.shared.open(Self.urlForJoining(url))
         NotchController.shared.attentionLeft()
         return true
     }
@@ -339,7 +363,7 @@ final class CalendarStore: ObservableObject {
     /// CA-4 — open the detected call link.
     func join() {
         guard let url = activeAlert?.videoURL else { return }
-        NSWorkspace.shared.open(url)
+        NSWorkspace.shared.open(Self.urlForJoining(url))
         dismissAlert()
         // Policy rule 7: the browser is taking over, so the notch is done.
         NotchController.shared.attentionLeft()
