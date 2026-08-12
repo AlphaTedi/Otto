@@ -161,6 +161,18 @@ final class TodoStore: ObservableObject {
 
     // MARK: - Notes & checklist (NC-1..4)
 
+    /// End any in-progress row edit, committing it.
+    ///
+    /// Closing the row is what actually releases the caret: the editor only
+    /// exists while a row is expanded, so collapsing removes the focused
+    /// field, and TodoItemRow's `onChange(of: isExpanded)` saves the draft on
+    /// the way out. One path, so clicking off a field can never diverge from
+    /// what Return and clicking-the-row-shut already do.
+    func endEditing() {
+        guard expandedItemID != nil else { return }
+        withAnimation(NotchAnimation.contentHug) { expandedItemID = nil }
+    }
+
     /// Rename an existing to-do.
     ///
     /// Until now a title was write-once: you could add a note or a step to a

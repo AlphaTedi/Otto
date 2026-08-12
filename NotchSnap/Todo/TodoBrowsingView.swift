@@ -194,6 +194,26 @@ struct TodoTabView: View {
             AppState.shared.todoContentHeight = height
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // Click anywhere the panel isn't otherwise using — the empty band
+        // beside the tabs, the gaps between rows, the padding — and whatever
+        // is being edited commits and gives up the caret.
+        //
+        // This is the ordinary text-field contract everywhere else on the
+        // Mac: clicking off a focused field ends the edit. SwiftUI does not
+        // give it to you for free on macOS, because nothing else claims focus
+        // when you click a non-interactive area, so the field simply keeps it
+        // and typing carries on into a row the user has visually left
+        // (Marcello, 2026-08-10).
+        //
+        // Sits in `.background`, deliberately: a background only receives a
+        // click where no real control was hit, so rows, buttons, the tab
+        // strip and drag-to-reorder all still get theirs first. It is a
+        // fallback, not an interceptor.
+        .background(
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture { TodoStore.shared.endEditing() }
+        )
         .background(TodoBrowsingKeyHandler())
     }
 
