@@ -624,7 +624,7 @@ struct UrgencyTooltip: View {
 // MARK: Inline entity chips (§2)
 
 enum EntityKind {
-    case link, date, mention, code
+    case link, date, mention, code, channel
 }
 
 enum DSEntityChip {
@@ -633,7 +633,12 @@ enum DSEntityChip {
         case .link: return Color(hex: "#1A2733")
         case .date: return Color(hex: "#231F14")
         case .mention: return Color(hex: "#2A1F33")
-        case .code: return Color(hex: "#1C1C1C")
+        // Code sits on a warm dark ground rather than neutral grey — the
+        // orange-on-dark convention Slack, Jira and every code review tool
+        // share, which is what makes a snippet findable by scanning rather
+        // than reading (Marcello's tester, 2026-08-10).
+        case .code: return Color(hex: "#2A1A14")
+        case .channel: return Color(hex: "#14262A")
         }
     }
 
@@ -642,7 +647,8 @@ enum DSEntityChip {
         case .link: return Color(hex: "#2F4A5C")
         case .date: return Color(hex: "#4A3F22")
         case .mention: return Color(hex: "#493459")
-        case .code: return Color(hex: "#3A3A3A")
+        case .code: return Color(hex: "#5C3524")
+        case .channel: return Color(hex: "#245259")
         }
     }
 
@@ -651,7 +657,8 @@ enum DSEntityChip {
         case .link: return DSColor.CategoryPalette.blue
         case .date: return DSColor.CategoryPalette.amber
         case .mention: return DSColor.CategoryPalette.purple
-        case .code: return Color(hex: "#BBBBBB")
+        case .code: return Color(hex: "#E8905C")
+        case .channel: return Color(hex: "#5CC5D6")
         }
     }
 
@@ -661,8 +668,14 @@ enum DSEntityChip {
         case .date: return "calendar"
         case .mention: return "at"
         case .code: return nil // monospace font is the signal, no icon
+        case .channel: return "number"
         }
     }
+
+    /// Code is the one kind whose glyph shapes carry meaning — brackets,
+    /// underscores and `l` vs `1` have to be unambiguous — so it renders
+    /// monospaced while every other chip stays in the UI face.
+    static func isMonospaced(_ kind: EntityKind) -> Bool { kind == .code }
 }
 
 // NOTE: this SwiftUI view is a visual reference for a SINGLE chip's styling.

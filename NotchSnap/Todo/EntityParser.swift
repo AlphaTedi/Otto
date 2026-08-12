@@ -34,6 +34,11 @@ enum EntityParser {
     // Lookbehind keeps the @ from matching inside an email address
     // ("me@julian.dev" is not a mention of @julian.dev).
     private static let mentionRegex = try? NSRegularExpression(pattern: "(?<![\\w.])@([\\p{L}\\w.-]+)")
+    /// #channel / #tag. Same shape as a mention but requires a leading letter,
+    /// so "#1" and a hex colour like "#3A3A3A" stay plain text rather than
+    /// becoming chips — the common false positives for this pattern.
+    private static let channelRegex = try? NSRegularExpression(
+        pattern: "(?<![\\w#])#([\\p{L}][\\p{L}\\w-]*)")
     private static let dataDetector = try? NSDataDetector(
         types: NSTextCheckingResult.CheckingType.link.rawValue
              | NSTextCheckingResult.CheckingType.date.rawValue
@@ -84,6 +89,17 @@ enum EntityParser {
             candidates.append(Candidate(
                 range: match.range,
                 kind: .mention,
+                display: ns.substring(with: match.range(at: 1)),
+                url: nil, priority: 2
+            ))
+        }
+
+        // 3b. Channels / tags.
+        channelRegex?.enumerateMatches(in: title, range: full) { match, _, _ in
+            guard let match, match.numberOfRanges > 1 else { return }
+            candidates.append(Candidate(
+                range: match.range,
+                kind: .channel,
                 display: ns.substring(with: match.range(at: 1)),
                 url: nil, priority: 2
             ))

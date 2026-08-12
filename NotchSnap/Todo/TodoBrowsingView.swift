@@ -928,6 +928,11 @@ private struct TodoItemRow: View {
     @State private var urgencyHover = false
     @State private var hover = false
     @State private var newStep = ""
+    /// Title editing. `nil` = not editing; a String = the live draft.
+    /// Held separately from the item so an abandoned edit (Escape, clicking
+    /// away) never touches the stored title.
+    @State private var titleDraft: String?
+    @FocusState private var titleFieldFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -997,6 +1002,28 @@ private struct TodoItemRow: View {
                     .strikethrough(true)
                     .foregroundStyle(DSColor.textHint)
                     .lineLimit(1)
+            } else if let draft = titleDraft {
+                // Editing. A plain TextField, deliberately NOT the entity
+                // renderer: chips are a read view built from NSTextAttachments,
+                // and you cannot put a caret inside one. Editing shows the raw
+                // source — `code`, @name, the full URL — which is also the only
+                // way to see and fix the markup that produced a chip.
+                TextField("", text: Binding(
+                    get: { draft },
+                    set: { titleDraft = $0 }
+                ), axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(DSFont.todoTitle)
+                    .foregroundStyle(DSColor.textPrimaryBright)
+                    .lineLimit(1...5)
+                    .focused($titleFieldFocused)
+                    .onSubmit { commitTitle() }
+                    // Losing focus commits too — clicking away is a save
+                    // everywhere else in this app, so it is here as well.
+                    .onChange(of: titleFieldFocused) { focused in
+                        if !focused { commitTitle() }
+                    }
+                    .onExitCommand { titleDraft = nil }   // Escape discards
             } else {
                 // EH-1..6: links/dates/mentions/code render as inline chips
                 // in the flowing, wrapping title.
@@ -1011,6 +1038,20 @@ private struct TodoItemRow: View {
 
             // Trailing indicators ride the first line too.
             Group {
+                // The visible way in. Only while expanded — a pencil on every
+                // row of a resting list is noise, and the row is already
+                // expanded by the time someone is looking at its details.
+                if isExpanded && titleDraft == nil && !item.isCompleted {
+                    Button { beginEditingTitle() } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 9))
+                            .foregroundStyle(DSColor.textHint)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(L10n.t("todo.editTitle"))
+                }
+
                 // NC-2: collapsed rows with details wear a subtle indicator.
                 if item.hasDetails && !isExpanded {
                     Image(systemName: "text.alignleft")
@@ -1068,6 +1109,23 @@ private struct TodoItemRow: View {
         withAnimation(NotchAnimation.contentHug) {
             store.expandedItemID = (store.expandedItemID == item.id) ? nil : item.id
         }
+    }
+
+    /// Enter edit mode with the caret in the title.
+    private func beginEditingTitle() {
+        guard !item.isCompleted else { return }
+        titleDraft = item.title
+        // The field has to exist before it can take focus.
+        DispatchQueue.main.async { titleFieldFocused = true }
+    }
+
+    /// Save and leave edit mode. An empty title is refused by the store, so
+    /// clearing the field and pressing Return keeps the original rather than
+    /// leaving an unidentifiable blank row.
+    private func commitTitle() {
+        guard let draft = titleDraft else { return }
+        TodoStore.shared.rename(item.id, to: draft)
+        titleDraft = nil
     }
 
     // MARK: NC expanded details — note with left rule, sub-checklist (§7)
@@ -1145,6 +1203,8 @@ private struct TodoItemRow: View {
 
     @ViewBuilder
     private var contextMenuItems: some View {
+        Button(L10n.t("todo.editTitle")) { beginEditingTitle() }
+        Divider()
         ForEach(TodoUrgency.allCases) { u in
             Button(u.label) { TodoStore.shared.setUrgency(u, for: item.id) }
         }

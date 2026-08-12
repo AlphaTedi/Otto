@@ -177,7 +177,7 @@ enum EntityChipRenderer {
         let key = "\(kind)|\(label)"
         if let cached = cache[key] { return cached }
 
-        let font: NSFont = kind == .code
+        let font: NSFont = DSEntityChip.isMonospaced(kind)
             ? .monospacedSystemFont(ofSize: 12, weight: .regular)
             : .systemFont(ofSize: 12)
         let textColor = NSColor(DSEntityChip.text(for: kind))

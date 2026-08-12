@@ -161,6 +161,25 @@ final class TodoStore: ObservableObject {
 
     // MARK: - Notes & checklist (NC-1..4)
 
+    /// Rename an existing to-do.
+    ///
+    /// Until now a title was write-once: you could add a note or a step to a
+    /// row but never fix the words themselves, so a typo meant deleting the
+    /// item and retyping it — "kind of a blocker" for a developer using this
+    /// daily (Marcello's tester, 2026-08-10).
+    ///
+    /// An empty or whitespace-only title is REFUSED rather than saved: a row
+    /// with no text is unidentifiable and unrecoverable from the list, so the
+    /// edit is simply discarded and the old title stands.
+    func rename(_ id: UUID, to title: String) {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let idx = items.firstIndex(where: { $0.id == id }),
+              items[idx].title != trimmed else { return }
+        items[idx].title = trimmed
+        scheduleSave()
+    }
+
     func setNote(_ note: String, for id: UUID) {
         guard let idx = items.firstIndex(where: { $0.id == id }) else { return }
         items[idx].note = note
