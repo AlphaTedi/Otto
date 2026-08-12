@@ -956,6 +956,13 @@ private struct TodoItemRow: View {
         )
         .animation(NotchAnimation.hintFade, value: isFocused)
         .onHover { hover = $0 }
+        // A row can also be closed from outside this view — clicking a
+        // different row, Escape, the whole panel collapsing. Any of those
+        // while mid-edit would otherwise strand the draft in view state and
+        // silently lose it, so they save on the way out too.
+        .onChange(of: isExpanded) { expanded in
+            if !expanded { commitTitle() }
+        }
         .contextMenu { contextMenuItems }
     }
 
@@ -1038,19 +1045,10 @@ private struct TodoItemRow: View {
 
             // Trailing indicators ride the first line too.
             Group {
-                // The visible way in. Only while expanded — a pencil on every
-                // row of a resting list is noise, and the row is already
-                // expanded by the time someone is looking at its details.
-                if isExpanded && titleDraft == nil && !item.isCompleted {
-                    Button { beginEditingTitle() } label: {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 9))
-                            .foregroundStyle(DSColor.textHint)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help(L10n.t("todo.editTitle"))
-                }
+                // No pencil. Opening a row puts the caret straight in the
+                // title, so a button to do the same thing was an extra step
+                // for something that should just be click-and-type
+                // (Marcello, 2026-08-10).
 
                 // NC-2: collapsed rows with details wear a subtle indicator.
                 if item.hasDetails && !isExpanded {
@@ -1102,12 +1100,31 @@ private struct TodoItemRow: View {
     /// NC-1: deliberate open — clicking the row body (not the checkbox)
     /// toggles the note/checklist details. Non-link clicks inside the
     /// entity title view route here too.
+    /// Clicking a to-do opens it AND drops the caret in its text.
+    ///
+    /// Editing used to be a separate act behind a pencil; selecting a row and
+    /// then aiming at a small button is two steps for what should be one.
+    /// Opening a row is already the gesture that means "I want to work on
+    /// this one", so it now hands over a caret as well — you click, you type
+    /// (Marcello, 2026-08-10).
+    ///
+    /// A caret is unobtrusive enough to carry both meanings: someone who only
+    /// wanted to read the note or tick a step just ignores it, and nothing is
+    /// written unless they actually type.
     private func activateRow() {
         let store = TodoStore.shared
         store.focusedItemID = item.id
         guard !item.isCompleted else { return }
+        let willExpand = store.expandedItemID != item.id
         withAnimation(NotchAnimation.contentHug) {
-            store.expandedItemID = (store.expandedItemID == item.id) ? nil : item.id
+            store.expandedItemID = willExpand ? item.id : nil
+        }
+        if willExpand {
+            beginEditingTitle()
+        } else {
+            // Collapsing while mid-edit saves rather than silently dropping
+            // the change — closing a row is not a cancel.
+            commitTitle()
         }
     }
 
