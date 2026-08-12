@@ -238,11 +238,27 @@ class NotchController: ObservableObject {
     func forceCollapse() {
         TodoStore.shared.setMode(.browsing)
         TodoStore.shared.showShortcuts = false
+        // Actually relinquish key status, don't just announce it. resignKey()
+        // is what AppKit CALLS on a window to tell it the status is gone; it
+        // does not give the status up, so `panel.isKeyWindow` stayed true and
+        // isUserEngaged kept vetoing the collapse underneath. allowKey backs
+        // canBecomeKey, so dropping it first is what makes the resign stick.
+        (panel as? NotchPanel)?.allowKey = false
         panel?.resignKey()
-        triggerCollapse()
+        // force: this is the guaranteed exit. Re-applying isUserEngaged here
+        // is what made "force" a misnomer — clicking a button inside the panel
+        // makes it key, and a key panel counted as "engaged", so the one path
+        // that exists to always work was blocked by the user having clicked
+        // something (Marcello, 2026-08-10).
+        triggerCollapse(force: true)
     }
 
-    func triggerCollapse() {
+    /// - Parameter force: skip the "user is engaged" veto. Used by
+    ///   `forceCollapse` for the paths that must always work — an explicit
+    ///   outside click, Escape, dismissing a meeting alert. A drag in flight
+    ///   still blocks even a forced collapse: the user may be carrying a file
+    ///   to the tray, and yanking the target away mid-drag loses the drop.
+    func triggerCollapse(force: Bool = false) {
         // Guard against re-entry: mouse-move events call this continuously
         // while the cursor is outside the panel. Without the guard, every
         // event spawned a new collapse task and fired sound + haptic —
@@ -251,7 +267,7 @@ class NotchController: ObservableObject {
         // the user may be carrying a file to or from the tray — or while
         // the user is engaged (typing in the composer, date popover open).
         guard state == .expanded, collapseTask == nil,
-              !isDragSessionActive, !isUserEngaged else { return }
+              !isDragSessionActive, force || !isUserEngaged else { return }
 
         expandTask?.cancel()
         expandTask = nil

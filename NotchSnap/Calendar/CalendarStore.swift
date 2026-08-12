@@ -375,6 +375,12 @@ final class CalendarStore: ObservableObject {
         snoozedUntil[meeting.id] = Date().addingTimeInterval(TimeInterval(snoozeMinutes * 60))
         alertedIDs.remove(meeting.id)
         dismissAlert()
+        // Snooze means "not now" — so the panel goes away, the same as Join
+        // does. It used to fall back to the to-do list, leaving a panel open
+        // that the user never asked to open: the notch had opened ITSELF for
+        // the meeting, so dismissing the meeting should return the screen to
+        // exactly where it was (Marcello, 2026-08-10).
+        NotchController.shared.attentionLeft()
     }
 
     func dismissAlert() {
