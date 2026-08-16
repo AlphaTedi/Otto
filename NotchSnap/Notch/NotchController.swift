@@ -553,9 +553,13 @@ class NotchController: ObservableObject {
     //   6. The display arrangement changes (the panel's geometry is now stale).
     //   7. A link is opened out of the notch — joining a meeting hands over to
     //      the browser, so the notch has finished its job.
-    //   8. A to-do is captured through the GLOBAL shortcut: quick entry means
-    //      "note it and get back to work", the same as Things' or Alfred's.
-    //      Adding from the "+" tab while already browsing does NOT close.
+    //   8. WITHDRAWN 2026-08-16. A to-do captured through the GLOBAL shortcut
+    //      used to close the notch — "note it and get back to work", the way
+    //      Things and Alfred do. Marcello asked for it to stay open: with the
+    //      draft row permanent and ⏎ now handing the caret back, the panel
+    //      that remains is a list showing the thing you just made, at the top
+    //      where you can see it. Closing it hid the confirmation. One Escape
+    //      still closes.
     //
     // CLOSE POLITELY — existing rules, which respect a drag in flight and an
     // active typing surface: pointer leaves while browsing, an explicit outside
@@ -1044,27 +1048,9 @@ class NotchController: ObservableObject {
     /// browsed — someone summoning the notch from another app has no idea
     /// which tab it was left on.
     func openCreateFresh() {
-        cameFromGlobalShortcut = true
         TodoStore.shared.focusDraft(fromGlobalShortcut: true)
         triggerExpand()
         makeKeyForTyping()
-    }
-
-    /// True while the current creation surface was summoned by the global
-    /// shortcut, so committing can close the panel (policy rule 8). Cleared on
-    /// any collapse, so a later "+" tab creation does not inherit it.
-    private var cameFromGlobalShortcut = false
-
-    /// Rule 8. Called when a to-do is actually committed.
-    func todoWasCaptured() {
-        guard cameFromGlobalShortcut, state == .expanded else { return }
-        cameFromGlobalShortcut = false
-        Task { @MainActor in
-            // Let the row land and the confirmation haptic register first.
-            try? await Task.sleep(nanoseconds: 550_000_000)
-            guard !isDragSessionActive else { return }
-            forceCollapse()
-        }
     }
 
     /// ⌥Space toggles: already typing → step out and close; otherwise take

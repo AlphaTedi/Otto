@@ -166,6 +166,8 @@ prioritise other work. Re-enable with one line or
 | 08-16 | Esc in the draft steps out and KEEPS the text | Esc backs out one level everywhere else; a second Esc closes the notch, and a half-written to-do survives both |
 | 08-16 | `⏎` releases the caret instead of holding it for the next to-do | Writing one to-do then closing the notch cost two Escapes, one just to leave a finished field |
 | 08-16 | Clicking dead panel space blurs the draft as well as ending a row edit | "Stop typing" cannot mean one of the two live editors and not the other |
+| 08-16 | Close policy rule 8 WITHDRAWN — a global-shortcut capture no longer closes the notch | The new row is at the top of the list where you can see it; closing over it hid the only confirmation anything happened |
+| 08-16 | `WordKeycap` for named keys (Tab, Esc), separate from `Keycap` | `Keycap` draws one cap per character by design ("⌘↩" is two keys), so "tab" rendered as t·a·b and read as a three-key chord |
 | 08-16 | Tab-row "+" moved to the end and de-emphasised; it now means "new section" | With creation inline there is no to-do surface for it to open; "•••" went too, since every item on it is already on each tab's context menu |
 | 08-16 | Priority dropped from creation (still settable afterwards) | It was a second decision demanded before the first one was written down |
 

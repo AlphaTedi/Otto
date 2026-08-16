@@ -960,12 +960,14 @@ private struct InlineDraftRow: View {
                 // Always present, just quieter when idle: this is the only
                 // thing telling you the row has a destination at all, so
                 // hiding it until hover hid the whole feature.
-                HStack(spacing: 5) {
-                    ShortcutHintBadge(text: L10n.t("key.tab"))
+                // Label first, key last — Raycast's order, and the one that
+                // reads as a sentence: what it does, then what to press.
+                HStack(spacing: 7) {
                     Text(L10n.t("todo.switchSection"))
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(DSColor.textFaint)
                         .fixedSize()
+                    WordKeycap(text: L10n.t("key.tab"))
                 }
                 .padding(.top, TodoItemRow.firstLineInset)
                 .opacity(focused || hover ? 1 : 0.5)

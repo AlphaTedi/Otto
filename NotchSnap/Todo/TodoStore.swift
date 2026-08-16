@@ -577,7 +577,10 @@ final class TodoStore: ObservableObject {
         // notch is only half the lesson, and someone who stops there has not
         // yet made anything. See OnboardingPracticeView.
         NotificationCenter.default.post(name: .todoCreated, object: nil)
-        NotchController.shared.todoWasCaptured()
+        // The notch deliberately stays open — see close policy rule 8, which
+        // was withdrawn. The new row is at the top of the list behind the
+        // draft; closing over it hid the only confirmation that anything
+        // happened.
         return item
     }
 

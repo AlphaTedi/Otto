@@ -415,6 +415,33 @@ struct Keycap: View {
     }
 }
 
+/// A keycap for a NAMED key — Tab, Esc, Space.
+///
+/// `Keycap` draws one cap per CHARACTER, deliberately, because "⌘↩" is two
+/// keys. That makes it exactly wrong for a word: "tab" came out as three
+/// separate caps reading t · a · b, which "looks like you need to press a
+/// combination of 3 different keys at the same time" (Marcello, 2026-08-16).
+///
+/// A named key is ONE key, so it gets one cap wide enough to hold its name —
+/// outlined rather than filled, which is how Raycast draws the same hint and
+/// reads as a key rather than as a chip.
+struct WordKeycap: View {
+    let text: String
+    var size: CGFloat = 10
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: size, weight: .medium))
+            .foregroundStyle(DSColor.textPrimaryBright.opacity(0.75))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(
+                RoundedRectangle(cornerRadius: 4.5, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.20), lineWidth: 1)
+            )
+    }
+}
+
 // MARK: - Reusable component: Shortcut hint badge
 
 struct ShortcutHintBadge: View {
