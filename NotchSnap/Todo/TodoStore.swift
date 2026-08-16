@@ -214,24 +214,19 @@ final class TodoStore: ObservableObject {
     @Published var findQuery = ""
     @Published var findSelection = 0
 
-    /// FB8: the user's explicitly chosen default category for new to-dos —
-    /// the one preselected (and listed first) in the creation flow. Set from
-    /// a tab's context menu; persisted. Independent of tab order.
-    @Published var defaultCollectionID: UUID?
-
-    /// The category the creation flow should default to: the explicit choice
-    /// if still valid and not the smart Today view, else the first real tab.
+    /// Where ⌃⇧N starts: simply the FIRST real section in the tab row.
+    ///
+    /// It used to be an explicitly chosen default (FB8), stored per-category
+    /// and set from a tab's context menu, which took precedence over tab
+    /// order. Two mechanisms for one outcome, and the invisible one won —
+    /// so a user who dragged Work to the front and then pressed ⌃⇧N still
+    /// landed in Personal, with nothing on screen explaining why (Marcello,
+    /// 2026-08-16). Order is the visible mechanism, so order is the only one:
+    /// drag the section you use most to the front and the shortcut follows it.
+    ///
+    /// Today is skipped because it is a live query, not a bucket.
     var defaultCreationCollectionID: UUID? {
-        if let id = defaultCollectionID, let c = collection(id: id), !c.isSystemToday {
-            return id
-        }
-        return firstUserCollection?.id
-    }
-
-    func setDefaultCollection(_ id: UUID) {
-        guard let c = collection(id: id), !c.isSystemToday else { return }
-        defaultCollectionID = id
-        scheduleSave()
+        firstUserCollection?.id
     }
 
     /// Leaving voice mode must also tear the capture session down, so mode
@@ -383,7 +378,10 @@ final class TodoStore: ObservableObject {
         var collections: [TodoCollection]
         var items: [TodoItem]
         var lastUsedCollectionID: UUID?
-        var defaultCollectionID: UUID?   // FB8; decodeIfPresent for old files
+        // `defaultCollectionID` (FB8) was removed 2026-08-16 — tab order is now
+        // the only thing that decides where ⌃⇧N files. Old files still carry
+        // the key; Codable ignores keys the struct no longer declares, so they
+        // keep loading and the value is simply dropped on the next save.
     }
 
     private init() {
@@ -513,6 +511,22 @@ final class TodoStore: ObservableObject {
         withAnimation(NotchAnimation.contentHug) {
             let moved = collections.remove(at: from)
             collections.insert(moved, at: to)
+            for (i, _) in collections.enumerated() {
+                collections[i].sortOrder = i
+            }
+        }
+        scheduleSave()
+    }
+
+    /// Drop past the last tab. `moveCollection(_:before:)` can only ever land a
+    /// section in FRONT of another one, so without this the trailing slot is
+    /// unreachable by drag — the same gap the to-do list has `moveToEnd` for.
+    func moveCollectionToEnd(_ id: UUID) {
+        guard let from = collections.firstIndex(where: { $0.id == id }),
+              from != collections.count - 1 else { return }
+        withAnimation(NotchAnimation.contentHug) {
+            let moved = collections.remove(at: from)
+            collections.append(moved)
             for (i, _) in collections.enumerated() {
                 collections[i].sortOrder = i
             }
@@ -782,7 +796,6 @@ final class TodoStore: ObservableObject {
         collections = payload.collections.sorted { $0.sortOrder < $1.sortOrder }
         items = payload.items
         lastUsedCollectionID = payload.lastUsedCollectionID
-        defaultCollectionID = payload.defaultCollectionID
     }
 
     private func scheduleSave() {
@@ -793,8 +806,7 @@ final class TodoStore: ObservableObject {
             let payload = Payload(
                 collections: self.collections,
                 items: self.items,
-                lastUsedCollectionID: self.lastUsedCollectionID,
-                defaultCollectionID: self.defaultCollectionID
+                lastUsedCollectionID: self.lastUsedCollectionID
             )
             guard let data = try? JSONEncoder().encode(payload) else { return }
             // Promote the last-known-good primary to the backup BEFORE

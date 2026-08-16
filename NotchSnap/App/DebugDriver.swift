@@ -161,10 +161,16 @@ enum DebugDriver {
                             + "phase=\(VoiceCaptureController.shared.phase)")
             } else if command == "create-fresh" {
                 NotchController.shared.openCreateFresh()
-            } else if command.hasPrefix("setdefault ") {
-                // setdefault <index> — mark the collection at tab index default.
-                if let i = Int(command.dropFirst(11)), i >= 0, i < store.collections.count {
-                    store.setDefaultCollection(store.collections[i].id)
+            } else if command.hasPrefix("movecat-before ") {
+                // movecat-before <from> <to> — the drop delegate's own path.
+                let parts = command.dropFirst(15).split(separator: " ").compactMap { Int($0) }
+                if parts.count == 2, parts.allSatisfy({ $0 >= 0 && $0 < store.collections.count }) {
+                    store.moveCollection(store.collections[parts[0]].id,
+                                         before: store.collections[parts[1]].id)
+                }
+            } else if command.hasPrefix("movecat-end ") {
+                if let i = Int(command.dropFirst(12)), i >= 0, i < store.collections.count {
+                    store.moveCollectionToEnd(store.collections[i].id)
                 }
             } else if command == "defaultcat" {
                 let name = store.collection(id: store.defaultCreationCollectionID ?? UUID())?.name ?? "nil"

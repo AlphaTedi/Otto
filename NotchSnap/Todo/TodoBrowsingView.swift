@@ -281,6 +281,19 @@ private struct TodoTabRow: View {
     @ObservedObject private var store = TodoStore.shared
     /// The category tab currently being dragged (nil when idle).
     @State private var draggedCollectionID: UUID?
+    /// The tab the dragged one would land in FRONT of. Arc's model, the same
+    /// one the to-do list uses: dragging only ever moves the indicator, and
+    /// the row itself is left alone until the drop lands.
+    ///
+    /// It used to reorder live inside `dropEntered`, which on a horizontal
+    /// row is worse than on a vertical one — re-slotting shifts every tab
+    /// sideways under the cursor, which immediately fires the next
+    /// `dropEntered`, and the tabs flip back and forth for as long as you hold
+    /// the drag (Marcello: "we need to implement the possibility to swap the
+    /// ordering by dragging" — it was implemented, it just never settled).
+    @State private var dropBeforeCollectionID: UUID?
+    /// True when the drop would land past the last tab.
+    @State private var dropCollectionAtEnd = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -344,23 +357,25 @@ private struct TodoTabRow: View {
                                 .strokeBorder(DSColor.panelBorder, lineWidth: 0.5)
                         )
                     }
+                    // Drawn in the gap BEFORE this tab so it never displaces
+                    // anything — an inserted view would make the row jump
+                    // under the cursor, which is the whole bug being fixed.
+                    .overlay(alignment: .leading) {
+                        if dropBeforeCollectionID == collection.id {
+                            TabDropIndicator().offset(x: -5)
+                        }
+                    }
                     .onDrop(of: [.notchSnapInternalItem], delegate: CollectionReorderDropDelegate(
                         targetID: collection.id,
-                        draggedID: $draggedCollectionID
+                        draggedID: $draggedCollectionID,
+                        dropBeforeID: $dropBeforeCollectionID,
+                        dropAtEnd: $dropCollectionAtEnd
                     ))
                     .contextMenu {
-                        // FB8: explicit default for new to-dos (checkmark on
-                        // the current default). Today can't be a default —
-                        // it's a smart view, not a home.
-                        if !collection.isSystemToday {
-                            Button {
-                                store.setDefaultCollection(collection.id)
-                            } label: {
-                                let isDefault = store.defaultCreationCollectionID == collection.id
-                                Text((isDefault ? "\u{2713}  " : "") + L10n.t("todo.setDefault"))
-                            }
-                            Divider()
-                        }
+                        // No "set as default" item any more. Where ⌃⇧N files
+                        // is decided by tab ORDER — drag the section you use
+                        // most to the front — so a second, invisible way to
+                        // set the same thing could only contradict it.
                         Button(L10n.t("todo.newCollection") + "\u{2026}") {
                             store.setMode(.newCategory)
                             NotchController.shared.focusPanel()
@@ -404,9 +419,27 @@ private struct TodoTabRow: View {
                 // than in front of the first. The extra 4pt is deliberate: at
                 // the tabs' own 8pt spacing it read as a fourth tab rather
                 // than an action, which is the one risk of putting it here.
+                // Landing strip for the last slot: `moveCollection(_:before:)`
+                // can only insert in front of a tab, so without this the
+                // trailing position cannot be reached by dragging.
+                if draggedCollectionID != nil {
+                    Color.clear
+                        .frame(width: 18, height: 22)
+                        .overlay(alignment: .leading) {
+                            if dropCollectionAtEnd { TabDropIndicator() }
+                        }
+                        .onDrop(of: [.notchSnapInternalItem], delegate: CollectionEndDropDelegate(
+                            draggedID: $draggedCollectionID,
+                            dropBeforeID: $dropBeforeCollectionID,
+                            dropAtEnd: $dropCollectionAtEnd
+                        ))
+                }
+
                 NewSectionButton()
                     .padding(.leading, 4)
             }
+            .animation(NotchAnimation.hintFade, value: dropBeforeCollectionID)
+            .animation(NotchAnimation.hintFade, value: dropCollectionAtEnd)
             // No top padding here. It used to reserve headroom for the
             // ⌘-held index badges (offset y:-8) drawn above each chip; the
             // badges are gone, but the padding stayed and pushed every chip
@@ -422,24 +455,74 @@ private struct TodoTabRow: View {
 private struct CollectionReorderDropDelegate: DropDelegate {
     let targetID: UUID
     @Binding var draggedID: UUID?
+    @Binding var dropBeforeID: UUID?
+    @Binding var dropAtEnd: Bool
 
     func dropEntered(info: DropInfo) {
         guard let dragged = draggedID, dragged != targetID else { return }
-        // Live re-slotting: the row reorders as the drag passes over it, so
-        // the drop itself is just "let go".
-        TodoStore.shared.moveCollection(dragged, before: targetID)
+        dropBeforeID = targetID
+        dropAtEnd = false
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
+        DropProposal(operation: draggedID == nil ? .cancel : .move)
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        draggedID = nil
+        defer { clear() }
+        guard let dragged = draggedID, dragged != targetID else { return false }
+        TodoStore.shared.moveCollection(dragged, before: targetID)
         return true
     }
 
-    func dropExited(info: DropInfo) {}
+    func dropExited(info: DropInfo) {
+        // Only retract the indicator if it is still ours — the next tab's
+        // dropEntered may already have claimed it.
+        if dropBeforeID == targetID { dropBeforeID = nil }
+    }
+
+    private func clear() {
+        draggedID = nil
+        dropBeforeID = nil
+        dropAtEnd = false
+    }
+}
+
+/// The strip after the last tab: drops here send the section to the end.
+private struct CollectionEndDropDelegate: DropDelegate {
+    @Binding var draggedID: UUID?
+    @Binding var dropBeforeID: UUID?
+    @Binding var dropAtEnd: Bool
+
+    func dropEntered(info: DropInfo) {
+        guard draggedID != nil else { return }
+        dropBeforeID = nil
+        dropAtEnd = true
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: draggedID == nil ? .cancel : .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        defer { draggedID = nil; dropBeforeID = nil; dropAtEnd = false }
+        guard let dragged = draggedID else { return false }
+        TodoStore.shared.moveCollectionToEnd(dragged)
+        return true
+    }
+
+    func dropExited(info: DropInfo) { dropAtEnd = false }
+}
+
+/// The landing slot between two tabs — a vertical bar, since the tab row runs
+/// horizontally. `DropIndicator` is the list's horizontal equivalent.
+private struct TabDropIndicator: View {
+    var body: some View {
+        Capsule()
+            .fill(DSColor.textPrimaryBright.opacity(0.85))
+            .frame(width: 2, height: 18)
+            .transition(.opacity)
+    }
 }
 
 // MARK: - VoiceChip — voice brain-dump entry (VC-1)
