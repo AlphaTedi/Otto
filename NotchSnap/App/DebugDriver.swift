@@ -60,10 +60,12 @@ enum DebugDriver {
             // Same path Return takes in find mode.
             store.jumpToFindSelection()
         case "create-cancel":
-            store.cancelDraft()
+            store.blurDraft()
         case "create-tab":
-            // Same path the Tab key takes: re-aim the draft, leave it alone.
-            store.cycleDraftDestination()
+            // Same path the Tab key takes: switch section, leave the row alone.
+            store.cycleCollection()
+        case "create-shift-tab":
+            store.cycleCollection(by: -1)
         case "browse-mode":
             store.setMode(.browsing)
         case "expand-focused":
@@ -169,7 +171,7 @@ enum DebugDriver {
                 // The draft has no collection of its own any more: the
                 // active tab IS its destination.
                 appendState("defaultCreationCollection=\(name) mode=\(store.panelMode) "
-                            + "drafting=\(store.isCreatingDraft) destination=\(store.activeCollection?.name ?? "nil")")
+                            + "draftFocused=\(store.draftFocused) destination=\(store.draftDestination?.name ?? "nil")")
             } else if command.hasPrefix("entities ") {
                 let text = String(command.dropFirst(9))
                 let segments = EntityParser.parse(text).map { segment -> String in
@@ -213,7 +215,8 @@ enum DebugDriver {
         progress=\(progress.map { String(format: "%.2f", $0) } ?? "nil") \
         expandedRow=\(store.expandedItemID != nil) \
         findQuery='\(store.findQuery)' findMatches=\(store.findMatches.count) \
-        drafting=\(store.isCreatingDraft) draft='\(store.draftTitle)' \
+        draftFocused=\(store.draftFocused) dest=\(store.draftDestination?.name ?? "nil") \
+        draft='\(store.draftTitle)' \
         todoContentHeight=\(app.todoContentHeight) \
         notchExtraHeight=\(app.notchExtraHeight)
         """)

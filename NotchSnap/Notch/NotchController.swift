@@ -304,9 +304,8 @@ class NotchController: ObservableObject {
                 state = .idle
             }
             AppState.shared.isNotchExpanded = false
-            // The draft row's home just went away. Put it away with it, but
-            // keep what was typed — policy rule 2.
-            TodoStore.shared.suspendDraft()
+            // The caret went with the panel; the text did not — policy rule 2.
+            TodoStore.shared.releaseDraftFocus()
             autoCollapseTimer?.invalidate()
             autoCollapseTimer = nil
 
@@ -469,7 +468,7 @@ class NotchController: ObservableObject {
             contentVisible = false
         }
         AppState.shared.isNotchExpanded = false
-        TodoStore.shared.suspendDraft()
+        TodoStore.shared.releaseDraftFocus()
         autoCollapseTimer?.invalidate()
         autoCollapseTimer = nil
 
@@ -1031,11 +1030,11 @@ class NotchController: ObservableObject {
 
     // MARK: - To-do creation entry points (design PRD §3)
 
-    /// KB-3: ⌘N / ⌥Space put a draft row at the top of the section already on
-    /// screen. No card, no modal — the row appears inside the list it is
-    /// about to join (Marcello's spec, 2026-08-16).
+    /// KB-3: ⌘N / ⌥Space put the caret in the draft row at the top of the
+    /// section already on screen. No card, no modal — and no conjuring
+    /// either: the row is always there, this just aims at it.
     func openCreate() {
-        TodoStore.shared.beginDraft(fromGlobalShortcut: false)
+        TodoStore.shared.focusDraft(fromGlobalShortcut: false)
         triggerExpand()
         makeKeyForTyping()
     }
@@ -1046,7 +1045,7 @@ class NotchController: ObservableObject {
     /// which tab it was left on.
     func openCreateFresh() {
         cameFromGlobalShortcut = true
-        TodoStore.shared.beginDraft(fromGlobalShortcut: true)
+        TodoStore.shared.focusDraft(fromGlobalShortcut: true)
         triggerExpand()
         makeKeyForTyping()
     }
@@ -1068,11 +1067,11 @@ class NotchController: ObservableObject {
         }
     }
 
-    /// ⌥Space toggles: a draft is already open → throw it away and close;
-    /// otherwise start one.
+    /// ⌥Space toggles: already typing → step out and close; otherwise take
+    /// the caret.
     func toggleCreate() {
-        if state == .expanded && TodoStore.shared.isCreatingDraft {
-            TodoStore.shared.cancelDraft()
+        if state == .expanded && TodoStore.shared.draftFocused {
+            TodoStore.shared.blurDraft()
             panel?.resignKey()
             triggerCollapse()
         } else {

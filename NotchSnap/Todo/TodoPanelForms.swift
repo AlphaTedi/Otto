@@ -33,6 +33,15 @@ import AppKit
 struct HighlightingTitleField: NSViewRepresentable {
     @Binding var text: String
     let highlightRange: NSRange?
+    /// The destination section's color — the caret and the selection wear it,
+    /// so "where is my cursor" and "where is this going" are one answer.
+    var accent: Color = DSColor.focusAccent
+    /// Set by the store when something asks for the caret (⌃⇧N, ⌘N, a click
+    /// on the row). Cleared here once taken, so it is a request, not a state.
+    var wantsFocus: Bool = false
+    /// Reports first-responder changes back to the store. Focus is what pins
+    /// the panel open, so it has to be observed rather than assumed.
+    var onFocusChange: (Bool) -> Void = { _ in }
 
     static let lineHeight: CGFloat = 17
     static let maxHeight: CGFloat = 102   // ~6 lines, then it scrolls
@@ -51,8 +60,14 @@ struct HighlightingTitleField: NSViewRepresentable {
         scroll.autohidesScrollers = true
         scroll.verticalScrollElasticity = .allowed
 
-        let view = NSTextView()
+        let view = FocusReportingTextView()
         view.identifier = Self.fieldIdentifier
+        view.onFocusChange = { focused in
+            // Async: this fires from inside AppKit's responder change, and
+            // publishing store state synchronously from there re-enters
+            // SwiftUI layout mid-transaction.
+            DispatchQueue.main.async { onFocusChange(focused) }
+        }
         view.delegate = context.coordinator
         view.drawsBackground = false
         view.isRichText = false
@@ -67,9 +82,10 @@ struct HighlightingTitleField: NSViewRepresentable {
         context.coordinator.restyle(view, highlight: highlightRange)
 
         scroll.documentView = view
-        // The creation surface exists to be typed into — grab focus once
-        // the panel has become key.
-        DispatchQueue.main.async { view.window?.makeFirstResponder(view) }
+        // Deliberately NOT grabbing focus on appear. The draft row is now
+        // permanent, so it is built every time the panel opens — and a field
+        // that took the caret on sight would pin the notch open forever and
+        // swallow every keystroke meant for Quick Find.
         return scroll
     }
 
@@ -78,7 +94,15 @@ struct HighlightingTitleField: NSViewRepresentable {
         if view.string != text {
             view.string = text
         }
+        view.insertionPointColor = NSColor(accent)
+        view.selectedTextAttributes = [
+            .backgroundColor: NSColor(accent).withAlphaComponent(0.32),
+            .foregroundColor: NSColor(DSColor.textPrimaryBright),
+        ]
         context.coordinator.restyle(view, highlight: highlightRange)
+        if wantsFocus, view.window?.firstResponder !== view {
+            view.window?.makeFirstResponder(view)
+        }
     }
 
     /// FB5: report the wrapped content height for the proposed width, clamped
@@ -103,6 +127,26 @@ struct HighlightingTitleField: NSViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    /// NSTextView tells nobody when it gains or loses the caret, and the
+    /// delegate's textDidBegin/EndEditing only fire on an actual edit — so
+    /// clicking in and out of an empty field is silent. Overriding the
+    /// responder calls is the only account of focus that is always right.
+    final class FocusReportingTextView: NSTextView {
+        var onFocusChange: ((Bool) -> Void)?
+
+        override func becomeFirstResponder() -> Bool {
+            let accepted = super.becomeFirstResponder()
+            if accepted { onFocusChange?(true) }
+            return accepted
+        }
+
+        override func resignFirstResponder() -> Bool {
+            let resigned = super.resignFirstResponder()
+            if resigned { onFocusChange?(false) }
+            return resigned
+        }
+    }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: HighlightingTitleField

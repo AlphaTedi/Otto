@@ -566,10 +566,10 @@ struct TodoBrowsingView: View {
     /// content — so the region cheerfully laid out rows the notch could never
     /// display (Marcello, 2026-08-05). One source now, two consumers.
     ///
-    /// `draftInset` is the space the pinned draft row is taking above the
-    /// list. It has to come out of the same budget: the draft is chrome from
-    /// the scroll region's point of view, and a region that ignored it would
-    /// lay out rows in the strip the draft is standing on.
+    /// `draftInset` is the space the pinned draft row takes above the list.
+    /// It has to come out of the same budget: the draft is chrome from the
+    /// scroll region's point of view, and a region that ignored it would lay
+    /// out rows in the strip the draft is standing on.
     private static func maxRegion(draftInset: CGFloat) -> CGFloat {
         // Panel top inset + tab row + its top padding + the two paddings under
         // it + the panel's bottom inset.
@@ -608,10 +608,7 @@ struct TodoBrowsingView: View {
             // crossfade — on the very keystroke (Tab) whose entire purpose is
             // to leave it alone. Out here it is a sibling of the list, so Tab
             // swaps what is underneath it and nothing else.
-            if store.isCreatingDraft, let collection = store.activeCollection {
-                InlineDraftRow(accent: collection.color)
-                    .transition(.opacity.combined(with: .offset(y: -6)))
-            }
+            InlineDraftRow(accent: store.draftDestination?.color ?? DSColor.focusAccent)
 
             // §8.3 category switch: the id() swap transitions the whole block
             // while the panel height animates — content and container together.
@@ -650,9 +647,7 @@ struct TodoBrowsingView: View {
         } else {
             // Tall: one capped ScrollView so list + Completed scroll as a
             // single unit and the panel height stops at the budget.
-            let budget = Self.maxRegion(
-                draftInset: store.isCreatingDraft ? Self.draftRowAllowance : 0
-            )
+            let budget = Self.maxRegion(draftInset: Self.draftRowAllowance)
             let viewport = min(regionNaturalHeight, budget)
             let hasBelow = regionNaturalHeight - scrollOffset - viewport > 2
             // Indicators ON. They were hidden, so a capped region gave the eye
@@ -861,43 +856,51 @@ struct TodoBrowsingView: View {
 
 // MARK: - InlineDraftRow — the to-do being typed
 //
-// The replacement for the creation card. It is deliberately built out of the
-// SAME parts as a real row — checkbox at 14pt, the same leading gap, the same
-// title type — because the point of typing in place is that you can see the
-// thing you are making take its final shape. A differently-shaped input box
-// would put the old card back, just smaller.
+// The replacement for the creation card, and the panel's only visible way to
+// make a to-do — so it is ALWAYS here, at the top of the list, whether or not
+// anyone asked for it. Summoning it with ⌃⇧N was not enough: a user who opens
+// the notch and looks at it has to be able to see how to add something.
 //
-// Two things separate it from the rows below:
+// It is deliberately built out of the SAME parts as a real row — checkbox at
+// 14pt, the same leading gap, the same title type — because the point of
+// typing in place is that you can see the thing you are making take its final
+// shape. It also spans the FULL panel width; a short box floating in the
+// middle of a wide notch reads as a stray control rather than as the first
+// row of the list.
 //
-//  1. A wash of the destination section's own color, no border. The spec's
-//     lean was a fixed purple; taking the tint from the active section
-//     instead costs nothing (it is the existing tab color, not a new token)
-//     and makes Tab legible — the row visibly changes allegiance as the
-//     destination changes, which is otherwise only readable off the tab bar.
-//  2. Real margin underneath, so it is not glued to the first real item.
+// Four states, and they have to be told apart at a glance:
 //
-// The trailing ⇥ is the only hint that Tab does anything. It needs no label
-// for the same reason the ↩ badge on a focused row needs none.
+//   1. Idle + empty     neutral fill, muted placeholder — an invitation
+//   2. Focused + empty  destination tint + border, caret blinking
+//   3. Idle + typed     neutral fill, full-brightness text
+//   4. Focused + typing tint + border, accent caret and selection
+//
+// The tint and the caret both take the DESTINATION section's color, so "where
+// is my cursor" and "where is this going" have one answer. That also makes ⇥
+// legible in the row itself, not only up in the tab bar — and it is what
+// makes an honest job of Today, which cannot hold to-dos: aim at Today and
+// the row quietly wears the section it will actually file into.
 
 private struct InlineDraftRow: View {
-    /// The destination section's color — both the tint and the checkbox
-    /// stroke, so the row wears where it is going.
+    /// The destination section's color.
     let accent: Color
 
     @ObservedObject private var store = TodoStore.shared
+    @State private var hover = false
 
+    private var focused: Bool { store.draftFocused }
     private var parsed: NLDateMatch? { NLDateParser.parse(store.draftTitle) }
 
     /// FB5, inherited from the creation card: an NSViewRepresentable's own
     /// sizeThatFits is NOT re-invoked on a pure content change, so the height
-    /// has to be computed here — where `draftTitle` is observed — or the
-    /// field stays stuck at one line while the text wraps out of sight.
+    /// has to be computed here — where `draftTitle` is observed — or the field
+    /// stays stuck at one line while the text wraps out of sight.
     private var fieldHeight: CGFloat {
         let panelWidth = CGFloat(NotchController.shared.expandedWidth)
         // Panel padding ×2, the row's own inset ×2, the checkbox and its gap,
         // and the ⇥ badge. Estimated slightly narrow so the line count rounds
         // up rather than clipping the last line.
-        let width = max(120, panelWidth - CGFloat(DSSpacing.panelPadding) * 2 - 16 - 24 - 32)
+        let width = max(120, panelWidth - CGFloat(DSSpacing.panelPadding) * 2 - 20 - 24 - 34)
         let text = store.draftTitle.isEmpty ? " " : store.draftTitle
         let measured = NSAttributedString(
             string: text, attributes: [.font: NSFont.systemFont(ofSize: DSFont.todoTitleSize)]
@@ -914,31 +917,44 @@ private struct InlineDraftRow: View {
             HStack(alignment: .top, spacing: DSSpacing.rowInternalGap) {
                 // Inert on purpose: there is nothing to complete until the row
                 // exists. It is here so the draft READS as a to-do rather than
-                // as a text box that happens to be in a list.
+                // as a text box that happens to sit above a list.
                 RoundedRectangle(cornerRadius: DSRadius.checkboxCorner, style: .continuous)
-                    .strokeBorder(accent.opacity(0.55), lineWidth: 1.5)
+                    .strokeBorder(accent.opacity(focused ? 0.85 : 0.5), lineWidth: 1.5)
                     .frame(width: 14, height: 14)
                     .padding(.top, TodoItemRow.firstLineInset)
 
-                HighlightingTitleField(
-                    text: $store.draftTitle,
-                    // NL-2: a recognized date phrase colors inline, in place,
-                    // and is stripped from the title only on commit.
-                    highlightRange: parsed?.nsRange
-                )
-                .frame(height: fieldHeight)
-                // NSTextView has no placeholder of its own.
-                .overlay(alignment: .topLeading) {
+                ZStack(alignment: .topLeading) {
+                    // Stays until the first character, the way every other
+                    // Mac text field behaves — it brightens on focus instead
+                    // of vanishing, so an empty focused field still says what
+                    // it is for.
                     if store.draftTitle.isEmpty {
                         Text(L10n.t("todo.titlePlaceholder"))
                             .font(DSFont.todoTitle)
-                            .foregroundStyle(DSColor.textHint)
+                            .foregroundStyle(focused ? DSColor.textFaint : DSColor.textHint)
                             .allowsHitTesting(false)
                     }
+                    HighlightingTitleField(
+                        text: $store.draftTitle,
+                        // NL-2: a recognized date phrase colors inline, in
+                        // place, and is stripped from the title only on commit.
+                        highlightRange: parsed?.nsRange,
+                        accent: accent,
+                        wantsFocus: store.draftWantsFocus,
+                        onFocusChange: { isFocused in
+                            store.draftFocused = isFocused
+                            if isFocused { store.draftWantsFocus = false }
+                        }
+                    )
+                    .frame(height: fieldHeight)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
+                // Only once the row is in play — a permanent badge on a
+                // permanent row is furniture nobody reads.
                 ShortcutHintBadge(text: "\u{21E5}")
                     .padding(.top, TodoItemRow.firstLineInset)
+                    .opacity(focused || hover ? 1 : 0)
                     .help(L10n.t("todo.sc.cycleDestination"))
             }
 
@@ -951,16 +967,31 @@ private struct InlineDraftRow: View {
                     .transition(.opacity)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 7)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        // Spans the notch. Without this the field reports its own ideal width
+        // and the box floated mid-panel, detached from the list it belongs to.
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
-                .fill(accent.opacity(0.13))
+                .fill(focused ? accent.opacity(0.14) : DSColor.fieldBackground)
         )
-        // Detachment is whitespace, not a rule: the tint already says "this
-        // is not one of the list items", so a divider as well would be two
-        // devices doing one job.
+        .overlay(
+            RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
+                .strokeBorder(focused ? accent.opacity(0.6) : .clear, lineWidth: 1)
+        )
+        // Clicking anywhere in the box takes the caret, not just the ~17pt
+        // strip of text view inside it.
+        .contentShape(RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous))
+        .onTapGesture { store.draftWantsFocus = true }
+        .onHover { hovering in
+            withAnimation(NotchAnimation.hintFade) { hover = hovering }
+        }
+        // Detachment is whitespace, not a rule: the fill already says "this is
+        // not one of the list items", so a divider would be two devices doing
+        // one job.
         .padding(.bottom, 10)
+        .animation(NotchAnimation.hintFade, value: focused)
         .animation(NotchAnimation.hintFade, value: parsed?.display)
         .animation(NotchAnimation.contentHug, value: accent)
     }

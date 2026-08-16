@@ -29,7 +29,7 @@ import SwiftUI
 /// whole panel with a card — a title field, two combo boxes and a Create
 /// button, detached from the section it was filing into. It is now a draft row
 /// pinned above the list you are already looking at (Marcello's spec,
-/// 2026-08-16), which needs no mode of its own: see `isCreatingDraft`.
+/// 2026-08-16), which needs no mode of its own: see `draftTitle`.
 enum TodoPanelMode: Equatable {
     case browsing
     case newCategory
@@ -72,22 +72,124 @@ final class TodoStore: ObservableObject {
 
     // MARK: - Inline creation
     //
-    // The pinned draft row. ⌃⇧N (or ⌘N inside the panel) puts an empty,
-    // unchecked row above the list with the caret already in it; Tab re-aims
-    // it at another section; Return files it there.
+    // The draft row. It is ALWAYS on screen, at the top of the list — not
+    // summoned by a shortcut. Making it appear only on ⌃⇧N left the panel
+    // with no visible way to create anything at all: "when I open the notch
+    // normally, I don't see, and I don't know how to actually create new
+    // to-do items" (Marcello, 2026-08-16). It is the same reasoning that put
+    // an always-open trailing row in the step checklist, one level up.
     //
-    // The one rule the implementation has to protect: **the row is fixed at
-    // the top, and Tab changes the destination and the list beneath it, never
-    // the row itself.** That is why the draft lives here rather than in the
-    // view — the list below is rebuilt (`.id(collection.id)`) on every tab
-    // switch, and anything owned by that subtree would lose its text and its
-    // caret exactly when the user is mid-sentence.
+    // ⌃⇧N now puts the CARET in it rather than conjuring it, ⇥ re-aims it at
+    // another section, and ⏎ files it there.
+    //
+    // The row is fixed at the top and ⇥ changes the destination and the list
+    // beneath it, never the row itself. That is why the draft lives here
+    // rather than in the view — the list below is rebuilt
+    // (`.id(collection.id)`) on every section switch, and anything owned by
+    // that subtree would lose its text and its caret exactly when the user is
+    // mid-sentence.
 
-    /// What is being typed into the draft row. Survives Tab, and survives
-    /// leaving and re-entering the panel.
+    /// What is being typed into the draft row.
     @Published var draftTitle = ""
-    /// True while the draft row is on screen.
-    @Published private(set) var isCreatingDraft = false
+    /// True while the caret is actually in the draft row.
+    ///
+    /// Distinct from "the row exists", which is now always. Only the caret
+    /// pins the panel open; a row merely sitting there must not stop the
+    /// notch from ever auto-collapsing again.
+    @Published var draftFocused = false
+    /// Set to ask the view to take the caret; the field clears it once it has.
+    /// A flag rather than a direct call because the field may not exist yet —
+    /// ⌃⇧N from another app asks for focus before the panel has even opened.
+    @Published var draftWantsFocus = false
+
+    /// Where a committed draft will actually land.
+    ///
+    /// Today is a live query across every collection, not a bucket, so it can
+    /// never be a destination. A draft aimed at it files into the default
+    /// section instead — and the row wears THAT section's color, so the
+    /// redirection is visible while typing rather than a surprise on ⏎.
+    var draftDestination: TodoCollection? {
+        if let active = activeCollection, !active.isSystemToday { return active }
+        return defaultCreationCollectionID.flatMap { collection(id: $0) }
+    }
+
+    /// ⌃⇧N / ⌘N: put the caret in the draft row.
+    ///
+    /// `fromGlobalShortcut` also jumps to the user's default section, never
+    /// whatever was last browsed — someone summoning the notch from another
+    /// app has no idea which tab it was left on.
+    func focusDraft(fromGlobalShortcut: Bool) {
+        if fromGlobalShortcut, let target = defaultCreationCollectionID {
+            withAnimation(NotchAnimation.contentHug) { activeCollectionID = target }
+        }
+        panelMode = .browsing
+        // The caret is about to belong to the draft; nothing in the list below
+        // should still look selected or open underneath it.
+        focusedItemID = nil
+        expandedItemID = nil
+        draftWantsFocus = true
+    }
+
+    /// Escape: step out of the field, keeping what was typed.
+    ///
+    /// Deliberately not a discard. Escape backs out ONE level everywhere else
+    /// in this panel (close policy rule 3), so here it hands the caret back to
+    /// the list and a second Escape closes the notch — two presses to get all
+    /// the way out, and a half-written to-do survives both.
+    func blurDraft() {
+        draftWantsFocus = false
+        draftFocused = false
+    }
+
+    /// The panel closed: the caret is gone with it, but the text is not.
+    /// Close policy rule 2 — an outside click always closes, and "the creation
+    /// draft survives (KB-11), nothing is lost".
+    func releaseDraftFocus() {
+        draftWantsFocus = false
+        draftFocused = false
+    }
+
+    /// ⇥ — the tab cycle, which is also plain section switching.
+    ///
+    /// One function for both: with the draft row always present, "change the
+    /// destination" and "switch tabs" are the same act, and Marcello asked for
+    /// ⇥ to switch sections whether or not he is typing. Today IS included
+    /// here — it is a tab like any other to read — and `draftDestination`
+    /// handles the fact that nothing can be filed into it.
+    func cycleCollection(by offset: Int = 1) {
+        guard collections.count > 1 else { return }
+        let idx = collections.firstIndex { $0.id == activeCollectionID } ?? 0
+        let count = collections.count
+        let next = ((idx + offset) % count + count) % count
+        withAnimation(NotchAnimation.contentHug) {
+            activeCollectionID = collections[next].id
+        }
+        focusedItemID = nil
+        expandedItemID = nil
+    }
+
+    /// ⏎ — file the draft into the destination the row is pointing at.
+    /// The caret stays put afterwards, so a second to-do is just more typing.
+    @discardableResult
+    func commitDraft() -> Bool {
+        // NL-4: a recognized date phrase leaves the title and becomes a real
+        // due date, exactly as the old creation card did.
+        let parsed = NLDateParser.parse(draftTitle)
+        let title = parsed?.cleanedTitle ?? draftTitle
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let target = draftDestination?.id,
+              addItem(title: title, collectionID: target,
+                      urgency: .low, dueDate: parsed?.date) != nil else { return false }
+        draftTitle = ""
+        return true
+    }
+
+    /// While any non-browsing surface is up, the notch must not auto-collapse
+    /// under the user mid-typing. Checked by NotchController.triggerCollapse.
+    /// A caret in the draft row counts; the row merely existing does not.
+    var isPanelPinnedOpen: Bool {
+        panelMode != .browsing || showShortcuts || draftFocused
+    }
 
     /// QF: Quick Find state — query, cross-category matches, ↑↓ selection.
     @Published var findQuery = ""
@@ -113,88 +215,6 @@ final class TodoStore: ObservableObject {
         scheduleSave()
     }
 
-    /// Open the draft row.
-    ///
-    /// `fromGlobalShortcut` starts on the user's default category rather than
-    /// whatever was last browsed. Either way the destination can never be
-    /// Today: Today is a live query across every collection, not a bucket, so
-    /// nothing can be filed into it — starting there would make the row's
-    /// whole promise ("Return files it where you are") a lie.
-    func beginDraft(fromGlobalShortcut: Bool) {
-        let stayPut = !fromGlobalShortcut && !(activeCollection?.isSystemToday ?? true)
-        let target = stayPut ? activeCollectionID : defaultCreationCollectionID
-        withAnimation(NotchAnimation.contentHug) {
-            panelMode = .browsing
-            if let target { activeCollectionID = target }
-            isCreatingDraft = true
-        }
-        // The caret belongs to the draft, so nothing in the list below should
-        // still look selected or open underneath it.
-        focusedItemID = nil
-        expandedItemID = nil
-    }
-
-    /// The panel closed with a draft open: put the row away but KEEP the text.
-    ///
-    /// Close policy rule 2 in NotchController — an explicit outside click
-    /// always closes, in every mode, and "the creation draft survives (KB-11),
-    /// nothing is lost". The next ⌃⇧N reopens with the sentence still there.
-    ///
-    /// This can't ride on `setMode(.browsing)` the way the old creation card
-    /// did. That card WAS a mode, so closing the panel changed the mode and
-    /// swept it up; the draft row lives inside browsing mode, so `setMode`
-    /// hits its `panelMode != mode` guard and returns having done nothing —
-    /// which left a collapsed notch still believing it had a caret in it.
-    func suspendDraft() {
-        guard isCreatingDraft else { return }
-        isCreatingDraft = false
-    }
-
-    /// Escape: throw the draft away.
-    func cancelDraft() {
-        guard isCreatingDraft else { return }
-        withAnimation(NotchAnimation.contentHug) { isCreatingDraft = false }
-        draftTitle = ""
-    }
-
-    /// Tab: re-aim the draft at the next section, leaving the row alone.
-    ///
-    /// Today is skipped. The spec listed it in the cycle, but the same rule as
-    /// `beginDraft` applies — the active tab IS the destination, and Today
-    /// cannot be one, so cycling onto it would leave Return with nowhere
-    /// honest to file.
-    func cycleDraftDestination() {
-        let targets = collections.filter { !$0.isSystemToday }
-        guard targets.count > 1 else { return }
-        let current = targets.firstIndex { $0.id == activeCollectionID } ?? -1
-        withAnimation(NotchAnimation.contentHug) {
-            activeCollectionID = targets[(current + 1) % targets.count].id
-        }
-    }
-
-    /// Return: file the draft into whichever section is currently active.
-    @discardableResult
-    func commitDraft() -> Bool {
-        // NL-4: a recognized date phrase leaves the title and becomes a real
-        // due date, exactly as the old creation card did.
-        let parsed = NLDateParser.parse(draftTitle)
-        let title = parsed?.cleanedTitle ?? draftTitle
-        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              let target = activeCollectionID,
-              addItem(title: title, collectionID: target,
-                      urgency: .low, dueDate: parsed?.date) != nil else { return false }
-        draftTitle = ""
-        withAnimation(NotchAnimation.contentHug) { isCreatingDraft = false }
-        return true
-    }
-
-    /// While any non-browsing surface is up, the notch must not auto-collapse
-    /// under the user mid-typing. Checked by NotchController.triggerCollapse.
-    /// A live draft counts: it is browsing mode, but there is a caret in it.
-    var isPanelPinnedOpen: Bool {
-        panelMode != .browsing || showShortcuts || isCreatingDraft
-    }
-
     /// Leaving voice mode must also tear the capture session down, so mode
     /// changes route through here rather than assigning panelMode directly.
     func exitVoiceIfNeeded(_ newMode: TodoPanelMode) {
@@ -209,9 +229,9 @@ final class TodoStore: ObservableObject {
         withAnimation(NotchAnimation.contentHug) {
             panelMode = mode
             if mode == .find { findQuery = ""; findSelection = 0 }
-            // A surface that replaces the list also replaces the draft row
-            // sitting above it — there is nowhere for it to be pinned to.
-            if mode != .browsing { isCreatingDraft = false }
+            // A surface that replaces the list replaces the draft row sitting
+            // above it too — there is nothing left for the caret to be in.
+            if mode != .browsing { draftFocused = false; draftWantsFocus = false }
         }
     }
 
@@ -512,7 +532,11 @@ final class TodoStore: ObservableObject {
             target = firstUserCollection?.id ?? collectionID
         }
 
-        let next = (items.filter { $0.collectionID == target }.map(\.sortOrder).max() ?? -1) + 1
+        // TOP of the list, not the bottom. A new to-do appended below a long
+        // list lands off-screen, which reads as nothing having happened at all
+        // (Marcello, 2026-08-16). Ordering is the user's to change by dragging
+        // — but the thing they just made has to be the thing they can see.
+        let next = (items.filter { $0.collectionID == target }.map(\.sortOrder).min() ?? 0) - 1
         let item = TodoItem(
             id: UUID(), title: trimmed, collectionID: target,
             urgency: urgency, isCompleted: false, completedAt: nil,

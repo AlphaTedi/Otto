@@ -11,8 +11,9 @@ import SwiftUI
 //   browsing     arrows/space/return operate on rows; → ← expand/collapse
 //                details; a printable character seeds Quick Find (QF-2:
 //                "type anywhere, no shortcut needed"); ? opens the overlay.
-//                While the inline draft row holds the caret, ⇥ re-aims it at
-//                the next section, ⏎ files it, Esc throws it away.
+//                ⇥ switches section whether or not the draft row has the
+//                caret; when it does, ⏎ files the draft and Esc steps out of
+//                it keeping the text.
 //   find         all typing is routed manually into the query (the field
 //                is deliberately not a focused NSTextField — see
 //                QuickFindView); ↑↓ move the selection, ⏎ jumps, Esc backs out.
@@ -122,26 +123,35 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
         // those three keys can't be stolen out from under another field.
 
         @MainActor
+        private static func draftHasCaret() -> Bool {
+            guard let responder = NSApp.keyWindow?.firstResponder as? NSView else { return false }
+            return responder.identifier == HighlightingTitleField.fieldIdentifier
+        }
+
+        @MainActor
         private static func handleDraft(_ store: TodoStore, keyCode: UInt16) -> Bool {
-            guard store.isCreatingDraft,
-                  let responder = NSApp.keyWindow?.firstResponder as? NSView,
-                  responder.identifier == HighlightingTitleField.fieldIdentifier else { return false }
+            guard draftHasCaret() else { return false }
             switch keyCode {
-            case 36:                            // ⏎ — file it where we are
+            case 36:                            // ⏎ — file it, caret stays put
                 store.commitDraft()
                 return true
-            case 48:                            // ⇥ — re-aim at the next section
-                // Must be caught here: left alone, AppKit spends Tab on
-                // focus-ring traversal and the key never reaches us at all.
-                store.cycleDraftDestination()
-                return true
-            case 53:                            // Esc — discard
+            case 53:                            // Esc — step out, keep the text
                 NSApp.keyWindow?.makeFirstResponder(nil)
-                store.cancelDraft()
+                store.blurDraft()
                 return true
             default:
+                // ⇥ is NOT handled here: it means the same thing in the field
+                // and out of it, so it is handled once, below.
                 return false                    // typing flows to the field
             }
+        }
+
+        /// True when the caret is in any text control — the draft row, a
+        /// note, a step. Typing must reach it untouched.
+        @MainActor
+        private static func isEditingText() -> Bool {
+            let responder = NSApp.keyWindow?.firstResponder
+            return responder is NSTextView || responder is NSTextField
         }
 
         // MARK: Find mode (manual query editing)
@@ -192,13 +202,29 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
         private static func handleBrowsing(_ store: TodoStore, cmd: Bool, shift: Bool,
                                            option: Bool, control: Bool, chars: String,
                                            keyCode: UInt16, lower: String) -> Bool {
-            // The draft row owns ⏎ / ⇥ / Esc whenever it holds the caret.
+            // ⇥ switches sections, full stop — while typing a draft (where it
+            // re-aims the destination) and while just reading a list (where it
+            // is plain tab switching). Those are the same act now that the
+            // draft row is always on screen, so they are one key with one
+            // meaning (Marcello, 2026-08-16). ⇧⇥ goes back.
+            //
+            // It has to be caught here: left alone, AppKit spends Tab on
+            // focus-ring traversal and it never reaches us at all. The one
+            // exception is a note or step field, where the caret is inside a
+            // to-do rather than in the panel, and stealing ⇥ would be reaching
+            // over the user's shoulder.
+            if keyCode == 48, !cmd, !option, !control,
+               draftHasCaret() || !isEditingText() {
+                store.cycleCollection(by: shift ? -1 : 1)
+                return true
+            }
+
+            // The draft row owns ⏎ / Esc whenever it holds the caret.
             if handleDraft(store, keyCode: keyCode) { return true }
 
             // While a text control has focus (note field, add-step), don't
             // steal keys; Esc hands focus back to the list.
-            if let responder = NSApp.keyWindow?.firstResponder,
-               responder is NSTextView || responder is NSTextField {
+            if isEditingText() {
                 if cmd, lower == "n" {
                     NotchController.shared.openCreate()
                     return true

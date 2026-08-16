@@ -95,8 +95,11 @@ as a click, so it can't feel like a different kind of motion.
   row exit and panel shrink fire together.
 - **In-panel modes** (`TodoPanelMode`): `browsing`, `newCategory`, `find`, `voice`.
   No floating windows.
-- **Inline creation** (there is no `create` mode any more): `⌃⇧N` / `⌘N` pins an empty
-  draft row above the list, `⇥` re-aims it at the next section, `⏎` files it there.
+- **Inline creation** (there is no `create` mode any more): a draft row is ALWAYS at the
+  top of the list — it is the only visible way to make a to-do. `⌃⇧N` / `⌘N` put the
+  caret in it, `⇥` switches section (caret or not), `⏎` files it and leaves the caret
+  for the next one. Only the CARET pins the panel open; the row merely existing must
+  not stop the notch auto-collapsing.
   The row lives OUTSIDE the `.id(collection.id)` subtree in `TodoBrowsingView` — that
   placement is the feature, since everything inside is rebuilt on a tab switch and a
   draft in there would lose its caret on the very keystroke meant to leave it alone.
@@ -155,7 +158,10 @@ prioritise other work. Re-enable with one line or
 | 07-25 | Calendar: **EventKit, not Google OAuth** | OAuth needs a Google Cloud client ID only Marcello can create; EventKit reaches the same events with zero setup. Protocol seam left in place for OAuth later |
 | 07-25 | Meeting alerts fire for **all accepted meetings**, Join only when a link is detected | You can miss an in-person meeting just as easily |
 | 08-16 | Creation card deleted; to-dos are typed into a draft row in the list | One less layer for the app's most common action; the card was also detached from the section it filed into |
-| 08-16 | `⇥` cycles the draft's destination, skipping Today | The active tab IS the destination, and Today is a live query nothing can be filed into |
+| 08-16 | Draft row is permanent, not summoned by `⌃⇧N` | Opening the notch showed no way at all to create a to-do; same reasoning as the always-open trailing step row, one level up |
+| 08-16 | `⇥` switches section always, Today included | With the row always present, "re-aim the draft" and "switch tabs" are the same act; `draftDestination` redirects Today to the default section and the row wears that section's colour so it is visible |
+| 08-16 | New to-dos land at the TOP of their section | Appended below a long list they were off-screen, which reads as nothing having happened |
+| 08-16 | Esc in the draft steps out and KEEPS the text | Esc backs out one level everywhere else; a second Esc closes the notch, and a half-written to-do survives both |
 | 08-16 | Tab-row "+" moved to the end and de-emphasised; it now means "new section" | With creation inline there is no to-do surface for it to open; "•••" went too, since every item on it is already on each tab's context menu |
 | 08-16 | Priority dropped from creation (still settable afterwards) | It was a second decision demanded before the first one was written down |
 
