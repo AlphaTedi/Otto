@@ -900,7 +900,7 @@ private struct InlineDraftRow: View {
         // Panel padding ×2, the row's own inset ×2, the checkbox and its gap,
         // and the ⇥ badge. Estimated slightly narrow so the line count rounds
         // up rather than clipping the last line.
-        let width = max(120, panelWidth - CGFloat(DSSpacing.panelPadding) * 2 - 20 - 24 - 34)
+        let width = max(120, panelWidth - CGFloat(DSSpacing.panelPadding) * 2 - 20 - 24 - 112)
         let text = store.draftTitle.isEmpty ? " " : store.draftTitle
         let measured = NSAttributedString(
             string: text, attributes: [.font: NSFont.systemFont(ofSize: DSFont.todoTitleSize)]
@@ -950,12 +950,26 @@ private struct InlineDraftRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Only once the row is in play — a permanent badge on a
-                // permanent row is furniture nobody reads.
-                ShortcutHintBadge(text: "\u{21E5}")
-                    .padding(.top, TodoItemRow.firstLineInset)
-                    .opacity(focused || hover ? 1 : 0)
-                    .help(L10n.t("todo.sc.cycleDestination"))
+                // Spelled out, not a bare ⇥. The glyph alone was "not really
+                // clear enough, and it's really hard to understand what you
+                // can do with it" (Marcello, 2026-08-16) — a keyboard hint
+                // that has to be decoded is not a hint. The word plus what it
+                // does needs no decoding, and there is room for it now that
+                // the row spans the panel.
+                //
+                // Always present, just quieter when idle: this is the only
+                // thing telling you the row has a destination at all, so
+                // hiding it until hover hid the whole feature.
+                HStack(spacing: 5) {
+                    ShortcutHintBadge(text: L10n.t("key.tab"))
+                    Text(L10n.t("todo.switchSection"))
+                        .font(.system(size: 10))
+                        .foregroundStyle(DSColor.textFaint)
+                        .fixedSize()
+                }
+                .padding(.top, TodoItemRow.firstLineInset)
+                .opacity(focused || hover ? 1 : 0.5)
+                .help(L10n.t("todo.switchSection"))
             }
 
             // NL-3: live resolved-date caption, aligned with the title.
@@ -1504,7 +1518,7 @@ private struct ShortcutsOverlay: View {
         ("\u{21A9}", "todo.sc.toggleComplete"),
         ("\u{2192} \u{2190}", "todo.sc.expandRow"),
         ("\u{2318}N", "todo.sc.newTodo"),
-        ("\u{21E5}", "todo.sc.cycleDestination"),
+        ("\u{21E5}", "todo.switchSection"),
         ("\u{2318}1\u{2013}9 / \u{2318}", "todo.sc.switchCollection"),
         ("\u{2325}\u{2191}\u{2193}", "todo.sc.reorder"),
         ("\u{21E7}\u{2318}M", "todo.sc.moveItem"),

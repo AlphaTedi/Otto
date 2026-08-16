@@ -97,9 +97,11 @@ as a click, so it can't feel like a different kind of motion.
   No floating windows.
 - **Inline creation** (there is no `create` mode any more): a draft row is ALWAYS at the
   top of the list — it is the only visible way to make a to-do. `⌃⇧N` / `⌘N` put the
-  caret in it, `⇥` switches section (caret or not), `⏎` files it and leaves the caret
-  for the next one. Only the CARET pins the panel open; the row merely existing must
-  not stop the notch auto-collapsing.
+  caret in it, `⇥` switches section (caret or not), `⏎` files it and hands the caret
+  back. Only the CARET pins the panel open; the row merely existing must not stop the
+  notch auto-collapsing. `blurDraft()` resigns first responder for real — `draftFocused`
+  is reported BY the text view, not obeyed by it, so lowering the flag alone leaves a
+  caret blinking in a field the app thinks is unfocused.
   The row lives OUTSIDE the `.id(collection.id)` subtree in `TodoBrowsingView` — that
   placement is the feature, since everything inside is rebuilt on a tab switch and a
   draft in there would lose its caret on the very keystroke meant to leave it alone.
@@ -162,6 +164,8 @@ prioritise other work. Re-enable with one line or
 | 08-16 | `⇥` switches section always, Today included | With the row always present, "re-aim the draft" and "switch tabs" are the same act; `draftDestination` redirects Today to the default section and the row wears that section's colour so it is visible |
 | 08-16 | New to-dos land at the TOP of their section | Appended below a long list they were off-screen, which reads as nothing having happened |
 | 08-16 | Esc in the draft steps out and KEEPS the text | Esc backs out one level everywhere else; a second Esc closes the notch, and a half-written to-do survives both |
+| 08-16 | `⏎` releases the caret instead of holding it for the next to-do | Writing one to-do then closing the notch cost two Escapes, one just to leave a finished field |
+| 08-16 | Clicking dead panel space blurs the draft as well as ending a row edit | "Stop typing" cannot mean one of the two live editors and not the other |
 | 08-16 | Tab-row "+" moved to the end and de-emphasised; it now means "new section" | With creation inline there is no to-do surface for it to open; "•••" went too, since every item on it is already on each tab's context menu |
 | 08-16 | Priority dropped from creation (still settable afterwards) | It was a second decision demanded before the first one was written down |
 

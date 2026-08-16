@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import UniformTypeIdentifiers
 
@@ -130,15 +131,25 @@ final class TodoStore: ObservableObject {
         draftWantsFocus = true
     }
 
-    /// Escape: step out of the field, keeping what was typed.
+    /// Step out of the draft field, keeping what was typed.
     ///
     /// Deliberately not a discard. Escape backs out ONE level everywhere else
     /// in this panel (close policy rule 3), so here it hands the caret back to
     /// the list and a second Escape closes the notch — two presses to get all
-    /// the way out, and a half-written to-do survives both.
+    /// the way out, and a half-written to-do survives both. Clicking dead
+    /// space in the panel lands here too.
+    ///
+    /// It actually resigns first responder rather than only lowering a flag.
+    /// `draftFocused` is REPORTED by the text view, not obeyed by it, so
+    /// clearing it alone left the caret blinking in a field the app had
+    /// already decided was unfocused (Marcello, 2026-08-16).
     func blurDraft() {
         draftWantsFocus = false
         draftFocused = false
+        guard let window = NSApp.keyWindow,
+              (window.firstResponder as? NSView)?.identifier
+                  == HighlightingTitleField.fieldIdentifier else { return }
+        window.makeFirstResponder(nil)
     }
 
     /// The panel closed: the caret is gone with it, but the text is not.
@@ -168,8 +179,15 @@ final class TodoStore: ObservableObject {
         expandedItemID = nil
     }
 
-    /// ⏎ — file the draft into the destination the row is pointing at.
-    /// The caret stays put afterwards, so a second to-do is just more typing.
+    /// ⏎ — file the draft into the destination the row is pointing at, and
+    /// hand the caret back.
+    ///
+    /// Keeping focus so a second to-do was "just more typing" cost more than
+    /// it saved: writing one to-do and then closing the notch took two
+    /// Escapes, one to leave a field the user had already finished with
+    /// (Marcello, 2026-08-16). Committing is the end of the sentence, so the
+    /// row returns to its resting placeholder state and a single Escape now
+    /// closes the panel. ⌃⇧N is one keystroke away for the next one.
     @discardableResult
     func commitDraft() -> Bool {
         // NL-4: a recognized date phrase leaves the title and becomes a real
@@ -181,6 +199,7 @@ final class TodoStore: ObservableObject {
               addItem(title: title, collectionID: target,
                       urgency: .low, dueDate: parsed?.date) != nil else { return false }
         draftTitle = ""
+        blurDraft()
         return true
     }
 
@@ -258,7 +277,11 @@ final class TodoStore: ObservableObject {
 
     // MARK: - Notes & checklist (NC-1..4)
 
-    /// End any in-progress row edit, committing it.
+    /// End whatever is being typed in the panel, committing it.
+    ///
+    /// Two different edits can be live: a row's title, and the draft row at
+    /// the top. Clicking dead space means "stop typing" for both — singling
+    /// out one of them is the bug this exists to prevent.
     ///
     /// Closing the row is what actually releases the caret: the editor only
     /// exists while a row is expanded, so collapsing removes the focused
@@ -266,6 +289,7 @@ final class TodoStore: ObservableObject {
     /// the way out. One path, so clicking off a field can never diverge from
     /// what Return and clicking-the-row-shut already do.
     func endEditing() {
+        blurDraft()
         guard expandedItemID != nil else { return }
         withAnimation(NotchAnimation.contentHug) { expandedItemID = nil }
     }
