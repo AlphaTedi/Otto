@@ -170,6 +170,8 @@ prioritise other work. Re-enable with one line or
 | 08-16 | `WordKeycap` for named keys (Tab, Esc), separate from `Keycap` | `Keycap` draws one cap per character by design ("⌘↩" is two keys), so "tab" rendered as t·a·b and read as a three-key chord |
 | 08-16 | Tab ORDER alone decides where `⌃⇧N` files; the FB8 "set as default" item is gone | Two mechanisms for one outcome, and the invisible one won — dragging Work to the front still left the shortcut on Personal with nothing on screen explaining why |
 | 08-16 | Tab drag uses the indicator-only (Arc) model, like the to-do list | Live re-slotting in `dropEntered` shifts every tab sideways under the cursor, which fires the next `dropEntered` — the tabs flip-flopped for as long as the drag was held |
+| 08-16 | A category tab is NOT a `Button` | A SwiftUI Button on macOS claims the mouse-down, so an `.onDrag` beside it never starts a drag session at all. This is why tabs could not be dragged while to-do rows — plain views with `.contentShape` + `.onTapGesture` + `.onDrag` — always could |
+| 08-16 | The tab scroller is `.scrollDisabled` unless the tabs overflow | A horizontal ScrollView and a sideways drag want the same gesture and the ScrollView wins; while every tab is visible the scroller could only cost the drag |
 | 08-16 | Tab-row "+" moved to the end and de-emphasised; it now means "new section" | With creation inline there is no to-do surface for it to open; "•••" went too, since every item on it is already on each tab's context menu |
 | 08-16 | Priority dropped from creation (still settable afterwards) | It was a second decision demanded before the first one was written down |
 

@@ -110,6 +110,23 @@ private struct MoreBelowPill: View {
     }
 }
 
+/// Width of the tab row's content, and of the window it sits in. The two
+/// together answer the only question the scroller has: does it need to scroll
+/// at all?
+private struct TabsContentWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct TabsViewportWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 private struct SectionHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
@@ -294,6 +311,16 @@ private struct TodoTabRow: View {
     @State private var dropBeforeCollectionID: UUID?
     /// True when the drop would land past the last tab.
     @State private var dropCollectionAtEnd = false
+    @State private var tabsContentWidth: CGFloat = 0
+    @State private var tabsViewportWidth: CGFloat = 0
+
+    /// Only scroll if there is genuinely something off the edge. A horizontal
+    /// ScrollView and a sideways drag compete for the same gesture and the
+    /// ScrollView wins, so an always-on scroller costs the drag and buys
+    /// nothing while every tab is already visible.
+    private var tabsOverflow: Bool {
+        tabsViewportWidth > 0 && tabsContentWidth > tabsViewportWidth + 1
+    }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -312,22 +339,33 @@ private struct TodoTabRow: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(Array(store.collections.enumerated()), id: \.element.id) { index, collection in
-                    Button {
-                        store.selectCollection(collection.id)
-                    } label: {
-                        CategoryTabChip(
-                            title: collection.name,
-                            categoryColor: collection.color,
-                            isActive: store.panelMode == .browsing
-                                && collection.id == store.activeCollectionID,
-                            remaining: store.remainingCount(for: collection)
-                        )
-                        .contentShape(RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    // Drag a tab onto another to swap places. Only category
-                    // chips participate — the "+" chips are structural, never
-                    // movable (Marcello, 2026-07-23).
+                    // NOT a Button, deliberately — and this is the whole
+                    // reason tabs could not be dragged at all.
+                    //
+                    // A SwiftUI Button on macOS installs its own press gesture
+                    // that claims the mouse-down and everything after it, so an
+                    // `.onDrag` attached alongside never gets to begin a drag
+                    // session. The chip was a Button; the to-do row, which has
+                    // always dragged fine, is a plain view with
+                    // `.contentShape` + `.onTapGesture` + `.onDrag`. Same
+                    // recipe here now.
+                    //
+                    // Tapping still selects, and the semantics are restored
+                    // explicitly below so VoiceOver still calls it a button.
+                    CategoryTabChip(
+                        title: collection.name,
+                        categoryColor: collection.color,
+                        isActive: store.panelMode == .browsing
+                            && collection.id == store.activeCollectionID,
+                        remaining: store.remainingCount(for: collection)
+                    )
+                    .contentShape(RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous))
+                    .onTapGesture { store.selectCollection(collection.id) }
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityLabel(collection.name)
+                    // Drag a tab onto another to change the order. Only
+                    // category chips participate — the "+" is structural and
+                    // never moves (Marcello, 2026-07-23).
                     .opacity(draggedCollectionID == collection.id ? 0.4 : 1)
                     .onDrag {
                         draggedCollectionID = collection.id
@@ -440,6 +478,12 @@ private struct TodoTabRow: View {
             }
             .animation(NotchAnimation.hintFade, value: dropBeforeCollectionID)
             .animation(NotchAnimation.hintFade, value: dropCollectionAtEnd)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear.preference(key: TabsContentWidthKey.self,
+                                           value: proxy.size.width)
+                }
+            )
             // No top padding here. It used to reserve headroom for the
             // ⌘-held index badges (offset y:-8) drawn above each chip; the
             // badges are gone, but the padding stayed and pushed every chip
@@ -447,6 +491,15 @@ private struct TodoTabRow: View {
             // matching offset — the avatar visibly floating above the tabs'
             // midline (Marcello, 2026-08-09).
         }
+        .scrollDisabled(!tabsOverflow)
+        .onPreferenceChange(TabsContentWidthKey.self) { tabsContentWidth = $0 }
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(key: TabsViewportWidthKey.self,
+                                       value: proxy.size.width)
+            }
+        )
+        .onPreferenceChange(TabsViewportWidthKey.self) { tabsViewportWidth = $0 }
     }
 }
 
