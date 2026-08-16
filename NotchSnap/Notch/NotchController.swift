@@ -304,6 +304,9 @@ class NotchController: ObservableObject {
                 state = .idle
             }
             AppState.shared.isNotchExpanded = false
+            // The draft row's home just went away. Put it away with it, but
+            // keep what was typed — policy rule 2.
+            TodoStore.shared.suspendDraft()
             autoCollapseTimer?.invalidate()
             autoCollapseTimer = nil
 
@@ -466,6 +469,7 @@ class NotchController: ObservableObject {
             contentVisible = false
         }
         AppState.shared.isNotchExpanded = false
+        TodoStore.shared.suspendDraft()
         autoCollapseTimer?.invalidate()
         autoCollapseTimer = nil
 
@@ -1027,21 +1031,24 @@ class NotchController: ObservableObject {
 
     // MARK: - To-do creation entry points (design PRD §3)
 
-    /// KB-3: ⌘N / ⌥Space land on the in-panel "+" tab — one creation
-    /// surface, no floating window.
+    /// KB-3: ⌘N / ⌥Space put a draft row at the top of the section already on
+    /// screen. No card, no modal — the row appears inside the list it is
+    /// about to join (Marcello's spec, 2026-08-16).
     func openCreate() {
-        TodoStore.shared.setMode(.create)
+        TodoStore.shared.beginDraft(fromGlobalShortcut: false)
         triggerExpand()
         makeKeyForTyping()
     }
 
-    /// FB8: a GLOBAL "new to-do" shortcut (⌃⇧N / ⌥⌘N from anywhere) — opens
-    /// straight into the creation page on the user's default category, never
-    /// on whatever was last browsed.
+    /// FB8: a GLOBAL "new to-do" shortcut (⌃⇧N / ⌥⌘N from anywhere) starts the
+    /// draft on the user's default category, never on whatever was last
+    /// browsed — someone summoning the notch from another app has no idea
+    /// which tab it was left on.
     func openCreateFresh() {
-        TodoStore.shared.prepareGlobalCreateDraft()
         cameFromGlobalShortcut = true
-        openCreate()
+        TodoStore.shared.beginDraft(fromGlobalShortcut: true)
+        triggerExpand()
+        makeKeyForTyping()
     }
 
     /// True while the current creation surface was summoned by the global
@@ -1061,10 +1068,11 @@ class NotchController: ObservableObject {
         }
     }
 
-    /// ⌥Space toggles: already on the "+" tab → dismiss; otherwise open it.
+    /// ⌥Space toggles: a draft is already open → throw it away and close;
+    /// otherwise start one.
     func toggleCreate() {
-        if state == .expanded && TodoStore.shared.panelMode == .create {
-            TodoStore.shared.setMode(.browsing)
+        if state == .expanded && TodoStore.shared.isCreatingDraft {
+            TodoStore.shared.cancelDraft()
             panel?.resignKey()
             triggerCollapse()
         } else {

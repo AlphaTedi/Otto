@@ -223,10 +223,9 @@ struct TodoTabView: View {
         ZStack(alignment: .topLeading) {
             VStack(alignment: .leading, spacing: 0) {
                 // The tab row lives OUTSIDE the mode switch: its identity is
-                // stable across browsing ↔ create, so toggling "+" swaps only
-                // the content below — same motion as switching categories.
-                if store.panelMode == .browsing || store.panelMode == .create
-                    || store.panelMode == .voice {
+                // stable, so a mode swap changes only the content below —
+                // same motion as switching categories.
+                if store.panelMode == .browsing || store.panelMode == .voice {
                     TodoTabRow()
                         .notchEntry(index: 0)
                 }
@@ -239,9 +238,6 @@ struct TodoTabView: View {
                     switch store.panelMode {
                     case .browsing:
                         TodoBrowsingView()
-                            .transition(modeTransition)
-                    case .create:
-                        TodoCreateView()
                             .transition(modeTransition)
                     case .newCategory:
                         CategoryFormView()
@@ -264,13 +260,22 @@ struct TodoTabView: View {
     }
 }
 
-// MARK: - Tab row — CreationTabChip + CategoryTabChips (design PRD §3.1)
+// MARK: - Tab row — CategoryTabChips + NewSectionButton (design PRD §3.1)
 //
 // Drift table §10: a tab is label + its remaining count, NOTHING else (#4);
 // badges exist only while ⌘ is held (#2); the active tab wears its own
 // category color at regular weight (#1). The count replaced the progress
 // ring on 2026-07-23 — see CategoryTabChip. Tabs drag to reorder; the "+"
-// chips are structural and never move.
+// is structural and never moves.
+//
+// The "+" changed both position and meaning on 2026-08-16. It used to lead
+// the row as a filled chip meaning "new to-do", which was the most prominent
+// thing in the panel; now that a to-do is made by typing into the list
+// itself, the only thing left for a button to create is a SECTION. So it
+// moved to the end of the tabs and lost its fill — it is ordinary chrome
+// now, not the primary action. The "•••" overflow went with it: everything
+// it held (set default, reorder, delete) is already on each tab's own
+// context menu, so it was a second door to one room.
 
 private struct TodoTabRow: View {
     @ObservedObject private var store = TodoStore.shared
@@ -293,21 +298,6 @@ private struct TodoTabRow: View {
     private var tabScroller: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                Button {
-                    if store.panelMode == .create {
-                        store.setMode(.browsing)
-                    } else {
-                        store.presetDraftToActiveCollection()
-                        store.setMode(.create)
-                        NotchController.shared.focusPanel()
-                    }
-                } label: {
-                    CreationTabChip(isActive: store.panelMode == .create)
-                        .contentShape(RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .help(L10n.t("todo.newTodo"))
-
                 ForEach(Array(store.collections.enumerated()), id: \.element.id) { index, collection in
                     Button {
                         store.selectCollection(collection.id)
@@ -409,12 +399,13 @@ private struct TodoTabRow: View {
                     }
                 }
 
-                // CT-5: exactly ONE "+" in the tab row, and it always means
-                // "create a to-do". Category management lives behind this
-                // overflow control instead of a second plus, which read as
-                // ambiguous. Trailing-aligned per the mockup.
-                Spacer(minLength: 8)
-                CategoryOverflowMenu()
+                // CT-5 still holds — exactly ONE "+" in the row — but it now
+                // means "new section", and sits after the last tab rather
+                // than in front of the first. The extra 4pt is deliberate: at
+                // the tabs' own 8pt spacing it read as a fourth tab rather
+                // than an action, which is the one risk of putting it here.
+                NewSectionButton()
+                    .padding(.leading, 4)
             }
             // No top padding here. It used to reserve headroom for the
             // ⌘-held index badges (offset y:-8) drawn above each chip; the
@@ -477,58 +468,35 @@ private struct VoiceChip: View {
     }
 }
 
-// MARK: - CategoryOverflowMenu — the "..." control (CT-5)
+// MARK: - NewSectionButton — the "+" at the end of the tabs
 //
-// Everything category-level lives here: creating one, reordering, choosing the
-// default, deleting. Keeping it out of the tab row means the row has exactly
-// one "+", which unambiguously means "new to-do".
+// A plain glyph at the same weight as any other piece of chrome, not a filled
+// chip. Creating a section is a rare, structural act; it should be findable
+// and never louder than the tabs it sits beside. Everything ELSE about a
+// section — default, reorder, delete — is on that section's own right-click
+// menu, where it applies to the tab you are pointing at rather than to
+// whichever one happened to be active.
 
-private struct CategoryOverflowMenu: View {
-    @ObservedObject private var store = TodoStore.shared
+private struct NewSectionButton: View {
     @State private var hover = false
 
     var body: some View {
-        Menu {
-            Button(L10n.t("todo.newCollection") + "\u{2026}") {
-                store.setMode(.newCategory)
-                NotchController.shared.focusPanel()
-            }
-            if let active = store.activeCollection {
-                Divider()
-                Text(active.name)
-                if !active.isSystemToday {
-                    Button(L10n.t("todo.setDefault")) {
-                        store.setDefaultCollection(active.id)
-                    }
-                }
-                let index = store.collections.firstIndex { $0.id == active.id } ?? 0
-                Button(L10n.t("action.moveLeft")) {
-                    store.moveCollection(active.id, by: -1)
-                }
-                .disabled(index == 0)
-                Button(L10n.t("action.moveRight")) {
-                    store.moveCollection(active.id, by: 1)
-                }
-                .disabled(index == store.collections.count - 1)
-                if !active.isSystemToday {
-                    Divider()
-                    Button(L10n.t("action.delete"), role: .destructive) {
-                        store.deleteCollection(active.id)
-                    }
-                }
-            }
+        Button {
+            TodoStore.shared.setMode(.newCategory)
+            NotchController.shared.focusPanel()
         } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(hover ? DSColor.textPrimary : DSColor.textSecondary)
+            Image(systemName: "plus")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(hover ? DSColor.textPrimary : DSColor.textFaint)
                 .frame(width: 20, height: 20)
                 .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .onHover { hover = $0 }
-        .help(L10n.t("todo.manageCategories"))
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(NotchAnimation.hintFade) { hover = hovering }
+        }
+        .help(L10n.t("todo.newCollection"))
+        .accessibilityLabel(L10n.t("todo.newCollection"))
     }
 }
 
@@ -597,14 +565,26 @@ struct TodoBrowsingView: View {
     /// fraction capped at 720, while the silhouette could only show ~539pt of
     /// content — so the region cheerfully laid out rows the notch could never
     /// display (Marcello, 2026-08-05). One source now, two consumers.
-    private static var maxRegion: CGFloat {
+    ///
+    /// `draftInset` is the space the pinned draft row is taking above the
+    /// list. It has to come out of the same budget: the draft is chrome from
+    /// the scroll region's point of view, and a region that ignored it would
+    /// lay out rows in the strip the draft is standing on.
+    private static func maxRegion(draftInset: CGFloat) -> CGFloat {
         // Panel top inset + tab row + its top padding + the two paddings under
         // it + the panel's bottom inset.
         let chrome: CGFloat = 14 + 34 + 8
             + DSSpacing.tabRowBottomPadding + DSSpacing.tabRowBottomMargin
             + DSSpacing.panelPadding
-        return max(240, AppState.shared.maxTodoContentHeight - chrome)
+        return max(200, AppState.shared.maxTodoContentHeight - chrome - draftInset)
     }
+
+    /// One line of draft plus its padding and the gap under it. An estimate,
+    /// not a measurement: a draft that has wrapped to three lines is both rare
+    /// and short-lived, and the cost of being a little conservative here is
+    /// one row of scroll, while the cost of measuring is a layout round-trip
+    /// on every keystroke.
+    private static let draftRowAllowance: CGFloat = 54
     private static let inlineRowThreshold = 8
     private static let scrollSpace = "todoScrollRegion"
     private static let bottomAnchor = "todoScrollBottom"
@@ -620,16 +600,30 @@ struct TodoBrowsingView: View {
     @State private var dropAtEnd = false
 
     var body: some View {
-        // §8.3 category switch: the id() swap transitions the whole block
-        // while the panel height animates — content and container together.
-        if let collection = store.activeCollection {
-            // Same jump guard as the mode switch: the id() swap keeps two
-            // copies alive mid-transition; overlap them instead of stacking.
-            ZStack(alignment: .topLeading) {
-                browsingBody(for: collection)
-                    .id(collection.id)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .transition(.opacity)   // FB2: same in-place crossfade
+        VStack(alignment: .leading, spacing: 0) {
+            // The draft row sits OUTSIDE the `.id(collection.id)` block below,
+            // and that placement is the whole feature. Everything inside that
+            // block is torn down and rebuilt when the active section changes;
+            // a draft living in there would lose its caret — and visibly
+            // crossfade — on the very keystroke (Tab) whose entire purpose is
+            // to leave it alone. Out here it is a sibling of the list, so Tab
+            // swaps what is underneath it and nothing else.
+            if store.isCreatingDraft, let collection = store.activeCollection {
+                InlineDraftRow(accent: collection.color)
+                    .transition(.opacity.combined(with: .offset(y: -6)))
+            }
+
+            // §8.3 category switch: the id() swap transitions the whole block
+            // while the panel height animates — content and container together.
+            if let collection = store.activeCollection {
+                // Same jump guard as the mode switch: the id() swap keeps two
+                // copies alive mid-transition; overlap them instead of stacking.
+                ZStack(alignment: .topLeading) {
+                    browsingBody(for: collection)
+                        .id(collection.id)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .transition(.opacity)   // FB2: same in-place crossfade
+                }
             }
         }
     }
@@ -656,7 +650,10 @@ struct TodoBrowsingView: View {
         } else {
             // Tall: one capped ScrollView so list + Completed scroll as a
             // single unit and the panel height stops at the budget.
-            let viewport = min(regionNaturalHeight, Self.maxRegion)
+            let budget = Self.maxRegion(
+                draftInset: store.isCreatingDraft ? Self.draftRowAllowance : 0
+            )
+            let viewport = min(regionNaturalHeight, budget)
             let hasBelow = regionNaturalHeight - scrollOffset - viewport > 2
             // Indicators ON. They were hidden, so a capped region gave the eye
             // nothing at all to say "there is more" — rows below the fold and
@@ -862,6 +859,113 @@ struct TodoBrowsingView: View {
     }
 }
 
+// MARK: - InlineDraftRow — the to-do being typed
+//
+// The replacement for the creation card. It is deliberately built out of the
+// SAME parts as a real row — checkbox at 14pt, the same leading gap, the same
+// title type — because the point of typing in place is that you can see the
+// thing you are making take its final shape. A differently-shaped input box
+// would put the old card back, just smaller.
+//
+// Two things separate it from the rows below:
+//
+//  1. A wash of the destination section's own color, no border. The spec's
+//     lean was a fixed purple; taking the tint from the active section
+//     instead costs nothing (it is the existing tab color, not a new token)
+//     and makes Tab legible — the row visibly changes allegiance as the
+//     destination changes, which is otherwise only readable off the tab bar.
+//  2. Real margin underneath, so it is not glued to the first real item.
+//
+// The trailing ⇥ is the only hint that Tab does anything. It needs no label
+// for the same reason the ↩ badge on a focused row needs none.
+
+private struct InlineDraftRow: View {
+    /// The destination section's color — both the tint and the checkbox
+    /// stroke, so the row wears where it is going.
+    let accent: Color
+
+    @ObservedObject private var store = TodoStore.shared
+
+    private var parsed: NLDateMatch? { NLDateParser.parse(store.draftTitle) }
+
+    /// FB5, inherited from the creation card: an NSViewRepresentable's own
+    /// sizeThatFits is NOT re-invoked on a pure content change, so the height
+    /// has to be computed here — where `draftTitle` is observed — or the
+    /// field stays stuck at one line while the text wraps out of sight.
+    private var fieldHeight: CGFloat {
+        let panelWidth = CGFloat(NotchController.shared.expandedWidth)
+        // Panel padding ×2, the row's own inset ×2, the checkbox and its gap,
+        // and the ⇥ badge. Estimated slightly narrow so the line count rounds
+        // up rather than clipping the last line.
+        let width = max(120, panelWidth - CGFloat(DSSpacing.panelPadding) * 2 - 16 - 24 - 32)
+        let text = store.draftTitle.isEmpty ? " " : store.draftTitle
+        let measured = NSAttributedString(
+            string: text, attributes: [.font: NSFont.systemFont(ofSize: DSFont.todoTitleSize)]
+        ).boundingRect(
+            with: NSSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        ).height
+        return max(HighlightingTitleField.lineHeight,
+                   min(ceil(measured), HighlightingTitleField.maxHeight))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .top, spacing: DSSpacing.rowInternalGap) {
+                // Inert on purpose: there is nothing to complete until the row
+                // exists. It is here so the draft READS as a to-do rather than
+                // as a text box that happens to be in a list.
+                RoundedRectangle(cornerRadius: DSRadius.checkboxCorner, style: .continuous)
+                    .strokeBorder(accent.opacity(0.55), lineWidth: 1.5)
+                    .frame(width: 14, height: 14)
+                    .padding(.top, TodoItemRow.firstLineInset)
+
+                HighlightingTitleField(
+                    text: $store.draftTitle,
+                    // NL-2: a recognized date phrase colors inline, in place,
+                    // and is stripped from the title only on commit.
+                    highlightRange: parsed?.nsRange
+                )
+                .frame(height: fieldHeight)
+                // NSTextView has no placeholder of its own.
+                .overlay(alignment: .topLeading) {
+                    if store.draftTitle.isEmpty {
+                        Text(L10n.t("todo.titlePlaceholder"))
+                            .font(DSFont.todoTitle)
+                            .foregroundStyle(DSColor.textHint)
+                            .allowsHitTesting(false)
+                    }
+                }
+
+                ShortcutHintBadge(text: "\u{21E5}")
+                    .padding(.top, TodoItemRow.firstLineInset)
+                    .help(L10n.t("todo.sc.cycleDestination"))
+            }
+
+            // NL-3: live resolved-date caption, aligned with the title.
+            if let parsed {
+                Text("\u{2192} \(parsed.display)")
+                    .font(.system(size: 10))
+                    .foregroundStyle(DSColor.textFaint)
+                    .padding(.leading, 14 + DSSpacing.rowInternalGap)
+                    .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
+                .fill(accent.opacity(0.13))
+        )
+        // Detachment is whitespace, not a rule: the tint already says "this
+        // is not one of the list items", so a divider as well would be two
+        // devices doing one job.
+        .padding(.bottom, 10)
+        .animation(NotchAnimation.hintFade, value: parsed?.display)
+        .animation(NotchAnimation.contentHug, value: accent)
+    }
+}
+
 // MARK: - Drag-to-reorder (TD-5)
 
 /// Arc's model: dragging only ever MOVES THE INDICATOR. The list itself is
@@ -947,7 +1051,6 @@ private struct TodoItemRow: View {
     /// Hover on the urgency dot alone — drives the priority tooltip.
     @State private var urgencyHover = false
     @State private var hover = false
-    @State private var newStep = ""
     /// Title editing. `nil` = not editing; a String = the live draft.
     /// Held separately from the item so an abandoned edit (Escape, clicking
     /// away) never touches the stored title.
@@ -990,7 +1093,7 @@ private struct TodoItemRow: View {
     // indicators sit on THAT line via a small top inset, so a title that
     // wraps to several lines keeps the checkbox pinned to the top-left
     // instead of floating to the vertical middle (FB1, Marcello 2026-07-23).
-    private static let firstLineInset: CGFloat = 1.5
+    fileprivate static let firstLineInset: CGFloat = 1.5
 
     private var titleRow: some View {
         HStack(alignment: .top, spacing: DSSpacing.rowInternalGap) {
@@ -1165,77 +1268,61 @@ private struct TodoItemRow: View {
         titleDraft = nil
     }
 
-    // MARK: NC expanded details — note with left rule, sub-checklist (§7)
+    // MARK: NC expanded details — note, then steps (§7)
+    //
+    // Notes and steps used to share one block: a note field, then a checklist
+    // hanging off the same indent with no separation, so a to-do's prose and
+    // its sub-tasks read as one undifferentiated column. They are two
+    // different kinds of thing — one is a paragraph, the other is a list you
+    // tick off — and each now gets its own connector rule with real air
+    // between them.
 
     private var expandedDetails: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 0) {
-                Rectangle()
-                    .fill(DSColor.panelBorder)
-                    .frame(width: 0.5)
-                    .padding(.leading, 6)
+        VStack(alignment: .leading, spacing: 9) {
+            // Notes: one freeform, wrapping block.
+            indented {
                 TextField(L10n.t("todo.notePlaceholder"),
                           text: noteBinding, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(DSFont.checklistItem)
                     .foregroundStyle(DSColor.textSecondary)
-                    .lineLimit(1...4)
-                    .padding(.leading, 17)
+                    .lineLimit(1...8)
+                    // Without this the field is handed its ideal (single-line)
+                    // width and the rest of the note is simply cropped off the
+                    // right edge — text that was typed and then silently
+                    // disappeared (Marcello, 2026-08-16).
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.top, 2)
 
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(item.checklist) { step in
-                    HStack(spacing: 6) {
-                        Button {
-                            TodoStore.shared.toggleChecklistItem(step.id, in: item.id)
-                        } label: {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: DSRadius.checklistCheckboxCorner,
-                                                 style: .continuous)
-                                    .strokeBorder(DSColor.textFaint, lineWidth: 1)
-                                    .frame(width: 10, height: 10)
-                                if step.isDone {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 6, weight: .bold))
-                                        .foregroundStyle(DSColor.textSecondary)
-                                }
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-
-                        Text(step.title)
-                            .font(DSFont.checklistItem)
-                            .strikethrough(step.isDone)
-                            .foregroundStyle(step.isDone ? DSColor.textFaint : Color(hex: "#AAAAAA"))
-                        Spacer(minLength: 0)
+            // Steps: their own checklist, same indent and rule.
+            indented {
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(item.checklist) { step in
+                        StepRow(step: step, parentID: item.id)
                     }
-                    .contextMenu {
-                        Button(L10n.t("action.delete"), role: .destructive) {
-                            TodoStore.shared.deleteChecklistItem(step.id, in: item.id)
-                        }
-                    }
-                }
-
-                HStack(spacing: 6) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 7))
-                        .foregroundStyle(DSColor.textHint)
-                        .frame(width: 10, height: 10)
-                    TextField(L10n.t("todo.addStep"), text: $newStep)
-                        .textFieldStyle(.plain)
-                        .font(DSFont.checklistItem)
-                        .foregroundStyle(DSColor.textSecondary)
-                        .onSubmit {
-                            TodoStore.shared.addChecklistItem(newStep, to: item.id)
-                            newStep = ""
-                        }
+                    // Always present, always last, styled exactly like a real
+                    // step. There is no "add step" button because there is
+                    // nothing to press: the empty row IS the affordance, and
+                    // committing one leaves you sitting on the next.
+                    StepDraftRow(parentID: item.id)
                 }
             }
-            .padding(.leading, DSSpacing.checklistIndent)
-            .padding(.top, 2)
         }
+        .padding(.top, 2)
+    }
+
+    /// The connector rule + indent shared by notes and steps.
+    private func indented<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        HStack(spacing: 0) {
+            Rectangle()
+                .fill(DSColor.panelBorder)
+                .frame(width: 0.5)
+                .padding(.leading, 6)
+            content()
+                .padding(.leading, 17)   // 6 + 0.5 + 17 ≈ DSSpacing.checklistIndent
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder
@@ -1261,6 +1348,123 @@ private struct TodoItemRow: View {
     }
 }
 
+// MARK: - Steps
+//
+// A step is a real checklist entry with its own checkbox, independent of the
+// parent to-do's — ticking a step never completes the task, and completing
+// the task never ticks its steps. Checked state matches the parent's exactly:
+// filled box, strikethrough, dimmed label.
+
+private struct StepRow: View {
+    let step: ChecklistItem
+    let parentID: UUID
+    @State private var hover = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 7) {
+            Button {
+                TodoStore.shared.toggleChecklistItem(step.id, in: parentID)
+            } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: DSRadius.checklistCheckboxCorner,
+                                     style: .continuous)
+                        .strokeBorder(DSColor.textFaint, lineWidth: 1)
+                        .frame(width: 10, height: 10)
+                    if step.isDone {
+                        RoundedRectangle(cornerRadius: DSRadius.checklistCheckboxCorner,
+                                         style: .continuous)
+                            .fill(DSColor.textFaint)
+                            .frame(width: 10, height: 10)
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 6, weight: .black))
+                            .foregroundStyle(DSColor.primaryText.opacity(0.85))
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 1.5)
+
+            Text(step.title)
+                .font(DSFont.checklistItem)
+                .strikethrough(step.isDone)
+                .foregroundStyle(step.isDone ? DSColor.textFaint : Color(hex: "#AAAAAA"))
+                // Same crop as the note field had: an HStack proposes a Text
+                // its ideal width, so a long step lost its tail off the right
+                // edge instead of running onto a second line.
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Deleting a step was right-click only, which is not a thing
+            // anyone finds. The gutter is always reserved and only the glyph
+            // fades in, so revealing it can't reflow the text beside it.
+            Button {
+                TodoStore.shared.deleteChecklistItem(step.id, in: parentID)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 7, weight: .semibold))
+                    .foregroundStyle(DSColor.textFaint)
+                    .frame(width: 12, height: 12)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .opacity(hover ? 1 : 0)
+            .padding(.top, 1)
+            .help(L10n.t("action.delete"))
+        }
+        .onHover { hovering in
+            withAnimation(NotchAnimation.hintFade) { hover = hovering }
+        }
+        .contextMenu {
+            Button(L10n.t("action.delete"), role: .destructive) {
+                TodoStore.shared.deleteChecklistItem(step.id, in: parentID)
+            }
+        }
+    }
+}
+
+/// The always-open trailing row.
+///
+/// Not a button, not a dashed box, not a "+ Add step" link — an ordinary step
+/// row that happens to be empty. Typing in it and pressing Return files it and
+/// leaves the caret in the fresh empty row underneath, so a list of five steps
+/// is five lines and five Returns with nothing else to aim at in between.
+private struct StepDraftRow: View {
+    let parentID: UUID
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 7) {
+            // The same 10pt box as a real step, one tone quieter. It is what
+            // makes this read as "the next step" rather than as a form field.
+            RoundedRectangle(cornerRadius: DSRadius.checklistCheckboxCorner, style: .continuous)
+                .strokeBorder(DSColor.textHint, lineWidth: 1)
+                .frame(width: 10, height: 10)
+                .padding(.top, 1.5)
+
+            // Single-line deliberately: on a vertical-axis field Return
+            // inserts a newline instead of submitting, and Return is the
+            // entire interaction here.
+            TextField(L10n.t("todo.stepPlaceholder"), text: $text)
+                .textFieldStyle(.plain)
+                .font(DSFont.checklistItem)
+                .foregroundStyle(DSColor.textSecondary)
+                .focused($focused)
+                .onSubmit {
+                    TodoStore.shared.addChecklistItem(text, to: parentID)
+                    text = ""
+                    // Stay put. Losing focus after each step would make the
+                    // second one cost a click.
+                    focused = true
+                }
+
+            // Matches StepRow's delete gutter so the two align.
+            Color.clear.frame(width: 12, height: 12)
+        }
+    }
+}
+
 // MARK: - ShortcutsOverlay — in-panel `?` reference (§2.3)
 
 private struct ShortcutsOverlay: View {
@@ -1269,6 +1473,7 @@ private struct ShortcutsOverlay: View {
         ("\u{21A9}", "todo.sc.toggleComplete"),
         ("\u{2192} \u{2190}", "todo.sc.expandRow"),
         ("\u{2318}N", "todo.sc.newTodo"),
+        ("\u{21E5}", "todo.sc.cycleDestination"),
         ("\u{2318}1\u{2013}9 / \u{2318}", "todo.sc.switchCollection"),
         ("\u{2325}\u{2191}\u{2193}", "todo.sc.reorder"),
         ("\u{21E7}\u{2318}M", "todo.sc.moveItem"),

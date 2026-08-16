@@ -11,12 +11,11 @@ import SwiftUI
 //   browsing     arrows/space/return operate on rows; → ← expand/collapse
 //                details; a printable character seeds Quick Find (QF-2:
 //                "type anywhere, no shortcut needed"); ? opens the overlay.
+//                While the inline draft row holds the caret, ⇥ re-aims it at
+//                the next section, ⏎ files it, Esc throws it away.
 //   find         all typing is routed manually into the query (the field
 //                is deliberately not a focused NSTextField — see
 //                QuickFindView); ↑↓ move the selection, ⏎ jumps, Esc backs out.
-//   create       ⏎ files the to-do, Esc backs out keeping the draft (KB-11),
-//                ⌃⇥ / ⌃⇧⇥ cycle category/urgency; characters flow to the
-//                highlighting title field.
 //   newCategory  Esc backs out; typing flows to the name field.
 
 struct TodoBrowsingKeyHandler: NSViewRepresentable {
@@ -74,8 +73,6 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             switch store.panelMode {
             case .voice:
                 return handleVoice(store, keyCode: keyCode)
-            case .create:
-                return handleCreate(store, control: control, shift: shift, keyCode: keyCode, lower: lower)
             case .find:
                 return handleFind(store, cmd: cmd, option: option, control: control,
                                   chars: chars, keyCode: keyCode)
@@ -116,23 +113,31 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             }
         }
 
-        // MARK: Create mode
+        // MARK: The inline draft row
+        //
+        // Scoped by FIRST RESPONDER, not by a store flag. A draft can be open
+        // while the caret sits somewhere else entirely — a note field, a step
+        // field, the row you clicked into below — and ⏎/⇥/Esc mean different
+        // things in each. Asking who actually has the caret is the only way
+        // those three keys can't be stolen out from under another field.
 
         @MainActor
-        private static func handleCreate(_ store: TodoStore, control: Bool, shift: Bool,
-                                         keyCode: UInt16, lower: String) -> Bool {
+        private static func handleDraft(_ store: TodoStore, keyCode: UInt16) -> Bool {
+            guard store.isCreatingDraft,
+                  let responder = NSApp.keyWindow?.firstResponder as? NSView,
+                  responder.identifier == HighlightingTitleField.fieldIdentifier else { return false }
             switch keyCode {
-            case 53:                            // Esc — draft survives (KB-11)
-                store.setMode(.browsing)
+            case 36:                            // ⏎ — file it where we are
+                store.commitDraft()
                 return true
-            case 36:                            // Return — explicit Send
-                TodoCreateView.submit(store: store)
+            case 48:                            // ⇥ — re-aim at the next section
+                // Must be caught here: left alone, AppKit spends Tab on
+                // focus-ring traversal and the key never reaches us at all.
+                store.cycleDraftDestination()
                 return true
-            case 48 where control:              // ⌃⇥ / ⌃⇧⇥ cycle combos —
-                // NOT ⌘⇥: that's the system app switcher, macOS consumes it
-                // before any app sees it (Marcello, 2026-07-15).
-                if shift { store.draftUrgency = store.draftUrgency.next }
-                else { TodoCreateView.cycleCollection(store: store) }
+            case 53:                            // Esc — discard
+                NSApp.keyWindow?.makeFirstResponder(nil)
+                store.cancelDraft()
                 return true
             default:
                 return false                    // typing flows to the field
@@ -187,12 +192,14 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
         private static func handleBrowsing(_ store: TodoStore, cmd: Bool, shift: Bool,
                                            option: Bool, control: Bool, chars: String,
                                            keyCode: UInt16, lower: String) -> Bool {
+            // The draft row owns ⏎ / ⇥ / Esc whenever it holds the caret.
+            if handleDraft(store, keyCode: keyCode) { return true }
+
             // While a text control has focus (note field, add-step), don't
             // steal keys; Esc hands focus back to the list.
             if let responder = NSApp.keyWindow?.firstResponder,
                responder is NSTextView || responder is NSTextField {
                 if cmd, lower == "n" {
-                    store.presetDraftToActiveCollection()
                     NotchController.shared.openCreate()
                     return true
                 }
@@ -203,10 +210,8 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 return false
             }
 
-            // KB-3: ⌘N opens the creation tab.
+            // KB-3: ⌘N drops a draft row on top of the section being browsed.
             if cmd, !shift, lower == "n" {
-                // Creation opened from a tab files into that tab by default.
-                store.presetDraftToActiveCollection()
                 NotchController.shared.openCreate()
                 return true
             }

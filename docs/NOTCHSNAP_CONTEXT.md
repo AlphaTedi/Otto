@@ -93,12 +93,19 @@ as a click, so it can't feel like a different kind of motion.
 - Per-category **Completed** section, collapsible; two-phase completion — checkbox fill
   and strike-through land instantly while the row *holds its slot* (~350 ms), then the
   row exit and panel shrink fire together.
-- **In-panel modes** (`TodoPanelMode`): `browsing`, `create` ("+" tab), `newCategory`,
-  `find`, `voice`. No floating windows.
+- **In-panel modes** (`TodoPanelMode`): `browsing`, `newCategory`, `find`, `voice`.
+  No floating windows.
+- **Inline creation** (there is no `create` mode any more): `⌃⇧N` / `⌘N` pins an empty
+  draft row above the list, `⇥` re-aims it at the next section, `⏎` files it there.
+  The row lives OUTSIDE the `.id(collection.id)` subtree in `TodoBrowsingView` — that
+  placement is the feature, since everything inside is rebuilt on a tab switch and a
+  draft in there would lose its caret on the very keystroke meant to leave it alone.
 - **Quick Find**: typing any letter in browsing mode starts a cross-category search
   (the field is monitor-fed, not a focused `TextField` — a real field would select-all
   and eat the seeding keystroke).
-- **Notes + checklists** per to-do, expanded via click or →.
+- **Notes + checklists** per to-do, expanded via click or →. Notes are one wrapping
+  freeform block; steps are a separate checklist ending in an always-open empty row
+  (type, `⏎`, and the caret lands on the next one — no "add step" button exists).
 - **Natural-language dates** in the title ("tom" → due date), highlighted inline in the
   accent colour and stripped only on Create.
 - **Inline entity chips** in titles — links (clickable, host-shortened), dates,
@@ -147,6 +154,10 @@ prioritise other work. Re-enable with one line or
 | 07-25 | Voice trigger: toggle, panel-only | Chosen over hold-to-talk / global |
 | 07-25 | Calendar: **EventKit, not Google OAuth** | OAuth needs a Google Cloud client ID only Marcello can create; EventKit reaches the same events with zero setup. Protocol seam left in place for OAuth later |
 | 07-25 | Meeting alerts fire for **all accepted meetings**, Join only when a link is detected | You can miss an in-person meeting just as easily |
+| 08-16 | Creation card deleted; to-dos are typed into a draft row in the list | One less layer for the app's most common action; the card was also detached from the section it filed into |
+| 08-16 | `⇥` cycles the draft's destination, skipping Today | The active tab IS the destination, and Today is a live query nothing can be filed into |
+| 08-16 | Tab-row "+" moved to the end and de-emphasised; it now means "new section" | With creation inline there is no to-do surface for it to open; "•••" went too, since every item on it is already on each tab's context menu |
+| 08-16 | Priority dropped from creation (still settable afterwards) | It was a second decision demanded before the first one was written down |
 
 ---
 

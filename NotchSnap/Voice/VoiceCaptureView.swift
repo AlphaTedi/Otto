@@ -146,9 +146,7 @@ struct VoiceCaptureView: View {
             // Always point at the alternative that does work.
             Button {
                 voice.cancel()
-                TodoStore.shared.presetDraftToActiveCollection()
-                TodoStore.shared.setMode(.create)
-                NotchController.shared.focusPanel()
+                NotchController.shared.openCreate()
             } label: {
                 HStack(spacing: 6) {
                     Text(L10n.t("voice.useTyping"))

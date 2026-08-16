@@ -245,6 +245,14 @@ struct CategoryTabChip: View {
 
 /// The dedicated "+" creation tab — always present, no category color of
 /// its own. See Section 6.1 of notchsnap_todo_pivot_prd.md.
+///
+/// RETIRED from the tab row (2026-08-16), like ProgressRing before it. A to-do
+/// is now made by typing into a draft row inside the list, so there is no
+/// creation surface for a chip to lead to, and the filled treatment was
+/// advertising an action that no longer exists. The row's "+" is now
+/// NewSectionButton — plain, muted, and at the END of the tabs. Kept here
+/// because the design PRD still names the type; do not put it back in a tab
+/// row without changing the PRD first.
 struct CreationTabChip: View {
     let isActive: Bool
 

@@ -54,11 +54,16 @@ enum DebugDriver {
         case "create-mode":
             NotchController.shared.openCreate()
         case "create-submit":
-            // Same path the Return key takes in create mode.
-            TodoCreateView.submit(store: store)
+            // Same path the Return key takes in the pinned draft row.
+            store.commitDraft()
         case "jump":
             // Same path Return takes in find mode.
             store.jumpToFindSelection()
+        case "create-cancel":
+            store.cancelDraft()
+        case "create-tab":
+            // Same path the Tab key takes: re-aim the draft, leave it alone.
+            store.cycleDraftDestination()
         case "browse-mode":
             store.setMode(.browsing)
         case "expand-focused":
@@ -161,8 +166,10 @@ enum DebugDriver {
                 }
             } else if command == "defaultcat" {
                 let name = store.collection(id: store.defaultCreationCollectionID ?? UUID())?.name ?? "nil"
-                let draftName = store.collection(id: store.draftCollectionID ?? UUID())?.name ?? "nil"
-                appendState("defaultCreationCollection=\(name) mode=\(store.panelMode) draftCollection=\(draftName)")
+                // The draft has no collection of its own any more: the
+                // active tab IS its destination.
+                appendState("defaultCreationCollection=\(name) mode=\(store.panelMode) "
+                            + "drafting=\(store.isCreatingDraft) destination=\(store.activeCollection?.name ?? "nil")")
             } else if command.hasPrefix("entities ") {
                 let text = String(command.dropFirst(9))
                 let segments = EntityParser.parse(text).map { segment -> String in
@@ -206,7 +213,7 @@ enum DebugDriver {
         progress=\(progress.map { String(format: "%.2f", $0) } ?? "nil") \
         expandedRow=\(store.expandedItemID != nil) \
         findQuery='\(store.findQuery)' findMatches=\(store.findMatches.count) \
-        draft='\(store.draftTitle)' \
+        drafting=\(store.isCreatingDraft) draft='\(store.draftTitle)' \
         todoContentHeight=\(app.todoContentHeight) \
         notchExtraHeight=\(app.notchExtraHeight)
         """)

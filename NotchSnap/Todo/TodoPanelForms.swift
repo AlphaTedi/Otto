@@ -3,269 +3,21 @@ import AppKit
 
 // MARK: - In-panel surfaces (design PRD §§3-5)
 //
-// Creation, category creation, and Quick Find all render INSIDE the panel,
-// replacing the browsing content — no floating windows (CT-5/CT-6). Mode
-// swaps animate on contentHug so the panel re-hugs each surface's height.
-// Every visual value comes from DesignSystem.swift; where a reusable
-// component exists there (ComboBoxRow, PrimaryActionButton, ColorSwatchButton,
-// ShortcutHintBadge) it is used directly, wrapped in Buttons for behavior.
-
-// MARK: - TodoCreateView — the "+" tab (§3.2)
-
-struct TodoCreateView: View {
-    @ObservedObject private var store = TodoStore.shared
-
-    /// Combo boxes are closed by default; tapping one expands its options
-    /// INLINE (the panel hugs the extra height) — SwiftUI's Menu can't
-    /// present from a non-activating panel, and a popup window would leave
-    /// the notch anyway.
-    private enum PickerKind { case category, urgency }
-    @State private var openPicker: PickerKind?
-
-    private var parsed: NLDateMatch? { NLDateParser.parse(store.draftTitle) }
-
-    private var selectedCollection: TodoCollection? {
-        store.collections.first { $0.id == store.draftCollectionID }
-    }
-
-    private var assignable: [TodoCollection] {
-        // FB8: the user's default category appears FIRST in the picker; the
-        // rest follow tab order.
-        let all = store.collections.filter { !$0.isSystemToday }
-        guard let def = store.defaultCreationCollectionID else { return all }
-        return all.sorted { a, b in
-            (a.id == def ? 0 : 1, a.sortOrder) < (b.id == def ? 0 : 1, b.sortOrder)
-        }
-    }
-
-    private var canCreate: Bool {
-        let title = parsed?.cleanedTitle ?? store.draftTitle
-        return !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && store.draftCollectionID != nil
-    }
-
-    /// FB5: the field's height, recomputed from the draft on every keystroke.
-    /// Width is estimated slightly narrow (panel width minus paddings) so we
-    /// round UP the line count and never clip the last line; beyond the max
-    /// the field scrolls internally.
-    private var titleFieldHeight: CGFloat {
-        let panelWidth = CGFloat(NotchController.shared.expandedWidth)
-        let width = max(120, panelWidth - CGFloat(DSSpacing.panelPadding) * 2 - 24 - 24)
-        let text = store.draftTitle.isEmpty ? " " : store.draftTitle
-        let measured = NSAttributedString(
-            string: text, attributes: [.font: NSFont.systemFont(ofSize: 13)]
-        ).boundingRect(
-            with: NSSize(width: width, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading]
-        ).height
-        return max(HighlightingTitleField.lineHeight,
-                   min(ceil(measured), HighlightingTitleField.maxHeight))
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(L10n.t("todo.newTodo").uppercased())
-                .font(DSFont.sectionLabel)
-                .tracking(0.4)
-                .foregroundStyle(DSColor.textFaint)
-                .padding(.bottom, 10)
-
-            // STEP 1 — Type. NL-2: a recognized date phrase colors inline,
-            // inside the same field, and is stripped only on Create.
-            HighlightingTitleField(
-                text: $store.draftTitle,
-                highlightRange: parsed?.nsRange,
-                placeholder: L10n.t("todo.titlePlaceholder")
-            )
-            // FB5: height is driven from SwiftUI (where draftTitle is
-            // observed) so it recomputes on every keystroke and the panel
-            // hugs it — an NSViewRepresentable's own sizeThatFits is NOT
-            // re-invoked on a pure content change, so relying on it left the
-            // field stuck at one line.
-            .frame(height: titleFieldHeight)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
-                    .fill(DSColor.fieldBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
-                    .stroke(DSColor.focusAccent, lineWidth: 0.5)
-            )
-            .padding(.bottom, parsed == nil ? 14 : 4)
-
-            // NL-3: live resolved-date caption.
-            if let parsed {
-                Text("\u{2192} \(parsed.display)")
-                    .font(.system(size: 10))
-                    .foregroundStyle(DSColor.textFaint)
-                    .padding(.leading, 2)
-                    .padding(.bottom, 10)
-                    .transition(.opacity)
-            }
-
-            // STEP 2 — Category (rounded-square swatch; the square-vs-circle
-            // distinction is deliberate, DesignSystem ComboBoxRow enforces it).
-            VStack(alignment: .leading, spacing: 0) {
-                Button {
-                    togglePicker(.category)
-                } label: {
-                    ComboBoxRow(
-                        label: selectedCollection?.name ?? L10n.t("todo.noCollection"),
-                        swatchColor: selectedCollection?.color ?? .gray,
-                        swatchShape: .roundedSquare,
-                        cycleShortcutHint: "\u{2303}\u{21E5}"
-                    )
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-
-                if openPicker == .category {
-                    optionList {
-                        ForEach(assignable) { c in
-                            OptionRow(
-                                swatch: AnyView(RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                    .fill(c.color).frame(width: 10, height: 10)),
-                                label: c.name,
-                                selected: c.id == store.draftCollectionID
-                            ) {
-                                store.draftCollectionID = c.id
-                                togglePicker(nil)
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(.bottom, 8)
-
-            // STEP 3 — Urgency (circle swatch).
-            VStack(alignment: .leading, spacing: 0) {
-                Button {
-                    togglePicker(.urgency)
-                } label: {
-                    ComboBoxRow(
-                        label: store.draftUrgency.fullLabel,
-                        swatchColor: store.draftUrgency.color,
-                        swatchShape: .circle,
-                        cycleShortcutHint: "\u{2303}\u{21E7}\u{21E5}",
-                        swatchDiameter: DSUrgencyDot.creationFlowSwatchDiameter
-                    )
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-
-                if openPicker == .urgency {
-                    optionList {
-                        ForEach(TodoUrgency.allCases) { u in
-                            OptionRow(
-                                swatch: AnyView(Circle()
-                                    .fill(u.color).frame(width: 10, height: 10)),
-                                label: u.fullLabel,
-                                selected: u == store.draftUrgency
-                            ) {
-                                store.draftUrgency = u
-                                togglePicker(nil)
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(.bottom, 14)
-
-            // STEP 4 — Send: explicit, never implicit (⏎ chip inline per §3.2).
-            Button(action: create) {
-                PrimaryActionButton(title: L10n.t("todo.create"), shortcutHint: "\u{21A9}")
-                    .opacity(canCreate ? 1 : 0.35)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!canCreate)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .animation(NotchAnimation.hintFade, value: parsed?.display)
-    }
-
-    private func togglePicker(_ kind: PickerKind?) {
-        withAnimation(NotchAnimation.contentHug) {
-            openPicker = (openPicker == kind) ? nil : kind
-        }
-    }
-
-    /// KB-3/KB-4: cycle without opening — called from the key handler.
-    static func cycleCollection(store: TodoStore) {
-        let assignable = store.collections.filter { !$0.isSystemToday }
-        guard !assignable.isEmpty else { return }
-        let idx = assignable.firstIndex { $0.id == store.draftCollectionID } ?? -1
-        store.draftCollectionID = assignable[(idx + 1) % assignable.count].id
-    }
-
-    static func submit(store: TodoStore) {
-        let parsed = NLDateParser.parse(store.draftTitle)
-        let title = parsed?.cleanedTitle ?? store.draftTitle
-        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              let cid = store.draftCollectionID else { return }
-        // NL-4: the phrase leaves the title and becomes a real due date.
-        guard store.addItem(title: title, collectionID: cid,
-                            urgency: store.draftUrgency, dueDate: parsed?.date) != nil else { return }
-        store.draftTitle = ""
-        store.draftUrgency = .low
-        store.setMode(.browsing)
-    }
-
-    private func create() { Self.submit(store: store) }
-
-    // MARK: Inline option list (the opened state of a combo box)
-
-    @ViewBuilder
-    private func optionList<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            content()
-        }
-        .padding(.vertical, 4)
-        .background(
-            RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
-                .fill(DSColor.fieldBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
-                .stroke(DSColor.panelBorder, lineWidth: 0.5)
-        )
-        .padding(.top, 4)
-        .transition(.opacity.combined(with: .offset(y: -4)))
-    }
-}
-
-private struct OptionRow: View {
-    let swatch: AnyView
-    let label: String
-    let selected: Bool
-    let action: () -> Void
-    @State private var hover = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                swatch
-                Text(label)
-                    .font(.system(size: 12))
-                    .foregroundStyle(DSColor.textPrimaryBright)
-                Spacer()
-                if selected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(DSColor.textFaint)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(hover ? Color.white.opacity(0.05) : .clear)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hover = $0 }
-    }
-}
+// Category creation and Quick Find render INSIDE the panel, replacing the
+// browsing content — no floating windows (CT-5/CT-6). Mode swaps animate on
+// contentHug so the panel re-hugs each surface's height. Every visual value
+// comes from DesignSystem.swift; where a reusable component exists there
+// (PrimaryActionButton, ColorSwatchButton, ShortcutHintBadge) it is used
+// directly, wrapped in Buttons for behavior.
+//
+// TO-DO CREATION IS NO LONGER ONE OF THESE. It was `TodoCreateView` — a card
+// with a title field, a category combo, an urgency combo and a Create button,
+// which replaced the whole panel and so was detached from the section it was
+// filing into. It is now a draft row pinned above the list itself (see
+// InlineDraftRow in TodoBrowsingView.swift). What survived the deletion is
+// HighlightingTitleField below, which the draft row reuses: the inline date
+// coloring and the grow-with-your-text behaviour were the parts of that card
+// worth keeping.
 
 // MARK: - HighlightingTitleField — auto-growing NSTextView w/ inline NL coloring
 //
@@ -281,10 +33,15 @@ private struct OptionRow: View {
 struct HighlightingTitleField: NSViewRepresentable {
     @Binding var text: String
     let highlightRange: NSRange?
-    let placeholder: String
 
     static let lineHeight: CGFloat = 17
     static let maxHeight: CGFloat = 102   // ~6 lines, then it scrolls
+
+    /// Stamped on the text view so the key monitor can ask "is the caret in
+    /// the draft row?" rather than "is a draft open?". Those are different
+    /// questions once a note or step field can hold focus at the same time,
+    /// and ⏎ / ⇥ / Esc belong to whichever field the user is actually in.
+    static let fieldIdentifier = NSUserInterfaceItemIdentifier("otto.todo.draftTitleField")
 
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSScrollView()
@@ -295,6 +52,7 @@ struct HighlightingTitleField: NSViewRepresentable {
         scroll.verticalScrollElasticity = .allowed
 
         let view = NSTextView()
+        view.identifier = Self.fieldIdentifier
         view.delegate = context.coordinator
         view.drawsBackground = false
         view.isRichText = false
