@@ -224,17 +224,39 @@ extension NotchPresenceState {
 struct NotchPresenceView: View {
     let state: NotchPresenceState
     let notchWidth: CGFloat
+    let notchHeight: CGFloat
     let wingWidth: CGFloat
+
+    /// The tallest thing either wing draws. Everything is centred against
+    /// this, so the gap under the content is the same whichever state is up.
+    private static let contentHeight: CGFloat = 14
+
+    /// ONE inset, used against the bottom edge and the outer side edge alike.
+    ///
+    /// It is derived rather than picked: vertical centring inside the notch's
+    /// own height already leaves a specific gap under the content, and the
+    /// side inset is set to exactly that number. So the icon is equidistant
+    /// from the bottom of the notch and from its edge by construction, and
+    /// stays equidistant if the notch height ever changes — rather than being
+    /// two hand-tuned constants that drift apart (Marcello, 2026-08-17).
+    private var edgeInset: CGFloat {
+        max(6, (notchHeight - Self.contentHeight) / 2)
+    }
 
     var body: some View {
         HStack(spacing: 0) {
+            // Pushed to the OUTER edge and inset, not floated in the middle of
+            // the wing — the same pattern on both sides, mirrored.
             leading
-                .frame(width: wingWidth, alignment: .center)
+                .padding(.leading, edgeInset)
+                .frame(width: wingWidth, alignment: .leading)
             // The housing. Nothing may be drawn here.
             Color.clear.frame(width: notchWidth)
             trailing
-                .frame(width: wingWidth, alignment: .center)
+                .padding(.trailing, edgeInset)
+                .frame(width: wingWidth, alignment: .trailing)
         }
+        .frame(height: notchHeight)
         .allowsHitTesting(false)
     }
 

@@ -126,8 +126,11 @@ struct NotchShapeView: View {
     private var presenceExtraWidth: CGFloat {
         switch presenceState {
         case .none:            return 0
-        case .resting:         return 52
-        case .countdown:       return 136
+        // Each wing is exactly half of this. It has to hold the content plus
+        // the edge inset, or the inset gets squeezed out and the glyph ends up
+        // against the side — which is what it did at 52.
+        case .resting:         return 76
+        case .countdown:       return 148
         }
     }
 
@@ -277,10 +280,10 @@ struct NotchShapeView: View {
                     NotchPresenceView(
                         state: presenceState,
                         notchWidth: notchSize.width,
+                        notchHeight: notchSize.height,
                         wingWidth: max(0, (currentWidth - notchSize.width) / 2 - currentFilletRadius)
                     )
-                    .frame(width: currentWidth - currentFilletRadius * 2,
-                           height: notchSize.height)
+                    .frame(width: currentWidth - currentFilletRadius * 2)
                 }
             }
             .animation(NotchAnimation.contentHug, value: presenceExtraWidth)
