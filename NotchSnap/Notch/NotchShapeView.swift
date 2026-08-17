@@ -271,19 +271,20 @@ struct NotchShapeView: View {
             // lone amber dot, which said only "a meeting exists" — this says
             // which kind, and how long you have.
             //
-            // Drawn in the wings either side of the camera housing, and
-            // vertically centred on the PHYSICAL notch rather than on the
-            // whole shape, so the countdown's extra 8pt of hang does not drag
-            // the text down off the housing's midline with it.
+            // Anchored to the silhouette's own bottom and side edges, by one
+            // shared inset — see NotchPresenceView.edgeInset.
             .overlay(alignment: .top) {
                 if let presenceState {
+                    // The shape's INNER rect: full silhouette height, and the
+                    // width between its two straight sides (the fillet eats a
+                    // radius off each). Anchoring inside this is what makes
+                    // "inset from the edge of the notch" mean the real edge.
                     NotchPresenceView(
                         state: presenceState,
-                        notchWidth: notchSize.width,
-                        notchHeight: notchSize.height,
-                        wingWidth: max(0, (currentWidth - notchSize.width) / 2 - currentFilletRadius)
+                        notchWidth: notchSize.width
                     )
-                    .frame(width: currentWidth - currentFilletRadius * 2)
+                    .frame(width: currentWidth - currentFilletRadius * 2,
+                           height: currentHeight)
                 }
             }
             .animation(NotchAnimation.contentHug, value: presenceExtraWidth)

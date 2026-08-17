@@ -79,7 +79,7 @@ class NotchController: ObservableObject {
     // MARK: - Setup
 
     func setup() {
-        guard let screen = NSScreen.main else { return }
+        guard let screen = notchScreen else { return }
 
         // Calculate notch geometry
         hasPhysicalNotch = screen.safeAreaInsets.top > 0
@@ -145,6 +145,31 @@ class NotchController: ObservableObject {
         )
     }
 
+    /// The display the notch belongs to.
+    ///
+    /// Deliberately NOT `NSScreen.main`, which means "the screen with the key
+    /// window" — so on a two-display setup it becomes the external monitor the
+    /// moment you click something over there, and the panel followed it. You
+    /// then had Otto's simulated notch drawn on the external display AND the
+    /// real hardware notch on the laptop: the notch, twice, one of them in the
+    /// wrong place (Marcello, 2026-08-17).
+    ///
+    /// A notch is a property of one specific piece of hardware, so the panel is
+    /// pinned to the display that actually has one (`safeAreaInsets.top > 0`).
+    ///
+    /// On a Mac where NO display has a notch — Marcello's own 2018 machine
+    /// included, where the entire black silhouette is Otto's drawing — the
+    /// panel still has to stop wandering. It falls back to the PRIMARY display
+    /// (frame origin at zero, the one macOS hangs the menu bar off), not to
+    /// `.main`, so it stays on one screen for the whole session instead of
+    /// hopping to whichever display you last clicked on.
+    var notchScreen: NSScreen? {
+        if let notched = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) {
+            return notched
+        }
+        return NSScreen.screens.first(where: { $0.frame.origin == .zero }) ?? NSScreen.main
+    }
+
     @objc private func screenParametersDidChange() {
         // Hop to the next runloop tick so NSScreen reports the new geometry.
         DispatchQueue.main.async { [weak self] in
@@ -153,7 +178,7 @@ class NotchController: ObservableObject {
     }
 
     private func repositionForCurrentScreen() {
-        guard let panel, let screen = NSScreen.main else { return }
+        guard let panel, let screen = notchScreen else { return }
         hasPhysicalNotch = screen.safeAreaInsets.top > 0
         notchSize = calculateNotchSize(screen: screen)
         AppState.shared.notchBarHeight = notchSize.height
@@ -229,7 +254,7 @@ class NotchController: ObservableObject {
     /// Policy rule 2: a real click outside the panel closes it no matter
     /// which mode is up. Unpins first so the collapse guards can't veto it.
     private func handleOutsideClick(_ location: NSPoint) {
-        guard state == .expanded, let screen = NSScreen.main else { return }
+        guard state == .expanded, let screen = notchScreen else { return }
         guard !expandedPanelRect(screen: screen).insetBy(dx: -8, dy: -8).contains(location) else { return }
         forceCollapse()
     }
@@ -709,7 +734,7 @@ class NotchController: ObservableObject {
     }
 
     private func handleMouseMoved(_ location: NSPoint, timestamp: TimeInterval) {
-        guard let screen = NSScreen.main else { return }
+        guard let screen = notchScreen else { return }
         let settings = AppState.shared.settings
         // Drag-to-tray works regardless of the notch trigger setting —
         // only plain hover behavior is gated by it.
@@ -892,7 +917,7 @@ class NotchController: ObservableObject {
     /// Same single geometry source as the renderer, so the hit region and the
     /// visible shape cannot drift apart.
     func visibleShapeScreenRect() -> NSRect {
-        guard let screen = NSScreen.main else { return .zero }
+        guard let screen = notchScreen else { return .zero }
         let notchRect = calculateNotchRect(screen: screen)
 
         // Matches NotchShapeView.currentFilletRadius.

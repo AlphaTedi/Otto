@@ -223,40 +223,41 @@ extension NotchPresenceState {
 /// value the capture notification uses for exactly this reason.
 struct NotchPresenceView: View {
     let state: NotchPresenceState
+    /// The camera housing's width. Nothing may be drawn across it.
     let notchWidth: CGFloat
-    let notchHeight: CGFloat
-    let wingWidth: CGFloat
 
-    /// The tallest thing either wing draws. Everything is centred against
-    /// this, so the gap under the content is the same whichever state is up.
-    private static let contentHeight: CGFloat = 14
-
-    /// ONE inset, used against the bottom edge and the outer side edge alike.
+    /// ONE number, used against the bottom edge and the side edges alike.
     ///
-    /// It is derived rather than picked: vertical centring inside the notch's
-    /// own height already leaves a specific gap under the content, and the
-    /// side inset is set to exactly that number. So the icon is equidistant
-    /// from the bottom of the notch and from its edge by construction, and
-    /// stays equidistant if the notch height ever changes — rather than being
-    /// two hand-tuned constants that drift apart (Marcello, 2026-08-17).
-    private var edgeInset: CGFloat {
-        max(6, (notchHeight - Self.contentHeight) / 2)
-    }
+    /// Marcello's rule, verbatim: "if I have 4 or 8px at the bottom of this
+    /// icon, I should have the same amount on the right side from the edge of
+    /// the notch". So it is a single constant applied to both, not two values
+    /// that happen to look similar and are free to drift.
+    ///
+    /// 10pt because that is also the shape's bottom corner radius: content
+    /// inset by the radius clears the corner arc exactly, so the glyph can sit
+    /// in the corner without the curve biting into it.
+    static let edgeInset: CGFloat = 10
 
     var body: some View {
+        // Anchored to the shape's real edges, not centred inside a "wing".
+        //
+        // The wing version put the glyph in the middle of the space beside the
+        // housing, which is why it read as floating in the notch rather than
+        // sitting in its corner. Pushing each side's content hard against its
+        // own outer edge and insetting by one number is the whole fix.
+        //
+        // The Spacer's minLength is the housing: it guarantees the two sides
+        // can never grow toward each other far enough to cross the camera.
         HStack(spacing: 0) {
-            // Pushed to the OUTER edge and inset, not floated in the middle of
-            // the wing — the same pattern on both sides, mirrored.
             leading
-                .padding(.leading, edgeInset)
-                .frame(width: wingWidth, alignment: .leading)
-            // The housing. Nothing may be drawn here.
-            Color.clear.frame(width: notchWidth)
+            Spacer(minLength: notchWidth)
             trailing
-                .padding(.trailing, edgeInset)
-                .frame(width: wingWidth, alignment: .trailing)
         }
-        .frame(height: notchHeight)
+        .padding(.horizontal, Self.edgeInset)
+        .padding(.bottom, Self.edgeInset)
+        // Bottom-aligned, so the gap under the content IS `edgeInset` rather
+        // than whatever vertical centring happens to leave over.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .allowsHitTesting(false)
     }
 
