@@ -74,6 +74,12 @@ enum DebugDriver {
             }
         case "collapse-row":
             withAnimation(NotchAnimation.contentHug) { store.expandedItemID = nil }
+        case "presence":
+            appendState("presence: " + NotchPresence.shared.state.debugDescription)
+        case "presence-rest":
+            NotchPresence.shared.debugOverride = .resting
+        case "presence-auto":
+            NotchPresence.shared.debugOverride = nil
         case "dump":
             dumpState()
         default:
@@ -167,6 +173,16 @@ enum DebugDriver {
                 if parts.count == 2, parts.allSatisfy({ $0 >= 0 && $0 < store.collections.count }) {
                     store.moveCollection(store.collections[parts[0]].id,
                                          before: store.collections[parts[1]].id)
+                }
+            } else if command.hasPrefix("presence-meet ") {
+                if let m = Int(command.dropFirst(14)) {
+                    NotchPresence.shared.debugOverride =
+                        .countdown(.init(platform: .meet, minutes: m))
+                }
+            } else if command.hasPrefix("presence-todo ") {
+                if let m = Int(command.dropFirst(14)) {
+                    NotchPresence.shared.debugOverride =
+                        .countdown(.init(platform: nil, minutes: m))
                 }
             } else if command.hasPrefix("movecat-end ") {
                 if let i = Int(command.dropFirst(12)), i >= 0, i < store.collections.count {

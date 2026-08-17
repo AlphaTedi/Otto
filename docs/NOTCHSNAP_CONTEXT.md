@@ -172,6 +172,10 @@ prioritise other work. Re-enable with one line or
 | 08-16 | Tab drag uses the indicator-only (Arc) model, like the to-do list | Live re-slotting in `dropEntered` shifts every tab sideways under the cursor, which fires the next `dropEntered` — the tabs flip-flopped for as long as the drag was held |
 | 08-16 | A category tab is NOT a `Button` | A SwiftUI Button on macOS claims the mouse-down, so an `.onDrag` beside it never starts a drag session at all. This is why tabs could not be dragged while to-do rows — plain views with `.contentShape` + `.onTapGesture` + `.onDrag` — always could |
 | 08-16 | The tab scroller is `.scrollDisabled` unless the tabs overflow | A horizontal ScrollView and a sideways drag want the same gesture and the ScrollView wins; while every tab is visible the scroller could only cost the drag |
+| 08-17 | Presence indicator built INSIDE `NotchShape`, not as two overlapping rects | `filletRadius` is already a concave top corner — the exact "flare out of the bezel" the two-rect trick approximates, with no seam to hide and one path to animate |
+| 08-17 | No full-width black bezel strip across the screen top | On a MacBook the bezel the shape flares from is the physical notch; painting our own would cover the menu bar edge to edge to simulate hardware this Mac already has |
+| 08-17 | Presence dot is time-based only, never category | It is the only accent in an element with no label, so a second meaning has nothing to disambiguate against |
+| 08-17 | Platform glyphs are SF Symbols in a brand tint, not the real marks | Shipping Meet/Zoom/Teams artwork means bundling trademarked assets under their brand terms — a deliberate decision, not an incidental one |
 | 08-16 | Tab-row "+" moved to the end and de-emphasised; it now means "new section" | With creation inline there is no to-do surface for it to open; "•••" went too, since every item on it is already on each tab's context menu |
 | 08-16 | Priority dropped from creation (still settable afterwards) | It was a second decision demanded before the first one was written down |
 

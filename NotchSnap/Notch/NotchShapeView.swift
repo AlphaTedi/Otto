@@ -102,7 +102,48 @@ struct NotchShapeView: View {
 
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @AppStorage("notchCornerRadius") private var userCornerRadius: Double = 10
+    /// A permanent element on the user's menu bar is not something to impose,
+    /// so it is switchable. Default on — the whole point is that Otto stops
+    /// being invisible.
+    @AppStorage("showNotchPresence") private var showNotchPresence: Bool = true
     @ObservedObject private var calendar = CalendarStore.shared
+    @ObservedObject private var presence = NotchPresence.shared
+
+    // MARK: - Presence indicator geometry
+    //
+    // The collapsed silhouette has to grow to hold the indicator, and how much
+    // it grows is the whole cost of the feature: every point of width covers a
+    // point of menu bar beside the notch. So the two states are sized
+    // separately — resting asks for one small glyph, a countdown asks for a
+    // glyph, a dot and four characters.
+
+    private var presenceState: NotchPresenceState? {
+        guard showNotchPresence, state == .idle || state == .hovering else { return nil }
+        return presence.state
+    }
+
+    /// Extra width the indicator needs, over the bare notch.
+    private var presenceExtraWidth: CGFloat {
+        switch presenceState {
+        case .none:            return 0
+        case .resting:         return 52
+        case .countdown:       return 136
+        }
+    }
+
+    /// How far the shape hangs BELOW the physical notch.
+    ///
+    /// Zero while resting: at menu-bar height the pill sits exactly in the
+    /// notch's own footprint on a notch Mac, so the glyph appears in the menu
+    /// bar strip without the silhouette protruding at all. A countdown earns
+    /// the protrusion — that downward flare IS the "something is coming"
+    /// signal, before you have read a single character of it.
+    private var presenceExtraHeight: CGFloat {
+        switch presenceState {
+        case .countdown: return 8
+        default:         return 0
+        }
+    }
 
     // MARK: - Raccordatura radius per state
 
@@ -120,8 +161,10 @@ struct NotchShapeView: View {
     private var currentWidth: CGFloat {
         let base: CGFloat = {
             switch state {
-            case .idle:                 return notchSize.width + currentFilletRadius * 2
-            case .hovering:             return notchSize.width + 28 + currentFilletRadius * 2
+            case .idle:
+                return notchSize.width + presenceExtraWidth + currentFilletRadius * 2
+            case .hovering:
+                return notchSize.width + max(28, presenceExtraWidth) + currentFilletRadius * 2
             case .expanded:             return expandedSize.width
             case .captureNotification:  return notificationWide ? 320 : notchSize.width + 80 + currentFilletRadius * 2
             }
@@ -132,8 +175,8 @@ struct NotchShapeView: View {
     private var currentHeight: CGFloat {
         let base: CGFloat = {
             switch state {
-            case .idle:                 return notchSize.height
-            case .hovering:             return notchSize.height + 6
+            case .idle:                 return notchSize.height + presenceExtraHeight
+            case .hovering:             return notchSize.height + max(6, presenceExtraHeight)
             case .expanded:             return expandedSize.height + extraExpandedHeight
             case .captureNotification:  return notchSize.height
             }
@@ -221,18 +264,27 @@ struct NotchShapeView: View {
                     runSquishAnimation(for: newState)
                 }
             }
-            // CA-2: ambient meeting signal — a small amber dot near the left
-            // edge of the COLLAPSED pill. Passive by design: visible at a
-            // glance, never interrupting.
-            .overlay(alignment: .topLeading) {
-                if state != .expanded, calendar.ambientMeeting != nil {
-                    AmbientMeetingDot()
-                        .padding(.leading, currentFilletRadius + 8)
-                        .padding(.top, max(4, (notchSize.height - 6) / 2))
-                        .allowsHitTesting(false)
+            // The presence indicator (spec 2026-08-17). It replaces CA-2's
+            // lone amber dot, which said only "a meeting exists" — this says
+            // which kind, and how long you have.
+            //
+            // Drawn in the wings either side of the camera housing, and
+            // vertically centred on the PHYSICAL notch rather than on the
+            // whole shape, so the countdown's extra 8pt of hang does not drag
+            // the text down off the housing's midline with it.
+            .overlay(alignment: .top) {
+                if let presenceState {
+                    NotchPresenceView(
+                        state: presenceState,
+                        notchWidth: notchSize.width,
+                        wingWidth: max(0, (currentWidth - notchSize.width) / 2 - currentFilletRadius)
+                    )
+                    .frame(width: currentWidth - currentFilletRadius * 2,
+                           height: notchSize.height)
                 }
             }
-            .animation(NotchAnimation.hintFade, value: calendar.ambientMeeting?.id)
+            .animation(NotchAnimation.contentHug, value: presenceExtraWidth)
+            .animation(NotchAnimation.hintFade, value: presence.state)
 
             // Content gallery — staggered fade-in.
             // The content is hard-clipped to the same NotchShape used for the

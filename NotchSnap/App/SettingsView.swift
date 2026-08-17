@@ -470,6 +470,7 @@ enum NotchSizePreset: String, CaseIterable, Identifiable {
 }
 
 struct NotchSettingsView: View {
+    @AppStorage("showNotchPresence") private var showNotchPresence: Bool = true
     @EnvironmentObject var appState: AppState
     @AppStorage("notchCornerRadius")   private var cornerRadius: Double = 10
     @AppStorage("notchExpandedWidth")  private var expandedWidth: Double = 680
@@ -540,6 +541,20 @@ struct NotchSettingsView: View {
                         )
                         .frame(width: 200)
                     }
+                }
+            }
+
+            SettingsSection_Card(
+                title: "Presence",
+                subtitle: "A small always-on indicator in the notch: Otto is running, and what is coming up."
+            ) {
+                SettingsRow(
+                    title: "Show in the notch",
+                    subtitle: "Widens the collapsed notch slightly, which covers a little of the menu bar beside it."
+                ) {
+                    Toggle("", isOn: $showNotchPresence)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
                 }
             }
 
