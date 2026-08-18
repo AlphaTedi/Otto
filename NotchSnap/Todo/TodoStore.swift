@@ -324,6 +324,27 @@ final class TodoStore: ObservableObject {
         scheduleSave()
     }
 
+    /// Rename a step.
+    ///
+    /// Steps were write-once: you could tick one or delete it, but the words
+    /// themselves were fixed, so a typo meant deleting the step and retyping
+    /// it — the same dead end the to-do TITLE had before `rename` (a user of
+    /// Marcello's, 2026-08-18).
+    ///
+    /// Empty is REFUSED rather than saved, exactly as `rename` refuses it: a
+    /// step with no text is unidentifiable and cannot be recovered from the
+    /// list, so the edit is discarded and the old title stands. Deleting is
+    /// what the × is for.
+    func renameChecklistItem(_ stepID: UUID, in id: UUID, to title: String) {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let idx = items.firstIndex(where: { $0.id == id }),
+              let step = items[idx].checklist.firstIndex(where: { $0.id == stepID }),
+              items[idx].checklist[step].title != trimmed else { return }
+        items[idx].checklist[step].title = trimmed
+        scheduleSave()
+    }
+
     func toggleChecklistItem(_ stepID: UUID, in id: UUID) {
         guard let idx = items.firstIndex(where: { $0.id == id }),
               let step = items[idx].checklist.firstIndex(where: { $0.id == stepID }) else { return }

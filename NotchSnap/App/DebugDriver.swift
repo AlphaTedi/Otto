@@ -174,6 +174,23 @@ enum DebugDriver {
                     store.moveCollection(store.collections[parts[0]].id,
                                          before: store.collections[parts[1]].id)
                 }
+            } else if command.hasPrefix("step-rename ") {
+                // step-rename <index> <text> — the path the field's commit takes.
+                let rest = command.dropFirst(12)
+                if let sp = rest.firstIndex(of: " "), let i = Int(rest[rest.startIndex..<sp]),
+                   let collection = store.activeCollection,
+                   let first = store.openItems(in: collection).first,
+                   i >= 0, i < first.checklist.count {
+                    store.renameChecklistItem(first.checklist[i].id, in: first.id,
+                                              to: String(rest[rest.index(after: sp)...]))
+                }
+            } else if command == "steps" {
+                if let collection = store.activeCollection,
+                   let first = store.openItems(in: collection).first {
+                    appendState("steps of '\(first.title)': "
+                        + first.checklist.map { "\($0.title)\($0.isDone ? " [x]" : "")" }
+                            .joined(separator: " | "))
+                }
             } else if command.hasPrefix("presence-meet ") {
                 if let m = Int(command.dropFirst(14)) {
                     NotchPresence.shared.debugOverride =

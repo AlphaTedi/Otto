@@ -1542,6 +1542,11 @@ private struct StepRow: View {
     let step: ChecklistItem
     let parentID: UUID
     @State private var hover = false
+    /// `nil` = not editing; a String = the live draft. Held apart from the
+    /// step so an abandoned edit never touches what is stored — the same
+    /// arrangement TodoItemRow uses for a to-do's title.
+    @State private var draft: String?
+    @FocusState private var focused: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 7) {
@@ -1568,15 +1573,35 @@ private struct StepRow: View {
             .buttonStyle(.plain)
             .padding(.top, 1.5)
 
-            Text(step.title)
-                .font(DSFont.checklistItem)
-                .strikethrough(step.isDone)
-                .foregroundStyle(step.isDone ? DSColor.textFaint : Color(hex: "#AAAAAA"))
-                // Same crop as the note field had: an HStack proposes a Text
-                // its ideal width, so a long step lost its tail off the right
-                // edge instead of running onto a second line.
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            // Click the words to change them. No pencil, for the reason the
+            // to-do row has none: opening a thing to work on it and putting a
+            // caret in it are one gesture, not two.
+            if let draft {
+                TextField("", text: Binding(get: { draft }, set: { self.draft = $0 }))
+                    .textFieldStyle(.plain)
+                    .font(DSFont.checklistItem)
+                    .foregroundStyle(DSColor.textPrimaryBright)
+                    .focused($focused)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .onSubmit { commit() }
+                    // Clicking away is a save everywhere else in this app.
+                    .onChange(of: focused) { isFocused in
+                        if !isFocused { commit() }
+                    }
+                    .onExitCommand { self.draft = nil }   // Escape discards
+            } else {
+                Text(step.title)
+                    .font(DSFont.checklistItem)
+                    .strikethrough(step.isDone)
+                    .foregroundStyle(step.isDone ? DSColor.textFaint : Color(hex: "#AAAAAA"))
+                    // Same crop as the note field had: an HStack proposes a Text
+                    // its ideal width, so a long step lost its tail off the right
+                    // edge instead of running onto a second line.
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { beginEditing() }
+            }
 
             // Deleting a step was right-click only, which is not a thing
             // anyone finds. The gutter is always reserved and only the glyph
@@ -1598,11 +1623,36 @@ private struct StepRow: View {
         .onHover { hovering in
             withAnimation(NotchAnimation.hintFade) { hover = hovering }
         }
+        // The whole row can be closed from outside this view — the parent
+        // to-do collapsing, Escape, the panel shutting. Any of those mid-edit
+        // would stranded the draft in view state and silently lose it, so
+        // leaving the screen saves too.
+        .onDisappear { commit() }
         .contextMenu {
+            Button(L10n.t("todo.editTitle")) { beginEditing() }
+            Divider()
             Button(L10n.t("action.delete"), role: .destructive) {
                 TodoStore.shared.deleteChecklistItem(step.id, in: parentID)
             }
         }
+    }
+
+    /// A ticked step is history; editing it would be rewriting what happened.
+    /// Untick it first, exactly as a completed to-do's title is not editable.
+    private func beginEditing() {
+        guard !step.isDone else { return }
+        draft = step.title
+        // The field has to exist before it can take focus.
+        DispatchQueue.main.async { focused = true }
+    }
+
+    /// Save and leave edit mode. An empty title is refused by the store, so
+    /// clearing the field and pressing Return keeps the original rather than
+    /// leaving an unreadable blank row.
+    private func commit() {
+        guard let draft else { return }
+        TodoStore.shared.renameChecklistItem(step.id, in: parentID, to: draft)
+        self.draft = nil
     }
 }
 
