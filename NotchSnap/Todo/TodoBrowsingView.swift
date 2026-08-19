@@ -763,9 +763,16 @@ struct TodoBrowsingView: View {
 
     @ViewBuilder
     private func browsingBody(for collection: TodoCollection) -> some View {
-        let openCount = store.openItems(in: collection).count
+        let open = store.openItems(in: collection)
+        let openCount = open.count
         let completedCount = store.completedItems(in: collection).count
-        let visibleRows = openCount + (store.completedExpanded ? completedCount : 0)
+        // Steps are real rows on screen now, so they have to count toward the
+        // budget. Three to-dos with five steps each is eighteen rows, not
+        // three — and a region that only counted parents would lay them out
+        // past what the notch can display, which is exactly the bug the cap
+        // exists to prevent (2026-08-05).
+        let stepCount = open.reduce(0) { $0 + $1.checklist.count }
+        let visibleRows = openCount + stepCount + (store.completedExpanded ? completedCount : 0)
 
         let content = VStack(alignment: .leading, spacing: 0) {
             // CT-1/CT-6: meetings (or the connect nudge) sit above the
@@ -1244,8 +1251,22 @@ private struct TodoItemRow: View {
         VStack(alignment: .leading, spacing: 6) {
             titleRow
 
+            // Notes stay behind the click. Steps do not.
+            //
+            // A step used to be invisible until you opened the to-do, which
+            // meant you had to click into every item to find out whether it
+            // had any — so a checklist you had written was, during ordinary
+            // browsing, simply not there (Marcello's spec, 2026-08-18). Steps
+            // now render inline, always, and stay tickable from the list.
+            //
+            // The DRAFT row is not part of that: adding a step is still
+            // something you do inside the opened to-do, so the list does not
+            // sprout an empty row under every item that has a checklist.
             if isExpanded {
-                expandedDetails
+                noteBlock
+            }
+            if !item.checklist.isEmpty || isExpanded {
+                stepsBlock(showDraftRow: isExpanded)
             }
         }
         .padding(.horizontal, isExpanded ? 12 : 8)
@@ -1356,8 +1377,11 @@ private struct TodoItemRow: View {
                 // for something that should just be click-and-type
                 // (Marcello, 2026-08-10).
 
-                // NC-2: collapsed rows with details wear a subtle indicator.
-                if item.hasDetails && !isExpanded {
+                // NC-2, narrowed: the indicator means "there is something here
+                // you cannot see". Steps are visible now, so only a note
+                // still qualifies — leaving it on `hasDetails` would have it
+                // pointing at a checklist already on screen.
+                if !item.note.isEmpty && !isExpanded {
                     Image(systemName: "text.alignleft")
                         .font(.system(size: 8))
                         .foregroundStyle(DSColor.textHint)
@@ -1460,29 +1484,33 @@ private struct TodoItemRow: View {
     // tick off — and each now gets its own connector rule with real air
     // between them.
 
-    private var expandedDetails: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            // Notes: one freeform, wrapping block.
-            indented {
-                TextField(L10n.t("todo.notePlaceholder"),
-                          text: noteBinding, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(DSFont.checklistItem)
-                    .foregroundStyle(DSColor.textSecondary)
-                    .lineLimit(1...8)
-                    // Without this the field is handed its ideal (single-line)
-                    // width and the rest of the note is simply cropped off the
-                    // right edge — text that was typed and then silently
-                    // disappeared (Marcello, 2026-08-16).
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+    private var noteBlock: some View {
+        indented {
+            TextField(L10n.t("todo.notePlaceholder"),
+                      text: noteBinding, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(DSFont.checklistItem)
+                .foregroundStyle(DSColor.textSecondary)
+                .lineLimit(1...8)
+                // Without this the field is handed its ideal (single-line)
+                // width and the rest of the note is simply cropped off the
+                // right edge — text that was typed and then silently
+                // disappeared (Marcello, 2026-08-16).
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, 2)
+    }
 
-            // Steps: their own checklist, same indent and rule.
-            indented {
-                VStack(alignment: .leading, spacing: 5) {
-                    ForEach(item.checklist) { step in
-                        StepRow(step: step, parentID: item.id)
-                    }
+    /// The steps checklist. Same indent and connector rule in the list as in
+    /// the opened row — deliberately the identical treatment, because they are
+    /// the identical rows; only where you can reach them has changed.
+    private func stepsBlock(showDraftRow: Bool) -> some View {
+        indented {
+            VStack(alignment: .leading, spacing: 5) {
+                ForEach(item.checklist) { step in
+                    StepRow(step: step, parentID: item.id)
+                }
+                if showDraftRow {
                     // Always present, always last, styled exactly like a real
                     // step. There is no "add step" button because there is
                     // nothing to press: the empty row IS the affordance, and
