@@ -109,45 +109,6 @@ struct NotchShapeView: View {
     @ObservedObject private var calendar = CalendarStore.shared
     @ObservedObject private var presence = NotchPresence.shared
 
-    // MARK: - Presence indicator geometry
-    //
-    // The collapsed silhouette has to grow to hold the indicator, and how much
-    // it grows is the whole cost of the feature: every point of width covers a
-    // point of menu bar beside the notch. So the two states are sized
-    // separately — resting asks for one small glyph, a countdown asks for a
-    // glyph, a dot and four characters.
-
-    private var presenceState: NotchPresenceState? {
-        guard showNotchPresence, state == .idle || state == .hovering else { return nil }
-        return presence.state
-    }
-
-    /// Extra width the indicator needs, over the bare notch.
-    private var presenceExtraWidth: CGFloat {
-        switch presenceState {
-        case .none:            return 0
-        // Each wing is exactly half of this. It has to hold the content plus
-        // the edge inset, or the inset gets squeezed out and the glyph ends up
-        // against the side — which is what it did at 52.
-        case .resting:         return 76
-        case .countdown:       return 148
-        }
-    }
-
-    /// How far the shape hangs BELOW the physical notch.
-    ///
-    /// Zero while resting: at menu-bar height the pill sits exactly in the
-    /// notch's own footprint on a notch Mac, so the glyph appears in the menu
-    /// bar strip without the silhouette protruding at all. A countdown earns
-    /// the protrusion — that downward flare IS the "something is coming"
-    /// signal, before you have read a single character of it.
-    private var presenceExtraHeight: CGFloat {
-        switch presenceState {
-        case .countdown: return 8
-        default:         return 0
-        }
-    }
-
     // MARK: - Raccordatura radius per state
 
     private var currentFilletRadius: CGFloat {
@@ -159,7 +120,40 @@ struct NotchShapeView: View {
         }
     }
 
-    // MARK: - Dimensions per state
+    // MARK: - Presence indicator geometry
+    //
+    // How far the collapsed silhouette grows is the entire cost of this
+    // feature: every point of width covers a point of menu bar, and enlarges
+    // the zone that swallows clicks meant for whatever is up there. So it
+    // grows for a countdown and not one point otherwise.
+
+    private var presenceState: NotchPresenceState? {
+        guard showNotchPresence, state == .idle || state == .hovering else { return nil }
+        // `.resting` draws NOTHING and adds NOTHING. A closed notch with
+        // nothing coming up is just the notch — the resting glyph made it
+        // permanently wider than the hardware for no information at all
+        // (Marcello, 2026-08-18). Presence is now something you notice
+        // because it appeared, not something always sitting there.
+        guard case .countdown = presence.state else { return nil }
+        return presence.state
+    }
+
+    /// Extra width the indicator needs, over the bare notch.
+    ///
+    /// Every point of this covers a point of menu bar and enlarges the
+    /// collapsed hit zone, so it is sized off MEASURED content, not guessed:
+    /// "in 34′" is 31pt at 11pt monospaced-digit, plus a 6pt dot and a 4pt gap
+    /// = 41pt, and 6pt of breathing room each side of it makes a 53pt wing.
+    /// Doubling that for the two wings is the whole number.
+    ///
+    /// Fixed at the widest label rather than tracking the current one: a notch
+    /// that resized itself every minute as "in 10′" became "in 9′" would be
+    /// far more distracting than a few points of slack.
+    private static let presenceWingWidth: CGFloat = 53
+
+    private var presenceExtraWidth: CGFloat {
+        presenceState == nil ? 0 : Self.presenceWingWidth * 2
+    }
 
     private var currentWidth: CGFloat {
         let base: CGFloat = {
@@ -178,8 +172,12 @@ struct NotchShapeView: View {
     private var currentHeight: CGFloat {
         let base: CGFloat = {
             switch state {
-            case .idle:                 return notchSize.height + presenceExtraHeight
-            case .hovering:             return notchSize.height + max(6, presenceExtraHeight)
+            // The indicator NEVER adds height. It exceeded the hardware notch
+            // vertically, which reads as a bar hanging into the desktop rather
+            // than as the notch itself (Marcello, 2026-08-18). It widens, and
+            // only as far as its content needs.
+            case .idle:                 return notchSize.height
+            case .hovering:             return notchSize.height + 6
             case .expanded:             return expandedSize.height + extraExpandedHeight
             case .captureNotification:  return notchSize.height
             }
@@ -271,8 +269,10 @@ struct NotchShapeView: View {
             // lone amber dot, which said only "a meeting exists" — this says
             // which kind, and how long you have.
             //
-            // Anchored to the silhouette's own bottom and side edges, by one
-            // shared inset — see NotchPresenceView.edgeInset.
+            // Each side's content is centred in its own wing — the strip
+            // between the camera housing's edge and the silhouette's outer
+            // edge — so it sits exactly between the two, which is only tight
+            // because the wing is barely wider than the content.
             .overlay(alignment: .top) {
                 if let presenceState {
                     // The shape's INNER rect: full silhouette height, and the
@@ -281,10 +281,11 @@ struct NotchShapeView: View {
                     // "inset from the edge of the notch" mean the real edge.
                     NotchPresenceView(
                         state: presenceState,
-                        notchWidth: notchSize.width
+                        notchWidth: notchSize.width,
+                        wingWidth: Self.presenceWingWidth
                     )
                     .frame(width: currentWidth - currentFilletRadius * 2,
-                           height: currentHeight)
+                           height: notchSize.height)
                 }
             }
             .animation(NotchAnimation.contentHug, value: presenceExtraWidth)

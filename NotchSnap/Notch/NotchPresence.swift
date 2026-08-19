@@ -225,39 +225,29 @@ struct NotchPresenceView: View {
     let state: NotchPresenceState
     /// The camera housing's width. Nothing may be drawn across it.
     let notchWidth: CGFloat
-
-    /// ONE number, used against the bottom edge and the side edges alike.
-    ///
-    /// Marcello's rule, verbatim: "if I have 4 or 8px at the bottom of this
-    /// icon, I should have the same amount on the right side from the edge of
-    /// the notch". So it is a single constant applied to both, not two values
-    /// that happen to look similar and are free to drift.
-    ///
-    /// 10pt because that is also the shape's bottom corner radius: content
-    /// inset by the radius clears the corner arc exactly, so the glyph can sit
-    /// in the corner without the curve biting into it.
-    static let edgeInset: CGFloat = 10
+    /// The strip between the housing's edge and the silhouette's outer edge.
+    let wingWidth: CGFloat
 
     var body: some View {
-        // Anchored to the shape's real edges, not centred inside a "wing".
+        // Each side's content is CENTRED in its wing, so it sits exactly
+        // between the edge of the physical notch and the edge of ours.
         //
-        // The wing version put the glyph in the middle of the space beside the
-        // housing, which is why it read as floating in the notch rather than
-        // sitting in its corner. Pushing each side's content hard against its
-        // own outer edge and insetting by one number is the whole fix.
-        //
-        // The Spacer's minLength is the housing: it guarantees the two sides
-        // can never grow toward each other far enough to cross the camera.
+        // Centring only works because the wing is barely wider than the
+        // content: at 53pt against 41pt of countdown there is 6pt either side,
+        // so "centred in the wing" and "almost touching both edges" are the
+        // same placement. In the first version the wings were 74pt and the
+        // glyph floated in the middle of all that space, which is why edge
+        // anchoring looked like the fix — the real problem was the width.
         HStack(spacing: 0) {
             leading
-            Spacer(minLength: notchWidth)
+                .frame(width: wingWidth)
+            Color.clear.frame(width: notchWidth)
             trailing
+                .frame(width: wingWidth)
         }
-        .padding(.horizontal, Self.edgeInset)
-        .padding(.bottom, Self.edgeInset)
-        // Bottom-aligned, so the gap under the content IS `edgeInset` rather
-        // than whatever vertical centring happens to leave over.
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        // Vertically centred in the notch's own height. Nothing hangs below
+        // it any more, so there is no protrusion to align against.
+        .frame(maxHeight: .infinity, alignment: .center)
         .allowsHitTesting(false)
     }
 
@@ -285,21 +275,19 @@ struct NotchPresenceView: View {
     private var trailing: some View {
         switch state {
         case .resting:
-            // Glyph-only, as the spec recommended: the least a permanent
-            // element can be and still say "running". No dot — a dot with no
-            // countdown beside it looks like an unread badge.
-            Image(systemName: "circle.dashed")
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(DSColor.textPrimaryBright.opacity(0.38))
+            // Never rendered — NotchShapeView refuses to show the indicator at
+            // all while resting, so the closed notch matches the hardware.
+            EmptyView()
         case .countdown(let countdown):
-            HStack(spacing: 5) {
+            HStack(spacing: 4) {
                 Circle()
                     .fill(countdown.dotColor)
                     .frame(width: 6, height: 6)
                     .shadow(color: countdown.dotColor.opacity(0.55), radius: 3)
                 Text(countdown.label)
-                    .font(.system(size: 11, weight: .medium))
-                    .monospacedDigit()
+                    // Monospaced digits so the label does not reflow — and so
+                    // the width the wing is sized against is a constant.
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
                     .foregroundStyle(DSColor.textPrimaryBright)
                     .fixedSize()
             }
