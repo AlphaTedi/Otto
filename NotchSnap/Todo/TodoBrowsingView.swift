@@ -1537,13 +1537,13 @@ private struct TodoItemRow: View {
         indented {
             VStack(alignment: .leading, spacing: 5) {
                 ForEach(item.checklist) { step in
-                    StepRow(step: step, parentID: item.id)
+                    StepRow(step: step, parentID: item.id, accent: accent)
                 }
                 // Always present, always last, styled exactly like a real
                 // step. There is no "add step" button because there is nothing
                 // to press: the empty row IS the affordance, and committing one
                 // leaves you sitting on the next.
-                StepDraftRow(parentID: item.id)
+                StepDraftRow(parentID: item.id, accent: accent)
             }
         }
         .padding(.top, 2)
@@ -1596,6 +1596,10 @@ private struct TodoItemRow: View {
 private struct StepRow: View {
     let step: ChecklistItem
     let parentID: UUID
+    /// The section's own colour, the same one the parent to-do's checkbox
+    /// wears. A step's box was a flat grey, which made a checklist look like
+    /// it belonged to no list in particular (Marcello, 2026-08-19).
+    let accent: Color
     @State private var hover = false
     /// `nil` = not editing; a String = the live draft. Held apart from the
     /// step so an abandoned edit never touches what is stored — the same
@@ -1611,12 +1615,12 @@ private struct StepRow: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: DSRadius.checklistCheckboxCorner,
                                      style: .continuous)
-                        .strokeBorder(DSColor.textFaint, lineWidth: 1)
+                        .strokeBorder(accent, lineWidth: 1)
                         .frame(width: 10, height: 10)
                     if step.isDone {
                         RoundedRectangle(cornerRadius: DSRadius.checklistCheckboxCorner,
                                          style: .continuous)
-                            .fill(DSColor.textFaint)
+                            .fill(accent)
                             .frame(width: 10, height: 10)
                         Image(systemName: "checkmark")
                             .font(.system(size: 6, weight: .black))
@@ -1719,18 +1723,28 @@ private struct StepRow: View {
 /// is five lines and five Returns with nothing else to aim at in between.
 private struct StepDraftRow: View {
     let parentID: UUID
+    let accent: Color
     @State private var text = ""
     @FocusState private var focused: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 7) {
-            // IDENTICAL to a real step's box, not a quieter version of it.
-            // The original pattern was "styled identically to a real step row,
-            // showing muted placeholder text" — the muting belongs to the
-            // words, not the checkbox, and a dimmer box was working against
-            // the one job this row has: being noticed.
+            // DASHED, and that is the whole point of it.
+            //
+            // This box was made identical to a real step's for fidelity to
+            // "styled identically to a real step row" — which turned out to be
+            // the wrong reading. On a real display the two were
+            // indistinguishable, so an empty box that does nothing when you
+            // click it sat directly under boxes that tick (Marcello,
+            // 2026-08-19). Identical ROW — same size, same indent, same
+            // baseline — but the box has to say it is not a step yet.
+            //
+            // A dashed outline is the ordinary way to draw a slot rather than
+            // a thing, and it keeps the section's colour so the row still
+            // reads as part of this checklist.
             RoundedRectangle(cornerRadius: DSRadius.checklistCheckboxCorner, style: .continuous)
-                .strokeBorder(DSColor.textFaint, lineWidth: 1)
+                .strokeBorder(accent.opacity(0.5),
+                              style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
                 .frame(width: 10, height: 10)
                 .padding(.top, 1.5)
 
