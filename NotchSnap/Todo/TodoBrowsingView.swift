@@ -771,7 +771,9 @@ struct TodoBrowsingView: View {
         // three — and a region that only counted parents would lay them out
         // past what the notch can display, which is exactly the bug the cap
         // exists to prevent (2026-08-05).
-        let stepCount = open.reduce(0) { $0 + $1.checklist.count }
+        // +1 per checklist for the trailing draft row, which is now on screen
+        // in the list as well.
+        let stepCount = open.reduce(0) { $0 + $1.checklist.count + ($1.checklist.isEmpty ? 0 : 1) }
         let visibleRows = openCount + stepCount + (store.completedExpanded ? completedCount : 0)
 
         let content = VStack(alignment: .leading, spacing: 0) {
@@ -1259,14 +1261,21 @@ private struct TodoItemRow: View {
             // browsing, simply not there (Marcello's spec, 2026-08-18). Steps
             // now render inline, always, and stay tickable from the list.
             //
-            // The DRAFT row is not part of that: adding a step is still
-            // something you do inside the opened to-do, so the list does not
-            // sprout an empty row under every item that has a checklist.
+            // The draft row comes with them. It was held back to the opened
+            // to-do at first, which left the list showing a checklist with no
+            // hint that it could be added to — "you don't have anything that
+            // shows you how you can add a new step" (Marcello, 2026-08-19).
+            // The empty row IS the affordance, so keeping it hidden was
+            // keeping the feature hidden.
+            //
+            // It appears under a to-do that HAS steps, not under every to-do:
+            // an empty "Type to add a step" line beneath all twenty rows of a
+            // list would be a lot of furniture to advertise one gesture.
             if isExpanded {
                 noteBlock
             }
             if !item.checklist.isEmpty || isExpanded {
-                stepsBlock(showDraftRow: isExpanded)
+                stepsBlock()
             }
         }
         .padding(.horizontal, isExpanded ? 12 : 8)
@@ -1504,19 +1513,17 @@ private struct TodoItemRow: View {
     /// The steps checklist. Same indent and connector rule in the list as in
     /// the opened row — deliberately the identical treatment, because they are
     /// the identical rows; only where you can reach them has changed.
-    private func stepsBlock(showDraftRow: Bool) -> some View {
+    private func stepsBlock() -> some View {
         indented {
             VStack(alignment: .leading, spacing: 5) {
                 ForEach(item.checklist) { step in
                     StepRow(step: step, parentID: item.id)
                 }
-                if showDraftRow {
-                    // Always present, always last, styled exactly like a real
-                    // step. There is no "add step" button because there is
-                    // nothing to press: the empty row IS the affordance, and
-                    // committing one leaves you sitting on the next.
-                    StepDraftRow(parentID: item.id)
-                }
+                // Always present, always last, styled exactly like a real
+                // step. There is no "add step" button because there is nothing
+                // to press: the empty row IS the affordance, and committing one
+                // leaves you sitting on the next.
+                StepDraftRow(parentID: item.id)
             }
         }
         .padding(.top, 2)
@@ -1697,10 +1704,13 @@ private struct StepDraftRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 7) {
-            // The same 10pt box as a real step, one tone quieter. It is what
-            // makes this read as "the next step" rather than as a form field.
+            // IDENTICAL to a real step's box, not a quieter version of it.
+            // The original pattern was "styled identically to a real step row,
+            // showing muted placeholder text" — the muting belongs to the
+            // words, not the checkbox, and a dimmer box was working against
+            // the one job this row has: being noticed.
             RoundedRectangle(cornerRadius: DSRadius.checklistCheckboxCorner, style: .continuous)
-                .strokeBorder(DSColor.textHint, lineWidth: 1)
+                .strokeBorder(DSColor.textFaint, lineWidth: 1)
                 .frame(width: 10, height: 10)
                 .padding(.top, 1.5)
 
