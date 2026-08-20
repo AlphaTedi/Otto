@@ -285,6 +285,13 @@ final class TodoStore: ObservableObject {
     /// what Return and clicking-the-row-shut already do.
     func endEditing() {
         blurDraft()
+        // Selection goes too, not just the open row.
+        //
+        // Clicking a to-do rings it blue and there was no way to un-ring it:
+        // arrows moved the selection along, but nothing put it back to nobody
+        // selected (Marcello, 2026-08-19). A selection you cannot clear is a
+        // mode the user has been put into and cannot leave.
+        focusedItemID = nil
         guard expandedItemID != nil else { return }
         withAnimation(NotchAnimation.contentHug) { expandedItemID = nil }
     }

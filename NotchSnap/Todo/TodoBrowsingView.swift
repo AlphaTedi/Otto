@@ -150,6 +150,21 @@ private struct UrgencyTooltipKey: PreferenceKey {
     }
 }
 
+/// A transparent layer that means "you clicked nothing" — it ends whatever
+/// edit or selection is live.
+///
+/// Always used as a `.background`, deliberately: a background only receives a
+/// click where nothing in front of it handled one, so rows, checkboxes,
+/// buttons, the tab strip and drag-to-reorder all still get theirs first. It
+/// is a fallback, never an interceptor.
+private struct DeselectCatcher: View {
+    var body: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .onTapGesture { TodoStore.shared.endEditing() }
+    }
+}
+
 private extension View {
     func measureHeight<K: PreferenceKey>(_ key: K.Type) -> some View where K.Value == CGFloat {
         background(
@@ -226,11 +241,7 @@ struct TodoTabView: View {
         // click where no real control was hit, so rows, buttons, the tab
         // strip and drag-to-reorder all still get theirs first. It is a
         // fallback, not an interceptor.
-        .background(
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture { TodoStore.shared.endEditing() }
-        )
+        .background(DeselectCatcher())
         .background(TodoBrowsingKeyHandler())
     }
 
@@ -785,6 +796,15 @@ struct TodoBrowsingView: View {
             todoList(for: collection)
             completedSection(for: collection)
         }
+        // A second catcher, INSIDE what will become the scroll region.
+        //
+        // The panel already had one at its root, but an NSScrollView is opaque
+        // to hit testing: once the list is long enough to scroll, a click in
+        // the gaps between rows lands on the scroller and is consumed there,
+        // and never reaches anything behind it. So the panel-root catcher
+        // worked on a short list and silently stopped working on a long one —
+        // which is the list you are most likely to be clicking around in.
+        .background(DeselectCatcher())
 
         if visibleRows <= Self.inlineRowThreshold {
             // Fits comfortably: hug it, no scroll, no measurement round-trip.

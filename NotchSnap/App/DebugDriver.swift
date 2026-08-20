@@ -72,6 +72,14 @@ enum DebugDriver {
             if let focused = store.focusedItemID ?? store.activeCollection.flatMap({ store.openItems(in: $0).first?.id }) {
                 withAnimation(NotchAnimation.contentHug) { store.expandedItemID = focused }
             }
+        case "deselect":
+            // The exact path a click on dead panel space takes.
+            store.endEditing()
+        case "focus-first":
+            if let collection = store.activeCollection,
+               let first = store.openItems(in: collection).first {
+                store.focusedItemID = first.id
+            }
         case "collapse-row":
             withAnimation(NotchAnimation.contentHug) { store.expandedItemID = nil }
         case "presence":
@@ -252,7 +260,7 @@ enum DebugDriver {
         activeCollection=\(store.activeCollection?.name ?? "nil") \
         open=\(open) completed=\(done) settling=\(store.settlingItemIDs.count) \
         progress=\(progress.map { String(format: "%.2f", $0) } ?? "nil") \
-        expandedRow=\(store.expandedItemID != nil) \
+        expandedRow=\(store.expandedItemID != nil) focused=\(store.focusedItemID != nil) \
         findQuery='\(store.findQuery)' findMatches=\(store.findMatches.count) \
         draftFocused=\(store.draftFocused) dest=\(store.draftDestination?.name ?? "nil") \
         draft='\(store.draftTitle)' \
