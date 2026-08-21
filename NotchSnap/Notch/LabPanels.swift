@@ -19,18 +19,41 @@ import AppKit
 // these are exactly the values that get retuned against the Figma file.
 
 enum LabMetrics {
+    // Measured off the isolated block render, not guessed. The block is 760px
+    // wide in a 1940px shot of a 1512pt screen (1.283 px/pt), so it is 592pt —
+    // and the standalone render is that same block at 1314px, giving 2.218
+    // px/pt to convert everything else.
+
     /// Panel width. Both blocks share it — they are a column, not two shapes
     /// that happen to be near each other.
-    static let blockWidth: CGFloat = 600
+    static let blockWidth: CGFloat = 592
 
     /// From the bottom of the notch to the first panel. Big on purpose: this
     /// gap is the entire argument that the panels are not part of the notch.
-    static let notchGap: CGFloat = 56
+    static let notchGap: CGFloat = 72
     /// Between the two panels.
-    static let blockGap: CGFloat = 20
+    static let blockGap: CGFloat = 24
 
-    static let blockRadius: CGFloat = 18
-    static let blockPadding: CGFloat = 14
+    static let blockRadius: CGFloat = 20
+    static let blockPadding: CGFloat = 22
+
+    /// The to-do panel STOPS. Without a ceiling it grew to whatever the list
+    /// needed and swallowed the screen (Marcello, 2026-08-19) — a floating
+    /// panel that can outgrow its own design is not a panel, it is a window.
+    static let todoBlockMaxHeight: CGFloat = 470
+    /// What is left for the list once the panel's own furniture is paid for:
+    /// padding, the field, the section row, the rule and the gaps between.
+    static let todoListMaxHeight: CGFloat =
+        todoBlockMaxHeight - (blockPadding * 2 + inputHeight + inputToTabs
+                              + tabRowHeight + tabsToRule + ruleToList)
+
+    // The to-do panel's internals.
+    static let inputHeight: CGFloat = 44
+    static let inputRadius: CGFloat = 11
+    static let inputToTabs: CGFloat = 16
+    static let tabRowHeight: CGFloat = 26
+    static let tabsToRule: CGFloat = 26
+    static let ruleToList: CGFloat = 32
 
     /// The peeking cards behind the top meeting.
     static let stackOffset: CGFloat = 7
@@ -331,8 +354,11 @@ struct LabPanelsView: View {
         VStack(spacing: LabMetrics.blockGap) {
             LabMeetingBlock()
 
+            // No padding here: TodoTabView carries its own, to the same
+            // number. Applying both is what made the panel's insets read as
+            // roughly twice the design.
             TodoTabView()
-                .padding(LabMetrics.blockPadding)
+                .frame(maxHeight: LabMetrics.todoBlockMaxHeight, alignment: .top)
                 .labBlock()
         }
         .padding(.top, LabMetrics.notchGap)

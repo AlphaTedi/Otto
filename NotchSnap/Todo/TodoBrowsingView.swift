@@ -201,8 +201,7 @@ struct TodoTabView: View {
                 todoPanelContent
             }
         }
-        .padding(EdgeInsets(top: 14, leading: DSSpacing.panelPadding,
-                            bottom: DSSpacing.panelPadding, trailing: DSSpacing.panelPadding))
+        .padding(LabMetrics.blockPadding)
         // UG-2: immediate tooltip near the hovered/focused row's urgency dot,
         // clamped so it can't overflow the panel's edges.
         .overlayPreferenceValue(UrgencyTooltipKey.self) { infos in
@@ -266,6 +265,7 @@ struct TodoTabView: View {
                 if store.panelMode == .browsing || store.panelMode == .voice {
                     InlineDraftRow(accent: store.draftDestination?.color ?? DSColor.focusAccent)
                         .notchEntry(index: 0)
+                        .padding(.bottom, LabMetrics.inputToTabs)
                     TodoTabRow()
                         .notchEntry(index: 1)
                 }
@@ -354,14 +354,21 @@ private struct TodoTabRow: View {
         // No rule under the tab row (Marcello, 2026-07-26). The two paddings
         // stay: they were the breathing room either side of the line, and
         // together they are what now separates the tabs from the list.
-        .padding(.bottom, DSSpacing.tabRowBottomPadding)
-        .padding(.bottom, DSSpacing.tabRowBottomMargin)
+        // A hairline under the sections, then air before the list — the
+        // separation the design draws, at the distances it draws them.
+        .padding(.bottom, LabMetrics.tabsToRule)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(DSColor.panelBorder.opacity(0.6))
+                .frame(height: 0.5)
+        }
+        .padding(.bottom, LabMetrics.ruleToList)
     }
 
     private var tabScroller: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(Array(store.collections.enumerated()), id: \.element.id) { index, collection in
+                ForEach(Array(store.visibleCollections.enumerated()), id: \.element.id) { index, collection in
                     // NOT a Button, deliberately — and this is the whole
                     // reason tabs could not be dragged at all.
                     //
@@ -449,7 +456,7 @@ private struct TodoTabRow: View {
                         Button(L10n.t("action.moveRight")) {
                             store.moveCollection(collection.id, by: 1)
                         }
-                        .disabled(index == store.collections.count - 1)
+                        .disabled(index == store.visibleCollections.count - 1)
                         if !collection.isSystemToday {
                             Divider()
                             Button(L10n.t("action.delete"), role: .destructive) {
@@ -730,12 +737,10 @@ struct TodoBrowsingView: View {
     /// scroll region's point of view, and a region that ignored it would lay
     /// out rows in the strip the draft is standing on.
     private static func maxRegion(draftInset: CGFloat) -> CGFloat {
-        // Panel top inset + tab row + its top padding + the two paddings under
-        // it + the panel's bottom inset.
-        let chrome: CGFloat = 14 + 34 + 8
-            + DSSpacing.tabRowBottomPadding + DSSpacing.tabRowBottomMargin
-            + DSSpacing.panelPadding
-        return max(200, AppState.shared.maxTodoContentHeight - chrome - draftInset)
+        // The panel's ceiling minus its furniture, computed once in
+        // LabMetrics. It used to be derived from the SCREEN, which is why an
+        // unbounded list grew until it covered one.
+        LabMetrics.todoListMaxHeight
     }
 
     /// One line of draft plus its padding and the gap under it. An estimate,
@@ -744,7 +749,11 @@ struct TodoBrowsingView: View {
     /// one row of scroll, while the cost of measuring is a layout round-trip
     /// on every keystroke.
     private static let draftRowAllowance: CGFloat = 54
-    private static let inlineRowThreshold = 8
+    /// Negative on purpose: the capped, scrolling path is now the ONLY path.
+    /// The inline path had no ceiling, so a list that grew past the panel's
+    /// height simply kept going. `viewport = min(natural, cap)` still hugs a
+    /// short list, so nothing is lost but the overflow.
+    private static let inlineRowThreshold = -1
     private static let scrollSpace = "todoScrollRegion"
     private static let bottomAnchor = "todoScrollBottom"
 
@@ -815,7 +824,9 @@ struct TodoBrowsingView: View {
         } else {
             // Tall: one capped ScrollView so list + Completed scroll as a
             // single unit and the panel height stops at the budget.
-            let budget = Self.maxRegion(draftInset: Self.draftRowAllowance)
+            // draftInset 0: the typing bar lives above the sections now, in
+            // TodoTabView, not inside this scrolling column.
+            let budget = Self.maxRegion(draftInset: 0)
             let viewport = min(regionNaturalHeight, budget)
             let hasBelow = regionNaturalHeight - scrollOffset - viewport > 2
             // Indicators ON. They were hidden, so a capped region gave the eye

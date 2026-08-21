@@ -168,12 +168,13 @@ final class TodoStore: ObservableObject {
     /// here — it is a tab like any other to read — and `draftDestination`
     /// handles the fact that nothing can be filed into it.
     func cycleCollection(by offset: Int = 1) {
-        guard collections.count > 1 else { return }
-        let idx = collections.firstIndex { $0.id == activeCollectionID } ?? 0
-        let count = collections.count
+        let row = visibleCollections
+        guard row.count > 1 else { return }
+        let idx = row.firstIndex { $0.id == activeCollectionID } ?? 0
+        let count = row.count
         let next = ((idx + offset) % count + count) % count
         withAnimation(NotchAnimation.contentHug) {
-            activeCollectionID = collections[next].id
+            activeCollectionID = row[next].id
         }
         focusedItemID = nil
         expandedItemID = nil
@@ -416,7 +417,7 @@ final class TodoStore: ObservableObject {
         try? FileManager.default.createDirectory(at: Self.directory, withIntermediateDirectories: true)
         load()
         if collections.isEmpty { seedStarterCollections() }
-        activeCollectionID = collections.first?.id
+        activeCollectionID = firstUserCollection?.id ?? collections.first?.id
         lastUsedCollectionID = lastUsedCollectionID ?? firstUserCollection?.id
     }
 
@@ -440,8 +441,23 @@ final class TodoStore: ObservableObject {
         collections.first { !$0.isSystemToday }
     }
 
+    /// LAB: the sections a user actually sees. Today is not one of them.
+    ///
+    /// Today was a smart view aggregating meetings and anything due today.
+    /// Meetings have their own panel now, and what was left was a section you
+    /// could not file into, could not reorder meaningfully, and which sat
+    /// first in a row whose first entry decides where ⌃⇧N lands. It is hidden
+    /// rather than deleted — the collection still exists in the file, so
+    /// nothing a user made goes anywhere, and turning it back on is one line.
+    var visibleCollections: [TodoCollection] {
+        collections.filter { !$0.isSystemToday }
+    }
+
     var activeCollection: TodoCollection? {
-        collections.first { $0.id == activeCollectionID } ?? collections.first
+        // Falls back to a VISIBLE section: resolving to Today would light no
+        // tab and list nothing, which reads as the panel being broken.
+        collections.first { $0.id == activeCollectionID }
+            ?? firstUserCollection ?? collections.first
     }
 
     func collection(id: UUID) -> TodoCollection? {
@@ -564,7 +580,7 @@ final class TodoStore: ObservableObject {
 
     /// KB-8: ⌘1…⌘9 select by tab order.
     func selectCollection(atIndex index: Int) {
-        let ordered = collections.sorted { $0.sortOrder < $1.sortOrder }
+        let ordered = visibleCollections.sorted { $0.sortOrder < $1.sortOrder }
         guard index >= 0, index < ordered.count else { return }
         withAnimation(NotchAnimation.contentHug) {
             activeCollectionID = ordered[index].id
