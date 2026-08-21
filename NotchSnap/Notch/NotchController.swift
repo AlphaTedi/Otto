@@ -935,8 +935,12 @@ class NotchController: ObservableObject {
             width = notificationWide ? 320 : notchSize.width + 80 + fillet * 2
             height = notchSize.height
         case .expanded:
-            width = expandedSize.width
-            height = expandedSize.height + currentExtraExpandedHeight
+            // LAB: the column is centred and the notch sits above it, so the
+            // live region is the wider of the two, from the screen top down
+            // past the last panel. Without this the "pointer left" test fires
+            // the moment you move off the notch and onto the panel you opened.
+            width = max(expandedSize.width, LabMetrics.blockWidth + 40)
+            height = notchSize.height + AppState.shared.labColumnHeight + 24
         }
         return NSRect(x: notchRect.midX - width / 2,
                       y: screen.frame.maxY - height,
