@@ -35,7 +35,7 @@ final class NotesStore: ObservableObject {
 
     private static var notesDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("NotchSnap/Notes", isDirectory: true)
+        return base.appendingPathComponent("\(AppBuild.supportRoot)/Notes", isDirectory: true)
     }
     private var indexURL: URL { Self.notesDirectory.appendingPathComponent("notes.json") }
     private var draftURL: URL { Self.notesDirectory.appendingPathComponent("draft.txt") }

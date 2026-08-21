@@ -27,7 +27,7 @@ final class ShelfStore: ObservableObject {
 
     static var shelfDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("NotchSnap/Shelf", isDirectory: true)
+        return base.appendingPathComponent("\(AppBuild.supportRoot)/Shelf", isDirectory: true)
     }
 
     private var indexURL: URL { Self.shelfDirectory.appendingPathComponent("shelf.json") }

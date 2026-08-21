@@ -34,8 +34,11 @@ final class UpdateController: ObservableObject {
         // startingUpdater: true wires the scheduled background check. The
         // interval and opt-in live in Info.plist (SUScheduledCheckInterval,
         // SUEnableAutomaticChecks) so they can change without code.
+        // `startingUpdater` is what schedules the background check. Off in the
+        // lab: its feed is the production appcast, so a check there would offer
+        // the shipped Otto as an update to the experiment. See AppBuild.
         controller = SPUStandardUpdaterController(
-            startingUpdater: true,
+            startingUpdater: AppBuild.updatesEnabled,
             updaterDelegate: nil,
             userDriverDelegate: nil
         )
@@ -49,6 +52,7 @@ final class UpdateController: ObservableObject {
     /// "you're up to date" — an explicit check that silently does nothing reads
     /// as broken.
     func checkForUpdates() {
+        guard AppBuild.updatesEnabled else { return }
         controller.checkForUpdates(nil)
     }
 

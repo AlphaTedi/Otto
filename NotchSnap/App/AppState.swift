@@ -398,7 +398,7 @@ class AppState: ObservableObject {
 
     private static var clipboardArchiveDir: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("NotchSnap/Clipboard", isDirectory: true)
+        return base.appendingPathComponent("\(AppBuild.supportRoot)/Clipboard", isDirectory: true)
     }
 
     private var archiveSaveWork: Task<Void, Never>?

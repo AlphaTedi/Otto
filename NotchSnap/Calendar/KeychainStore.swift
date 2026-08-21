@@ -18,7 +18,7 @@ import Security
 // `account` key, so nothing is gained by splitting it further.
 
 enum KeychainStore {
-    private static let service = "com.notchsnap.app.google"
+    private static let service = AppBuild.keychainService
 
     static func set(_ value: String?, for key: String) {
         guard let value, !value.isEmpty else { remove(key); return }

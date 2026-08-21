@@ -398,7 +398,7 @@ final class TodoStore: ObservableObject {
 
     private static var directory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("NotchSnap/Todo", isDirectory: true)
+        return base.appendingPathComponent("\(AppBuild.supportRoot)/Todo", isDirectory: true)
     }
     private var fileURL: URL { Self.directory.appendingPathComponent("todos.json") }
 
