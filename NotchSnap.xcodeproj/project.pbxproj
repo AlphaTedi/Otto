@@ -56,6 +56,7 @@
 		3BF751FAB2DFBE6DC925D070 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1D1573CE4ECF92AE73C92E80 /* CoreGraphics.framework */; };
 		5526A8F0BE72BC26415C37CF /* ServiceManagement.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 84C92F197DAF6CED42810033 /* ServiceManagement.framework */; };
 		57FD7FB54260751DC5FD3F66 /* NotchShapeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7942B954C2418CDD5041B8A /* NotchShapeView.swift */; };
+		57FD7FB54260751DC5FD3F69 /* LabPanels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7942B954C2418CDD5041B8D /* LabPanels.swift */; };
 		57FD7FB54260751DC5FD3F68 /* AppBuild.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7942B954C2418CDD5041B8C /* AppBuild.swift */; };
 		57FD7FB54260751DC5FD3F67 /* NotchPresence.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7942B954C2418CDD5041B8B /* NotchPresence.swift */; };
 		58E49326D849B64D6ECF2FB4 /* DragImageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CA5E8BD295598E318BF0355 /* DragImageProvider.swift */; };
@@ -204,6 +205,7 @@
 		CDE65A9C4E12466ED5903603 /* NotchController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchController.swift; sourceTree = "<group>"; };
 		D2E3F40516A7B8C9D0E1F2A3 /* AnnotationToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationToolbar.swift; sourceTree = "<group>"; };
 		D7942B954C2418CDD5041B8A /* NotchShapeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchShapeView.swift; sourceTree = "<group>"; };
+		D7942B954C2418CDD5041B8D /* LabPanels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabPanels.swift; sourceTree = "<group>"; };
 		D7942B954C2418CDD5041B8C /* AppBuild.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBuild.swift; sourceTree = "<group>"; };
 		D7942B954C2418CDD5041B8B /* NotchPresence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchPresence.swift; sourceTree = "<group>"; };
 		DD44EE55FF66AA11BB22CC33 /* NotchLivePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchLivePreview.swift; sourceTree = "<group>"; };
@@ -426,6 +428,7 @@
 				BB22CC33DD44EE55FF660011 /* NotchAnimation.swift */,
 				CDE65A9C4E12466ED5903603 /* NotchController.swift */,
 				D7942B954C2418CDD5041B8A /* NotchShapeView.swift */,
+				D7942B954C2418CDD5041B8D /* LabPanels.swift */,
 				D7942B954C2418CDD5041B8B /* NotchPresence.swift */,
 				96E1B1ED1D889C06D708A9E8 /* NotchRootView.swift */,
 				517D724F18CF2E7DAF0B50FD /* NotchExpandedView.swift */,
@@ -602,6 +605,7 @@
 				B2A1D418A62187C8E8EF5FB8 /* AreaSelector.swift in Sources */,
 				06FE3C740C45168B53D42F4C /* NotchController.swift in Sources */,
 				57FD7FB54260751DC5FD3F66 /* NotchShapeView.swift in Sources */,
+				57FD7FB54260751DC5FD3F69 /* LabPanels.swift in Sources */,
 				57FD7FB54260751DC5FD3F68 /* AppBuild.swift in Sources */,
 				57FD7FB54260751DC5FD3F67 /* NotchPresence.swift in Sources */,
 				AA5CA730912737A5ABBADA14 /* NotchRootView.swift in Sources */,

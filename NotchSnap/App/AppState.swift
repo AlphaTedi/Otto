@@ -61,6 +61,11 @@ class AppState: ObservableObject {
     /// function of this value — never a fixed container that scrolls.
     /// Published so the notch shape re-renders the moment content changes.
     @Published var todoContentHeight: CGFloat = 0
+    /// LAB: the height of the whole detached column — gap, meeting block, gap,
+    /// to-do block. The panel window and the hover zone are both derived from
+    /// it, so the window can never be shorter than what it is drawing and the
+    /// notch cannot collapse out from under panels the pointer is inside.
+    @Published var labColumnHeight: CGFloat = 0
 
     /// Menu-bar/notch strip height, pushed in by NotchController on setup and
     /// screen changes — the hugging math needs it to convert "content height"
@@ -124,7 +129,10 @@ class AppState: ObservableObject {
             // notch strip + 8 (top gap) + measured panel (its own paddings
             // and bezel margins are inside the measurement) + filter bar
             // when legacy panels are shown.
-            let desiredTotal = notchBarHeight + 8 + todoContentHeight + filterBar
+            // LAB: the column measures itself — meeting block included — so
+            // the to-do panel's own height is no longer the whole story.
+            let content = labColumnHeight > 0 ? labColumnHeight : todoContentHeight + 8
+            let desiredTotal = notchBarHeight + content + filterBar
             let cappedTotal = min(desiredTotal, Self.expandedBaseHeight + Self.maxExtraHeight)
             return cappedTotal - Self.expandedBaseHeight
         case .notes:

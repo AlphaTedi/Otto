@@ -250,12 +250,24 @@ struct TodoTabView: View {
     private var todoPanelContent: some View {
         ZStack(alignment: .topLeading) {
             VStack(alignment: .leading, spacing: 0) {
-                // The tab row lives OUTSIDE the mode switch: its identity is
-                // stable, so a mode swap changes only the content below —
-                // same motion as switching categories.
+                // LAB: the typing bar leads, the sections follow it.
+                //
+                // It used to be tabs-then-field, which put a row of category
+                // chips between you and the thing you came to do. The bar is
+                // the panel's purpose — it reads as a search field, you type,
+                // you press Return — so it goes first, and the sections become
+                // what they actually are: where the thing you just typed will
+                // land. ⇥ still moves between them.
+                //
+                // The draft row is hoisted out of TodoBrowsingView to sit here,
+                // which also puts it further OUTSIDE the `.id(collection.id)`
+                // subtree that is rebuilt on every section switch — the same
+                // reason it was pinned in the first place, now structural.
                 if store.panelMode == .browsing || store.panelMode == .voice {
-                    TodoTabRow()
+                    InlineDraftRow(accent: store.draftDestination?.color ?? DSColor.focusAccent)
                         .notchEntry(index: 0)
+                    TodoTabRow()
+                        .notchEntry(index: 1)
                 }
                 // ZStack, not bare switch: during a transition BOTH the
                 // outgoing and incoming views exist for a few frames — as
@@ -748,15 +760,6 @@ struct TodoBrowsingView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // The draft row sits OUTSIDE the `.id(collection.id)` block below,
-            // and that placement is the whole feature. Everything inside that
-            // block is torn down and rebuilt when the active section changes;
-            // a draft living in there would lose its caret — and visibly
-            // crossfade — on the very keystroke (Tab) whose entire purpose is
-            // to leave it alone. Out here it is a sibling of the list, so Tab
-            // swaps what is underneath it and nothing else.
-            InlineDraftRow(accent: store.draftDestination?.color ?? DSColor.focusAccent)
-
             // §8.3 category switch: the id() swap transitions the whole block
             // while the panel height animates — content and container together.
             if let collection = store.activeCollection {
