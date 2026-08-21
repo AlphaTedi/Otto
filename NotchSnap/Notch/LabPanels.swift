@@ -76,14 +76,14 @@ private extension View {
     func labBlock() -> some View {
         self
             .frame(width: LabMetrics.blockWidth, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: LabMetrics.blockRadius, style: .continuous)
-                    .fill(Color.black)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: LabMetrics.blockRadius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.5)
-            )
+            // Glass, not a black fill. A black panel on a dark desktop has no
+            // edge to find; what separates glass from what is behind it is the
+            // blur and the lit rim, which work at any background brightness.
+            .liquidGlass(in: RoundedRectangle(cornerRadius: LabMetrics.blockRadius,
+                                              style: .continuous))
+            // The shadow stays and matters MORE on glass: a translucent panel
+            // needs the ground shadow to sit above the desktop rather than
+            // dissolve into it.
             .shadow(color: .black.opacity(0.45), radius: 24, y: 10)
     }
 }
@@ -243,14 +243,9 @@ struct LabMeetingBlock: View {
                 .background(alignment: .top) {
                     ForEach(0..<peekCount, id: \.self) { i in
                         let depth = CGFloat(i + 1)
-                        RoundedRectangle(cornerRadius: LabMetrics.blockRadius,
-                                         style: .continuous)
-                            .fill(Color.black)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: LabMetrics.blockRadius,
-                                                 style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
-                            )
+                        Color.clear
+                            .liquidGlass(in: RoundedRectangle(
+                                cornerRadius: LabMetrics.blockRadius, style: .continuous))
                             .scaleEffect(1 - LabMetrics.stackScaleStep * depth, anchor: .top)
                             .offset(y: LabMetrics.stackOffset * depth)
                             .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
@@ -327,7 +322,9 @@ private struct LabMeetingCard: View {
                         diameter: 24,
                         maxVisible: 3,
                         isMuted: !isNext,
-                        ringColor: .black
+                        // The ring separates overlapping discs, so it has to be
+                        // whatever is actually behind them — glass, not black.
+                        ringColor: Color.white.opacity(0.10)
                     )
                 }
                 .padding(.top, 10)

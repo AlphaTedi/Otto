@@ -1167,13 +1167,17 @@ private struct InlineDraftRow: View {
         // Spans the notch. Without this the field reports its own ideal width
         // and the box floated mid-panel, detached from the list it belongs to.
         .frame(maxWidth: .infinity, alignment: .leading)
+        // On glass a near-black fill reads as a hole punched in the panel, so
+        // the resting state lifts with white instead of sinking with black.
+        // Focus still swaps to the destination's colour.
         .background(
-            RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
-                .fill(focused ? accent.opacity(0.14) : DSColor.fieldBackground)
+            RoundedRectangle(cornerRadius: LabMetrics.inputRadius, style: .continuous)
+                .fill(focused ? accent.opacity(0.16) : Color.white.opacity(0.08))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
-                .strokeBorder(focused ? accent.opacity(0.6) : .clear, lineWidth: 1)
+            RoundedRectangle(cornerRadius: LabMetrics.inputRadius, style: .continuous)
+                .strokeBorder(focused ? accent.opacity(0.7)
+                                      : Color.white.opacity(0.10), lineWidth: 1)
         )
         // Clicking anywhere in the box takes the caret, not just the ~17pt
         // strip of text view inside it.
