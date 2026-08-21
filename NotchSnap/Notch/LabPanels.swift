@@ -55,10 +55,17 @@ enum LabMetrics {
     static let tabsToRule: CGFloat = 26
     static let ruleToList: CGFloat = 32
 
-    /// The peeking cards behind the top meeting.
-    static let stackOffset: CGFloat = 7
-    static let stackInset: CGFloat = 14
+    /// The deck behind the top meeting. Slight, on purpose: the stack has to
+    /// read as depth at a glance, not as a list competing with the card in
+    /// front of it.
+    static let stackOffset: CGFloat = 6
+    static let stackScaleStep: CGFloat = 0.04
     static let maxStackPeek = 2
+    /// Gap between cards once the deck is opened.
+    static let stackExpandedGap: CGFloat = 8
+    /// An opened deck scrolls rather than growing without limit — the same
+    /// rule the to-do panel needed.
+    static let meetingBlockMaxHeight: CGFloat = 300
 
     /// How long the alert waits before snoozing itself.
     static let autoSnoozeSeconds: Double = 25
@@ -180,63 +187,90 @@ struct LabMeetingBlock: View {
         if meetings.isEmpty {
             EmptyView()
         } else if expanded {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .trailing, spacing: LabMetrics.stackExpandedGap) {
+                // Apple puts the control above the opened stack, on the right.
                 Button {
                     withAnimation(NotchAnimation.contentHug) { expanded = false }
                 } label: {
                     HStack(spacing: 5) {
                         Image(systemName: "chevron.up")
-                            .font(.system(size: 8, weight: .semibold))
+                            .font(.system(size: 9, weight: .semibold))
                         Text(L10n.t("cal.showLess"))
                             .font(.system(size: 11, weight: .medium))
                     }
-                    .foregroundStyle(DSColor.textSecondary)
-                    .contentShape(Rectangle())
+                    .foregroundStyle(DSColor.textPrimaryBright)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Capsule(style: .continuous).fill(Color.white.opacity(0.12)))
+                    .contentShape(Capsule(style: .continuous))
                 }
                 .buttonStyle(.plain)
 
-                ForEach(Array(meetings.enumerated()), id: \.element.id) { index, meeting in
-                    LabMeetingCard(meeting: meeting, isNext: index == 0)
+                // Each meeting is its OWN card with air between, exactly as an
+                // opened notification stack becomes a list of notifications —
+                // not one container that happens to hold several rows.
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: LabMetrics.stackExpandedGap) {
+                        ForEach(Array(meetings.enumerated()), id: \.element.id) { index, meeting in
+                            LabMeetingCard(meeting: meeting, isNext: index == 0)
+                                .padding(LabMetrics.blockPadding)
+                                .labBlock()
+                        }
+                    }
                 }
+                .frame(maxHeight: LabMetrics.meetingBlockMaxHeight)
             }
-            .padding(LabMetrics.blockPadding)
-            .labBlock()
+            .frame(width: LabMetrics.blockWidth, alignment: .trailing)
             .transition(.opacity)
         } else {
-            ZStack(alignment: .top) {
-                // Drawn FIRST so they sit behind, and in reverse order so the
-                // furthest card is furthest back. Each is inset and pushed
-                // down, which is the whole trick — no shadow, no label, just
-                // enough of a sliver to say the deck is deeper than one.
-                let peeks = min(LabMetrics.maxStackPeek, max(0, meetings.count - 1))
-                ForEach(0..<peeks, id: \.self) { i in
-                    let depth = CGFloat(peeks - i)
-                    RoundedRectangle(cornerRadius: LabMetrics.blockRadius, style: .continuous)
-                        .fill(Color.black)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: LabMetrics.blockRadius,
-                                             style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.5)
-                        )
-                        .frame(width: LabMetrics.blockWidth - LabMetrics.stackInset * 2 * depth)
-                        .offset(y: LabMetrics.stackOffset * depth)
-                        .shadow(color: .black.opacity(0.4), radius: 12, y: 6)
+            LabMeetingCard(meeting: meetings[0], isNext: true)
+                .padding(LabMetrics.blockPadding)
+                .labBlock()
+                // The deck, drawn as the card's BACKGROUND rather than as
+                // siblings in a ZStack.
+                //
+                // That placement is the fix, not a detail: a background is
+                // handed the card's own frame, so the rounded rects get a
+                // definite height. As ZStack siblings they had a width and no
+                // height, and a Shape with no height is greedy — it grew to
+                // fill the window and painted the screen black (Marcello,
+                // 2026-08-19).
+                //
+                // Scaled from the TOP so they stay pinned under the card's top
+                // edge and only their bottom sliver shows, then nudged down —
+                // the lock-screen stack, where the deck reads as depth rather
+                // than as a list you have to parse.
+                .background(alignment: .top) {
+                    ForEach(0..<peekCount, id: \.self) { i in
+                        let depth = CGFloat(i + 1)
+                        RoundedRectangle(cornerRadius: LabMetrics.blockRadius,
+                                         style: .continuous)
+                            .fill(Color.black)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: LabMetrics.blockRadius,
+                                                 style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                            )
+                            .scaleEffect(1 - LabMetrics.stackScaleStep * depth, anchor: .top)
+                            .offset(y: LabMetrics.stackOffset * depth)
+                            .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
+                            // Furthest back, furthest down the z-order.
+                            .zIndex(-depth)
+                    }
                 }
-
-                LabMeetingCard(meeting: meetings[0], isNext: true)
-                    .padding(LabMetrics.blockPadding)
-                    .labBlock()
-            }
-            // The stack is one target: clicking the visible card or the
-            // slivers under it does the same thing, the way a notification
-            // stack behaves.
-            .contentShape(Rectangle())
-            .onTapGesture {
-                guard meetings.count > 1 else { return }
-                withAnimation(NotchAnimation.contentHug) { expanded = true }
-            }
-            .transition(.opacity)
+                // One target: the visible card and the slivers under it do the
+                // same thing, the way a notification stack behaves.
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    guard meetings.count > 1 else { return }
+                    withAnimation(NotchAnimation.contentHug) { expanded = true }
+                }
+                .transition(.opacity)
         }
+    }
+
+    private var peekCount: Int {
+        min(LabMetrics.maxStackPeek, max(0, meetings.count - 1))
     }
 }
 
