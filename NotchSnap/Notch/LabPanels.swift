@@ -63,6 +63,10 @@ enum LabMetrics {
 
     // The to-do panel's internals.
     static let inputHeight: CGFloat = 67
+    /// Inside the bar. Wider than it is tall, which is what stops a 67pt bar
+    /// reading as a slab with the text stranded in the middle of it.
+    static let inputPaddingH: CGFloat = 24
+    static let inputPaddingV: CGFloat = 16
     /// 40 - 16 = 24, as specified. Derived, not typed, so changing the panel's
     /// radius or its padding carries the bar along instead of leaving it
     /// behind.

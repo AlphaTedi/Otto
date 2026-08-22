@@ -230,6 +230,10 @@ class NotchController: ObservableObject {
         // Opening the panel is the moment the data must be current.
         CalendarStore.shared.refreshNow()
 
+        // Opening is the other moment the material comes back stale: the
+        // second open rendered flat and desaturated where the first was right.
+        GlassRefresh.shared.bump()
+
         expandTask = Task { @MainActor in
             // Allow key + accept mouse events so drag-and-drop works in expanded state
             (panel as? NotchPanel)?.allowKey = true

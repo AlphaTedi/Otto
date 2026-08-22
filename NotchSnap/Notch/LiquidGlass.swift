@@ -42,11 +42,46 @@ import AppKit
 // The notch silhouette deliberately does NOT use this. It is pretending to be
 // a hole in the hardware, and hardware is not translucent.
 
+/// Forces the material to look again.
+///
+/// A blur samples what is behind its WINDOW. Two situations change that
+/// without the window moving, and in both the material can keep showing what
+/// it sampled the first time:
+///
+///   * A Space switch. The window is `.canJoinAllSpaces` + `.stationary`, so
+///     it does not move — the wallpaper underneath is simply replaced. Open
+///     the notch over a dark Space, switch to a light one, and the glass stays
+///     dark (Marcello, Tahoe, 2026-08-22).
+///   * Reopening the panel. The first open sampled correctly; the second came
+///     back flat and desaturated.
+///
+/// One counter drives both paths. Nothing here changes how the glass LOOKS —
+/// it only makes it re-resolve.
+@MainActor
+final class GlassRefresh: ObservableObject {
+    static let shared = GlassRefresh()
+
+    @Published private(set) var token: Int = 0
+
+    private init() {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil, queue: .main
+        ) { _ in
+            Task { @MainActor in GlassRefresh.shared.bump() }
+        }
+    }
+
+    func bump() { token &+= 1 }
+}
+
 struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
     let shape: S
     /// Optional colour cast, used sparingly — a tinted panel stops reading as
     /// glass and starts reading as coloured plastic.
     var tint: Color?
+
+    @ObservedObject private var refresh = GlassRefresh.shared
 
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) {
@@ -61,7 +96,17 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
             // this machine). Tinting makes the two paths land in the same
             // place: 26 gets Apple's real refraction AND our depth, rather
             // than choosing between them.
-            content.glassEffect(Glass.regular.tint(tint ?? Self.scrim), in: shape)
+            // The alpha jitter is the refresh. `Glass` is Equatable, so the
+            // effect is only re-resolved when its value changes — and half a
+            // thousandth of an alpha is far below anything visible while
+            // still being a different value. Blunt, but contained to one line
+            // and it does not touch the content's identity, so nothing being
+            // typed into loses its caret when a Space changes.
+            content.glassEffect(
+                Glass.regular.tint((tint ?? Self.scrim)
+                    .opacity(refresh.token % 2 == 0 ? 1.0 : 0.9995)),
+                in: shape
+            )
         } else {
             content.background(legacy)
         }
@@ -81,7 +126,8 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
             // the panel window is transparent, which is exactly the condition
             // this mode needs. No pinned appearance: it follows the system, as
             // Spotlight's does.
-            VisualEffectBlur(material: .hudWindow, blendingMode: .behindWindow)
+            VisualEffectBlur(material: .hudWindow, blendingMode: .behindWindow,
+                             refreshToken: refresh.token)
 
             // The same colour macOS 26 is tinted with, so neither path can
             // drift from the other.

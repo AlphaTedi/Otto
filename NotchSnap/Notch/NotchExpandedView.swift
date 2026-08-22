@@ -446,6 +446,9 @@ struct VisualEffectBlur: NSViewRepresentable {
     /// app draws white text on it. nil keeps the old inherited behaviour for
     /// the callers that want it.
     var appearance: NSAppearance.Name?
+    /// Bumped when the material must sample again — see GlassRefresh. The
+    /// value is never read for its own sake; it exists so `updateNSView` runs.
+    var refreshToken: Int = 0
 
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
@@ -460,5 +463,10 @@ struct VisualEffectBlur: NSViewRepresentable {
         nsView.material = material
         nsView.blendingMode = blendingMode
         nsView.appearance = appearance.flatMap { NSAppearance(named: $0) }
+        // Re-asserting `.active` is what makes AppKit re-sample what is behind
+        // the window. Setting it to the value it already holds is not a no-op
+        // here: it marks the effect dirty.
+        nsView.state = .active
+        nsView.needsDisplay = true
     }
 }

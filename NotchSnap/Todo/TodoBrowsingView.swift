@@ -1170,27 +1170,36 @@ private struct InlineDraftRow: View {
                     .transition(.opacity)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 9)
+        // 24 / 16, as specified.
+        .padding(.horizontal, LabMetrics.inputPaddingH)
+        .padding(.vertical, LabMetrics.inputPaddingV)
         // Spans the notch. Without this the field reports its own ideal width
         // and the box floated mid-panel, detached from the list it belongs to.
         .frame(maxWidth: .infinity, alignment: .leading)
-        // 67pt as specified, and the bar is GLASS in its own right rather
-        // than a flat wash on the panel — which is why it looked like a
-        // painted rectangle sitting on glass instead of part of it. Its scrim
-        // lands on top of the panel's, so it comes out deeper than what
-        // surrounds it, exactly as the drawing has it.
+        // NOT a second sheet of glass. That is what made it disappear.
+        //
+        // Glass over glass means both layers sample the same desktop, so the
+        // bar's colour was decided by the WALLPAPER — and over a dark one it
+        // and the panel converged until the placeholder and the key hints were
+        // barely legible (Marcello, Tahoe, 2026-08-22).
+        //
+        // Its contrast is now defined against the PANEL instead: a fixed step
+        // away from whatever the panel resolved to, which cannot collapse no
+        // matter what is behind the window. Plus a hairline that is always
+        // drawn, so the bar has an edge even when the fills are close.
         .frame(minHeight: LabMetrics.inputHeight)
-        .liquidGlass(
-            in: RoundedRectangle(cornerRadius: LabMetrics.inputRadius, style: .continuous),
-            tint: focused ? accent.opacity(0.18) : nil
+        .background(
+            RoundedRectangle(cornerRadius: LabMetrics.inputRadius, style: .continuous)
+                .fill(focused ? accent.opacity(0.18)
+                              : Color.dynamicOverlay(light: 0.07, dark: 0.26))
         )
-        // Only focus draws a ring; the resting edge is the glass's own
-        // hairline, which liquidGlass already lays down.
         .overlay(
             RoundedRectangle(cornerRadius: LabMetrics.inputRadius, style: .continuous)
-                .strokeBorder(focused ? accent.opacity(0.7) : .clear, lineWidth: 1)
+                .strokeBorder(focused ? accent.opacity(0.7)
+                                      : Color.dynamicOverlay(light: 0.10, dark: 0.10),
+                              lineWidth: 1)
         )
+
         // Clicking anywhere in the box takes the caret, not just the ~17pt
         // strip of text view inside it.
         .contentShape(RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous))
