@@ -23,14 +23,23 @@ import AppKit
 //   1. BLUR of what is behind the window — NSVisualEffectView with
 //      `.behindWindow`, which is what makes the panel sit ON the desktop
 //      rather than over it.
-//   2. A LIFT — a whisper of white over the blur. This is the part that
-//      actually answers the complaint: black on black is invisible no matter
-//      how much you blur it, so the surface has to read brighter than what it
-//      covers.
+//   2. A DARK SCRIM over that blur. The first attempt lifted the surface with
+//      white instead, reasoning that black-on-black is invisible — and it was
+//      unreadable: "il liquid glass è veramente troppo chiaro e non si legge
+//      niente" (Marcello, 2026-08-22). The reasoning was wrong. Legibility
+//      here is white text on the panel, so the panel must stay DARKER than the
+//      text no matter what is behind it; a light surface under white type has
+//      no contrast left to give. What separates the panel from a dark desktop
+//      is the blur and the rim, not the fill being brighter.
 //   3. A SPECULAR RIM — brightest at the top-left, fading round to almost
 //      nothing. An even border reads as a stroke; an uneven one reads as light
 //      catching an edge, and it is what makes the shape legible against a
-//      background of any brightness.
+//      background of any brightness. It carries the separation that the white
+//      lift was wrongly asked to carry.
+//
+// The material is also pinned to the DARK appearance. `.hudWindow` otherwise
+// resolves against the system appearance, so on a light desktop it came back
+// light and took the text with it — half of why the first attempt washed out.
 //
 // The notch silhouette deliberately does NOT use this. It is pretending to be
 // a hole in the hardware, and hardware is not translucent.
@@ -43,8 +52,12 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
 
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) {
-            content.glassEffect(tint.map { Glass.regular.tint($0) } ?? .regular,
-                                in: shape)
+            // Tinted dark for the same reason the fallback is: untinted
+            // `.regular` is a LIGHT material, and white text on it loses.
+            content.glassEffect(
+                Glass.regular.tint(tint ?? Color.black.opacity(0.55)),
+                in: shape
+            )
         } else {
             content.background(legacy)
         }
@@ -53,18 +66,19 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
     private var legacy: some View {
         ZStack {
             // `.behindWindow` blurs the DESKTOP, not the window's own content.
-            // `.withinWindow` would blur our own black fill and produce
-            // nothing — the panel window is transparent, which is exactly the
-            // condition this mode needs.
-            VisualEffectBlur(material: .hudWindow, blendingMode: .behindWindow)
+            // `.withinWindow` would blur our own fill and produce nothing —
+            // the panel window is transparent, which is exactly the condition
+            // this mode needs.
+            VisualEffectBlur(material: .hudWindow,
+                             blendingMode: .behindWindow,
+                             appearance: .darkAqua)
 
-            // The lift. Small numbers: at 0.14 it stops looking like glass and
-            // starts looking like grey plastic, and at 0.02 it is invisible
-            // over a dark wallpaper, which is the bug.
-            shape.fill(Color.white.opacity(0.07))
+            // The scrim. This is the number to move if it is still not dark
+            // enough — everything else here is edge treatment.
+            shape.fill(Color.black.opacity(LiquidGlassTuning.scrimOpacity))
 
             if let tint {
-                shape.fill(tint.opacity(0.10))
+                shape.fill(tint.opacity(0.12))
             }
         }
         .clipShape(shape)
@@ -72,10 +86,10 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
             shape.strokeBorder(
                 LinearGradient(
                     colors: [
-                        .white.opacity(0.38),   // light catches here
-                        .white.opacity(0.10),
+                        .white.opacity(0.30),   // light catches here
+                        .white.opacity(0.08),
                         .white.opacity(0.05),
-                        .white.opacity(0.14),   // faint bounce on the far edge
+                        .white.opacity(0.12),   // faint bounce on the far edge
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -84,6 +98,17 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
             )
         )
     }
+
+}
+
+/// How dark the glass sits over whatever is behind it.
+///
+/// THE knob. If the panels are still washing out, this is the number to move —
+/// everything else in LiquidGlassSurface is edge treatment. Dark enough that
+/// white type always wins; Raycast's panels sit around here, unmistakably
+/// see-through and never in a fight with their own text.
+enum LiquidGlassTuning {
+    static let scrimOpacity: Double = 0.62
 }
 
 extension View {

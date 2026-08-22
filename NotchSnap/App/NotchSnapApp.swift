@@ -124,8 +124,19 @@ struct HiddenContextView: View {
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .settingsWindowClosed)) { _ in
-                if !AppState.shared.settings.showInDock {
-                    NSApp.setActivationPolicy(.accessory)
+                // Deferred to the next turn of the runloop, and skipped when
+                // the policy already matches.
+                //
+                // This fires from `windowWillClose` — the window is still on
+                // screen. Changing the activation policy there makes AppKit
+                // re-order the app's windows mid-teardown, which is when
+                // anything else still alive gets a frame of visibility. Let the
+                // close finish first; then there is nothing to re-order.
+                guard !AppState.shared.settings.showInDock else { return }
+                DispatchQueue.main.async {
+                    if NSApp.activationPolicy() != .accessory {
+                        NSApp.setActivationPolicy(.accessory)
+                    }
                 }
             }
     }

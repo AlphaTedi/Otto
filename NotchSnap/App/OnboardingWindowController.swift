@@ -3,9 +3,23 @@ import SwiftUI
 
 // MARK: - OnboardingWindowController — NSWindow (not NSPanel) for stable onboarding
 
-class OnboardingWindowController: NSWindowController {
+class OnboardingWindowController: NSWindowController, NSWindowDelegate {
 
     private static var sharedController: OnboardingWindowController?
+
+    /// Dropped on close by ANY route, not just `dismiss()`.
+    ///
+    /// It used to be cleared in `dismiss()` alone, so a window closed any other
+    /// way stayed alive behind the static — closed, invisible, and still one of
+    /// the app's windows. That is what AppKit re-orders when the activation
+    /// policy flips, which it does every time Settings opens and closes, and
+    /// the stale onboarding window flashed for a frame on the way past
+    /// (Marcello, 2026-08-22).
+    nonisolated func windowWillClose(_ notification: Notification) {
+        Task { @MainActor in
+            OnboardingWindowController.sharedController = nil
+        }
+    }
 
     static func show() {
         if sharedController == nil {
@@ -102,7 +116,13 @@ class OnboardingWindowController: NSWindowController {
         window.standardWindowButton(.miniaturizeButton)?.isHidden = true
         window.standardWindowButton(.zoomButton)?.isHidden = true
 
+        // ARC owns it through this controller. Left at its default `true`,
+        // AppKit would free the window under the controller and the static
+        // would be left pointing at freed memory.
+        window.isReleasedWhenClosed = false
+
         self.init(window: window)
+        window.delegate = self
 
         let hostingView = NSHostingView(rootView: OnboardingFlowView())
         window.contentView = hostingView

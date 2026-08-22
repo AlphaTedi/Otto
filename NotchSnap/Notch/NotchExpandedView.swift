@@ -439,17 +439,26 @@ private struct FilterChip: View {
 struct VisualEffectBlur: NSViewRepresentable {
     let material: NSVisualEffectView.Material
     let blendingMode: NSVisualEffectView.BlendingMode
+    /// Pin the material's appearance instead of inheriting the system's.
+    ///
+    /// Materials resolve light or dark from the effective appearance, so on a
+    /// light desktop `.hudWindow` came back LIGHT — and every panel in this
+    /// app draws white text on it. nil keeps the old inherited behaviour for
+    /// the callers that want it.
+    var appearance: NSAppearance.Name?
 
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
         view.material = material
         view.blendingMode = blendingMode
         view.state = .active
+        if let appearance { view.appearance = NSAppearance(named: appearance) }
         return view
     }
 
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
         nsView.material = material
         nsView.blendingMode = blendingMode
+        nsView.appearance = appearance.flatMap { NSAppearance(named: $0) }
     }
 }
