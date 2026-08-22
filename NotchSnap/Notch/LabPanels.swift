@@ -98,6 +98,15 @@ enum LabMetrics {
 
     /// How long the alert waits before snoozing itself.
     static let autoSnoozeSeconds: Double = 25
+
+    /// Room around the column for the panels' drop shadows.
+    ///
+    /// The window is only as big as what it draws, so a 24pt-radius shadow
+    /// offset 10pt down ran straight off the bottom edge and was sliced —
+    /// which reads as a black halo cropped in a straight line rather than as
+    /// a shadow (Marcello, 2026-08-22). 44 covers radius + offset with room
+    /// to spare; the window is transparent, so the margin costs nothing.
+    static let shadowMargin: CGFloat = 44
 }
 
 private extension View {
@@ -433,11 +442,18 @@ struct LabPanelsView: View {
             // No padding here: TodoTabView carries its own, to the same
             // number. Applying both is what made the panel's insets read as
             // roughly twice the design.
+            // FIXED height, not a maximum.
+            //
+            // As a maximum the panel shrank to its content, so the tab bar
+            // rose and fell with however many to-dos a section happened to
+            // hold — the one row that must never move, moving most. The panel
+            // is 556 whatever is in it; the list takes the slack.
             TodoTabView()
-                .frame(maxHeight: LabMetrics.todoBlockMaxHeight, alignment: .top)
+                .frame(height: LabMetrics.todoBlockMaxHeight, alignment: .top)
                 .labBlock()
         }
         .padding(.top, LabMetrics.notchGap)
+        .padding(.bottom, LabMetrics.shadowMargin)
         .frame(maxWidth: .infinity, alignment: .center)
         // The window has to be tall enough to hold the column, and the hover
         // zone has to match it or the notch collapses out from under the

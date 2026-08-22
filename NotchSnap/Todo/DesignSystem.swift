@@ -283,7 +283,7 @@ struct CategoryTabChip: View {
         }
         .padding(.horizontal, LabMetrics.tabPaddingH)
         .padding(.vertical, LabMetrics.tabPaddingV)
-        .background(isActive ? LabMetrics.accent : Color.clear)
+        .background(isActive ? categoryColor : Color.clear)
         // A full pill when active, barely rounded when not. The asymmetry is
         // deliberate: it is what makes the selected tab read as selected
         // rather than merely tinted, and it is not an inconsistency to tidy.

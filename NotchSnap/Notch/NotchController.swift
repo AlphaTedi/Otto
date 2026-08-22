@@ -943,7 +943,8 @@ class NotchController: ObservableObject {
             // live region is the wider of the two, from the screen top down
             // past the last panel. Without this the "pointer left" test fires
             // the moment you move off the notch and onto the panel you opened.
-            width = max(expandedSize.width, LabMetrics.blockWidth + 40)
+            width = max(expandedSize.width,
+                        LabMetrics.blockWidth + LabMetrics.shadowMargin * 2)
             height = notchSize.height + AppState.shared.labColumnHeight + 24
         }
         return NSRect(x: notchRect.midX - width / 2,
@@ -1038,10 +1039,15 @@ class NotchController: ObservableObject {
     private func expandedPanelRect(screen: NSScreen) -> NSRect {
         let notchRect = calculateNotchRect(screen: screen)
         let height = expandedSize.height + currentExtraExpandedHeight
+        // Wide enough for the panel AND the room its shadow needs on each
+        // side. At the old width the window was ~11pt clear of a 657pt column,
+        // so a 24pt shadow was cut off vertically down both edges.
+        let width = max(expandedSize.width,
+                        LabMetrics.blockWidth + LabMetrics.shadowMargin * 2)
         return NSRect(
-            x: notchRect.midX - expandedSize.width / 2,
+            x: notchRect.midX - width / 2,
             y: notchRect.maxY - height,
-            width: expandedSize.width,
+            width: width,
             height: height
         )
     }

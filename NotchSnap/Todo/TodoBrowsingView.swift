@@ -261,7 +261,7 @@ struct TodoTabView: View {
                 // also keeps it clear of the `.id(collection.id)` subtree that
                 // is rebuilt on every ⇥ — the reason its caret survives.
                 if store.panelMode == .browsing || store.panelMode == .voice {
-                    InlineDraftRow(accent: LabMetrics.accent)
+                    InlineDraftRow(accent: store.draftDestination?.color ?? LabMetrics.accent)
                         .padding(.horizontal, LabMetrics.barOuterInset)
                         .notchEntry(index: 0)
                         .padding(.bottom, LabMetrics.sectionGap)
@@ -888,17 +888,9 @@ struct TodoBrowsingView: View {
                         .frame(height: LabMetrics.listFadeHeight)
                         .allowsHitTesting(false)
                 }
-                .overlay(alignment: .bottom) {
-                    if hasBelow {
-                        MoreBelowPill {
-                            withAnimation(NotchAnimation.contentHug) {
-                                proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
-                            }
-                        }
-                        .padding(.bottom, 4)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-                    }
-                }
+                // No "More below" pill. The 54pt fade already says the list
+                // continues; a floating label over the last row was a second
+                // device carrying one message.
                 .animation(NotchAnimation.hintFade, value: hasBelow)
             }
             // The panel must animate to the new budget, or opening Completed
@@ -1121,13 +1113,18 @@ private struct InlineDraftRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            HStack(alignment: .top, spacing: DSSpacing.rowInternalGap) {
+            // CENTER, per the export's `align-items: center`. Top-aligning while
+        // the label carries its own 8pt box is what left every checkbox
+        // sitting visibly above the text it belongs to.
+        HStack(alignment: .center, spacing: LabMetrics.rowInnerGap) {
                 // Back to a checkbox, and the SAME one the rows use: 18pt,
                 // 2pt cyan, 6pt corner. The export draws the bar and the list
                 // with one component, so the bar reads as the row you are
                 // about to make rather than as a search field.
+                // The DESTINATION's colour, so the bar says where the thing
+                // being typed will land — the same pairing the rows use.
                 RoundedRectangle(cornerRadius: LabMetrics.checkboxRadius, style: .continuous)
-                    .strokeBorder(LabMetrics.accent, lineWidth: LabMetrics.checkboxStroke)
+                    .strokeBorder(accent, lineWidth: LabMetrics.checkboxStroke)
                     .frame(width: LabMetrics.checkboxSize, height: LabMetrics.checkboxSize)
 
                 ZStack(alignment: .topLeading) {
@@ -1407,7 +1404,10 @@ private struct TodoItemRow: View {
     fileprivate static let firstLineInset: CGFloat = 1.5
 
     private var titleRow: some View {
-        HStack(alignment: .top, spacing: DSSpacing.rowInternalGap) {
+        // CENTER, per the export's `align-items: center`. Top-aligning while
+        // the label carries its own 8pt box is what left every checkbox
+        // sitting visibly above the text it belongs to.
+        HStack(alignment: .center, spacing: LabMetrics.rowInnerGap) {
             // No grip handle. The row IS the drag handle now — see
             // EntityTextView.hitTest, which makes the title transparent to the
             // mouse everywhere except a link chip. The old six-dot grip had to
@@ -1433,7 +1433,6 @@ private struct TodoItemRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.top, Self.firstLineInset)
             // §8.3: near-instant fill; row exit + shrink follow on contentHug.
             .animation(.spring(response: 0.28, dampingFraction: 0.6), value: item.isCompleted)
 

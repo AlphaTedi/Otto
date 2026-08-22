@@ -195,98 +195,113 @@ struct CategoryFormView: View {
     /// hex, the DS palette only exposes Color values).
     private static let paletteHex = ["#7FB8E0", "#C99EE0", "#E8C15A", "#8FBF7A", "#E07A5F"]
 
+    private var chosen: Color { Color(hex: colorHex) }
+    private var canCreate: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    // Rebuilt in the panel's own vocabulary rather than the old form's.
+    //
+    // It was still wearing the pre-glass styling — full-bleed fills, 12pt
+    // corners, a blue system caret — inside a 40pt glass panel, and it
+    // stretched to the panel's full fixed height because nothing told it to
+    // stop. So it read as a different app opening inside this one.
+    //
+    // Same field shape as the creation bar, same checkbox-sized swatches, same
+    // pill for the primary action, and it hugs its content.
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 14) {
             Text(L10n.t("todo.newCollection").uppercased())
-                .font(DSFont.sectionLabel)
+                .font(.system(size: 10, weight: .medium))
                 .tracking(0.4)
-                .foregroundStyle(DSColor.textFaint)
-                .padding(.bottom, 10)
+                .foregroundStyle(Color.white.opacity(0.35))
 
-            Text(L10n.t("todo.categoryName"))
-                .font(.system(size: 10))
-                .foregroundStyle(DSColor.textFaint)
-                .padding(.bottom, 6)
-
-            TextField("", text: $name)
+            // The name field IS the creation bar, one radius step smaller for
+            // sitting inside the panel's inset.
+            TextField("", text: $name, prompt:
+                Text(L10n.t("todo.categoryName")).foregroundColor(Color.white.opacity(0.4)))
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .foregroundStyle(DSColor.textPrimaryBright)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(.white)
                 .focused($nameFocused)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
+                .padding(.horizontal, LabMetrics.barPaddingH)
+                .padding(.vertical, LabMetrics.barPaddingV)
                 .background(
-                    RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
-                        .fill(DSColor.fieldBackground)
+                    RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+                        .fill(Color.black.opacity(0.4))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
-                        .stroke(nameFocused ? DSColor.focusAccent : DSColor.panelBorder, lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+                        .strokeBorder(nameFocused ? chosen.opacity(0.8)
+                                                  : Color.white.opacity(0.10), lineWidth: 1)
                 )
                 .onSubmit(create)
-                .padding(.bottom, 16)
 
-            Text(L10n.t("todo.categoryColor"))
-                .font(.system(size: 10))
-                .foregroundStyle(DSColor.textFaint)
-                .padding(.bottom, 8)
-
-            // 5 swatches; selection is a white border + check, never implied
-            // by position alone (CT-6, enforced by ColorSwatchButton). Each is
-            // an explicit 34pt square — big enough to see and to click.
+            // Swatches at checkbox size, so choosing a colour previews the
+            // thing the colour is actually for.
             HStack(spacing: 12) {
                 ForEach(Self.paletteHex, id: \.self) { hex in
                     Button {
                         withAnimation(NotchAnimation.hintFade) { colorHex = hex }
                     } label: {
-                        ColorSwatchButton(color: Color(hex: hex), isSelected: colorHex == hex)
-                            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        RoundedRectangle(cornerRadius: LabMetrics.checkboxRadius,
+                                         style: .continuous)
+                            .fill(Color(hex: hex))
+                            .frame(width: 26, height: 26)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: LabMetrics.checkboxRadius,
+                                                 style: .continuous)
+                                    .strokeBorder(.white,
+                                                  lineWidth: colorHex == hex ? 2 : 0)
+                            )
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .help(hex)
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.bottom, 18)
 
-            HStack(spacing: 8) {
-                Button {
-                    store.setMode(.browsing)
-                } label: {
+            HStack(spacing: 10) {
+                Button { store.setMode(.browsing) } label: {
                     Text(L10n.t("snippet.cancel"))
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color(hex: "#999999"))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.6))
+                        .padding(.horizontal, LabMetrics.tabPaddingH)
+                        .padding(.vertical, LabMetrics.tabPaddingV)
                         .overlay(
-                            RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
-                                .stroke(DSColor.panelBorder, lineWidth: 0.5)
+                            RoundedRectangle(cornerRadius: LabMetrics.tabActiveRadius,
+                                             style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
                         )
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
 
+                // The primary action wears the colour being chosen — the one
+                // preview that says what the section will look like.
                 Button(action: create) {
                     Text(L10n.t("todo.create"))
-                        .font(DSFont.buttonLabel)
-                        .foregroundStyle(DSColor.primaryText)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, LabMetrics.tabPaddingH)
+                        .padding(.vertical, LabMetrics.tabPaddingV)
                         .background(
-                            RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
-                                .fill(DSColor.primaryFill)
+                            RoundedRectangle(cornerRadius: LabMetrics.tabActiveRadius,
+                                             style: .continuous)
+                                .fill(chosen)
                         )
-                        .opacity(name.trimmingCharacters(in: .whitespaces).isEmpty ? 0.35 : 1)
+                        .opacity(canCreate ? 1 : 0.35)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                .disabled(!canCreate)
+
+                Spacer(minLength: 0)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .onAppear {
-            DispatchQueue.main.async { nameFocused = true }
-        }
+        .padding(.horizontal, LabMetrics.listInset)
+        // Hugs its content and sits at the TOP. Without this it stretched down
+        // the panel's whole fixed height.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onAppear { DispatchQueue.main.async { nameFocused = true } }
     }
 
     private func create() {
