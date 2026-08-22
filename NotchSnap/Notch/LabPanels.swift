@@ -50,10 +50,15 @@ enum LabMetrics {
 
     // List
     static let listInset: CGFloat = 24
-    static let listRowGap: CGFloat = 6
+    /// Tightened from the export's 6. The rows were reading far too far
+    /// apart against the previous build, and the gap plus the label's own box
+    /// were compounding.
+    static let listRowGap: CGFloat = 2
     static let rowPaddingH: CGFloat = 12
     static let rowInnerGap: CGFloat = 6
-    static let rowTextInset: CGFloat = 8
+    /// 4, not the export's 8. Two 8s stack into 16pt of air inside every
+    /// single-line row, which is where most of the distance was coming from.
+    static let rowTextInset: CGFloat = 4
     /// The list fades out before it reaches the tabs underneath.
     static let listFadeHeight: CGFloat = 54
 
@@ -99,14 +104,20 @@ enum LabMetrics {
     /// How long the alert waits before snoozing itself.
     static let autoSnoozeSeconds: Double = 25
 
-    /// Room around the column for the panels' drop shadows.
-    ///
-    /// The window is only as big as what it draws, so a 24pt-radius shadow
-    /// offset 10pt down ran straight off the bottom edge and was sliced —
-    /// which reads as a black halo cropped in a straight line rather than as
-    /// a shadow (Marcello, 2026-08-22). 44 covers radius + offset with room
-    /// to spare; the window is transparent, so the margin costs nothing.
-    static let shadowMargin: CGFloat = 44
+    // The drop shadow, and the room it needs.
+    //
+    // 44 was not enough and the halo was still being sliced. A SwiftUI shadow
+    // RADIUS is a blur sigma, not an extent — the visible falloff reaches
+    // roughly three times it, so a 24pt shadow was still painting 70pt out
+    // and meeting a hard window edge, which reads as a cropped black band
+    // rather than as a shadow at all.
+    //
+    // So the shadow is softer AND the margin is computed from it rather than
+    // typed beside it. The two cannot drift apart, and if the shadow is ever
+    // retuned the window follows on its own.
+    static let shadowRadius: CGFloat = 18
+    static let shadowOffsetY: CGFloat = 8
+    static let shadowMargin: CGFloat = shadowRadius * 3 + shadowOffsetY   // 62
 }
 
 private extension View {
@@ -121,7 +132,8 @@ private extension View {
             // The shadow stays and matters MORE on glass: a translucent panel
             // needs the ground shadow to sit above the desktop rather than
             // dissolve into it.
-            .shadow(color: .black.opacity(0.45), radius: 24, y: 10)
+            .shadow(color: .black.opacity(0.40),
+                    radius: LabMetrics.shadowRadius, y: LabMetrics.shadowOffsetY)
     }
 }
 
@@ -290,7 +302,7 @@ struct LabMeetingBlock: View {
                                 cornerRadius: LabMetrics.meetingRadius, style: .continuous))
                             .scaleEffect(1 - LabMetrics.stackScaleStep * depth, anchor: .top)
                             .offset(y: LabMetrics.stackOffset * depth)
-                            .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
+                            .shadow(color: .black.opacity(0.30), radius: 8, y: 3)
                             // Furthest back, furthest down the z-order.
                             .zIndex(-depth)
                     }
@@ -454,6 +466,7 @@ struct LabPanelsView: View {
         }
         .padding(.top, LabMetrics.notchGap)
         .padding(.bottom, LabMetrics.shadowMargin)
+        .padding(.horizontal, LabMetrics.shadowMargin)
         .frame(maxWidth: .infinity, alignment: .center)
         // The window has to be tall enough to hold the column, and the hover
         // zone has to match it or the notch collapses out from under the

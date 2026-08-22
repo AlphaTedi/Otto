@@ -289,11 +289,22 @@ struct TodoTabView: View {
                     }
                 }
 
+                // The list takes ALL the remaining height, which is what pins
+                // the tab row to the foot of the panel.
+                //
+                // A fixed panel height was not enough on its own: the VStack
+                // still packed to the top, so the tabs sat directly under
+                // whatever the list happened to be and jumped every time ⇥
+                // moved to a section with a different number of to-dos — the
+                // one row that must never move (Marcello, 2026-08-22).
+                Spacer(minLength: 0)
+
                 if store.panelMode == .browsing || store.panelMode == .voice {
                     TodoTabRow()
                         .notchEntry(index: 1)
                 }
             }
+            .frame(maxHeight: .infinity, alignment: .top)
 
             if store.showShortcuts {
                 ShortcutsOverlay()
@@ -1418,16 +1429,16 @@ private struct TodoItemRow: View {
                 TodoStore.shared.toggleComplete(item.id)
             } label: {
                 ZStack {
-                    RoundedRectangle(cornerRadius: DSRadius.checkboxCorner, style: .continuous)
-                        .strokeBorder(accent, lineWidth: 1.5)
-                        .frame(width: 14, height: 14)
+                    RoundedRectangle(cornerRadius: LabMetrics.checkboxRadius, style: .continuous)
+                        .strokeBorder(accent, lineWidth: LabMetrics.checkboxStroke)
+                        .frame(width: LabMetrics.checkboxSize, height: LabMetrics.checkboxSize)
                     if item.isCompleted {
-                        RoundedRectangle(cornerRadius: DSRadius.checkboxCorner, style: .continuous)
+                        RoundedRectangle(cornerRadius: LabMetrics.checkboxRadius, style: .continuous)
                             .fill(accent)
-                            .frame(width: 14, height: 14)
+                            .frame(width: LabMetrics.checkboxSize, height: LabMetrics.checkboxSize)
                         Image(systemName: "checkmark")
-                            .font(.system(size: 8, weight: .black))
-                            .foregroundStyle(DSColor.primaryText.opacity(0.8))
+                            .font(.system(size: 10, weight: .black))
+                            .foregroundStyle(.black.opacity(0.85))
                     }
                 }
                 .contentShape(Rectangle())
