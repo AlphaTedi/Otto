@@ -99,27 +99,10 @@ struct OnboardingFlowView: View {
             FrostedGlassBackground()
                 .ignoresSafeArea()
 
-            Group {
-                switch step {
-                case .welcome:
-                    OnboardingWelcomeView(onAdvance: advanceStep)
-                case .value:
-                    OnboardingValueView(onAdvance: advanceStep)
-                case .focus:
-                    OnboardingFocusView(selection: $focusRaw, onAdvance: advanceStep)
-                case .whereItLives:
-                    OnboardingNotchView(onAdvance: advanceStep)
-                case .practice:
-                    OnboardingPracticeView(onAdvance: advanceStep, onToast: showToast)
-                case .calendar:
-                    OnboardingCalendarView(onAdvance: advanceStep, onToast: showToast)
-                case .signIn:
-                    OnboardingSignInView(onAdvance: advanceStep)
-                case .allSet:
-                    OnboardingAllSetView(onFinish: completeOnboarding)
-                }
-            }
-            .transition(stepTransition)
+            currentScreen
+                .foregroundStyle(OnbColor.text)
+                .environment(\.onbCompact, step == .practice)
+                .transition(stepTransition)
             .animation(.spring(response: 0.45, dampingFraction: 0.85), value: stepIndex)
 
             // Non-blocking, bottom-left, above whatever screen is showing.
@@ -146,14 +129,13 @@ struct OnboardingFlowView: View {
         // (Marcello, 2026-08-09: "I cannot go through the onboarding"). The
         // two real sizes are 520x300 and 600x560; these bounds cover both with
         // a margin and nothing more.
-        .frame(minWidth: 480, maxWidth: 640, minHeight: 260, maxHeight: 620)
+        .frame(minWidth: 480, maxWidth: OnbMetric.windowWidth,
+               minHeight: 260, maxHeight: OnbMetric.windowHeight)
         // Its own strip, below everything — never on top of a button.
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            StepDotIndicator(current: stepIndex, total: steps.count)
-                .padding(.top, 2)
-                .padding(.bottom, 16)
-                .frame(maxWidth: .infinity)
-        }
+        .safeAreaInset(edge: .bottom, spacing: 0) { bottomRail }
+        // The window controls are ours: the real ones are hidden, and the
+        // design draws its own.
+        .overlay(alignment: .topLeading) { OnbWindowControls() }
         .onAppear { OnboardingWindowController.setCompact(step == .practice) }
         // Single-parameter form: the two-parameter onChange is macOS 14+, and
         // Otto's deployment target is 13.0.
@@ -169,11 +151,62 @@ struct OnboardingFlowView: View {
         }
     }
 
+    @ViewBuilder
+    private var currentScreen: some View {
+        switch step {
+        case .welcome:
+            OnboardingWelcomeView(onAdvance: advanceStep)
+        case .value:
+            OnboardingValueView(onAdvance: advanceStep,
+                                onBack: backAction,
+                                current: stepIndex,
+                                total: steps.count)
+        case .focus:
+            OnboardingFocusView(selection: $focusRaw, onAdvance: advanceStep)
+        case .whereItLives:
+            OnboardingNotchView(onAdvance: advanceStep)
+        case .practice:
+            OnboardingPracticeView(onAdvance: advanceStep, onToast: showToast)
+        case .calendar:
+            OnboardingCalendarView(onAdvance: advanceStep, onToast: showToast)
+        case .signIn:
+            OnboardingSignInView(onAdvance: advanceStep)
+        case .allSet:
+            OnboardingAllSetView(onFinish: completeOnboarding)
+        }
+    }
+
+    /// Not on the grid screen, whose nav bar already carries the rail, and not
+    /// on the welcome screen, which the design keeps bare. Two rails on one
+    /// screen is the same collision the rail was moved out of an overlay to
+    /// avoid in the first place.
+    @ViewBuilder
+    private var bottomRail: some View {
+        if step != .value && step != .welcome {
+            StepDotIndicator(current: stepIndex, total: steps.count)
+                .padding(.top, 2)
+                .padding(.bottom, 22)
+                .frame(maxWidth: .infinity)
+        }
+    }
+
     private var stepTransition: AnyTransition {
         .asymmetric(
             insertion: .move(edge: .trailing).combined(with: .opacity),
             removal:   .move(edge: .leading).combined(with: .opacity)
         )
+    }
+
+    /// Stated as a typed property: as a ternary against `nil` inline in the
+    /// view builder the type checker gave up on the whole body.
+    private var backAction: (() -> Void)? {
+        stepIndex > 0 ? { goBack() } : nil
+    }
+
+    /// The grid screen's back arrow. Nothing else in the flow offers one —
+    /// the other screens either ask for something or confirm it.
+    private func goBack() {
+        withAnimation { stepIndex = max(0, stepIndex - 1) }
     }
 
     func advanceStep() {
@@ -213,18 +246,24 @@ struct OnboardingFlowView: View {
 private struct OnboardingScaffold<Content: View, Footer: View>: View {
     @ViewBuilder var content: Content
     @ViewBuilder var footer: Footer
+    @Environment(\.onbCompact) private var compact
 
     var body: some View {
+        let gutter = compact ? 24 : OnbMetric.gridInset
         VStack(spacing: 0) {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, 44)
+                .padding(.horizontal, gutter)
 
             footer
-                .padding(.horizontal, 44)
-                .padding(.top, 8)
-                .padding(.bottom, 20)
+                .padding(.horizontal, gutter)
+                .padding(.top, compact ? 6 : 12)
+                .padding(.bottom, compact ? 14 : 28)
         }
+        // Every screen is now dark-on-purple, so the whole flow states its
+        // colours rather than inheriting the system's — .primary/.secondary
+        // resolve to black text in Light Mode and would vanish.
+        .foregroundStyle(OnbColor.text)
     }
 }
 
@@ -237,6 +276,7 @@ private struct OnboardingHeader: View {
     let title: String
     var subtitle: String? = nil
     var topPadding: CGFloat = 52
+    @Environment(\.onbCompact) private var compact
 
     var body: some View {
         VStack(spacing: 10) {
@@ -245,19 +285,20 @@ private struct OnboardingHeader: View {
                     .padding(.bottom, 2)
             }
             Text(title)
-                .font(.system(size: 25, weight: .bold))
+                .font(OnbFont.title(compact: compact))
+                .foregroundStyle(OnbColor.text)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             if let subtitle {
                 Text(subtitle)
-                    .font(.system(size: 13.5))
-                    .foregroundStyle(.secondary)
+                    .font(OnbFont.tagline(compact: compact))
+                    .foregroundStyle(OnbColor.subtext)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 12)
+                    .frame(maxWidth: 720)
             }
         }
-        .padding(.top, topPadding)
+        .padding(.top, compact ? 20 : topPadding)
     }
 }
 
@@ -269,16 +310,10 @@ private struct OnboardingPrimaryButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            Text(title)
-                .fontWeight(.semibold)
-                .frame(maxWidth: .infinity)
-                .frame(height: 42)
-        }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .disabled(!isEnabled)
-        .keyboardShortcut(.return, modifiers: [])
+        // Frosted, not `borderedProminent`. The solid green accent is gone
+        // from the whole flow — see OnbButton.
+        OnbButton(title: title, isEnabled: isEnabled, action: action)
+            .keyboardShortcut(.return, modifiers: [])
     }
 }
 
@@ -287,74 +322,118 @@ private struct OnboardingQuietButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) { Text(title) }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .font(.system(size: 12.5))
+        OnbQuietButton(title: title, action: action)
     }
 }
 
 // MARK: - Act 1 · Value (Step 2) — what Otto is for, nothing asked
 
+/// One feature slot on the grid. `demo` is the live mini-animation where one
+/// exists; the two cards without one show a marked empty slot, because the
+/// bespoke visual per feature is copywriting and art direction, not layout.
+private struct OnbFeature: Identifiable {
+    let id = UUID()
+    let title: String
+    var demo: FeatureDemo? = nil
+    /// The export's row-1 widths are 476/290/290 and row-2's are 347/733; each
+    /// card carries its own share so the asymmetry survives any window width.
+    let share: CGFloat
+}
+
 private struct OnboardingValueView: View {
     var onAdvance: () -> Void
+    var onBack: (() -> Void)?
+    let current: Int
+    let total: Int
+
     @State private var appeared = false
 
+    /// Three of these are Otto's real features and keep the animated demos the
+    /// old bullet list used — a card showing the thing happening beats any
+    /// placeholder. The last two are the honest gap: the grid wants five, Otto
+    /// has three written, and inventing two features to fill a layout would be
+    /// worse than leaving the slots marked.
+    private var row1: [OnbFeature] {
+        [
+            OnbFeature(title: "To-dos that stay out of the way",
+                       demo: .todoAppears, share: 476),
+            OnbFeature(title: "Meetings before they start",
+                       demo: .meetingNudge, share: 290),
+            OnbFeature(title: "Silent the rest of the time",
+                       demo: .goesQuiet, share: 290)
+        ]
+    }
+    private var row2: [OnbFeature] {
+        [
+            OnbFeature(title: "Feature four", share: 347),
+            OnbFeature(title: "Feature five", share: 733)
+        ]
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer().frame(height: 46)
-
-            OnboardingEyebrowPill(text: "Why Otto")
-                .padding(.bottom, 12)
-
-            Text("Never a window in your way")
-                .font(.system(size: 26, weight: .bold))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 48)
-
-            Text("Your tasks and today's meetings live in the notch. One glance up, and back to what you were doing.")
-                .font(.system(size: 14))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 56)
-                .padding(.top, 10)
-
-            Spacer().frame(height: 26)
-
-            // Each row shows its benefit happening rather than labelling it
-            // with an icon — the one change that turns this from a feature
-            // list into a demo reel.
-            VStack(spacing: 10) {
-                ValueRow(demo: .todoAppears,
-                         title: "To-dos that stay out of the way",
-                         detail: "Capture one in a second, from any app.")
-                ValueRow(demo: .meetingNudge,
-                         title: "Meetings before they start",
-                         detail: "A quiet nudge, then a card with the join link.")
-                ValueRow(demo: .goesQuiet,
-                         title: "Silent the rest of the time",
-                         detail: "No dock icon, no badge, no noise.")
+        ZStack(alignment: .bottom) {
+            VStack(spacing: OnbMetric.cardGap) {
+                row(row1)
+                row(row2)
             }
-            .padding(.horizontal, 40)
+            .padding(.horizontal, OnbMetric.gridInset)
+            .padding(.top, OnbMetric.gridTop)
+            .padding(.bottom, OnbMetric.gridBottom)
             .opacity(appeared ? 1 : 0)
-            .offset(y: appeared ? 0 : 12)
-            .animation(.spring(response: 0.5, dampingFraction: 0.85).delay(0.15), value: appeared)
+            .offset(y: appeared ? 0 : 14)
+            .animation(.spring(response: 0.55, dampingFraction: 0.85).delay(0.1),
+                       value: appeared)
 
-            Spacer()
-
-            Button(action: onAdvance) {
-                Text("Continue \u{2192}")
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .keyboardShortcut(.return, modifiers: [])
-            .padding(.horizontal, 48)
-            .padding(.bottom, 40)
+            OnbBottomNav(onBack: onBack,
+                         current: current,
+                         total: total,
+                         continueTitle: "Continue",
+                         onContinue: onAdvance)
+                .padding(.horizontal, OnbMetric.gridInset)
+                .padding(.bottom, OnbMetric.navBottom)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { appeared = true }
+    }
+
+    /// Widths are proportional, not fixed: the window clamps to the screen on
+    /// a display smaller than the 1200pt the design was drawn at, and a row of
+    /// hard-coded pixel widths would overflow it.
+    private func row(_ features: [OnbFeature]) -> some View {
+        GeometryReader { geo in
+            let gaps = OnbMetric.cardGap * CGFloat(features.count - 1)
+            let unit = max(0, geo.size.width - gaps)
+            let totalShare = features.reduce(0) { $0 + $1.share }
+            HStack(spacing: OnbMetric.cardGap) {
+                ForEach(features) { feature in
+                    card(feature)
+                        .frame(width: unit * feature.share / totalShare)
+                }
+            }
+        }
+    }
+
+    private func card(_ feature: OnbFeature) -> some View {
+        OnbCard {
+            VStack(spacing: OnbMetric.cardGap) {
+                Text(feature.title)
+                    .font(OnbFont.cardTitle)
+                    .foregroundStyle(OnbColor.text)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
+
+                if let demo = feature.demo {
+                    FeatureDemoLoop(demo: demo)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: OnbMetric.imageRadius,
+                                                    style: .continuous))
+                } else {
+                    OnbCardImageSlot()
+                }
+            }
+        }
+        .frame(maxHeight: .infinity)
     }
 }
 
@@ -429,17 +508,9 @@ private struct OnboardingFocusView: View {
 
             Spacer()
 
-            Button(action: onAdvance) {
-                Text("Continue \u{2192}")
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .keyboardShortcut(.return, modifiers: [])
-            .padding(.horizontal, 48)
-            .padding(.bottom, 40)
+            OnbButton(title: "Continue", action: onAdvance)
+                .keyboardShortcut(.return, modifiers: [])
+                .padding(.bottom, 40)
         }
     }
 }
@@ -457,7 +528,7 @@ private struct FocusOptionRow: View {
             HStack(spacing: 12) {
                 Image(systemName: icon)
                     .font(.system(size: 15))
-                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                    .foregroundStyle(isSelected ? OnbColor.text : OnbColor.subtext)
                     .frame(width: 26)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -468,18 +539,18 @@ private struct FocusOptionRow: View {
 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 15))
-                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary.opacity(0.4))
+                    .foregroundStyle(isSelected ? OnbColor.text : Color.white.opacity(0.35))
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.primary.opacity(isSelected ? 0.10 : (hover ? 0.06 : 0.03)))
+                RoundedRectangle(cornerRadius: OnbMetric.imageRadius, style: .continuous)
+                    .fill(OnbColor.card)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(isSelected ? Color.accentColor.opacity(0.7)
-                                             : Color.primary.opacity(0.08),
+                RoundedRectangle(cornerRadius: OnbMetric.imageRadius, style: .continuous)
+                    .strokeBorder(Color.white.opacity(isSelected ? 0.45
+                                                                 : (hover ? 0.16 : 0.08)),
                                   lineWidth: isSelected ? 1.5 : 1)
             )
             .contentShape(Rectangle())
@@ -502,15 +573,12 @@ struct FrostedGlassBackground: View {
             // Layer 1: behind-window blur of the wallpaper
             VisualEffectBackground(material: .fullScreenUI, blendingMode: .behindWindow)
 
-            // Layer 2: soft tint that picks up the wallpaper hue but pushes it lighter
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0.18),
-                    Color.white.opacity(0.04)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            // Layer 2: the window itself — purple at the top falling to
+            // near-black at the foot. This replaces the white tint the old
+            // flow lifted the wallpaper with; the design is a dark surface, so
+            // the wallpaper now reads as depth behind it rather than as the
+            // background colour.
+            OnbColor.windowGradient
 
             // Layer 3: ambient colour wash — the single cheapest thing that
             // makes a flow read as "premium" rather than "a form". Two large,
@@ -538,15 +606,17 @@ struct FrostedGlassBackground: View {
                             y: drift ? geo.size.height * 0.30 : geo.size.height * 0.18)
                 }
                 .blur(radius: 90)
+                .opacity(0.45)
+                .blendMode(.plusLighter)
                 .allowsHitTesting(false)
             }
 
-            // Layer 4: faint vignette to anchor the floating cards
+            // Layer 4: vignette, anchoring the cards against the gradient.
             RadialGradient(
-                colors: [Color.clear, Color.black.opacity(0.10)],
+                colors: [Color.clear, Color.black.opacity(0.18)],
                 center: .center,
-                startRadius: 200,
-                endRadius: 700
+                startRadius: 260,
+                endRadius: 900
             )
         }
         .onAppear {
@@ -586,12 +656,10 @@ private struct OnboardingEyebrowPill: View {
         Text(text.uppercased())
             .font(.system(size: 10, weight: .semibold))
             .kerning(0.6)
-            .foregroundStyle(Color(hex: "#FF7A4D"))
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
-            .background(
-                Capsule().fill(Color(hex: "#FF7A4D").opacity(0.15))
-            )
+            .foregroundStyle(OnbColor.subtext)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(OnbColor.button))
             .accessibilityHidden(true)   // decorative; the headline carries meaning
     }
 }
@@ -609,7 +677,7 @@ private struct SuccessToast: View {
     var body: some View {
         HStack(spacing: 8) {
             Circle()
-                .fill(Color.green)
+                .fill(OnbColor.text)
                 .frame(width: 7, height: 7)
             Text(text)
                 .font(.system(size: 12, weight: .medium))
@@ -634,24 +702,9 @@ struct StepDotIndicator: View {
     let total: Int
 
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<total, id: \.self) { i in
-                let isCurrent = i == current
-                let isDone = i < current
-                Capsule()
-                    // Three states, not two: done reads slightly brighter than
-                    // upcoming, so the bar shows how far along you are without
-                    // ever printing "4 of 8" and making anyone count.
-                    .fill(isCurrent ? Color.accentColor
-                                    : Color.secondary.opacity(isDone ? 0.55 : 0.25))
-                    .frame(width: isCurrent ? 22 : 8, height: 6)
-                    // The glow is what makes "you are here" read instantly at a
-                    // glance, rather than being a slightly wider grey dash.
-                    .shadow(color: isCurrent ? Color.accentColor.opacity(0.55) : .clear,
-                            radius: 5)
-                    .animation(.spring(response: 0.42, dampingFraction: 0.7), value: current)
-            }
-        }
+        // One rail, defined once in OnbProgress and used both here and inside
+        // the feature grid's nav bar, so the two can never drift apart.
+        OnbProgress(current: current, total: total)
     }
 }
 
@@ -675,80 +728,68 @@ struct VisualEffectBackground: NSViewRepresentable {
 
 struct OnboardingWelcomeView: View {
     var onAdvance: () -> Void
-    @State private var iconAppeared = false
-    @State private var textAppeared = false
-    @State private var previewAppeared = false
-    @State private var buttonAppeared = false
+    @State private var appeared = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            // App icon with bounce
-            Image(systemName: "checklist")
-                .font(.system(size: 56))
-                .foregroundStyle(.tint)
-                .scaleEffect(iconAppeared ? 1.0 : 0.5)
-                .opacity(iconAppeared ? 1.0 : 0)
-                .animation(.spring(response: 0.6, dampingFraction: 0.6).delay(0.1), value: iconAppeared)
-                .padding(.top, 48)
+        // Sketch A: one centred column, nothing else on the screen. 29pt
+        // between the mark and its tagline, 64pt down to the button.
+        VStack(spacing: 64) {
+            VStack(spacing: 29) {
+                OttoWordmark()
+                    .frame(height: 210)
+                    .scaleEffect(appeared ? 1 : 0.94)
+                    .opacity(appeared ? 1 : 0)
+                    .animation(.spring(response: 0.6, dampingFraction: 0.75).delay(0.05),
+                               value: appeared)
 
-            Spacer().frame(height: 20)
-
-            OnboardingEyebrowPill(text: "Welcome")
-                .padding(.bottom, 12)
-
-            Text("Otto")
-                .font(.system(size: 32, weight: .bold))
-                .foregroundStyle(.primary)
-                .opacity(textAppeared ? 1.0 : 0)
-                .offset(y: textAppeared ? 0 : 12)
-                .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.2), value: textAppeared)
-
-            Text("Your to-dos and today's meetings, always in reach of the notch.")
-                .font(.system(size: 16))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-                .opacity(textAppeared ? 1.0 : 0)
-                .offset(y: textAppeared ? 0 : 8)
-                .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.3), value: textAppeared)
-
-            Spacer().frame(height: 32)
-
-            // Mini preview
-            NotchMiniPreview()
-                .frame(height: 120)
-                .padding(.horizontal, 48)
-                .opacity(previewAppeared ? 1.0 : 0)
-                .scaleEffect(previewAppeared ? 1.0 : 0.95)
-                .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.4), value: previewAppeared)
-
-            Spacer()
-
-            // CTA button
-            Button(action: onAdvance) {
-                HStack {
-                    Text("Get Started")
-                        .fontWeight(.semibold)
-                    Image(systemName: "arrow.right")
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 44)
+                Text("Your to-dos and today's meetings, always in reach of the notch.")
+                    .font(OnbFont.tagline)
+                    .foregroundStyle(OnbColor.subtext)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 922)
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 10)
+                    .animation(.spring(response: 0.5, dampingFraction: 0.85).delay(0.18),
+                               value: appeared)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .keyboardShortcut(.return, modifiers: [])
-            .padding(.horizontal, 48)
-            .opacity(buttonAppeared ? 1.0 : 0)
-            .offset(y: buttonAppeared ? 0 : 8)
-            .animation(.spring(response: 0.4, dampingFraction: 0.8).delay(0.55), value: buttonAppeared)
-            .padding(.bottom, 40)
+
+            OnbButton(title: "Get Started", action: onAdvance)
+                .keyboardShortcut(.return, modifiers: [])
+                .opacity(appeared ? 1 : 0)
+                .offset(y: appeared ? 0 : 8)
+                .animation(.spring(response: 0.45, dampingFraction: 0.85).delay(0.3),
+                           value: appeared)
         }
-        .onAppear {
-            iconAppeared = true
-            textAppeared = true
-            previewAppeared = true
-            buttonAppeared = true
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear { appeared = true }
+    }
+}
+
+/// The Otto mark.
+///
+/// The sketch uses the drawn "otto" wordmark — a vector that does not exist in
+/// this repo (Assets.xcassets holds the app icon and nothing else), and a
+/// hand-lettered logotype cannot be reconstructed from a CSS export of its
+/// paths. So this sets the word in the mark's gradient at the sketch's size,
+/// which reads as the mark at a glance and holds the layout exactly.
+/// Dropping the real asset in here later changes nothing around it: give it
+/// the same 210pt height and the screen is finished.
+private struct OttoWordmark: View {
+    var body: some View {
+        Text("otto")
+            .font(.system(size: 140, weight: .bold, design: .rounded))
+            .kerning(-4)
+            .foregroundStyle(OnbColor.markGradient)
+            .overlay(
+                // The checkmark the real mark hides inside its final "o".
+                Image(systemName: "checkmark")
+                    .font(.system(size: 44, weight: .bold))
+                    .foregroundStyle(OnbColor.markGradient)
+                    .offset(x: 118, y: 6),
+                alignment: .center
+            )
+            .fixedSize()
     }
 }
 
@@ -795,17 +836,9 @@ private struct OnboardingNotchView: View {
 
             Spacer()
 
-            Button(action: onAdvance) {
-                Text("Show me \u{2192}")
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .keyboardShortcut(.return, modifiers: [])
-            .padding(.horizontal, 48)
-            .padding(.bottom, 40)
+            OnbButton(title: "Show me", action: onAdvance)
+                .keyboardShortcut(.return, modifiers: [])
+                .padding(.bottom, 40)
         }
         .onAppear { appeared = true }
     }
@@ -1080,37 +1113,22 @@ private struct OnboardingCalendarView: View {
 
             VStack(spacing: 10) {
                 if calendar.isConnected {
-                    Button(action: onAdvance) {
-                        Text("Continue \u{2192}").fontWeight(.semibold)
-                            .frame(maxWidth: .infinity).frame(height: 44)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .keyboardShortcut(.return, modifiers: [])
-                    .padding(.horizontal, 48)
+                    OnbButton(title: "Continue", action: onAdvance)
+                        .keyboardShortcut(.return, modifiers: [])
                 } else {
-                    Button {
+                    OnbButton(title: asking ? "Waiting for macOS\u{2026}" : "Connect calendar",
+                              isEnabled: !asking) {
                         asking = true
                         Task {
                             await calendar.connect()
                             asking = false
-                            // Confirm inline and keep moving, rather than
-                            // spending a whole screen on "it worked".
                             if calendar.isConnected {
                                 onToast("Calendar connected")
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { onAdvance() }
                             }
                         }
-                    } label: {
-                        Text(asking ? "Waiting for macOS\u{2026}" : "Connect calendar")
-                            .fontWeight(.semibold)
-                            .frame(maxWidth: .infinity).frame(height: 44)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(asking)
                     .keyboardShortcut(.return, modifiers: [])
-                    .padding(.horizontal, 48)
 
                     // Permanent, not conditional: macOS may never prompt again.
                     Button("Open System Settings") {
@@ -1367,12 +1385,18 @@ private struct GoogleGlyph: View {
 // MARK: - GlassTile — reusable liquid-glass background pane
 
 struct GlassTile: View {
-    var cornerRadius: CGFloat = 14
+    var cornerRadius: CGFloat = OnbMetric.cardRadius
 
     var body: some View {
-        // Clean blur — no sheen, no gradient overlay. Just the material.
+        // rgba(0,0,0,0.3) with a hairline, per the export. It used to be
+        // `.ultraThinMaterial`, which resolves LIGHT — on the new dark purple
+        // surface every grouped row came out as a pale slab.
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(.ultraThinMaterial)
+            .fill(OnbColor.card)
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            )
     }
 }
 
@@ -1466,7 +1490,7 @@ struct NotchMiniPreview: View {
     private var miniTodoRow: some View {
         HStack(spacing: 6) {
             RoundedRectangle(cornerRadius: 3)
-                .strokeBorder(Color.accentColor, lineWidth: 1.4)
+                .strokeBorder(Color(hex: "#10EFF2"), lineWidth: 1.4)
                 .frame(width: 9, height: 9)
             RoundedRectangle(cornerRadius: 2)
                 .fill(Color.white.opacity(0.85))
@@ -1587,7 +1611,7 @@ private struct FeatureDemoLoop: View {
     private func miniRow(filled: Bool) -> some View {
         HStack(spacing: 3) {
             RoundedRectangle(cornerRadius: 1.5)
-                .strokeBorder(Color.accentColor.opacity(filled ? 0.5 : 1), lineWidth: 1)
+                .strokeBorder(Color(hex: "#10EFF2").opacity(filled ? 0.5 : 1), lineWidth: 1)
                 .frame(width: 5, height: 5)
             RoundedRectangle(cornerRadius: 1)
                 .fill(Color.primary.opacity(filled ? 0.25 : 0.55))
@@ -1616,11 +1640,11 @@ struct OnboardingAllSetView: View {
         VStack(spacing: 0) {
             ZStack {
                 Circle()
-                    .fill(Color.green.opacity(0.18))
+                    .fill(Color.white.opacity(0.12))
                     .frame(width: 84, height: 84)
                 Image(systemName: "checkmark")
                     .font(.system(size: 38, weight: .bold))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(OnbColor.text)
             }
             .scaleEffect(headerAppeared ? 1.0 : 0.6)
             .opacity(headerAppeared ? 1 : 0)
@@ -1672,16 +1696,8 @@ struct OnboardingAllSetView: View {
 
             Spacer()
 
-            Button(action: onFinish) {
-                Text("Done")
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .keyboardShortcut(.return, modifiers: [])
-            .padding(.horizontal, 48)
+            OnbButton(title: "Done", action: onFinish)
+                .keyboardShortcut(.return, modifiers: [])
             .opacity(buttonAppeared ? 1 : 0)
             .offset(y: buttonAppeared ? 0 : 8)
             .animation(.spring(response: 0.4, dampingFraction: 0.85).delay(0.55), value: buttonAppeared)
@@ -1755,7 +1771,7 @@ struct TutorialCard: View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 22))
-                .foregroundColor(.accentColor)
+                .foregroundStyle(OnbColor.text)
                 .frame(width: 36)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: 13, weight: .semibold))

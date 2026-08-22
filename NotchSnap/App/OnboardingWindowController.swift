@@ -52,9 +52,13 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     static func setCompact(_ compact: Bool) {
         guard let window = sharedController?.window,
               let screen = window.screen ?? NSScreen.main else { return }
-        let size = compact ? NSSize(width: 520, height: 300)
-                           : NSSize(width: 600, height: 560)
         let vis = screen.visibleFrame
+        // The design is drawn at 1200x800, but a window may not be larger than
+        // the screen it is on — clamped with a margin so the redesign does not
+        // become unusable on a smaller display than the one it was drawn for.
+        let full = NSSize(width: min(OnbMetric.windowWidth, vis.width - 80),
+                          height: min(OnbMetric.windowHeight, vis.height - 80))
+        let size = compact ? NSSize(width: 520, height: 300) : full
         let origin: NSPoint
         if compact {
             // Sit just above the Dock, well clear of anything the notch can
@@ -81,7 +85,9 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
 
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 600, height: 540),
+            contentRect: NSRect(x: 0, y: 0,
+                                width: OnbMetric.windowWidth,
+                                height: OnbMetric.windowHeight),
             styleMask: [.titled, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -108,7 +114,7 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         // produce a window that swallows the screen the way it did on
         // 2026-08-09 (Marcello: "I cannot go through the onboarding").
         window.minSize = NSSize(width: 480, height: 260)
-        window.maxSize = NSSize(width: 640, height: 620)
+        window.maxSize = NSSize(width: OnbMetric.windowWidth, height: OnbMetric.windowHeight)
         window.center()
 
         // Hide traffic lights
@@ -124,7 +130,15 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         self.init(window: window)
         window.delegate = self
 
-        let hostingView = NSHostingView(rootView: OnboardingFlowView())
+        // The export's 26pt corner. The window frame keeps the system radius,
+        // but the frame is transparent — the rounded rect the content clips
+        // itself to IS the visible window edge, which gets the design's corner
+        // without going borderless and losing key-window and drag behaviour.
+        let hostingView = NSHostingView(
+            rootView: OnboardingFlowView()
+                .clipShape(RoundedRectangle(cornerRadius: OnbMetric.windowRadius,
+                                            style: .continuous))
+        )
         window.contentView = hostingView
     }
 }

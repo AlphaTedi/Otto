@@ -13,6 +13,7 @@
 		08284509974CD670AA69BB0B /* TextExtractionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F008497BB5485486B0CAEB8D /* TextExtractionView.swift */; };
 		0C95DD96AE7700E58D54F005 /* ScreenCaptureKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22ACC55133418148325C1F8B /* ScreenCaptureKit.framework */; };
 		0D99CA6FF0A3543AE50C6B61 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A32063A8096DCB7171E34409 /* OnboardingView.swift */; };
+		7B53500704A4454B9C8BC8E0 /* OnboardingDesign.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29DFCC1118A34D48815EB0B0 /* OnboardingDesign.swift */; };
 		EE01AA02BB03CC04DD05FF06 /* ShelfItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF06EE01AA02BB03CC04DD05 /* ShelfItem.swift */; };
 		0F663776CDD3D605C249FA70 /* AnnotationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53C8C36D1B4598D827B5BD40 /* AnnotationModel.swift */; };
 		11223344556677889900AABB /* OnboardingWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2233445566778899AABB0011 /* OnboardingWindowController.swift */; };
@@ -186,6 +187,7 @@
 		A1B2C3D4E5F60004A2B3C4D5 /* SoundManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundManager.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60004A2B3C4DD /* DebugDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugDriver.swift; sourceTree = "<group>"; };
 		A32063A8096DCB7171E34409 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		29DFCC1118A34D48815EB0B0 /* OnboardingDesign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingDesign.swift; sourceTree = "<group>"; };
 		A54EE6536F83A25DC71266E2 /* AreaSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AreaSelector.swift; sourceTree = "<group>"; };
 		AA00BB11CC22DD33EE44FE01 /* Local.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Local.xcconfig; path = Config/Local.xcconfig; sourceTree = "<group>"; };
 		A9AC6B6EB302353AFBED2BB8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -412,6 +414,7 @@
 				AA00BB11CC22DD33EE44SP11 /* UpdateController.swift */,
 				2F1B783B764932999A1FEF0B /* SettingsView.swift */,
 				A32063A8096DCB7171E34409 /* OnboardingView.swift */,
+				29DFCC1118A34D48815EB0B0 /* OnboardingDesign.swift */,
 				FF46EE41AA42BB43CC44DD45 /* Localization.swift */,
 				F1A2B3C4D5E6F7A8B9C0D1E2 /* HapticManager.swift */,
 				DD44EE55FF66AA11BB22CC33 /* NotchLivePreview.swift */,
@@ -597,6 +600,7 @@
 				AA00BB11CC22DD33EE44SP10 /* UpdateController.swift in Sources */,
 				1F1C19FC2912D0907E997C14 /* SettingsView.swift in Sources */,
 				0D99CA6FF0A3543AE50C6B61 /* OnboardingView.swift in Sources */,
+				7B53500704A4454B9C8BC8E0 /* OnboardingDesign.swift in Sources */,
 				C1D718E235EFE1AEDF61E840 /* AppSettings.swift in Sources */,
 				EE01AA02BB03CC04DD05FF06 /* ShelfItem.swift in Sources */,
 				0F663776CDD3D605C249FA70 /* AnnotationModel.swift in Sources */,
