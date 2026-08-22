@@ -116,6 +116,29 @@ class NotchController: ObservableObject {
                 .environmentObject(AppState.shared)
         ))
         hostingView.controller = self
+        // NOTHING here may resize the window. This one line is the crash fix.
+        //
+        // An NSHostingView acting as a window's contentView propagates its
+        // content's ideal size to the WINDOW, through
+        // `updateAnimatedWindowSize` on every layout pass. That is fine for an
+        // ordinary window and wrong for this one: NotchController computes the
+        // panel's frame itself, from the screen and the notch, and SwiftUI
+        // fighting it produced all three of the symptoms reported together
+        // (Marcello, macOS 26.6.1, crash log 2026-08-22):
+        //
+        //   * The notch JUMPED RIGHT on click — the window was being resized
+        //     while its origin stayed put, so the shape slid sideways.
+        //   * It CRASHED a second later — resizing a window from inside the
+        //     display cycle re-entered layout
+        //     (setFrameSize -> setNeedsLayout -> _postWindowNeedsLayout),
+        //     which throws, and an uncaught ObjC exception aborts.
+        //   * Clicking outside STOPPED CLOSING it — `handleOutsideClick` tests
+        //     against the frame the controller computed, but the real window
+        //     had been grown past it, so "outside" was still inside.
+        //
+        // `sizingOptions = []` opts out of that propagation entirely. The
+        // hosting view then only ever fills the frame it is given.
+        hostingView.sizingOptions = []
         hostingView.frame = panel.contentView?.bounds ?? .zero
         hostingView.autoresizingMask = [.width, .height]
         panel.contentView = hostingView
@@ -1154,10 +1177,21 @@ class NotchController: ObservableObject {
         // small margin — a window smaller than the shape's own ceiling would
         // silently clip the bottom of the panel.
         let height = expandedSize.height + AppState.maxExtraHeight + 24
+        // Wide enough for the panels AND their shadows.
+        //
+        // This is the window everything is drawn into, and it was still
+        // `expandedSize.width` — 600 on this setup — while the column asks for
+        // 657 plus 62 of shadow margin on each side. The content was simply
+        // wider than its own window, so the panels were clipped down both
+        // edges and the shadow was sliced. `expandedPanelRect` had already
+        // been widened for the same reason; this is the one that actually
+        // sizes the window, and it had been left behind.
+        let width = max(expandedSize.width,
+                        LabMetrics.blockWidth + LabMetrics.shadowMargin * 2)
         return NSRect(
-            x: notchRect.midX - expandedSize.width / 2,
+            x: notchRect.midX - width / 2,
             y: screen.frame.maxY - height,
-            width: expandedSize.width,
+            width: width,
             height: height
         )
     }

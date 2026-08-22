@@ -289,8 +289,14 @@ struct TodoTabView: View {
                     }
                 }
 
-                // The list takes ALL the remaining height, which is what pins
-                // the tab row to the foot of the panel.
+                // The Spacer alone pins the tab row to the foot. The panel is
+                // already a fixed 556, so the VStack is handed a definite
+                // height and the Spacer takes the slack.
+                //
+                // The `.frame(maxHeight: .infinity)` that used to be here as
+                // well made the content ask for UNBOUNDED height, which is
+                // exactly what invited the hosting view to resize the window
+                // around it — see NotchController's sizingOptions.
                 //
                 // A fixed panel height was not enough on its own: the VStack
                 // still packed to the top, so the tabs sat directly under
@@ -304,7 +310,6 @@ struct TodoTabView: View {
                         .notchEntry(index: 1)
                 }
             }
-            .frame(maxHeight: .infinity, alignment: .top)
 
             if store.showShortcuts {
                 ShortcutsOverlay()
