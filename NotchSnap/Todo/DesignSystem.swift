@@ -17,30 +17,75 @@ import SwiftUI
 
 // MARK: - Design Tokens
 
+// MARK: - Dynamic tokens
+//
+// Every colour here used to be a fixed hex, chosen for a dark panel. With the
+// system in Light the panels went pale and the TEXT STAYED WHITE, so nothing
+// could be read at all (Marcello, 2026-08-22) — the tokens had no opposite to
+// switch to, because there was only ever one value.
+//
+// A token is now a PAIR, resolved by AppKit at draw time against whatever
+// appearance the view is actually being drawn in. That is the same mechanism
+// Spotlight and Raycast use, and it is why they simply work in both: they do
+// not pick colours, they name roles and let the system resolve them.
+//
+// Wherever Apple already has a semantic colour for the role, that is used
+// directly rather than hand-mixing a pair. `labelColor` IS the text colour
+// Spotlight draws with, in both appearances, including the exact contrast
+// Apple ships for accessibility — reinventing it with two hex values would be
+// strictly worse and would drift.
+
+extension Color {
+    /// One token, two values. Resolved per appearance, at draw time.
+    static func dynamic(light: NSColor, dark: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
+        })
+    }
+
+    /// Same, for a pair expressed as translucent white/black — the usual way
+    /// to state a surface that has to sit on top of a material.
+    static func dynamicOverlay(light: Double, dark: Double) -> Color {
+        .dynamic(light: NSColor.black.withAlphaComponent(light),
+                 dark: NSColor.white.withAlphaComponent(dark))
+    }
+}
+
 enum DSColor {
     // Panel & structure
-    static let panelBackground = Color(hex: "#111111")
-    static let outerBackground = Color(hex: "#000000")
-    static let panelBorder = Color(hex: "#333333")
-    static let divider = Color(hex: "#2A2A2A")
-    static let dividerSubtle = Color(hex: "#222222")
+    static let panelBackground = Color.dynamic(light: .white, dark: NSColor(white: 0.067, alpha: 1))
+    static let outerBackground = Color.dynamic(light: .white, dark: .black)
+    /// Apple's own hairline. It already differs per appearance.
+    static let panelBorder = Color(nsColor: .separatorColor)
+    static let divider = Color(nsColor: .separatorColor)
+    static let dividerSubtle = Color.dynamicOverlay(light: 0.06, dark: 0.07)
 
-    // Text
-    static let textPrimary = Color(hex: "#E5E5E5")
-    static let textPrimaryBright = Color(hex: "#EEEEEE")
-    static let textSecondary = Color(hex: "#888888")
-    static let textMuted = Color(hex: "#777777")
-    static let textFaint = Color(hex: "#666666")
-    static let textHint = Color(hex: "#555555")
+    // Text — Apple's semantic ladder, which is what Spotlight and Raycast
+    // draw with. Dark-on-light and light-on-dark come for free, at the
+    // contrast Apple ships.
+    static let textPrimary = Color(nsColor: .labelColor)
+    static let textPrimaryBright = Color(nsColor: .labelColor)
+    static let textSecondary = Color(nsColor: .secondaryLabelColor)
+    static let textMuted = Color(nsColor: .secondaryLabelColor)
+    static let textFaint = Color(nsColor: .tertiaryLabelColor)
+    static let textHint = Color(nsColor: .placeholderTextColor)
 
     // Interactive / focus
-    static let focusAccent = Color(hex: "#4A9EFF")
-    static let fieldBackground = Color(hex: "#1A1A1A")
-    static let focusedRowBackground = Color(hex: "#1C1C1C")
+    /// The system accent, so a panel matches the rest of the user's Mac.
+    static let focusAccent = Color(nsColor: .controlAccentColor)
+    /// Surfaces that sit ON the glass: a wash of the OPPOSITE of the
+    /// appearance, never a fixed near-black — which on a light panel read as a
+    /// hole punched through it.
+    static let fieldBackground = Color.dynamicOverlay(light: 0.05, dark: 0.08)
+    static let focusedRowBackground = Color.dynamicOverlay(light: 0.07, dark: 0.10)
 
-    // Primary action (Create button etc.)
-    static let primaryFill = Color(hex: "#EEEEEE")
-    static let primaryText = Color(hex: "#111111")
+    // Primary action. The pair inverts together: a near-white button carries
+    // near-black text in Dark, and the reverse in Light, so the button never
+    // disappears into the panel behind it.
+    static let primaryFill = Color.dynamic(light: NSColor(white: 0.12, alpha: 1),
+                                           dark: NSColor(white: 0.93, alpha: 1))
+    static let primaryText = Color.dynamic(light: NSColor(white: 0.98, alpha: 1),
+                                           dark: NSColor(white: 0.07, alpha: 1))
 
     // Reference category palette (actual colors are user-assigned per
     // category at creation time — see CT-1 in notchsnap_todo_pivot_prd.md.
@@ -382,12 +427,17 @@ struct Keycap: View {
     /// — Stripe, Linear, Raycast — draws them as a quiet tint of the surface
     /// they sit on and nothing more. The hint belongs to the control; it
     /// should not compete with it.
+    /// `.onDark` means "on the panel", `.onLight` means "on a primary-filled
+    /// button" — which is itself the inverse of the appearance. So the panel
+    /// tone flips with the system and the button tone flips against it, and
+    /// both stay readable in Light and Dark.
     private var capFill: Color {
-        tone == .onLight ? Color.black.opacity(0.08) : Color.white.opacity(0.10)
+        tone == .onLight ? DSColor.primaryText.opacity(0.14)
+                         : Color.dynamicOverlay(light: 0.08, dark: 0.10)
     }
     private var label: Color {
-        tone == .onLight ? DSColor.primaryText.opacity(0.62)
-                         : DSColor.textPrimaryBright.opacity(0.72)
+        tone == .onLight ? DSColor.primaryText.opacity(0.75)
+                         : DSColor.textPrimary.opacity(0.80)
     }
 
     /// "⌘↩" is TWO keys, so it draws as two caps. One wide cap containing
@@ -432,12 +482,13 @@ struct WordKeycap: View {
     var body: some View {
         Text(text)
             .font(.system(size: size, weight: .medium))
-            .foregroundStyle(DSColor.textPrimaryBright.opacity(0.75))
+            .foregroundStyle(DSColor.textPrimary.opacity(0.80))
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(
                 RoundedRectangle(cornerRadius: 4.5, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.20), lineWidth: 1)
+                    .strokeBorder(Color.dynamicOverlay(light: 0.22, dark: 0.20),
+                                  lineWidth: 1)
             )
     }
 }

@@ -122,7 +122,7 @@ struct AutoSnoozeButton: View {
             // a button with a progress bar bolted underneath it.
             GeometryReader { proxy in
                 Capsule(style: .continuous)
-                    .fill(Color.white.opacity(0.13))
+                    .fill(Color.dynamicOverlay(light: 0.10, dark: 0.13))
                     .frame(width: proxy.size.width * progress)
             }
         )
@@ -201,7 +201,8 @@ struct LabMeetingBlock: View {
                     .foregroundStyle(DSColor.textPrimaryBright)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Capsule(style: .continuous).fill(Color.white.opacity(0.12)))
+                    .background(Capsule(style: .continuous)
+                        .fill(Color.dynamicOverlay(light: 0.09, dark: 0.12)))
                     .contentShape(Capsule(style: .continuous))
                 }
                 .buttonStyle(.plain)
@@ -324,7 +325,7 @@ private struct LabMeetingCard: View {
                         isMuted: !isNext,
                         // The ring separates overlapping discs, so it has to be
                         // whatever is actually behind them — glass, not black.
-                        ringColor: Color.white.opacity(0.10)
+                        ringColor: Color.dynamicOverlay(light: 0.10, dark: 0.10)
                     )
                 }
                 .padding(.top, 10)
@@ -359,12 +360,17 @@ private struct LabJoinButton: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(DSColor.primaryText)
                 if showsShortcut {
+                    // .onLight because it sits on primaryFill, which is the
+                    // INVERSE of the appearance — a light chip in Dark and a
+                    // dark one in Light. The tone tracks the button, not the
+                    // system.
                     Keycap(text: "\u{2318}\u{21A9}", tone: .onLight, size: 9)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
-            .background(Capsule(style: .continuous).fill(Color.white.opacity(hover ? 1 : 0.92)))
+            .background(Capsule(style: .continuous)
+                .fill(DSColor.primaryFill.opacity(hover ? 1 : 0.92)))
             .contentShape(Capsule(style: .continuous))
         }
         .buttonStyle(.plain)

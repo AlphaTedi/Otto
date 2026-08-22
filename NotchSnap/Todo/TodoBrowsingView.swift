@@ -1172,12 +1172,12 @@ private struct InlineDraftRow: View {
         // Focus still swaps to the destination's colour.
         .background(
             RoundedRectangle(cornerRadius: LabMetrics.inputRadius, style: .continuous)
-                .fill(focused ? accent.opacity(0.16) : Color.white.opacity(0.08))
+                .fill(focused ? accent.opacity(0.16) : DSColor.fieldBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: LabMetrics.inputRadius, style: .continuous)
                 .strokeBorder(focused ? accent.opacity(0.7)
-                                      : Color.white.opacity(0.10), lineWidth: 1)
+                                      : DSColor.panelBorder, lineWidth: 1)
         )
         // Clicking anywhere in the box takes the caret, not just the ~17pt
         // strip of text view inside it.
@@ -1322,7 +1322,8 @@ private struct TodoItemRow: View {
             RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
                 .fill(isExpanded ? DSColor.fieldBackground
                                  : (isFocused ? DSColor.focusedRowBackground
-                                              : (hover ? Color.white.opacity(0.04) : .clear)))
+                                              : (hover ? Color.dynamicOverlay(light: 0.04, dark: 0.04)
+                                                       : .clear)))
         )
         .overlay(
             RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
@@ -1670,7 +1671,7 @@ private struct StepRow: View {
                 Text(step.title)
                     .font(DSFont.checklistItem)
                     .strikethrough(step.isDone)
-                    .foregroundStyle(step.isDone ? DSColor.textFaint : Color(hex: "#AAAAAA"))
+                    .foregroundStyle(step.isDone ? DSColor.textFaint : DSColor.textSecondary)
                     // Same crop as the note field had: an HStack proposes a Text
                     // its ideal width, so a long step lost its tail off the right
                     // edge instead of running onto a second line.
