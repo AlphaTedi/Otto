@@ -55,12 +55,16 @@ enum LabMetrics {
     /// were compounding.
     static let listRowGap: CGFloat = 2
     static let rowPaddingH: CGFloat = 12
-    static let rowInnerGap: CGFloat = 6
+    /// Between a row's checkbox and its text. 6 read as the two touching;
+    /// the checkbox is 18pt and needs air to be its own object.
+    static let rowInnerGap: CGFloat = 12
     /// 4, not the export's 8. Two 8s stack into 16pt of air inside every
     /// single-line row, which is where most of the distance was coming from.
     static let rowTextInset: CGFloat = 4
     /// The list fades out before it reaches the tabs underneath.
-    static let listFadeHeight: CGFloat = 54
+    /// The trailing affordances on a row: ⏎ in its own box, a hairline, then
+    /// the grip, hard against the right edge.
+    static let rowActionGap: CGFloat = 10
 
     // Section tabs, now at the BOTTOM
     static let tabsInset: CGFloat = 24

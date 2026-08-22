@@ -374,18 +374,24 @@ private struct TodoTabRow: View {
         // No rule under the tab row (Marcello, 2026-07-26). The two paddings
         // stay: they were the breathing room either side of the line, and
         // together they are what now separates the tabs from the list.
-        // The hairline now sits ABOVE the tabs, because the tabs sit at the
-        // bottom of the panel and the rule separates them from the list.
-        .padding(.top, LabMetrics.tabsTopPadding)
         .padding(.horizontal, LabMetrics.tabsInset)
-        .padding(.bottom, LabMetrics.tabsBottomPadding)
+        // The rule is part of the tab row's own LAYOUT now, not an overlay
+        // pushed up out of it.
+        //
+        // It used to be drawn at `-tabsDividerPaddingV`, 12pt above this row's
+        // top edge — which is inside the area the list occupies. So the last
+        // row and the rule were painted over each other and the list appeared
+        // to continue past its own boundary (Marcello, 2026-08-22). In the
+        // flow it cannot overlap anything, and the list is clipped to stop at
+        // it. See `.clipped()` on the scroll region.
+        .padding(.top, LabMetrics.tabsDividerPaddingV)
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(Color.white.opacity(0.05))
                 .frame(height: 1)
-                .padding(.horizontal, LabMetrics.tabsInset)
-                .padding(.top, -LabMetrics.tabsDividerPaddingV)
         }
+        .padding(.top, LabMetrics.tabsTopPadding)
+        .padding(.bottom, LabMetrics.tabsBottomPadding)
     }
 
     private var tabScroller: some View {
@@ -887,6 +893,11 @@ struct TodoBrowsingView: View {
                 .onPreferenceChange(SectionHeightKey.self) { regionNaturalHeight = $0 }
                 .onPreferenceChange(ScrollOffsetKey.self) { scrollOffset = $0 }
                 .frame(height: viewport)
+                // The list ENDS at its own bottom edge. Without this a row
+                // that overran the viewport kept drawing into the band the
+                // divider and the tabs live in, so the two overlapped and it
+                // read as a rendering fault rather than as a list continuing.
+                .clipped()
                 // The edge that is cut off softens, so the list visibly
                 // continues past it instead of ending on a hard crop.
                 .modifier(ScrollEdgeFade(scrollOffset: scrollOffset,
@@ -1528,13 +1539,27 @@ private struct TodoItemRow: View {
                     }
                 }
 
-                // §7.1: only the focused row shows its one relevant shortcut.
-                if isFocused && !item.isCompleted && !isExpanded {
-                    ShortcutHintBadge(text: "\u{21A9}")
-                        .transition(.opacity)
-                }
             }
+            // Glyphs align to the FIRST line of the title, not to the centre
+            // of a title that has wrapped to three lines.
             .padding(.top, Self.firstLineInset + 1)
+
+            // ⏎ and the drag grip, on hover OR keyboard focus.
+            //
+            // Reordering by drag has been wired the whole time — the drop
+            // delegates, the white landing line, all of it — but nothing on
+            // screen ever said a row could be dragged, so the feature was
+            // invisible. Six dots is the ordinary way to say it.
+            //
+            // The ⏎ sits in a bordered box, matching the Tab badge in the
+            // creation bar, and the grip is hard against the right edge with a
+            // hairline between them: two different kinds of thing, one you
+            // press and one you pull.
+            if !item.isCompleted && !isExpanded && (hover || isFocused) {
+                RowActions()
+                    .padding(.top, Self.firstLineInset)
+                    .transition(.opacity)
+            }
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: activateRow)
@@ -1681,6 +1706,50 @@ private struct TodoItemRow: View {
             get: { TodoStore.shared.items.first { $0.id == item.id }?.note ?? "" },
             set: { TodoStore.shared.setNote($0, for: item.id) }
         )
+    }
+}
+
+/// The trailing cluster on a hovered or focused row.
+private struct RowActions: View {
+    var body: some View {
+        HStack(spacing: LabMetrics.rowActionGap) {
+            Text("\u{21A9}")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.45))
+                .frame(width: 26, height: 19)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
+                )
+
+            Rectangle()
+                .fill(Color.white.opacity(0.14))
+                .frame(width: 1, height: 16)
+
+            DragGrip()
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// Six dots. Decorative on purpose — the WHOLE row is the drag handle (see
+/// EntityTextView.hitTest, which makes the title transparent to the mouse), so
+/// this says "draggable" without claiming a target of its own and without
+/// reserving leading space on every row the way the old grip did.
+private struct DragGrip: View {
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<2, id: \.self) { _ in
+                VStack(spacing: 3) {
+                    ForEach(0..<3, id: \.self) { _ in
+                        Circle()
+                            .fill(Color.white.opacity(0.35))
+                            .frame(width: 2.5, height: 2.5)
+                    }
+                }
+            }
+        }
+        .frame(width: 14, height: 16)
     }
 }
 
