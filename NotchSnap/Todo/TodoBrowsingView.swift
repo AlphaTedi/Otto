@@ -801,6 +801,10 @@ struct TodoBrowsingView: View {
     /// How far the capped region has been scrolled. Drives the edge fades.
     @State private var scrollOffset: CGFloat = 0
     @State private var draggedItemID: UUID?
+    /// Where each row sits, in `rowSpace`. Published by the rows themselves so
+    /// the gesture can resolve a pointer position to a gap.
+    @State private var rowFrames: [UUID: CGRect] = [:]
+    @State private var dragOffset: CGFloat = 0
     /// The row the dragged item would land ABOVE. Arc-style: nothing moves
     /// until the drop, we just draw the slot.
     @State private var dropBeforeID: UUID?
@@ -868,7 +872,14 @@ struct TodoBrowsingView: View {
             // draftInset 0: the typing bar lives above the sections now, in
             // TodoTabView, not inside this scrolling column.
             let budget = Self.maxRegion(draftInset: 0)
-            let viewport = min(regionNaturalHeight, budget)
+            // The FULL budget, not min(natural, budget). Sizing the region to
+            // its content meant every section had its own panel height: Work
+            // with 16 rows filled the budget while Personal with three hugged
+            // them, so the divider, the tabs and the panel's bottom edge all
+            // moved when you switched (Marcello, 2026-08-22). The export gives
+            // the block one height — 556 — and switching sections now only
+            // changes what is inside it.
+            let viewport = budget
             let hasBelow = regionNaturalHeight - scrollOffset - viewport > 2
             // Indicators ON. They were hidden, so a capped region gave the eye
             // nothing at all to say "there is more" — rows below the fold and
@@ -945,14 +956,15 @@ struct TodoBrowsingView: View {
     }
 
     private func openRows(_ rows: [TodoItem]) -> some View {
-        VStack(alignment: .leading, spacing: DSSpacing.rowInternalGap) {
+        // 6, per the export — 37pt rows on a 43pt pitch. This was the
+        // generic 10pt row gap, which is why the rhythm never matched the mock.
+        VStack(alignment: .leading, spacing: LabMetrics.listRowGap) {
             ForEach(Array(rows.enumerated()), id: \.element.id) { rowIndex, item in
                 TodoItemRow(
                     item: item,
                     accent: store.collection(id: item.collectionID)?.color ?? .accentColor,
                     isFocused: store.focusedItemID == item.id,
-                    isExpanded: store.expandedItemID == item.id,
-                    draggedItemID: $draggedItemID
+                    isExpanded: store.expandedItemID == item.id
                 )
                 .transition(rowTransition)
                 // Rows come in behind the tab row and the meeting cards, so
@@ -966,35 +978,105 @@ struct TodoBrowsingView: View {
                 .overlay(alignment: .top) {
                     if dropBeforeID == item.id {
                         DropIndicator()
-                            .offset(y: -(DSSpacing.rowInternalGap / 2 + 3))
+                            .offset(y: -(LabMetrics.listRowGap / 2 + 3))
                     }
                 }
-                .onDrop(of: [.notchSnapInternalItem], delegate: TodoReorderDropDelegate(
-                    targetID: item.id,
-                    draggedID: $draggedItemID,
-                    dropBeforeID: $dropBeforeID,
-                    dropAtEnd: $dropAtEnd
-                ))
+                // Where this row IS, so the gesture can tell which gap the
+                // pointer is over without any of the rows having to move.
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: RowFrameKey.self,
+                            value: [item.id: geo.frame(in: .named(Self.rowSpace))]
+                        )
+                    }
+                )
+                // The dragged row travels with the pointer and floats over
+                // its neighbours.
+                .offset(y: draggedItemID == item.id ? dragOffset : 0)
+                .zIndex(draggedItemID == item.id ? 1 : 0)
+                .gesture(reorderGesture(for: item, in: rows))
             }
 
-            // Landing strip for the bottom slot. `reorder(_:before:)` can only
-            // insert in FRONT of a row, so without this the last position is
-            // unreachable by drag.
-            if draggedItemID != nil {
-                Color.clear
-                    .frame(height: 14)
-                    .overlay(alignment: .top) {
-                        if dropAtEnd { DropIndicator().offset(y: 3) }
-                    }
-                    .onDrop(of: [.notchSnapInternalItem], delegate: TodoEndDropDelegate(
-                        draggedID: $draggedItemID,
-                        dropBeforeID: $dropBeforeID,
-                        dropAtEnd: $dropAtEnd
-                    ))
-            }
+            // No landing strip. Inserting a view when the drag began moved
+            // every row below it at the exact moment the pointer needed them
+            // to hold still; the bottom slot is reached now by the pointer
+            // simply being past the last row's middle.
         }
+        .coordinateSpace(name: Self.rowSpace)
+        .onPreferenceChange(RowFrameKey.self) { rowFrames = $0 }
         .animation(NotchAnimation.hintFade, value: dropBeforeID)
         .animation(NotchAnimation.hintFade, value: dropAtEnd)
+    }
+
+    fileprivate static let rowSpace = "todoRowSpace"
+
+    /// Reordering, as a plain drag gesture.
+    ///
+    /// This used to be `.onDrag` + `DropDelegate`, riding the system
+    /// pasteboard. Every piece of it was correct — the exported UTType, the
+    /// providers, the delegates — and it still never moved a row, twice, on a
+    /// non-activating panel that the drag machinery was never really meant to
+    /// start a session from. A gesture needs none of that: no pasteboard, no
+    /// item provider, no window activation. It is all in-process, which is all
+    /// this ever was, since a reorder drag cannot leave the list it started in.
+    private func reorderGesture(for item: TodoItem, in rows: [TodoItem]) -> some Gesture {
+        // A few points of slop so a click still reads as a click; the row's
+        // own tap gesture keeps working underneath.
+        DragGesture(minimumDistance: 5, coordinateSpace: .named(Self.rowSpace))
+            .onChanged { value in
+                if draggedItemID != item.id {
+                    draggedItemID = item.id
+                    TodoStore.shared.expandedItemID = nil
+                }
+                dragOffset = value.translation.height
+                updateDropTarget(pointerY: value.location.y, dragged: item.id, rows: rows)
+            }
+            .onEnded { _ in
+                commitReorder(dragged: item.id)
+            }
+    }
+
+    /// Insert before the first row whose middle the pointer is above; past
+    /// them all means the bottom.
+    private func updateDropTarget(pointerY: CGFloat, dragged: UUID, rows: [TodoItem]) {
+        let landing = rows.first { row in
+            guard let frame = rowFrames[row.id] else { return false }
+            return pointerY < frame.midY
+        }
+
+        guard let landing else {
+            // Below every row. Nothing to mark if it is already last.
+            dropBeforeID = nil
+            dropAtEnd = rows.last?.id != dragged
+            return
+        }
+
+        // Landing on itself, or in the gap directly above itself, is where it
+        // already is — say nothing rather than promise a move that won't
+        // happen.
+        let landingIndex = rows.firstIndex { $0.id == landing.id }
+        let draggedIndex = rows.firstIndex { $0.id == dragged }
+        if landing.id == dragged || landingIndex.map({ $0 - 1 }) == draggedIndex {
+            dropBeforeID = nil
+            dropAtEnd = false
+            return
+        }
+
+        dropBeforeID = landing.id
+        dropAtEnd = false
+    }
+
+    private func commitReorder(dragged: UUID) {
+        if let before = dropBeforeID, before != dragged {
+            TodoStore.shared.reorder(dragged, before: before)
+        } else if dropAtEnd {
+            TodoStore.shared.moveToEnd(dragged)
+        }
+        draggedItemID = nil
+        dropBeforeID = nil
+        dropAtEnd = false
+        dragOffset = 0
     }
 
     private var rowTransition: AnyTransition {
@@ -1065,9 +1147,7 @@ struct TodoBrowsingView: View {
                     item: item,
                     accent: store.collection(id: item.collectionID)?.color ?? .gray,
                     isFocused: false,
-                    isExpanded: false,
-                    // Completed rows aren't reorderable — the grip stays hidden.
-                    draggedItemID: .constant(nil)
+                    isExpanded: false
                 )
                 .transition(rowTransition)
             }
@@ -1280,66 +1360,12 @@ private struct InlineDraftRow: View {
 /// Arc's model: dragging only ever MOVES THE INDICATOR. The list itself is
 /// left alone until the drop lands, so rows never shuffle under the cursor
 /// mid-drag (the previous delegate reordered live inside `dropEntered`).
-private struct TodoReorderDropDelegate: DropDelegate {
-    let targetID: UUID
-    @Binding var draggedID: UUID?
-    @Binding var dropBeforeID: UUID?
-    @Binding var dropAtEnd: Bool
-
-    func dropEntered(info: DropInfo) {
-        guard let dragged = draggedID, dragged != targetID else { return }
-        dropBeforeID = targetID
-        dropAtEnd = false
+/// Every row's rectangle, collected into one dictionary.
+private struct RowFrameKey: PreferenceKey {
+    static let defaultValue: [UUID: CGRect] = [:]
+    static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) {
+        value.merge(nextValue()) { _, new in new }
     }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: draggedID == nil ? .cancel : .move)
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        defer { clear() }
-        guard let dragged = draggedID, dragged != targetID else { return false }
-        TodoStore.shared.reorder(dragged, before: targetID)
-        return true
-    }
-
-    func dropExited(info: DropInfo) {
-        // Only retract the indicator if it is still ours — the next row's
-        // dropEntered may already have claimed it.
-        if dropBeforeID == targetID { dropBeforeID = nil }
-    }
-
-    private func clear() {
-        draggedID = nil
-        dropBeforeID = nil
-        dropAtEnd = false
-    }
-}
-
-/// The strip below the last row: drops here send the item to the bottom.
-private struct TodoEndDropDelegate: DropDelegate {
-    @Binding var draggedID: UUID?
-    @Binding var dropBeforeID: UUID?
-    @Binding var dropAtEnd: Bool
-
-    func dropEntered(info: DropInfo) {
-        guard draggedID != nil else { return }
-        dropBeforeID = nil
-        dropAtEnd = true
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: draggedID == nil ? .cancel : .move)
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        defer { draggedID = nil; dropBeforeID = nil; dropAtEnd = false }
-        guard let dragged = draggedID else { return false }
-        TodoStore.shared.moveToEnd(dragged)
-        return true
-    }
-
-    func dropExited(info: DropInfo) { dropAtEnd = false }
 }
 
 // MARK: - TodoItemRow — live row (collapsed + NC expanded states)
@@ -1356,7 +1382,6 @@ private struct TodoItemRow: View {
     let isFocused: Bool
     let isExpanded: Bool
     /// Shared with the list so the dragged row can dim itself.
-    @Binding var draggedItemID: UUID?
     /// Hover on the urgency dot alone — drives the priority tooltip.
     @State private var urgencyHover = false
     @State private var hover = false
@@ -1563,30 +1588,33 @@ private struct TodoItemRow: View {
             // Hovering the focused row is the one moment both are true, and
             // then the hairline earns its place by separating them — which is
             // exactly the state the export draws.
-            if !item.isCompleted && !isExpanded && (hover || isFocused) {
-                // Centred in the row, like the export. The first-line inset
-                // the other glyphs use is for aligning to a title that wraps;
-                // this cluster is the row's, not the title's.
-                RowActions(showEnter: isFocused, showGrip: hover)
-                    .transition(.opacity)
+            // The gutter is ALWAYS here; only its contents come and go.
+            //
+            // Letting the cluster into the layout on hover took width away
+            // from the title, so a title that only just fit on one line
+            // re-wrapped to two and the row grew — under the pointer, and
+            // under the arrow keys, which made the whole list lurch
+            // (Marcello, 2026-08-22). Holding the width open means the title
+            // measures the same whether or not anything is drawn beside it,
+            // so nothing reflows and there is nothing to truncate.
+            //
+            // Centred in the row, like the export. The first-line inset the
+            // other glyphs use is for aligning to a title that wraps; this
+            // cluster belongs to the row, not to the title.
+            ZStack(alignment: .trailing) {
+                Color.clear.frame(width: LabMetrics.rowActionsWidth, height: 1)
+                if !item.isCompleted && !isExpanded && (hover || isFocused) {
+                    RowActions(showEnter: isFocused, showGrip: hover)
+                        .transition(.opacity)
+                }
             }
+            .frame(width: LabMetrics.rowActionsWidth, alignment: .trailing)
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: activateRow)
-        // Reordering starts from anywhere on the row. Completed rows are
-        // fixed, so they stay undraggable.
-        .onDrag {
-            draggedItemID = item.id
-            return .notchSnapInternal(item.id)
-        } preview: {
-            Text(item.title)
-                .font(DSFont.todoTitle)
-                .foregroundStyle(DSColor.textPrimaryBright)
-                .lineLimit(1)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(DSShape.squircle(DSRadius.controlCorner).fill(DSColor.fieldBackground))
-        }
+        // Reordering is NOT attached here. It is a plain drag gesture owned by
+        // the list, which is the only place that knows where the other rows
+        // are — see `reorderGesture`.
     }
 
     /// NC-1: deliberate open — clicking the row body (not the checkbox)

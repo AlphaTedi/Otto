@@ -82,6 +82,10 @@ enum LabMetrics {
     static let gripDot: CGFloat = 3
     static let gripGap: CGFloat = 2
     static let gripBox: CGFloat = 16
+    /// The trailing gutter, RESERVED on every row whether anything is drawn in
+    /// it or not: badge 23 + 6 + rule 1 + 6 + grip 16. Held open permanently
+    /// so the title's width never changes — see the comment at its use.
+    static let rowActionsWidth: CGFloat = 52
 
     // Section tabs, now at the BOTTOM
     static let tabsInset: CGFloat = 24
