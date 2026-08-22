@@ -234,12 +234,36 @@ struct LabMeetingBlock: View {
     @ObservedObject private var calendar = CalendarStore.shared
     @State private var expanded = false
 
-    private var meetings: [DetectedMeeting] { calendar.upcomingToday }
-
     var body: some View {
-        if meetings.isEmpty {
-            EmptyView()
-        } else if expanded {
+        // ONE snapshot per evaluation, and this is a crash fix, not tidying.
+        //
+        // `upcomingToday` re-filters `meetings` against a FRESH `Date()` on
+        // every single access, and this body read it four times: once for
+        // isEmpty, once to subscript [0], twice for the peek count. A meeting
+        // whose end passed between the isEmpty check and the subscript left
+        // the array empty and `[0]` trapped — the app died on opening the
+        // notch, at exactly the moment a meeting was ending (Marcello,
+        // 2026-08-22, with a 12:00-13:00 event).
+        //
+        // Invisible on a Mac with no meetings, which is every test run here:
+        // an empty list always takes the isEmpty branch and never reaches the
+        // subscript at all.
+        let list = calendar.upcomingToday
+        content(for: list)
+    }
+
+    @ViewBuilder
+    private func content(for meetings: [DetectedMeeting]) -> some View {
+        // `.first` rather than `[0]`, so even a snapshot that is somehow empty
+        // renders nothing instead of trapping.
+        if let next = meetings.first {
+            body(for: meetings, next: next)
+        }
+    }
+
+    @ViewBuilder
+    private func body(for meetings: [DetectedMeeting], next: DetectedMeeting) -> some View {
+        if expanded {
             VStack(alignment: .trailing, spacing: LabMetrics.stackExpandedGap) {
                 // Apple puts the control above the opened stack, on the right.
                 Button {
@@ -277,7 +301,7 @@ struct LabMeetingBlock: View {
             .frame(width: LabMetrics.blockWidth, alignment: .trailing)
             .transition(.opacity)
         } else {
-            LabMeetingCard(meeting: meetings[0], isNext: true)
+            LabMeetingCard(meeting: next, isNext: true)
                 .padding(LabMetrics.blockPadding)
                 .labBlock(radius: LabMetrics.meetingRadius)
                 // The deck, drawn as the card's BACKGROUND rather than as
@@ -295,7 +319,7 @@ struct LabMeetingBlock: View {
                 // the lock-screen stack, where the deck reads as depth rather
                 // than as a list you have to parse.
                 .background(alignment: .top) {
-                    ForEach(0..<peekCount, id: \.self) { i in
+                    ForEach(0..<peekCount(meetings), id: \.self) { i in
                         let depth = CGFloat(i + 1)
                         Color.clear
                             .liquidGlass(in: RoundedRectangle(
@@ -318,7 +342,7 @@ struct LabMeetingBlock: View {
         }
     }
 
-    private var peekCount: Int {
+    private func peekCount(_ meetings: [DetectedMeeting]) -> Int {
         min(LabMetrics.maxStackPeek, max(0, meetings.count - 1))
     }
 }
