@@ -77,7 +77,16 @@ enum DSColor {
     /// appearance, never a fixed near-black — which on a light panel read as a
     /// hole punched through it.
     static let fieldBackground = Color.dynamicOverlay(light: 0.05, dark: 0.08)
-    static let focusedRowBackground = Color.dynamicOverlay(light: 0.07, dark: 0.10)
+    /// The focused row's slab. #525252 in the export — a plainly visible
+    /// block, not a tint. It reads stronger than it used to because it is now
+    /// carrying the focus signal ALONE: the accent stroke that used to ring a
+    /// focused row is gone (Marcello, 2026-08-22 — "looks pretty weird, and I
+    /// really don't like it").
+    static let focusedRowBackground = Color.dynamicOverlay(light: 0.10, dark: 0.17)
+
+    /// The ⏎ badge and the drag grip on a row. #878787 in the export.
+    static let rowAffordance = Color.dynamic(light: NSColor(white: 0.463, alpha: 1),
+                                             dark: NSColor(white: 0.529, alpha: 1))
 
     // Primary action. The pair inverts together: a near-white button carries
     // near-black text in Dark, and the reverse in Light, so the button never

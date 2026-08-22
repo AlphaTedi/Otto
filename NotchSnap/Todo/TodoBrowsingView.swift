@@ -1402,16 +1402,23 @@ private struct TodoItemRow: View {
         // was lost when an earlier script aborted before writing.
         .padding(.horizontal, LabMetrics.rowPaddingH)
         .padding(.vertical, isExpanded ? 8 : 0)
+        // A floor, not a fixed height: a title that wraps still grows. Without
+        // it the row was exactly as tall as its content, so the checkbox had
+        // 12pt either side and nothing above or below.
+        .frame(minHeight: isExpanded ? 0 : LabMetrics.rowMinHeight)
         .background(
-            RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
+            RoundedRectangle(cornerRadius: LabMetrics.rowRadius, style: .continuous)
                 .fill(isExpanded ? DSColor.fieldBackground
                                  : (isFocused ? DSColor.focusedRowBackground
                                               : (hover ? Color.dynamicOverlay(light: 0.04, dark: 0.04)
                                                        : .clear)))
         )
+        // No ring on a focused row. The system accent drew a blue outline that
+        // belonged to no other surface in the panel; the slab behind the row
+        // says "focused" on its own, which is what the export does.
         .overlay(
-            RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
-                .stroke((isFocused || isExpanded) ? DSColor.focusAccent : .clear, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: LabMetrics.rowRadius, style: .continuous)
+                .stroke(isExpanded ? DSColor.focusAccent : .clear, lineWidth: 0.5)
         )
         .animation(NotchAnimation.hintFade, value: isFocused)
         .onHover { hover = $0 }
@@ -1544,20 +1551,23 @@ private struct TodoItemRow: View {
             // of a title that has wrapped to three lines.
             .padding(.top, Self.firstLineInset + 1)
 
-            // ⏎ and the drag grip, on hover OR keyboard focus.
+            // Each affordance answers the input that can actually reach it.
             //
-            // Reordering by drag has been wired the whole time — the drop
-            // delegates, the white landing line, all of it — but nothing on
-            // screen ever said a row could be dragged, so the feature was
-            // invisible. Six dots is the ordinary way to say it.
+            // ⏎ is a KEYBOARD act, so it appears when the row has keyboard
+            // focus — you arrowed here, and ⏎ is what to press next. The grip
+            // is a MOUSE act, so it appears under the pointer. Showing both to
+            // whichever input arrived first advertised a key to someone
+            // holding a mouse and a handle to someone who had let go of it
+            // (Marcello, 2026-08-22).
             //
-            // The ⏎ sits in a bordered box, matching the Tab badge in the
-            // creation bar, and the grip is hard against the right edge with a
-            // hairline between them: two different kinds of thing, one you
-            // press and one you pull.
+            // Hovering the focused row is the one moment both are true, and
+            // then the hairline earns its place by separating them — which is
+            // exactly the state the export draws.
             if !item.isCompleted && !isExpanded && (hover || isFocused) {
-                RowActions()
-                    .padding(.top, Self.firstLineInset)
+                // Centred in the row, like the export. The first-line inset
+                // the other glyphs use is for aligning to a title that wraps;
+                // this cluster is the row's, not the title's.
+                RowActions(showEnter: isFocused, showGrip: hover)
                     .transition(.opacity)
             }
         }
@@ -1710,23 +1720,37 @@ private struct TodoItemRow: View {
 }
 
 /// The trailing cluster on a hovered or focused row.
+///
+/// Geometry is the export's: a 23x18 badge with a 1pt border at radius 6, an
+/// 18pt hairline, and six 3pt dots 2pt apart inside a 16pt box.
 private struct RowActions: View {
+    let showEnter: Bool
+    let showGrip: Bool
+
     var body: some View {
         HStack(spacing: LabMetrics.rowActionGap) {
-            Text("\u{21A9}")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.45))
-                .frame(width: 26, height: 19)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
-                )
+            if showEnter {
+                Text("\u{21B5}")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(DSColor.rowAffordance)
+                    .frame(width: LabMetrics.enterBadgeWidth,
+                           height: LabMetrics.enterBadgeHeight)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: LabMetrics.enterBadgeRadius,
+                                         style: .continuous)
+                            .strokeBorder(DSColor.rowAffordance, lineWidth: 1)
+                    )
+            }
 
-            Rectangle()
-                .fill(Color.white.opacity(0.14))
-                .frame(width: 1, height: 16)
+            // Only when both are up does a separator have two things to
+            // separate.
+            if showEnter && showGrip {
+                Rectangle()
+                    .fill(Color.white.opacity(0.3))
+                    .frame(width: 1, height: LabMetrics.enterBadgeHeight)
+            }
 
-            DragGrip()
+            if showGrip { DragGrip() }
         }
         .allowsHitTesting(false)
     }
@@ -1738,18 +1762,18 @@ private struct RowActions: View {
 /// reserving leading space on every row the way the old grip did.
 private struct DragGrip: View {
     var body: some View {
-        HStack(spacing: 3) {
-            ForEach(0..<2, id: \.self) { _ in
-                VStack(spacing: 3) {
-                    ForEach(0..<3, id: \.self) { _ in
+        VStack(spacing: LabMetrics.gripGap) {
+            ForEach(0..<3, id: \.self) { _ in
+                HStack(spacing: LabMetrics.gripGap) {
+                    ForEach(0..<2, id: \.self) { _ in
                         Circle()
-                            .fill(Color.white.opacity(0.35))
-                            .frame(width: 2.5, height: 2.5)
+                            .fill(DSColor.rowAffordance)
+                            .frame(width: LabMetrics.gripDot, height: LabMetrics.gripDot)
                     }
                 }
             }
         }
-        .frame(width: 14, height: 16)
+        .frame(width: LabMetrics.gripBox, height: LabMetrics.gripBox)
     }
 }
 

@@ -53,7 +53,10 @@ enum LabMetrics {
     /// Tightened from the export's 6. The rows were reading far too far
     /// apart against the previous build, and the gap plus the label's own box
     /// were compounding.
-    static let listRowGap: CGFloat = 2
+    /// 6, per the export — rows are 37 tall on a 43pt pitch. At 2 the rows
+    /// were 37 tall but nearly touching, which is the other half of why the
+    /// spacing "looked off".
+    static let listRowGap: CGFloat = 6
     static let rowPaddingH: CGFloat = 12
     /// Between a row's checkbox and its text. 6 read as the two touching;
     /// the checkbox is 18pt and needs air to be its own object.
@@ -64,7 +67,21 @@ enum LabMetrics {
     /// The list fades out before it reaches the tabs underneath.
     /// The trailing affordances on a row: ⏎ in its own box, a hairline, then
     /// the grip, hard against the right edge.
-    static let rowActionGap: CGFloat = 10
+    static let rowActionGap: CGFloat = 6
+    /// A row is 37 tall with an 18pt checkbox, so the checkbox gets 9.5 above
+    /// and below against 12 either side — near enough to read as even. Letting
+    /// the height fall out of the text instead is what left the checkbox
+    /// touching top and bottom while it had 12pt of air left and right.
+    static let rowMinHeight: CGFloat = 37
+    static let rowRadius: CGFloat = 12
+    /// ⏎ badge: 23x18, 1pt border, radius 6.
+    static let enterBadgeWidth: CGFloat = 23
+    static let enterBadgeHeight: CGFloat = 18
+    static let enterBadgeRadius: CGFloat = 6
+    /// Grip: 3pt dots, 2pt apart, in a 16pt box.
+    static let gripDot: CGFloat = 3
+    static let gripGap: CGFloat = 2
+    static let gripBox: CGFloat = 16
 
     // Section tabs, now at the BOTTOM
     static let tabsInset: CGFloat = 24
