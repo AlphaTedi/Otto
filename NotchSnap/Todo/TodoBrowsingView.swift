@@ -1175,17 +1175,21 @@ private struct InlineDraftRow: View {
         // Spans the notch. Without this the field reports its own ideal width
         // and the box floated mid-panel, detached from the list it belongs to.
         .frame(maxWidth: .infinity, alignment: .leading)
-        // On glass a near-black fill reads as a hole punched in the panel, so
-        // the resting state lifts with white instead of sinking with black.
-        // Focus still swaps to the destination's colour.
-        .background(
-            RoundedRectangle(cornerRadius: LabMetrics.inputRadius, style: .continuous)
-                .fill(focused ? accent.opacity(0.16) : DSColor.fieldBackground)
+        // 67pt as specified, and the bar is GLASS in its own right rather
+        // than a flat wash on the panel — which is why it looked like a
+        // painted rectangle sitting on glass instead of part of it. Its scrim
+        // lands on top of the panel's, so it comes out deeper than what
+        // surrounds it, exactly as the drawing has it.
+        .frame(minHeight: LabMetrics.inputHeight)
+        .liquidGlass(
+            in: RoundedRectangle(cornerRadius: LabMetrics.inputRadius, style: .continuous),
+            tint: focused ? accent.opacity(0.18) : nil
         )
+        // Only focus draws a ring; the resting edge is the glass's own
+        // hairline, which liquidGlass already lays down.
         .overlay(
             RoundedRectangle(cornerRadius: LabMetrics.inputRadius, style: .continuous)
-                .strokeBorder(focused ? accent.opacity(0.7)
-                                      : DSColor.panelBorder, lineWidth: 1)
+                .strokeBorder(focused ? accent.opacity(0.7) : .clear, lineWidth: 1)
         )
         // Clicking anywhere in the box takes the caret, not just the ~17pt
         // strip of text view inside it.

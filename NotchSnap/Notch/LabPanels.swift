@@ -34,10 +34,22 @@ enum LabMetrics {
     /// Between the two panels.
     static let blockGap: CGFloat = 24
 
-    /// 40, as drawn. Measuring curvature off a render was never going to land
-    /// on it — I read 20 from the pixels and it was half the real value.
+    /// 40, as drawn.
     static let blockRadius: CGFloat = 40
-    static let blockPadding: CGFloat = 22
+    /// 16, and it is not a free choice: it is what makes the concentric rule
+    /// below produce the 24 the search bar is specified at.
+    static let blockPadding: CGFloat = 16
+    /// The meeting cards keep the softer corner they had; 40 belongs to the
+    /// panel, and a card is a smaller object inside the same family.
+    static let meetingRadius: CGFloat = 32
+
+    /// CONCENTRIC CORNERS. An inner radius must be the outer one minus the gap
+    /// between them, or the two curves are not parallel and the inner box
+    /// visibly fights the corner it sits in. Expressed as arithmetic rather
+    /// than as a second constant, so the two can never be edited apart.
+    static func concentric(outer: CGFloat, inset: CGFloat) -> CGFloat {
+        max(0, outer - inset)
+    }
 
     /// The to-do panel STOPS. Without a ceiling it grew to whatever the list
     /// needed and swallowed the screen (Marcello, 2026-08-19) — a floating
@@ -50,10 +62,11 @@ enum LabMetrics {
                               + tabRowHeight + tabsToRule + ruleToList)
 
     // The to-do panel's internals.
-    static let inputHeight: CGFloat = 48
-    /// The field is a rounded bar inside a very round panel; at 11 it read as
-    /// a sharp box sitting in a soft one.
-    static let inputRadius: CGFloat = 16
+    static let inputHeight: CGFloat = 67
+    /// 40 - 16 = 24, as specified. Derived, not typed, so changing the panel's
+    /// radius or its padding carries the bar along instead of leaving it
+    /// behind.
+    static var inputRadius: CGFloat { concentric(outer: blockRadius, inset: blockPadding) }
     static let inputToTabs: CGFloat = 18
     static let tabRowHeight: CGFloat = 26
     static let tabsToRule: CGFloat = 26
@@ -77,14 +90,13 @@ enum LabMetrics {
 
 private extension View {
     /// The shared surface both panels sit on.
-    func labBlock() -> some View {
+    func labBlock(radius: CGFloat = LabMetrics.blockRadius) -> some View {
         self
             .frame(width: LabMetrics.blockWidth, alignment: .leading)
             // Glass, not a black fill. A black panel on a dark desktop has no
             // edge to find; what separates glass from what is behind it is the
             // blur and the lit rim, which work at any background brightness.
-            .liquidGlass(in: RoundedRectangle(cornerRadius: LabMetrics.blockRadius,
-                                              style: .continuous))
+            .liquidGlass(in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             // The shadow stays and matters MORE on glass: a translucent panel
             // needs the ground shadow to sit above the desktop rather than
             // dissolve into it.
@@ -105,6 +117,10 @@ private extension View {
 /// Hovering pauses it. Someone whose pointer is on the button is deciding, and
 /// deciding must not be punished by having the thing decide for them.
 struct AutoSnoozeButton: View {
+    /// Whether the fill runs and fires on its own. False on a card the user
+    /// opened deliberately — nothing there has interrupted them, so nothing
+    /// there should time out.
+    var countsDown: Bool = true
     let action: () -> Void
 
     @State private var progress: CGFloat = 0
@@ -156,7 +172,7 @@ struct AutoSnoozeButton: View {
     }
 
     private func resume() {
-        guard !fired, progress < 1 else { return }
+        guard countsDown, !fired, progress < 1 else { return }
         let remaining = LabMetrics.autoSnoozeSeconds * Double(1 - progress)
         withAnimation(.linear(duration: remaining)) { progress = 1 }
         Task { @MainActor in
@@ -219,7 +235,7 @@ struct LabMeetingBlock: View {
                         ForEach(Array(meetings.enumerated()), id: \.element.id) { index, meeting in
                             LabMeetingCard(meeting: meeting, isNext: index == 0)
                                 .padding(LabMetrics.blockPadding)
-                                .labBlock()
+                                .labBlock(radius: LabMetrics.meetingRadius)
                         }
                     }
                 }
@@ -230,7 +246,7 @@ struct LabMeetingBlock: View {
         } else {
             LabMeetingCard(meeting: meetings[0], isNext: true)
                 .padding(LabMetrics.blockPadding)
-                .labBlock()
+                .labBlock(radius: LabMetrics.meetingRadius)
                 // The deck, drawn as the card's BACKGROUND rather than as
                 // siblings in a ZStack.
                 //
@@ -250,7 +266,7 @@ struct LabMeetingBlock: View {
                         let depth = CGFloat(i + 1)
                         Color.clear
                             .liquidGlass(in: RoundedRectangle(
-                                cornerRadius: LabMetrics.blockRadius, style: .continuous))
+                                cornerRadius: LabMetrics.meetingRadius, style: .continuous))
                             .scaleEffect(1 - LabMetrics.stackScaleStep * depth, anchor: .top)
                             .offset(y: LabMetrics.stackOffset * depth)
                             .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
@@ -315,11 +331,18 @@ private struct LabMeetingCard: View {
                     if meeting.videoURL != nil {
                         LabJoinButton(showsShortcut: isNext) { join() }
                     }
-                    // Only the meeting that opened the panel snoozes itself —
-                    // a card further down the day has not interrupted anyone.
-                    if isNext, calendar.activeAlert?.id == meeting.id {
-                        AutoSnoozeButton(action: calendar.snooze)
-                    }
+                    // ALWAYS. A meeting with no video link had a Join button
+                    // and nothing else, so its card sat visibly empty on the
+                    // left and there was no way to dismiss it at all — a plain
+                    // "Lunch" placeholder could not be told to go away
+                    // (Marcello, 2026-08-22).
+                    //
+                    // The countdown fill is a different matter: it only runs
+                    // on the meeting that actually interrupted, or every card
+                    // on screen would quietly snooze itself after 25 seconds.
+                    AutoSnoozeButton(
+                        countsDown: calendar.activeAlert?.id == meeting.id
+                    ) { calendar.snooze(meeting) }
                     Spacer(minLength: 8)
                     AvatarStack(
                         names: meeting.avatarNames,

@@ -50,13 +50,28 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
 
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) {
-            // `.regular` already resolves per appearance on 26, so it is left
-            // to do that; a tint is applied only when a caller asked for one.
-            content.glassEffect(tint.map { Glass.regular.tint($0) } ?? .regular,
-                                in: shape)
+            // Tinted with the SAME scrim the pre-26 path paints, and that is
+            // the whole point of this line.
+            //
+            // Bare `.regular` is a light material. On macOS 26 the panels came
+            // out far lighter than on 15.7, where the fallback lays down a 74%
+            // black scrim — so the app looked like two different apps
+            // depending on which Mac opened it, and the newer one was the
+            // wrong one (Marcello, 2026-08-22, comparing a Tahoe MBP against
+            // this machine). Tinting makes the two paths land in the same
+            // place: 26 gets Apple's real refraction AND our depth, rather
+            // than choosing between them.
+            content.glassEffect(Glass.regular.tint(tint ?? Self.scrim), in: shape)
         } else {
             content.background(legacy)
         }
+    }
+
+    /// One scrim, used by BOTH paths — tinting the real glass on 26 and
+    /// painting over the blur below it. Two numbers here would mean two looks.
+    static var scrim: Color {
+        .dynamic(light: NSColor.white.withAlphaComponent(LiquidGlassTuning.lightScrim),
+                 dark: NSColor.black.withAlphaComponent(LiquidGlassTuning.darkScrim))
     }
 
     private var legacy: some View {
@@ -68,11 +83,9 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
             // Spotlight's does.
             VisualEffectBlur(material: .hudWindow, blendingMode: .behindWindow)
 
-            // Takes the side of the appearance instead of always darkening.
-            shape.fill(Color.dynamic(
-                light: NSColor.white.withAlphaComponent(LiquidGlassTuning.lightScrim),
-                dark: NSColor.black.withAlphaComponent(LiquidGlassTuning.darkScrim)
-            ))
+            // The same colour macOS 26 is tinted with, so neither path can
+            // drift from the other.
+            shape.fill(Self.scrim)
 
             if let tint {
                 shape.fill(tint.opacity(0.12))
@@ -109,11 +122,11 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
 /// Light brightens toward white under dark labels, Dark deepens toward black
 /// under light ones. That is the invariant, not the specific values.
 enum LiquidGlassTuning {
-    /// Raycast's own surfaces sit near #07080a-#101111 — considerably
-    /// deeper than this was, which is why Otto's panel looked washed beside
-    /// it with the same wallpaper behind both.
-    static let lightScrim: Double = 0.70
-    static let darkScrim: Double = 0.74
+    /// Raycast's own surfaces sit near #07080a-#101111 — very deep. Pushed
+    /// further again after seeing the Figma beside the build: the drawing is
+    /// darker than anything the blur alone was going to produce.
+    static let lightScrim: Double = 0.74
+    static let darkScrim: Double = 0.82
 }
 
 extension View {

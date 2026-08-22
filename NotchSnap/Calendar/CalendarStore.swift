@@ -370,6 +370,21 @@ final class CalendarStore: ObservableObject {
     }
 
     /// CA-5 — re-trigger after the snooze delay.
+    /// Snooze a SPECIFIC meeting, whether or not it is the one alerting.
+    ///
+    /// Every card carries a Snooze now, including ones the user opened
+    /// themselves from the stack — a meeting with no video link previously had
+    /// no control at all and could not be dismissed. Snoozing one that is not
+    /// alerting simply suppresses its alert; the panel stays put, because the
+    /// user opened it and nothing has interrupted them.
+    func snooze(_ meeting: DetectedMeeting) {
+        snoozedUntil[meeting.id] = Date().addingTimeInterval(TimeInterval(snoozeMinutes * 60))
+        alertedIDs.remove(meeting.id)
+        guard activeAlert?.id == meeting.id else { return }
+        dismissAlert()
+        NotchController.shared.attentionLeft()
+    }
+
     func snooze() {
         guard let meeting = activeAlert else { return }
         snoozedUntil[meeting.id] = Date().addingTimeInterval(TimeInterval(snoozeMinutes * 60))
