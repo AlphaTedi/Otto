@@ -261,6 +261,16 @@ class NotchController: ObservableObject {
             // Allow key + accept mouse events so drag-and-drop works in expanded state
             (panel as? NotchPanel)?.allowKey = true
             panel?.ignoresMouseEvents = false
+            // Take key on EVERY open, not only the keyboard ones.
+            //
+            // `allowKey` was set and then nothing ever asked for it on a
+            // hover-open, so the panel sat unfocused: on macOS 26 the glass
+            // draws its INACTIVE variant when its window is not key — lighter
+            // and desaturated, which is the washed-out notch — and
+            // `NSApp.keyWindow` was never ours, so typing went to Quick Find
+            // instead of the field. `makeKey` on a nonactivating panel does
+            // NOT bring the app forward; that is what the style mask is for.
+            panel?.makeKey()
 
             // Step 1: animate the SHAPE (immediate)
             withAnimation(NotchAnimation.expand) {
@@ -409,6 +419,13 @@ class NotchController: ObservableObject {
             // Let the expand animation put the panel into its key-able state.
             try? await Task.sleep(nanoseconds: 80_000_000)
             focusPanel()
+            // Ask for the caret AFTER the window is key — the ordering IS the
+            // fix. The field's `makeFirstResponder` ran the moment
+            // `draftWantsFocus` was set, before this sleep, on a window that
+            // was not key yet; `makeKeyAndOrderFront` then resets the
+            // responder to the window's initial one. The request was made and
+            // thrown away, so the first character typed seeded Quick Find.
+            TodoStore.shared.draftWantsFocus = true
         }
     }
 

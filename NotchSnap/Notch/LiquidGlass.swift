@@ -116,11 +116,27 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
             // still being a different value. Blunt, but contained to one line
             // and it does not touch the content's identity, so nothing being
             // typed into loses its caret when a Space changes.
-            content.glassEffect(
-                Glass.regular.tint((tint ?? scrim)
-                    .opacity(refresh.token % 2 == 0 ? 1.0 : 0.9995)),
-                in: shape
-            )
+            // Apple's material for the refraction, and OUR scrim on top of it
+            // for the depth — not the material tinted and left to its own
+            // devices.
+            //
+            // `glassEffect` draws a lighter, desaturated variant when its
+            // window is not key, and the notch panel is not key on a plain
+            // hover-open. That is the washed-out notch: nothing had changed
+            // except whether the window held focus (Marcello, 2026-08-22 —
+            // "it seems like an input field that is disabled"). A tint alone
+            // rides that variation, because it only shifts whatever the
+            // material decided to be.
+            //
+            // A scrim painted ON TOP does not. It is our layer, at our
+            // opacity, unaffected by focus — so the panel has a guaranteed
+            // floor and the material's key-state swing is reduced to a
+            // subtlety underneath it.
+            content
+                .glassEffect(Glass.regular
+                    .tint(Color.clear.opacity(refresh.token % 2 == 0 ? 1.0 : 0.9995)),
+                             in: shape)
+                .background(scrimLayer)
         } else {
             content.background(legacy)
         }
@@ -139,6 +155,13 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
         colorScheme == .dark
             ? Color.white.opacity(0.06)
             : Color.black.opacity(0.08)
+    }
+
+    /// The scrim and its hairline, identical on every macOS version — the
+    /// thing that makes the panel look the same whatever the material does.
+    private var scrimLayer: some View {
+        shape.fill(scrim)
+            .overlay(shape.strokeBorder(hairline, lineWidth: 1))
     }
 
     private var legacy: some View {

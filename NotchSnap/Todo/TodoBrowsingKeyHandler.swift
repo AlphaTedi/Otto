@@ -122,9 +122,22 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
         // things in each. Asking who actually has the caret is the only way
         // those three keys can't be stolen out from under another field.
 
+        /// The window this panel lives in, asked directly.
+        ///
+        /// Everything here used to go through `NSApp.keyWindow`, which is only
+        /// our panel while it actually holds focus. On a hover-open it did
+        /// not, so `isEditingText()` came back false and the first printable
+        /// character seeded Quick Find instead of reaching the field the user
+        /// was looking at (Marcello, 2026-08-22). Asking the panel itself is
+        /// true regardless of who holds focus.
+        @MainActor
+        private static var notchResponder: NSResponder? {
+            (NSApp.keyWindow ?? NSApp.windows.first { $0 is NotchPanel })?.firstResponder
+        }
+
         @MainActor
         private static func draftHasCaret() -> Bool {
-            guard let responder = NSApp.keyWindow?.firstResponder as? NSView else { return false }
+            guard let responder = notchResponder as? NSView else { return false }
             return responder.identifier == HighlightingTitleField.fieldIdentifier
         }
 
@@ -150,7 +163,7 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
         /// note, a step. Typing must reach it untouched.
         @MainActor
         private static func isEditingText() -> Bool {
-            let responder = NSApp.keyWindow?.firstResponder
+            let responder = notchResponder
             return responder is NSTextView || responder is NSTextField
         }
 
