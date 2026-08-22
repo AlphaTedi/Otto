@@ -82,6 +82,20 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
     var tint: Color?
 
     @ObservedObject private var refresh = GlassRefresh.shared
+    /// SwiftUI's own idea of the appearance, not AppKit's.
+    ///
+    /// The scrim used to be a `Color.dynamic(...)` backed by an NSColor
+    /// dynamic provider, which resolves whenever and wherever SwiftUI happens
+    /// to ask. Around activation — ⌃⇧N calls `NSApp.activate`, and closing
+    /// flips the policy back — it sometimes resolved LIGHT while the panel was
+    /// plainly in Dark, and the whole notch came back washed out (Marcello,
+    /// 2026-08-22: "way more light than it actually is", exactly on the
+    /// keyboard summon and on close).
+    ///
+    /// `colorScheme` is resolved once for the view hierarchy and handed down,
+    /// so there is no ambient moment for it to be asked in. The scrim below is
+    /// a CONCRETE colour chosen from it — nothing left to re-resolve.
+    @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) {
@@ -103,7 +117,7 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
             // and it does not touch the content's identity, so nothing being
             // typed into loses its caret when a Space changes.
             content.glassEffect(
-                Glass.regular.tint((tint ?? Self.scrim)
+                Glass.regular.tint((tint ?? scrim)
                     .opacity(refresh.token % 2 == 0 ? 1.0 : 0.9995)),
                 in: shape
             )
@@ -114,9 +128,17 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
 
     /// One scrim, used by BOTH paths — tinting the real glass on 26 and
     /// painting over the blur below it. Two numbers here would mean two looks.
-    static var scrim: Color {
-        .dynamic(light: NSColor.white.withAlphaComponent(LiquidGlassTuning.lightScrim),
-                 dark: NSColor.black.withAlphaComponent(LiquidGlassTuning.darkScrim))
+    private var scrim: Color {
+        colorScheme == .dark
+            ? Color.black.opacity(LiquidGlassTuning.darkScrim)
+            : Color.white.opacity(LiquidGlassTuning.lightScrim)
+    }
+
+    /// Same reasoning for the hairline: concrete, not ambient.
+    private var hairline: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.06)
+            : Color.black.opacity(0.08)
     }
 
     private var legacy: some View {
@@ -131,7 +153,7 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
 
             // The same colour macOS 26 is tinted with, so neither path can
             // drift from the other.
-            shape.fill(Self.scrim)
+            shape.fill(scrim)
 
             if let tint {
                 shape.fill(tint.opacity(0.12))
@@ -149,10 +171,7 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
             // not Apple's and not Raycast's, and at this radius it reads as a
             // rendering artefact rather than as light.
             shape.strokeBorder(
-                Color.dynamic(
-                    light: NSColor.black.withAlphaComponent(0.08),
-                    dark: NSColor.white.withAlphaComponent(0.06)
-                ),
+                hairline,
                 lineWidth: 1
             )
         )

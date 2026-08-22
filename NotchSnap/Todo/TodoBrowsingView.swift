@@ -895,15 +895,11 @@ struct TodoBrowsingView: View {
                 // A fade says "there is more"; this says how to get there, and
                 // takes you. Even at full height a long enough list still
                 // overflows, and the fade alone is easy to miss on a first run.
-                // The list fades to nothing before it reaches the tabs — 54pt
-                // of transparent-to-black, so a half-cut row never sits
-                // against the divider.
-                .overlay(alignment: .bottom) {
-                    LinearGradient(colors: [.clear, .black],
-                                   startPoint: .top, endPoint: .bottom)
-                        .frame(height: LabMetrics.listFadeHeight)
-                        .allowsHitTesting(false)
-                }
+                // No bottom fade. Its 54pt of transparent-to-black was meant
+                // to soften a half-cut row against the divider, but it painted
+                // whether or not anything was being cut — so an empty or short
+                // list wore a dark band across nothing (Marcello, 2026-08-22).
+                // The rule above the tabs already does the separating.
                 // No "More below" pill. The 54pt fade already says the list
                 // continues; a floating label over the last row was a second
                 // device carrying one message.
@@ -1388,8 +1384,13 @@ private struct TodoItemRow: View {
                 stepsBlock()
             }
         }
-        .padding(.horizontal, isExpanded ? 12 : 8)
-        .padding(.vertical, isExpanded ? 10 : 7)
+        // 12pt horizontal, always. That puts a row's checkbox at
+        // listInset 24 + 12 = 36 — the same offset the creation bar's sits at
+        // (barOuterInset 16 + barPaddingH 20), so every checkbox in the panel
+        // finally shares one vertical line. They were apart because this line
+        // was lost when an earlier script aborted before writing.
+        .padding(.horizontal, LabMetrics.rowPaddingH)
+        .padding(.vertical, isExpanded ? 8 : 0)
         .background(
             RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
                 .fill(isExpanded ? DSColor.fieldBackground

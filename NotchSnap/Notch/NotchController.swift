@@ -282,8 +282,28 @@ class NotchController: ObservableObject {
     /// which mode is up. Unpins first so the collapse guards can't veto it.
     private func handleOutsideClick(_ location: NSPoint) {
         guard state == .expanded, let screen = notchScreen else { return }
-        guard !expandedPanelRect(screen: screen).insetBy(dx: -8, dy: -8).contains(location) else { return }
+        guard !contentScreenRect(screen: screen).insetBy(dx: -8, dy: -8).contains(location) else { return }
         forceCollapse()
+    }
+
+    /// What is actually DRAWN, as opposed to the window it is drawn in.
+    ///
+    /// Outside-click used to test `expandedPanelRect` — the WINDOW — and the
+    /// window carries 62pt of shadow margin on every side plus the gap under
+    /// the notch. A wide invisible border therefore counted as "inside", so
+    /// clicks near the panel did nothing at all. Summoning with ⌃⇧N made it
+    /// most obvious, because that is when someone clicks closest to the thing
+    /// they just opened.
+    ///
+    /// This is the column itself: the panels' own width, from the top of the
+    /// notch down to the last thing drawn.
+    private func contentScreenRect(screen: NSScreen) -> NSRect {
+        let notchRect = calculateNotchRect(screen: screen)
+        let height = notchSize.height + AppState.shared.labColumnHeight
+        return NSRect(x: notchRect.midX - LabMetrics.blockWidth / 2,
+                      y: screen.frame.maxY - height,
+                      width: LabMetrics.blockWidth,
+                      height: height)
     }
 
     /// Collapse that overrides the modal pin — the one guaranteed exit.
