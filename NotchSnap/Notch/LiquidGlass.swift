@@ -28,10 +28,11 @@ import AppKit
 //      it. Dark: black, so it deepens and the light label colours win. This
 //      was pinned to dark, which meant Light mode drew pale panels while the
 //      text stayed white — nothing readable at all (Marcello, 2026-08-22).
-//   3. A SPECULAR RIM — brightest at the top-left, fading round to almost
-//      nothing. An even border reads as a stroke; an uneven one reads as light
-//      catching an edge, and it is what makes the shape legible against a
-//      background of any brightness.
+//   3. A UNIFORM HAIRLINE — Raycast's documented rgba(255,255,255,0.06), one
+//      value all the way round. An earlier version ran a specular gradient up
+//      to 0.95; side by side with Raycast that read as a hard drawn edge next
+//      to one that is barely implied, and at a 40pt radius it looked like a
+//      rendering artefact rather than like light.
 //
 // The material's appearance is NOT pinned. Pinning it was half of why Light
 // mode was unusable: the surface stayed dark while the text tokens, now
@@ -79,29 +80,25 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
         }
         .clipShape(shape)
         .overlay(
+            // Raycast's card border is documented as a flat
+            // rgba(255,255,255,0.06) — ONE value, all the way round.
+            //
+            // Otto had a gradient running 0.30 to 0.95, up to sixteen times
+            // stronger at the bright corner, which is what made the two look
+            // so different stacked on top of each other: a hard drawn edge
+            // next to one that is barely implied. The specular idea was mine,
+            // not Apple's and not Raycast's, and at this radius it reads as a
+            // rendering artefact rather than as light.
             shape.strokeBorder(
-                LinearGradient(
-                    colors: [
-                        // A highlight in both, but Light needs a much stronger
-                        // one: a faint white rim on a bright panel over a
-                        // bright desktop has nothing to separate.
-                        rim(light: 0.95, dark: 0.30),
-                        rim(light: 0.55, dark: 0.08),
-                        rim(light: 0.35, dark: 0.05),
-                        rim(light: 0.60, dark: 0.12),
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
+                Color.dynamic(
+                    light: NSColor.black.withAlphaComponent(0.08),
+                    dark: NSColor.white.withAlphaComponent(0.06)
                 ),
-                lineWidth: 0.9
+                lineWidth: 1
             )
         )
     }
 
-    private func rim(light: Double, dark: Double) -> Color {
-        .dynamic(light: NSColor.white.withAlphaComponent(light),
-                 dark: NSColor.white.withAlphaComponent(dark))
-    }
 }
 
 /// How far the glass leans, in each appearance.
@@ -112,8 +109,11 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
 /// Light brightens toward white under dark labels, Dark deepens toward black
 /// under light ones. That is the invariant, not the specific values.
 enum LiquidGlassTuning {
-    static let lightScrim: Double = 0.62
-    static let darkScrim: Double = 0.62
+    /// Raycast's own surfaces sit near #07080a-#101111 — considerably
+    /// deeper than this was, which is why Otto's panel looked washed beside
+    /// it with the same wallpaper behind both.
+    static let lightScrim: Double = 0.70
+    static let darkScrim: Double = 0.74
 }
 
 extension View {

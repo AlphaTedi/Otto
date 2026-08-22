@@ -1094,13 +1094,18 @@ private struct InlineDraftRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .top, spacing: DSSpacing.rowInternalGap) {
-                // Inert on purpose: there is nothing to complete until the row
-                // exists. It is here so the draft READS as a to-do rather than
-                // as a text box that happens to sit above a list.
-                RoundedRectangle(cornerRadius: DSRadius.checkboxCorner, style: .continuous)
-                    .strokeBorder(accent.opacity(focused ? 0.85 : 0.5), lineWidth: 1.5)
-                    .frame(width: 14, height: 14)
-                    .padding(.top, TodoItemRow.firstLineInset)
+                // A DOT, not a checkbox.
+                //
+                // The checkbox was arguing that this row is already a to-do,
+                // when it is a place where one gets typed — and it invited a
+                // click that does nothing. A dot in the destination's colour
+                // says the same thing the tint says (this is going HERE) and
+                // asks for nothing.
+                Circle()
+                    .fill(accent)
+                    .frame(width: 8, height: 8)
+                    .opacity(focused ? 1 : 0.75)
+                    .padding(.top, TodoItemRow.firstLineInset + 4)
 
                 ZStack(alignment: .topLeading) {
                     // Stays until the first character, the way every other
@@ -1139,18 +1144,21 @@ private struct InlineDraftRow: View {
                 // Always present, just quieter when idle: this is the only
                 // thing telling you the row has a destination at all, so
                 // hiding it until hover hid the whole feature.
-                // Label first, key last — Raycast's order, and the one that
-                // reads as a sentence: what it does, then what to press.
-                HStack(spacing: 7) {
-                    Text(L10n.t("todo.switchSection"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(DSColor.textFaint)
-                        .fixedSize()
+                // Two keys, no prose.
+                //
+                // "Switch section" spelled it out because the ⇥ glyph alone
+                // was undecodable — but the words were only ever scaffolding
+                // for one key, and now there are two to show. Raycast puts the
+                // keys bare at the right edge and lets them be keys; the
+                // tooltips still carry the words for anyone who wants them.
+                HStack(spacing: 6) {
                     WordKeycap(text: L10n.t("key.tab"))
+                        .help(L10n.t("todo.switchSection"))
+                    WordKeycap(text: "\u{21A9}")
+                        .help(L10n.t("todo.sc.create"))
                 }
                 .padding(.top, TodoItemRow.firstLineInset)
-                .opacity(focused || hover ? 1 : 0.5)
-                .help(L10n.t("todo.switchSection"))
+                .opacity(focused || hover ? 1 : 0.55)
             }
 
             // NL-3: live resolved-date caption, aligned with the title.

@@ -34,7 +34,9 @@ enum LabMetrics {
     /// Between the two panels.
     static let blockGap: CGFloat = 24
 
-    static let blockRadius: CGFloat = 20
+    /// 40, as drawn. Measuring curvature off a render was never going to land
+    /// on it — I read 20 from the pixels and it was half the real value.
+    static let blockRadius: CGFloat = 40
     static let blockPadding: CGFloat = 22
 
     /// The to-do panel STOPS. Without a ceiling it grew to whatever the list
@@ -48,9 +50,11 @@ enum LabMetrics {
                               + tabRowHeight + tabsToRule + ruleToList)
 
     // The to-do panel's internals.
-    static let inputHeight: CGFloat = 44
-    static let inputRadius: CGFloat = 11
-    static let inputToTabs: CGFloat = 16
+    static let inputHeight: CGFloat = 48
+    /// The field is a rounded bar inside a very round panel; at 11 it read as
+    /// a sharp box sitting in a soft one.
+    static let inputRadius: CGFloat = 16
+    static let inputToTabs: CGFloat = 18
     static let tabRowHeight: CGFloat = 26
     static let tabsToRule: CGFloat = 26
     static let ruleToList: CGFloat = 32
