@@ -201,7 +201,7 @@ struct TodoTabView: View {
                 todoPanelContent
             }
         }
-        .padding(LabMetrics.blockPadding)
+        .padding(.top, LabMetrics.panelTopPadding)
         // UG-2: immediate tooltip near the hovered/focused row's urgency dot,
         // clamped so it can't overflow the panel's edges.
         .overlayPreferenceValue(UrgencyTooltipKey.self) { infos in
@@ -249,26 +249,24 @@ struct TodoTabView: View {
     private var todoPanelContent: some View {
         ZStack(alignment: .topLeading) {
             VStack(alignment: .leading, spacing: 0) {
-                // LAB: the typing bar leads, the sections follow it.
+                // The order is now bar, list, TABS AT THE BOTTOM.
                 //
-                // It used to be tabs-then-field, which put a row of category
-                // chips between you and the thing you came to do. The bar is
-                // the panel's purpose — it reads as a search field, you type,
-                // you press Return — so it goes first, and the sections become
-                // what they actually are: where the thing you just typed will
-                // land. ⇥ still moves between them.
+                // The sections were demoted deliberately: the point of the
+                // panel is the to-do being typed, and a row of section chips
+                // sitting between the field and the list kept pulling the eye
+                // to switching rather than to writing. At the foot they are
+                // still one click away and no longer compete.
                 //
-                // The draft row is hoisted out of TodoBrowsingView to sit here,
-                // which also puts it further OUTSIDE the `.id(collection.id)`
-                // subtree that is rebuilt on every section switch — the same
-                // reason it was pinned in the first place, now structural.
+                // The draft row stays hoisted out of TodoBrowsingView, which
+                // also keeps it clear of the `.id(collection.id)` subtree that
+                // is rebuilt on every ⇥ — the reason its caret survives.
                 if store.panelMode == .browsing || store.panelMode == .voice {
-                    InlineDraftRow(accent: store.draftDestination?.color ?? DSColor.focusAccent)
+                    InlineDraftRow(accent: LabMetrics.accent)
+                        .padding(.horizontal, LabMetrics.barOuterInset)
                         .notchEntry(index: 0)
-                        .padding(.bottom, LabMetrics.inputToTabs)
-                    TodoTabRow()
-                        .notchEntry(index: 1)
+                        .padding(.bottom, LabMetrics.sectionGap)
                 }
+
                 // ZStack, not bare switch: during a transition BOTH the
                 // outgoing and incoming views exist for a few frames — as
                 // VStack siblings they'd stack vertically and the whole
@@ -289,6 +287,11 @@ struct TodoTabView: View {
                         VoiceCaptureView()
                             .transition(modeTransition)
                     }
+                }
+
+                if store.panelMode == .browsing || store.panelMode == .voice {
+                    TodoTabRow()
+                        .notchEntry(index: 1)
                 }
             }
 
@@ -346,28 +349,32 @@ private struct TodoTabRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: LabMetrics.tabsGap) {
             tabScroller
+            Spacer(minLength: LabMetrics.tabsGap)
             // Outside the scroller: the account is not a tab.
             AccountButton()
         }
         // No rule under the tab row (Marcello, 2026-07-26). The two paddings
         // stay: they were the breathing room either side of the line, and
         // together they are what now separates the tabs from the list.
-        // A hairline under the sections, then air before the list — the
-        // separation the design draws, at the distances it draws them.
-        .padding(.bottom, LabMetrics.tabsToRule)
-        .overlay(alignment: .bottom) {
+        // The hairline now sits ABOVE the tabs, because the tabs sit at the
+        // bottom of the panel and the rule separates them from the list.
+        .padding(.top, LabMetrics.tabsTopPadding)
+        .padding(.horizontal, LabMetrics.tabsInset)
+        .padding(.bottom, LabMetrics.tabsBottomPadding)
+        .overlay(alignment: .top) {
             Rectangle()
-                .fill(DSColor.panelBorder.opacity(0.6))
-                .frame(height: 0.5)
+                .fill(Color.white.opacity(0.05))
+                .frame(height: 1)
+                .padding(.horizontal, LabMetrics.tabsInset)
+                .padding(.top, -LabMetrics.tabsDividerPaddingV)
         }
-        .padding(.bottom, LabMetrics.ruleToList)
     }
 
     private var tabScroller: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: LabMetrics.tabsGap) {
                 ForEach(Array(store.visibleCollections.enumerated()), id: \.element.id) { index, collection in
                     // NOT a Button, deliberately — and this is the whole
                     // reason tabs could not be dragged at all.
@@ -651,11 +658,17 @@ private struct NewSectionButton: View {
             TodoStore.shared.setMode(.newCategory)
             NotchController.shared.focusPanel()
         } label: {
-            Image(systemName: "plus")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(hover ? DSColor.textPrimary : DSColor.textFaint)
-                .frame(width: 20, height: 20)
-                .contentShape(Rectangle())
+            // Two bare crossing lines in a 24pt box — no glyph weight, no
+            // background, no border. Drawn rather than set, because an SF
+            // "plus" carries its own optical padding and metrics that will
+            // not match a 12pt/1pt cross.
+            ZStack {
+                Rectangle().frame(width: 12, height: 1)
+                Rectangle().frame(width: 1, height: 12)
+            }
+            .foregroundStyle(Color.white.opacity(hover ? 0.85 : 0.5))
+            .frame(width: 24, height: 24)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -740,7 +753,12 @@ struct TodoBrowsingView: View {
         // The panel's ceiling minus its furniture, computed once in
         // LabMetrics. It used to be derived from the SCREEN, which is why an
         // unbounded list grew until it covered one.
-        LabMetrics.todoListMaxHeight
+        // 556 total, less the creation-bar block and the tab bar that now
+        // sits under the list. Derived so changing either end carries.
+        LabMetrics.todoBlockMaxHeight
+            - (LabMetrics.panelTopPadding + LabMetrics.barHeight + LabMetrics.sectionGap)
+            - (LabMetrics.tabsDividerPaddingV + LabMetrics.tabsTopPadding
+               + 31 + LabMetrics.tabsBottomPadding)
     }
 
     /// One line of draft plus its padding and the gap under it. An estimate,
@@ -808,6 +826,7 @@ struct TodoBrowsingView: View {
             todoList(for: collection)
             completedSection(for: collection)
         }
+        .padding(.horizontal, LabMetrics.listInset)
         // A second catcher, INSIDE what will become the scroll region.
         //
         // The panel already had one at its root, but an NSScrollView is opaque
@@ -860,6 +879,15 @@ struct TodoBrowsingView: View {
                 // A fade says "there is more"; this says how to get there, and
                 // takes you. Even at full height a long enough list still
                 // overflows, and the fade alone is easy to miss on a first run.
+                // The list fades to nothing before it reaches the tabs — 54pt
+                // of transparent-to-black, so a half-cut row never sits
+                // against the divider.
+                .overlay(alignment: .bottom) {
+                    LinearGradient(colors: [.clear, .black],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: LabMetrics.listFadeHeight)
+                        .allowsHitTesting(false)
+                }
                 .overlay(alignment: .bottom) {
                     if hasBelow {
                         MoreBelowPill {
@@ -1094,18 +1122,13 @@ private struct InlineDraftRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .top, spacing: DSSpacing.rowInternalGap) {
-                // A DOT, not a checkbox.
-                //
-                // The checkbox was arguing that this row is already a to-do,
-                // when it is a place where one gets typed — and it invited a
-                // click that does nothing. A dot in the destination's colour
-                // says the same thing the tint says (this is going HERE) and
-                // asks for nothing.
-                Circle()
-                    .fill(accent)
-                    .frame(width: 8, height: 8)
-                    .opacity(focused ? 1 : 0.75)
-                    .padding(.top, TodoItemRow.firstLineInset + 4)
+                // Back to a checkbox, and the SAME one the rows use: 18pt,
+                // 2pt cyan, 6pt corner. The export draws the bar and the list
+                // with one component, so the bar reads as the row you are
+                // about to make rather than as a search field.
+                RoundedRectangle(cornerRadius: LabMetrics.checkboxRadius, style: .continuous)
+                    .strokeBorder(LabMetrics.accent, lineWidth: LabMetrics.checkboxStroke)
+                    .frame(width: LabMetrics.checkboxSize, height: LabMetrics.checkboxSize)
 
                 ZStack(alignment: .topLeading) {
                     // Stays until the first character, the way every other
@@ -1151,14 +1174,22 @@ private struct InlineDraftRow: View {
                 // for one key, and now there are two to show. Raycast puts the
                 // keys bare at the right edge and lets them be keys; the
                 // tooltips still carry the words for anyone who wants them.
-                HStack(spacing: 6) {
-                    WordKeycap(text: L10n.t("key.tab"))
-                        .help(L10n.t("todo.switchSection"))
-                    WordKeycap(text: "\u{21A9}")
-                        .help(L10n.t("todo.sc.create"))
+                // "Switch space", per the export — and always visible at the
+                // stated 35%, not fading in on hover.
+                HStack(spacing: 8) {
+                    Text(L10n.t("todo.switchSpace"))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.35))
+                        .fixedSize()
+                    Text(L10n.t("key.tab"))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.35))
+                        .frame(width: 32, height: 19)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.35), lineWidth: 1)
+                        )
                 }
-                .padding(.top, TodoItemRow.firstLineInset)
-                .opacity(focused || hover ? 1 : 0.55)
             }
 
             // NL-3: live resolved-date caption, aligned with the title.
@@ -1171,8 +1202,8 @@ private struct InlineDraftRow: View {
             }
         }
         // 24 / 16, as specified.
-        .padding(.horizontal, LabMetrics.inputPaddingH)
-        .padding(.vertical, LabMetrics.inputPaddingV)
+        .padding(.horizontal, LabMetrics.barPaddingH)
+        .padding(.vertical, LabMetrics.barPaddingV)
         // Spans the notch. Without this the field reports its own ideal width
         // and the box floated mid-panel, detached from the list it belongs to.
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1187,17 +1218,24 @@ private struct InlineDraftRow: View {
         // away from whatever the panel resolved to, which cannot collapse no
         // matter what is behind the window. Plus a hairline that is always
         // drawn, so the bar has an edge even when the fills are close.
-        .frame(minHeight: LabMetrics.inputHeight)
+        .frame(minHeight: LabMetrics.barHeight)
+        // linear-gradient(0deg, rgba(0,0,0,.4), rgba(0,0,0,.4)) over
+        // rgba(26,26,26,0.2) — a flat 40% black wash on a near-transparent
+        // dark base. Stated, so it is no longer a judgement call, and defined
+        // against the PANEL rather than the desktop, which is what keeps the
+        // bar legible whatever is behind the window.
         .background(
-            RoundedRectangle(cornerRadius: LabMetrics.inputRadius, style: .continuous)
-                .fill(focused ? accent.opacity(0.18)
-                              : Color.dynamicOverlay(light: 0.07, dark: 0.26))
+            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+                .fill(Color(hex: "#1A1A1A").opacity(0.2))
         )
+        .background(
+            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+                .fill(Color.black.opacity(0.4))
+        )
+        // Only focus draws a ring; the export gives the bar no resting border.
         .overlay(
-            RoundedRectangle(cornerRadius: LabMetrics.inputRadius, style: .continuous)
-                .strokeBorder(focused ? accent.opacity(0.7)
-                                      : Color.dynamicOverlay(light: 0.10, dark: 0.10),
-                              lineWidth: 1)
+            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+                .strokeBorder(focused ? accent.opacity(0.7) : .clear, lineWidth: 1)
         )
 
         // Clicking anywhere in the box takes the caret, not just the ~17pt
@@ -1435,6 +1473,10 @@ private struct TodoItemRow: View {
                     isBright: isFocused || isExpanded,
                     onTap: activateRow
                 )
+                // The export wraps the label in its own 8pt box, which is what
+                // gives a single-line row 33pt and lets a wrapped one grow to
+                // 50 instead of being clipped to a fixed height.
+                .padding(.vertical, LabMetrics.rowTextInset)
             }
 
             Spacer(minLength: 6)

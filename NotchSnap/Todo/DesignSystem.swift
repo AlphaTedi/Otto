@@ -197,8 +197,11 @@ enum DSFont {
     /// todoTitleSize — EntityTitleView's TextKit body attributes included, or
     /// the measured row height stops matching the drawn text.
     static let cardTitleSize: CGFloat = 15
-    static let todoTitleSize: CGFloat = 13
-    static let todoTitle: Font = .system(size: todoTitleSize)
+    /// 14/17 medium, per the Figma export. EntityTitleView mirrors this in
+    /// its own TextKit attributes — if the two drift the measured row height
+    /// stops matching the drawn text.
+    static let todoTitleSize: CGFloat = 14
+    static let todoTitle: Font = .system(size: todoTitleSize, weight: .medium)
     static let tabLabel: Font = .system(size: 11)
     static let sectionLabel: Font = .system(size: 10, weight: .regular)
     static let hint: Font = .system(size: 9)
@@ -258,8 +261,8 @@ struct CategoryTabChip: View {
     var body: some View {
         HStack(spacing: 5) {
             Text(title)
-                .font(DSFont.tabLabel)
-                .foregroundColor(isActive ? DSColor.primaryText : DSColor.textSecondary)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(isActive ? .black : .white)
 
             if let remaining {
                 if remaining == 0 {
@@ -270,18 +273,23 @@ struct CategoryTabChip: View {
                                                   : DSColor.textFaint)
                 } else {
                     Text("\(remaining)")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .monospacedDigit()
-                        .foregroundColor(isActive ? DSColor.primaryText.opacity(0.75)
-                                                  : DSColor.textFaint)
+                        .foregroundColor(isActive ? Color.black.opacity(0.5)
+                                                  : Color.white.opacity(0.5))
                         .contentTransition(.numericText())
                 }
             }
         }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 5)
-        .background(isActive ? categoryColor : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous))
+        .padding(.horizontal, LabMetrics.tabPaddingH)
+        .padding(.vertical, LabMetrics.tabPaddingV)
+        .background(isActive ? LabMetrics.accent : Color.clear)
+        // A full pill when active, barely rounded when not. The asymmetry is
+        // deliberate: it is what makes the selected tab read as selected
+        // rather than merely tinted, and it is not an inconsistency to tidy.
+        .clipShape(RoundedRectangle(
+            cornerRadius: isActive ? LabMetrics.tabActiveRadius : LabMetrics.tabInactiveRadius,
+            style: .continuous))
         // No ⌘-held index badge (Marcello, 2026-08-05). ⌘1-9 still jumps
         // between categories; it is documented in the "?" shortcuts overlay
         // like every other shortcut, rather than printed over the tabs.

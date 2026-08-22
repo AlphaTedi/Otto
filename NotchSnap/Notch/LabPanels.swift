@@ -19,73 +19,81 @@ import AppKit
 // these are exactly the values that get retuned against the Figma file.
 
 enum LabMetrics {
-    // Measured off the isolated block render, not guessed. The block is 760px
-    // wide in a 1940px shot of a 1512pt screen (1.283 px/pt), so it is 592pt —
-    // and the standalone render is that same block at 1314px, giving 2.218
-    // px/pt to convert everything else.
+    // Straight from the Figma CSS export (node 1098-4805). Not measured off a
+    // render this time — every number below is quoted, which is why the panel
+    // is 657 and not the 592 two rounds of pixel-reading produced.
 
-    /// Panel width. Both blocks share it — they are a column, not two shapes
-    /// that happen to be near each other.
-    static let blockWidth: CGFloat = 592
+    /// THE accent. One cyan for every checkbox and the active tab, replacing
+    /// the per-section colours those used to take. Stated as the source of
+    /// truth, superseding the purple explored earlier.
+    static let accent = Color(hex: "#10EFF2")
 
-    /// From the bottom of the notch to the first panel. Big on purpose: this
-    /// gap is the entire argument that the panels are not part of the notch.
+    static let blockWidth: CGFloat = 657
+    static let blockRadius: CGFloat = 40
+    /// 16 top, nothing on the other sides — the children carry their own.
+    static let panelTopPadding: CGFloat = 16
+    /// Between the creation-bar block and the list block.
+    static let sectionGap: CGFloat = 16
+
+    // Creation bar
+    static let barOuterInset: CGFloat = 16     // the wrapper's 0 16px
+    static let barPaddingH: CGFloat = 20
+    static let barPaddingV: CGFloat = 12
+    static let barRadius: CGFloat = 24
+    static let barHeight: CGFloat = 59
+    static let barInnerGap: CGFloat = 6
+
+    // Checkboxes — one size everywhere now, bar and rows alike
+    static let checkboxSize: CGFloat = 18
+    static let checkboxStroke: CGFloat = 2
+    static let checkboxRadius: CGFloat = 6
+
+    // List
+    static let listInset: CGFloat = 24
+    static let listRowGap: CGFloat = 6
+    static let rowPaddingH: CGFloat = 12
+    static let rowInnerGap: CGFloat = 6
+    static let rowTextInset: CGFloat = 8
+    /// The list fades out before it reaches the tabs underneath.
+    static let listFadeHeight: CGFloat = 54
+
+    // Section tabs, now at the BOTTOM
+    static let tabsInset: CGFloat = 24
+    static let tabsDividerPaddingV: CGFloat = 12
+    static let tabsTopPadding: CGFloat = 8
+    static let tabsBottomPadding: CGFloat = 24
+    static let tabsGap: CGFloat = 14
+    static let tabPaddingH: CGFloat = 12
+    static let tabPaddingV: CGFloat = 8
+    /// Active is a full pill, inactive is barely rounded. The asymmetry is
+    /// deliberate — it is what makes the active one read as selected rather
+    /// than merely tinted.
+    static let tabActiveRadius: CGFloat = 48
+    static let tabInactiveRadius: CGFloat = 8
+    static let avatarSize: CGFloat = 24
+
+    /// The to-do panel STOPS. 556 is the drawn height.
+    static let todoBlockMaxHeight: CGFloat = 556
+
+    /// From the bottom of the notch to the first panel.
     static let notchGap: CGFloat = 72
     /// Between the two panels.
     static let blockGap: CGFloat = 24
-
-    /// 40, as drawn.
-    static let blockRadius: CGFloat = 40
-    /// 16, and it is not a free choice: it is what makes the concentric rule
-    /// below produce the 24 the search bar is specified at.
     static let blockPadding: CGFloat = 16
-    /// The meeting cards keep the softer corner they had; 40 belongs to the
-    /// panel, and a card is a smaller object inside the same family.
     static let meetingRadius: CGFloat = 32
 
     /// CONCENTRIC CORNERS. An inner radius must be the outer one minus the gap
     /// between them, or the two curves are not parallel and the inner box
-    /// visibly fights the corner it sits in. Expressed as arithmetic rather
-    /// than as a second constant, so the two can never be edited apart.
+    /// visibly fights the corner it sits in.
     static func concentric(outer: CGFloat, inset: CGFloat) -> CGFloat {
         max(0, outer - inset)
     }
 
-    /// The to-do panel STOPS. Without a ceiling it grew to whatever the list
-    /// needed and swallowed the screen (Marcello, 2026-08-19) — a floating
-    /// panel that can outgrow its own design is not a panel, it is a window.
-    static let todoBlockMaxHeight: CGFloat = 470
-    /// What is left for the list once the panel's own furniture is paid for:
-    /// padding, the field, the section row, the rule and the gaps between.
-    static let todoListMaxHeight: CGFloat =
-        todoBlockMaxHeight - (blockPadding * 2 + inputHeight + inputToTabs
-                              + tabRowHeight + tabsToRule + ruleToList)
-
-    // The to-do panel's internals.
-    static let inputHeight: CGFloat = 67
-    /// Inside the bar. Wider than it is tall, which is what stops a 67pt bar
-    /// reading as a slab with the text stranded in the middle of it.
-    static let inputPaddingH: CGFloat = 24
-    static let inputPaddingV: CGFloat = 16
-    /// 40 - 16 = 24, as specified. Derived, not typed, so changing the panel's
-    /// radius or its padding carries the bar along instead of leaving it
-    /// behind.
-    static var inputRadius: CGFloat { concentric(outer: blockRadius, inset: blockPadding) }
-    static let inputToTabs: CGFloat = 18
-    static let tabRowHeight: CGFloat = 26
-    static let tabsToRule: CGFloat = 26
-    static let ruleToList: CGFloat = 32
-
-    /// The deck behind the top meeting. Slight, on purpose: the stack has to
-    /// read as depth at a glance, not as a list competing with the card in
-    /// front of it.
+    /// The deck behind the top meeting.
     static let stackOffset: CGFloat = 6
     static let stackScaleStep: CGFloat = 0.04
     static let maxStackPeek = 2
-    /// Gap between cards once the deck is opened.
     static let stackExpandedGap: CGFloat = 8
-    /// An opened deck scrolls rather than growing without limit — the same
-    /// rule the to-do panel needed.
     static let meetingBlockMaxHeight: CGFloat = 300
 
     /// How long the alert waits before snoozing itself.

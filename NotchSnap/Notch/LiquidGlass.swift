@@ -172,7 +172,9 @@ enum LiquidGlassTuning {
     /// further again after seeing the Figma beside the build: the drawing is
     /// darker than anything the blur alone was going to produce.
     static let lightScrim: Double = 0.74
-    static let darkScrim: Double = 0.82
+    /// 0.70 exactly — the panel's background is quoted as rgba(0,0,0,0.7) in
+    /// the export, so this stops being a judgement call.
+    static let darkScrim: Double = 0.70
 }
 
 extension View {
