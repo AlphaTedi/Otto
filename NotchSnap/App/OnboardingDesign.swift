@@ -131,7 +131,11 @@ enum OnbMetric {
     /// width, which lands here. It is also small enough to sit clear of the
     /// notch panel opening above it, which is the whole reason it shrinks.
     static let compactWidth: CGFloat = 525
-    static let compactHeight: CGFloat = 300
+    /// 250, down from 300. At 300 the content ended around two-thirds up and
+    /// the rest was dead height — which is what let the to-do panel cover the
+    /// window on the very step that asks you to look at both (Marcello,
+    /// 2026-08-23, screenshot 4).
+    static let compactHeight: CGFloat = 250
 
     /// Everything from step 3 onward lives inside this. The feature grid
     /// (step 2) is the one screen that stays full width.
@@ -139,9 +143,11 @@ enum OnbMetric {
     static let columnTop: CGFloat = 72
     /// Enough to clear the window controls and no more.
     static let columnTopCompact: CGFloat = 40
-    /// Room for the dots and the 45 under them, nothing like the 168 the wide
-    /// screens need for a full bar.
-    static let columnBottomCompact: CGFloat = 74
+    /// Room for the dots and the little under them — nothing like the 168 the
+    /// wide screens need for a full bar.
+    static let columnBottomCompact: CGFloat = 48
+    /// The rail sits closer to the edge here than the full bar does.
+    static let navBottomCompact: CGFloat = 22
     /// Clears the nav bar: 45 up from the bottom + 96 tall + air.
     static let columnBottom: CGFloat = 168
     /// The gap under the content column on the screens that state one.
@@ -401,7 +407,11 @@ struct OnbPressStyle: ButtonStyle {
 /// also triggers it.
 struct OnbButton: View {
     let title: String
-    var key: String? = "\u{21B5}"
+    /// No badge by default. The ⏎ chip is gone from the buttons (Marcello,
+    /// 2026-08-23) — Return still works, it just is not advertised on the
+    /// pill. Kept as an option rather than deleted so a screen that genuinely
+    /// needs to teach a key can still ask for one.
+    var key: String? = nil
     var isEnabled: Bool = true
     let action: () -> Void
 
@@ -552,6 +562,78 @@ struct OnbFeatureCard<Art: View>: View {
             RoundedRectangle(cornerRadius: OnbMetric.cardRadius, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
         )
+    }
+}
+
+/// Confetti for the final step.
+///
+/// Drawn rather than shipped as the design's 1200x926 image: at this size a
+/// bitmap would be a megabyte of asset for four seconds of screen, and drawn
+/// pieces can start from the top edge of whatever the window happens to be
+/// rather than assuming one height.
+///
+/// It fires ONCE and settles. A loop would turn a moment of "you're done"
+/// into decoration that never stops, and it is the last thing between the
+/// user and their desk.
+struct OnbConfetti: View {
+    @State private var fallen = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let palette: [Color] = [
+        Color(hex: "#FF5A5F"), Color(hex: "#FFC93C"), Color(hex: "#37D67A"),
+        Color(hex: "#3B9EFF"), Color(hex: "#C86DD7"), Color(hex: "#FF8A4C")
+    ]
+
+    private struct Piece: Identifiable {
+        let id = UUID()
+        let x: CGFloat          // 0...1 across the window
+        let delay: Double
+        let duration: Double
+        let spin: Double
+        let size: CGSize
+        let color: Color
+        let drift: CGFloat
+    }
+
+    private let pieces: [Piece] = (0..<48).map { i in
+        Piece(x: CGFloat.random(in: 0.02...0.98),
+              delay: Double.random(in: 0...0.5),
+              duration: Double.random(in: 1.9...3.2),
+              spin: Double.random(in: -540...540),
+              size: CGSize(width: CGFloat.random(in: 6...11),
+                           height: CGFloat.random(in: 9...16)),
+              color: palette[i % palette.count],
+              drift: CGFloat.random(in: -60...60))
+    }
+
+    var body: some View {
+        // Reduce Motion gets nothing at all here: confetti is pure motion, so
+        // a "gentler" version of it is just confetti, and there is no
+        // information in it to preserve.
+        if reduceMotion {
+            EmptyView()
+        } else {
+            GeometryReader { geo in
+                ZStack(alignment: .top) {
+                    ForEach(pieces) { piece in
+                        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                            .fill(piece.color)
+                            .frame(width: piece.size.width, height: piece.size.height)
+                            .rotationEffect(.degrees(fallen ? piece.spin : 0))
+                            .offset(x: piece.x * geo.size.width - geo.size.width / 2
+                                       + (fallen ? piece.drift : 0),
+                                    y: fallen ? geo.size.height + 40 : -40)
+                            .opacity(fallen ? 0 : 1)
+                            .animation(.easeIn(duration: piece.duration)
+                                        .delay(piece.delay),
+                                       value: fallen)
+                    }
+                }
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+            }
+            .allowsHitTesting(false)
+            .onAppear { fallen = true }
+        }
     }
 }
 

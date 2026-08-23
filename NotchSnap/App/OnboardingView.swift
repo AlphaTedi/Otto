@@ -193,7 +193,8 @@ struct OnboardingFlowView: View {
                          total: max(1, steps.count - 1),
                          primary: barPrimary,
                          onSelectStep: { goToStep($0 + 1) })
-                .padding(.bottom, OnbMetric.navBottom)
+                .padding(.bottom, step == .practice ? OnbMetric.navBottomCompact
+                                                    : OnbMetric.navBottom)
                 .transition(.opacity)
         }
     }
@@ -874,7 +875,9 @@ private struct OnboardingPracticeView: View {
             // something being taken away.
             NotchController.shared.collapse()
 
-            onToast("Nice \u{2014} that\u{2019}s it.")
+            // No toast. It was landing in the corner of a window it did not
+            // belong to, and the step advancing is already the confirmation —
+            // saying it twice, badly placed, was worse than not saying it.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { onAdvance() }
         }
     }
@@ -1070,8 +1073,11 @@ private struct OnboardingCalendarView: View {
 
             VStack(spacing: 10) {
                 if calendar.isConnected {
-                    OnbButton(title: "Continue", action: onAdvance)
-                        .keyboardShortcut(.return, modifiers: [])
+                    // Nothing here. The BAR carries Continue on this step —
+                    // drawing one in the content too is what put two of them
+                    // on screen at once, one of them over the rail
+                    // (Marcello, 2026-08-23, on Tahoe).
+                    EmptyView()
                 } else {
                     OnbButton(title: asking ? "Waiting for macOS\u{2026}" : "Connect calendar",
                               isEnabled: !asking) {
@@ -1625,6 +1631,9 @@ struct OnboardingAllSetView: View {
             .offset(y: appeared ? 0 : 12)
             .animation(OnbMotion.screen.delay(0.12), value: appeared)
         }
+        // Above everything on this screen, including the footer — it is the
+        // one moment in the flow that is allowed to be loud.
+        .overlay(OnbConfetti().ignoresSafeArea())
         .onAppear { appeared = true }
     }
 }
