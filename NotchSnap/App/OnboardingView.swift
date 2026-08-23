@@ -1589,45 +1589,19 @@ private struct FeatureDemoLoop: View {
 
 struct OnboardingAllSetView: View {
     var onFinish: () -> Void
-    @State private var headerAppeared = false
-    @State private var tipsAppeared = false
-    @State private var buttonAppeared = false
+    @State private var appeared = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            ZStack {
-                Circle()
-                    .fill(Color.white.opacity(0.12))
-                    .frame(width: 84, height: 84)
-                Image(systemName: "checkmark")
-                    .font(.system(size: 38, weight: .bold))
-                    .foregroundStyle(OnbColor.text)
-            }
-            .scaleEffect(headerAppeared ? 1.0 : 0.6)
-            .opacity(headerAppeared ? 1 : 0)
-            .animation(OnbMotion.screen.delay(0.05), value: headerAppeared)
-            .padding(.top, 36)
-
-            Spacer().frame(height: 16)
-
-            OnboardingEyebrowPill(text: "Done")
-                .padding(.bottom, 12)
-
-            Text("You\u{2019}re set")
-                .font(.system(size: 28, weight: .bold))
-                .opacity(headerAppeared ? 1 : 0)
-                .offset(y: headerAppeared ? 0 : 8)
-                .animation(OnbMotion.screen.delay(0.18), value: headerAppeared)
-
-            Text("Otto will stay quiet until you need it.")
-                .font(.system(size: 14))
-                .foregroundStyle(.secondary)
-                .padding(.top, 4)
-                .opacity(headerAppeared ? 1 : 0)
-                .animation(.easeOut(duration: 0.3).delay(0.28), value: headerAppeared)
-
-            Spacer().frame(height: 22)
-
+        // In the column, like every other screen from step 3 on. It used to
+        // build its own full-width stack, which is why its rows ran edge to
+        // edge past the 640 the rest of the flow sits in and its footer fell
+        // off the bottom of the window (Marcello, 2026-08-23).
+        //
+        // The eyebrow chip is gone with it: a pill reading "DONE" directly
+        // above a headline saying "You're set" was the same word twice, and it
+        // read as a stray button.
+        OnbScreen(title: "You\u{2019}re set",
+                  subtitle: "Otto will stay quiet until you need it.") {
             VStack(spacing: 10) {
                 AllSetTip(icon: "bolt", iconTint: .blue,
                           title: "Add a to-do from anywhere",
@@ -1645,20 +1619,13 @@ struct OnboardingAllSetView: View {
                           title: "Reach the notch",
                           detail: "Hover to peek, click to open. Press ? inside for every shortcut.",
                           shortcut: nil)
+                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 32)
-            .opacity(tipsAppeared ? 1 : 0)
-            .offset(y: tipsAppeared ? 0 : 14)
-            .animation(OnbMotion.screen.delay(0.35), value: tipsAppeared)
-
-            Spacer()
-            .padding(.bottom, 40)
+            .opacity(appeared ? 1 : 0)
+            .offset(y: appeared ? 0 : 12)
+            .animation(OnbMotion.screen.delay(0.12), value: appeared)
         }
-        .onAppear {
-            headerAppeared = true
-            tipsAppeared = true
-            buttonAppeared = true
-        }
+        .onAppear { appeared = true }
     }
 }
 

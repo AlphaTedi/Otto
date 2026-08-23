@@ -137,6 +137,11 @@ enum OnbMetric {
     /// (step 2) is the one screen that stays full width.
     static let columnWidth: CGFloat = 640
     static let columnTop: CGFloat = 72
+    /// Enough to clear the window controls and no more.
+    static let columnTopCompact: CGFloat = 40
+    /// Room for the dots and the 45 under them, nothing like the 168 the wide
+    /// screens need for a full bar.
+    static let columnBottomCompact: CGFloat = 74
     /// Clears the nav bar: 45 up from the bottom + 96 tall + air.
     static let columnBottom: CGFloat = 168
     /// The gap under the content column on the screens that state one.
@@ -743,21 +748,15 @@ struct OnbBottomNav: View {
                 .transition(.opacity)
             }
         }
-        // Stated, not derived. Padding first and a frame after sizes the row
-        // to its content and centres it, which left the controls clustered
-        // instead of reaching the bar's ends.
-        .frame(width: isMinimal ? OnbMetric.navCompactContentWidth
-                                : OnbMetric.navContentWidth,
-               height: OnbMetric.navIconButton)
-        .padding(OnbMetric.navPadding)
-        .frame(height: isMinimal ? OnbMetric.navCompactHeight : OnbMetric.navHeight)
-        // The tray is a plain fill, NOT glass.
+        // NO TRAY.
         //
-        // Glass cannot sample other glass: a glass bar holding glass buttons
-        // gives each control its own sampling region over a surface that is
-        // itself sampling, and they come out inconsistent. The export agrees —
-        // it specifies the bar as rgba(0,0,0,0.2), a flat fill.
-        .background(Capsule().fill(OnbColor.glassTint))
+        // The bar used to sit in its own dark capsule. The newer designs drop
+        // it entirely — the controls float straight on the window, which is
+        // also why the back button is a bare hit target and the primary is
+        // the only thing carrying a surface. The tray was making the footer
+        // read as a slab bolted to the bottom of every screen.
+        .frame(width: isMinimal ? nil : OnbMetric.navContentWidth,
+               height: OnbMetric.navIconButton)
         .animation(OnbMotion.screen, value: isMinimal)
     }
 }
@@ -794,12 +793,19 @@ struct OnbScreen<Content: View>: View {
             }
 
             content
-                .padding(OnbMetric.bodyPadding)
+                .padding(compact ? 0 : OnbMetric.bodyPadding)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: OnbMetric.columnWidth)
-        .padding(.top, OnbMetric.columnTop)
-        .padding(.bottom, OnbMetric.columnBottom)
+        // The compact window is 525x300. The full column would put a 640pt
+        // frame inside a 525pt window and 240pt of padding inside 300pt of
+        // height — which is exactly what pushed the headline up under the
+        // traffic lights and crushed everything under it (Marcello,
+        // 2026-08-23). Compact gets its own numbers rather than the big
+        // screen's, scaled by hope.
+        .frame(width: compact ? nil : OnbMetric.columnWidth)
+        .padding(.horizontal, compact ? 24 : 0)
+        .padding(.top, compact ? OnbMetric.columnTopCompact : OnbMetric.columnTop)
+        .padding(.bottom, compact ? OnbMetric.columnBottomCompact : OnbMetric.columnBottom)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
