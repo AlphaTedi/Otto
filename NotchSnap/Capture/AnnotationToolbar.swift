@@ -160,7 +160,11 @@ struct AnnotationToolbar: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: Capsule())
+        // Real Liquid Glass on macOS 26. A floating toolbar over a screenshot
+        // is the navigation layer over media — the case the material exists
+        // for — and `.ultraThinMaterial` was a static approximation of it that
+        // never refracts or responds to what is behind it.
+        .floatingGlass(in: Capsule())
         .shadow(color: .black.opacity(0.22), radius: 14, y: 5)
         // Force a dark appearance so the toolbar keeps its familiar look (and
         // readable white/secondary icons) even when it floats over a bright

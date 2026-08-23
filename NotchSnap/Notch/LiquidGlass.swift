@@ -97,8 +97,22 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
     /// a CONCRETE colour chosen from it — nothing left to re-resolve.
     @Environment(\.colorScheme) private var colorScheme
 
+    /// Someone telling the system they cannot read text on translucency.
+    ///
+    /// The notch had no answer to this at all: the panel stayed glass whatever
+    /// the setting said, which for a person who turns it on is the one surface
+    /// in the app they most need solid — everything they read lives on it.
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
     func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) {
+        if reduceTransparency {
+            // No blur, no refraction, no scrim over a sample: an opaque fill
+            // and a defined edge. Apple's own escape hatch for this is
+            // `Glass.identity`, but that still leaves the surface to the
+            // material — a stated colour is the thing the setting asks for.
+            content.background(shape.fill(opaque))
+                   .overlay(shape.strokeBorder(solidEdge, lineWidth: 1))
+        } else if #available(macOS 26.0, *) {
             // Tinted with the SAME scrim the pre-26 path paints, and that is
             // the whole point of this line.
             //
@@ -164,6 +178,19 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
             .overlay(shape.strokeBorder(hairline, lineWidth: 1))
     }
 
+    /// What the panel becomes under Reduce Transparency. Chosen from the same
+    /// invariant the scrims are: always further from the text colour than the
+    /// desktop behind it.
+    private var opaque: Color {
+        colorScheme == .dark ? Color(hex: "#0B0B0E") : Color(hex: "#F2F2F5")
+    }
+
+    /// A real border, not a hairline — with no blur to separate the panel from
+    /// the desktop, the edge has to do that job alone.
+    private var solidEdge: Color {
+        colorScheme == .dark ? Color.white.opacity(0.22) : Color.black.opacity(0.22)
+    }
+
     private var legacy: some View {
         ZStack {
             // `.behindWindow` blurs the DESKTOP, not the window's own content.
@@ -223,5 +250,54 @@ extension View {
     /// Real Liquid Glass on macOS 26, a faithful stand-in below it.
     func liquidGlass<S: InsettableShape>(in shape: S, tint: Color? = nil) -> some View {
         modifier(LiquidGlassSurface(shape: shape, tint: tint))
+    }
+
+    /// For controls that FLOAT over content — the annotation toolbar, the
+    /// capture action bar — rather than for a panel you read from.
+    ///
+    /// Same material, none of the notch's scrim: that scrim exists so a
+    /// reading surface stays legible, and putting it on a toolbar hovering
+    /// over a screenshot would bury the screenshot the toolbar is for. This is
+    /// the navigation layer doing what Liquid Glass is actually for.
+    func floatingGlass<S: InsettableShape>(in shape: S) -> some View {
+        modifier(FloatingGlassSurface(shape: shape))
+    }
+}
+
+extension View {
+    /// Groups neighbouring glass surfaces so the material samples them
+    /// together. Glass cannot sample other glass, and ungrouped neighbours
+    /// each open their own region and drift apart visually.
+    @ViewBuilder
+    func glassGroup(spacing: CGFloat) -> some View {
+        if #available(macOS 26.0, *) {
+            GlassEffectContainer(spacing: spacing) { self }
+        } else {
+            self
+        }
+    }
+}
+
+/// Glass for floating chrome. Three tiers, like everything else: the real
+/// material on 26, `.ultraThinMaterial` below it, and an opaque fill when the
+/// user has asked for one.
+struct FloatingGlassSurface<S: InsettableShape>: ViewModifier {
+    let shape: S
+    @ObservedObject private var refresh = GlassRefresh.shared
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    func body(content: Content) -> some View {
+        if reduceTransparency {
+            content.background(shape.fill(Color(hex: "#1C1C1E")))
+                   .overlay(shape.strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
+        } else if #available(macOS 26.0, *) {
+            content
+                .glassEffect(Glass.regular
+                    .tint(Color.clear.opacity(refresh.token % 2 == 0 ? 1.0 : 0.9995)),
+                             in: shape)
+        } else {
+            content.background(.ultraThinMaterial, in: shape)
+                   .overlay(shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
+        }
     }
 }

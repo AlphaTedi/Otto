@@ -346,9 +346,23 @@ struct LabMeetingBlock: View {
                 .background(alignment: .top) {
                     ForEach(0..<peekCount(meetings), id: \.self) { i in
                         let depth = CGFloat(i + 1)
-                        Color.clear
-                            .liquidGlass(in: RoundedRectangle(
-                                cornerRadius: LabMetrics.meetingRadius, style: .continuous))
+                        // A FLAT fill, not glass.
+                        //
+                        // Each of these used to be its own glass surface,
+                        // stacked directly under another one — and glass
+                        // cannot sample glass, so they sampled the card above
+                        // them and came out inconsistent with it. They also
+                        // cost a backdrop layer each (three offscreen textures
+                        // apiece) to render a 4pt sliver that is 96% hidden.
+                        // A fill is indistinguishable here and free.
+                        RoundedRectangle(cornerRadius: LabMetrics.meetingRadius,
+                                         style: .continuous)
+                            .fill(Color.black.opacity(0.45 - 0.10 * depth))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: LabMetrics.meetingRadius,
+                                                 style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                            )
                             .scaleEffect(1 - LabMetrics.stackScaleStep * depth, anchor: .top)
                             .offset(y: LabMetrics.stackOffset * depth)
                             .shadow(color: .black.opacity(0.30), radius: 8, y: 3)
@@ -513,6 +527,14 @@ struct LabPanelsView: View {
                 .frame(height: LabMetrics.todoBlockMaxHeight, alignment: .top)
                 .labBlock()
         }
+        // The two panels are neighbours, so they sample as one.
+        //
+        // Without this each block opens its own sampling region and the two
+        // can resolve differently over the same desktop — the meeting card
+        // reading a shade apart from the to-do panel directly beneath it. The
+        // spacing matches the gap between them so the container knows how near
+        // "near" is.
+        .glassGroup(spacing: LabMetrics.blockGap)
         .padding(.top, LabMetrics.notchGap)
         .padding(.bottom, LabMetrics.shadowMargin)
         .padding(.horizontal, LabMetrics.shadowMargin)

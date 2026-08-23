@@ -693,11 +693,10 @@ private struct SuccessToast: View {
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 9)
-        .background(
-            Capsule()
-                .fill(.ultraThinMaterial)
-                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 1))
-        )
+        // Floating chrome over the flow, so it is glass — and it has to be
+        // stated, because `.ultraThinMaterial` resolves LIGHT and came out a
+        // pale slab on the purple, the same way GlassTile did.
+        .onbGlass()
         .shadow(color: .black.opacity(0.28), radius: 12, y: 4)
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }

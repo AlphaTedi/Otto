@@ -176,7 +176,7 @@ struct TextExtractionView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(Capsule().fill(.ultraThinMaterial))
+        .floatingGlass(in: Capsule())
     }
 
     private var noTextOverlay: some View {
@@ -185,7 +185,7 @@ struct TextExtractionView: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .background(Capsule().fill(.ultraThinMaterial))
+            .floatingGlass(in: Capsule())
             .task {
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
                 onExit()
