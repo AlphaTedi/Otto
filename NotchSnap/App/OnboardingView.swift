@@ -470,13 +470,14 @@ private struct OnboardingValueView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity)
 
+                // Every card gets a full-size image area — one with the demo
+                // in it, one with stand-in art. Before, the demo drew at its
+                // own 46x34 in the middle of a large empty card and the two
+                // cards without one showed nothing at all.
                 if let demo = feature.demo {
-                    FeatureDemoLoop(demo: demo)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipShape(RoundedRectangle(cornerRadius: OnbMetric.imageRadius,
-                                                    style: .continuous))
+                    OnbCardImageSlot { EnlargedDemo(demo: demo) }
                 } else {
-                    OnbCardImageSlot()
+                    OnbCardImageSlot { OnbPlaceholderArt() }
                 }
             }
         }
@@ -886,6 +887,31 @@ private struct OnboardingPracticeView: View {
 
             onToast("Nice \u{2014} that\u{2019}s it.")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { onAdvance() }
+        }
+    }
+}
+
+/// The feature demo at card size.
+///
+/// `FeatureDemoLoop` is pinned to 46x34 — it was built as a thumbnail for the
+/// old bullet rows, and everything inside it is laid out against that box. So
+/// it is scaled rather than re-laid-out: every stroke and radius in it is
+/// proportional, so a scale is exactly what "the same drawing, larger" means,
+/// and re-specifying it at card size would be the same numbers twice.
+///
+/// Scaled to FIT, not fill: filling would crop a 1.35 aspect into a card
+/// nearly twice as wide and cut the drawing in half.
+private struct EnlargedDemo: View {
+    let demo: FeatureDemo
+    private static let natural = CGSize(width: 46, height: 34)
+
+    var body: some View {
+        GeometryReader { geo in
+            let scale = min(geo.size.width / Self.natural.width,
+                            geo.size.height / Self.natural.height)
+            FeatureDemoLoop(demo: demo)
+                .scaleEffect(scale)
+                .frame(width: geo.size.width, height: geo.size.height)
         }
     }
 }

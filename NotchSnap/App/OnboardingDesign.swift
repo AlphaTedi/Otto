@@ -177,6 +177,9 @@ enum OnbMetric {
 
     static let buttonPaddingH: CGFloat = 24
     static let buttonPaddingV: CGFloat = 12
+    /// 12 above and below a 19pt line comes to 43, and the design says 48.
+    /// Stated rather than derived, so it cannot drift with the type again.
+    static let buttonHeight: CGFloat = 48
     static let buttonGap: CGFloat = 12
     /// How far a button gives under the pointer. Small — the press has to
     /// read as the surface answering, not as the button shrinking.
@@ -373,38 +376,34 @@ struct OnbButton: View {
     }
 
     var body: some View {
-        if #available(macOS 26.0, *), !reduceTransparency {
-            // `.buttonStyle(.glass)` is the real control, not a rectangle with
-            // glass painted on it: Apple's own press behaviour, focus ring and
-            // accessibility come with it. `.tint(.clear)` is required on macOS
-            // — without it glass buttons come out wrongly tinted.
-            Button(action: action) {
-                label.frame(height: 24).padding(.horizontal, 8)
-            }
-            .buttonStyle(.glass)
-            .tint(.clear)
-            .controlSize(.large)
-            .disabled(!isEnabled)
-            .opacity(isEnabled ? 1 : 0.4)
-        } else {
-            Button(action: action) {
-                label
-                    .padding(.horizontal, OnbMetric.buttonPaddingH)
-                    .padding(.vertical, OnbMetric.buttonPaddingV)
-                    .onbGlass()
-                    .overlay(
-                        Capsule().fill(Color.white.opacity(hovering && isEnabled ? 0.06 : 0))
-                    )
-                    // Glass registers hits on its CONTENT, not its area, so
-                    // the shape has to be stated or the pill's edges are dead.
-                    .contentShape(Capsule())
-            }
-            .buttonStyle(OnbPressStyle())
-            .disabled(!isEnabled)
-            .opacity(isEnabled ? 1 : 0.4)
-            .onHover { hovering = $0 }
-            .animation(OnbMotion.standard, value: hovering)
+        // A custom view carrying real glass, not `.buttonStyle(.glass)`.
+        //
+        // The system style was the more canonical control, but it brings
+        // Apple's metrics with it and this design is explicit about its own:
+        // 48pt tall, 24 either side. Through the style the pills came out
+        // around a third shorter and read as thin bars hugging their text
+        // (Marcello, 2026-08-23). Applying the material to a custom view is
+        // Apple's other documented path, and it is the one that can be sized.
+        Button(action: action) {
+            label
+                .padding(.horizontal, OnbMetric.buttonPaddingH)
+                // HEIGHT, not vertical padding. Padding leaves the result at
+                // the mercy of whatever the label's line box happens to be;
+                // the design states 48, so this states 48.
+                .frame(height: OnbMetric.buttonHeight)
+                .onbGlass()
+                .overlay(
+                    Capsule().fill(Color.white.opacity(hovering && isEnabled ? 0.06 : 0))
+                )
+                // Glass registers hits on its CONTENT, not its area, so the
+                // shape has to be stated or the pill's edges are dead.
+                .contentShape(Capsule())
         }
+        .buttonStyle(OnbPressStyle())
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.4)
+        .onHover { hovering = $0 }
+        .animation(OnbMotion.standard, value: hovering)
     }
 }
 
@@ -452,15 +451,52 @@ struct OnbCard<Content: View>: View {
 /// preview, the way Raycast's "Out of the box" screen does it — and that is
 /// copy and art direction, not layout. Dropping a real image in here later
 /// changes nothing around it.
-struct OnbCardImageSlot: View {
+struct OnbCardImageSlot<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    init(@ViewBuilder content: () -> Content = { EmptyView() }) {
+        self.content = content()
+    }
+
     var body: some View {
         RoundedRectangle(cornerRadius: OnbMetric.imageRadius, style: .continuous)
-            .fill(Color.white.opacity(0.06))
+            .fill(Color.black.opacity(0.22))
+            .overlay(content.padding(10))
             .overlay(
                 RoundedRectangle(cornerRadius: OnbMetric.imageRadius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
             )
+            .clipShape(RoundedRectangle(cornerRadius: OnbMetric.imageRadius,
+                                        style: .continuous))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// Stand-in art for the two features that have no visual yet.
+///
+/// Visible on purpose. The slot used to be white at 6% — present in the
+/// layout and invisible on screen, so those two cards read as broken rather
+/// than as unfinished. This says "something goes here" out loud.
+struct OnbPlaceholderArt: View {
+    var body: some View {
+        GeometryReader { geo in
+            let unit = min(geo.size.width, geo.size.height)
+            ZStack {
+                Circle()
+                    .fill(OnbColor.markGradient)
+                    .frame(width: unit * 1.1, height: unit * 1.1)
+                    .offset(x: -unit * 0.25, y: -unit * 0.1)
+                    .opacity(0.28)
+                RoundedRectangle(cornerRadius: unit * 0.22, style: .continuous)
+                    .fill(Color.white)
+                    .frame(width: unit * 0.9, height: unit * 0.62)
+                    .offset(x: unit * 0.3, y: unit * 0.18)
+                    .opacity(0.14)
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .blur(radius: unit * 0.03)
+        }
+        .accessibilityHidden(true)
     }
 }
 
@@ -545,29 +581,15 @@ struct OnbBackButton: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
-        Group {
-            if #available(macOS 26.0, *), !reduceTransparency {
-                Button(action: action) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 15, weight: .semibold))
-                        .frame(width: 22, height: 22)
-                }
-                .buttonStyle(.glass)
-                .tint(.clear)
-                .controlSize(.large)
-            } else {
-                Button(action: action) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(OnbColor.text)
-                        .frame(width: OnbMetric.navIconButton,
-                               height: OnbMetric.navIconButton)
-                        .onbGlass()
-                        .contentShape(Circle())
-                }
-                .buttonStyle(OnbPressStyle())
-            }
+        Button(action: action) {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(OnbColor.text)
+                .frame(width: OnbMetric.navIconButton, height: OnbMetric.navIconButton)
+                .onbGlass()
+                .contentShape(Circle())
         }
+        .buttonStyle(OnbPressStyle())
         .accessibilityLabel("Back")
     }
 }
@@ -594,7 +616,8 @@ struct OnbBottomNav: View {
             if onBack == nil && primary == nil {
                 // Indicator only — 154x56 in the export.
                 OnbProgress(current: current, total: total)
-                    .padding(OnbMetric.navPadding)
+                    .frame(width: OnbMetric.navCompactWidth,
+                           height: OnbMetric.navCompactHeight)
                     .background(Capsule().fill(OnbColor.glassTint))
             } else {
                 HStack(spacing: OnbMetric.navInnerGap) {
