@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 // MARK: - Onboarding design system
@@ -271,6 +272,10 @@ struct OnbGlassSurface<S: Shape & InsettableShape>: ViewModifier {
         tint ?? OnbColor.glassFallback
     }
 
+    /// `.interactive()` is an iOS behaviour — the material scales and shimmers
+    /// under a finger. On macOS it is a no-op, which is why every pressable
+    /// surface here also carries OnbPressStyle: the press feedback cannot come
+    /// from the material on this platform.
     @available(macOS 26.0, *)
     private var glass: Glass {
         let base = Glass.regular.interactive(isInteractive)
@@ -356,29 +361,50 @@ struct OnbButton: View {
 
     @State private var hovering = false
 
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: OnbMetric.buttonGap) {
-                Text(title)
-                    .font(OnbFont.button)
-                    .foregroundStyle(OnbColor.text)
-                if let key { OnbKeyBadge(text: key) }
-            }
-            .padding(.horizontal, OnbMetric.buttonPaddingH)
-            .padding(.vertical, OnbMetric.buttonPaddingV)
-            // `interactive:` hands the press to the material itself on 26 —
-            // the glass reacts, not just a transform over it.
-            .onbGlass(interactive: true)
-            .overlay(
-                Capsule().fill(Color.white.opacity(hovering && isEnabled ? 0.06 : 0))
-            )
-            .contentShape(Capsule())
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    private var label: some View {
+        HStack(spacing: OnbMetric.buttonGap) {
+            Text(title)
+                .font(OnbFont.button)
+                .foregroundStyle(OnbColor.text)
+            if let key { OnbKeyBadge(text: key) }
         }
-        .buttonStyle(OnbPressStyle())
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.4)
-        .onHover { hovering = $0 }
-        .animation(OnbMotion.standard, value: hovering)
+    }
+
+    var body: some View {
+        if #available(macOS 26.0, *), !reduceTransparency {
+            // `.buttonStyle(.glass)` is the real control, not a rectangle with
+            // glass painted on it: Apple's own press behaviour, focus ring and
+            // accessibility come with it. `.tint(.clear)` is required on macOS
+            // — without it glass buttons come out wrongly tinted.
+            Button(action: action) {
+                label.frame(height: 24).padding(.horizontal, 8)
+            }
+            .buttonStyle(.glass)
+            .tint(.clear)
+            .controlSize(.large)
+            .disabled(!isEnabled)
+            .opacity(isEnabled ? 1 : 0.4)
+        } else {
+            Button(action: action) {
+                label
+                    .padding(.horizontal, OnbMetric.buttonPaddingH)
+                    .padding(.vertical, OnbMetric.buttonPaddingV)
+                    .onbGlass()
+                    .overlay(
+                        Capsule().fill(Color.white.opacity(hovering && isEnabled ? 0.06 : 0))
+                    )
+                    // Glass registers hits on its CONTENT, not its area, so
+                    // the shape has to be stated or the pill's edges are dead.
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(OnbPressStyle())
+            .disabled(!isEnabled)
+            .opacity(isEnabled ? 1 : 0.4)
+            .onHover { hovering = $0 }
+            .animation(OnbMotion.standard, value: hovering)
+        }
     }
 }
 
@@ -516,16 +542,32 @@ struct OnbWindowControls: View {
 struct OnbBackButton: View {
     let action: () -> Void
 
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
     var body: some View {
-        Button(action: action) {
-            Image(systemName: "chevron.left")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(OnbColor.text)
-                .frame(width: OnbMetric.navIconButton, height: OnbMetric.navIconButton)
-                .onbGlass(interactive: true)
-                .contentShape(Circle())
+        Group {
+            if #available(macOS 26.0, *), !reduceTransparency {
+                Button(action: action) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(.glass)
+                .tint(.clear)
+                .controlSize(.large)
+            } else {
+                Button(action: action) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(OnbColor.text)
+                        .frame(width: OnbMetric.navIconButton,
+                               height: OnbMetric.navIconButton)
+                        .onbGlass()
+                        .contentShape(Circle())
+                }
+                .buttonStyle(OnbPressStyle())
+            }
         }
-        .buttonStyle(OnbPressStyle())
         .accessibilityLabel("Back")
     }
 }
@@ -553,7 +595,7 @@ struct OnbBottomNav: View {
                 // Indicator only — 154x56 in the export.
                 OnbProgress(current: current, total: total)
                     .padding(OnbMetric.navPadding)
-                    .onbGlass(Capsule(), tint: OnbColor.glassTint)
+                    .background(Capsule().fill(OnbColor.glassTint))
             } else {
                 HStack(spacing: OnbMetric.navInnerGap) {
                     if let onBack {
@@ -575,10 +617,19 @@ struct OnbBottomNav: View {
                     }
                 }
                 .frame(height: OnbMetric.navIconButton)
+                // One container for the two glass CONTROLS.
                 .onbGlassGroup()
                 .padding(OnbMetric.navPadding)
                 .frame(width: OnbMetric.navWidth, height: OnbMetric.navHeight)
-                .onbGlass(Capsule(), tint: OnbColor.glassTint)
+                // The tray is a plain fill, NOT glass.
+                //
+                // Glass cannot sample other glass: a glass bar holding glass
+                // buttons gives each control its own sampling region over a
+                // surface that is itself sampling, and they come out
+                // inconsistent. The export agrees — it specifies the bar as
+                // rgba(0,0,0,0.2), a flat fill. The controls are the glass;
+                // the tray is what they sit on.
+                .background(Capsule().fill(OnbColor.glassTint))
             }
         }
     }
@@ -693,15 +744,79 @@ struct OnbKeycap: View {
     let glyph: String
     let rotation: Double
     var glyphSize: CGFloat = 66
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
-        Text(glyph)
-            .font(.system(size: glyphSize, weight: .semibold))
-            .foregroundStyle(OnbColor.badge)
-            .frame(width: OnbMetric.keycap, height: OnbMetric.keycap)
-            .onbGlass(RoundedRectangle(cornerRadius: OnbMetric.keycapRadius, style: .continuous),
-                      tint: OnbColor.glassTint)
-            .rotationEffect(.degrees(rotation))
+        ZStack {
+            pane
+            Text(glyph)
+                .font(.system(size: glyphSize, weight: .semibold))
+                .foregroundStyle(OnbColor.badge)
+                .rotationEffect(.degrees(rotation))
+        }
+        .frame(width: OnbMetric.keycap, height: OnbMetric.keycap)
+    }
+
+    @ViewBuilder
+    private var pane: some View {
+        if #available(macOS 26.0, *), !reduceTransparency {
+            // AppKit, deliberately.
+            //
+            // `rotationEffect` on a SwiftUI `glassEffect` view makes the glass
+            // SHAPE morph rather than rotate — a documented artifact, and the
+            // caps in this design are all tilted a few degrees. NSGlassEffectView
+            // takes the rotation as a layer transform instead, which is a plain
+            // affine transform the material never sees.
+            OnbGlassPane(cornerRadius: OnbMetric.keycapRadius,
+                         tint: NSColor.black.withAlphaComponent(0.2),
+                         rotation: rotation)
+        } else {
+            RoundedRectangle(cornerRadius: OnbMetric.keycapRadius, style: .continuous)
+                .fill(reduceTransparency ? OnbColor.opaque : OnbColor.glassTint)
+                .overlay(
+                    RoundedRectangle(cornerRadius: OnbMetric.keycapRadius, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                )
+                .rotationEffect(.degrees(rotation))
+        }
+    }
+}
+
+/// A rotatable pane of Liquid Glass, bridged from AppKit.
+///
+/// The SwiftUI modifier cannot be rotated without the material deforming; this
+/// can, because the rotation is applied to the layer rather than to the shape
+/// the effect is drawn in.
+@available(macOS 26.0, *)
+struct OnbGlassPane: NSViewRepresentable {
+    let cornerRadius: CGFloat
+    let tint: NSColor?
+    let rotation: Double
+
+    func makeNSView(context: Context) -> NSGlassEffectView {
+        let view = NSGlassEffectView()
+        view.style = .regular
+        view.cornerRadius = cornerRadius
+        view.tintColor = tint
+        view.wantsLayer = true
+        return view
+    }
+
+    func updateNSView(_ view: NSGlassEffectView, context: Context) {
+        view.cornerRadius = cornerRadius
+        view.tintColor = tint
+
+        // Around the CENTRE, composed by hand rather than by moving the
+        // layer's anchor point: on a layer-backed NSView AppKit derives the
+        // layer's position from the view's frame, so changing the anchor
+        // shifts the view instead of just changing what it turns about.
+        let b = view.bounds
+        guard b.width > 0, b.height > 0 else { return }
+        let angle = CGFloat(rotation) * .pi / 180
+        var t = CATransform3DMakeTranslation(b.midX, b.midY, 0)
+        t = CATransform3DRotate(t, angle, 0, 0, 1)
+        t = CATransform3DTranslate(t, -b.midX, -b.midY, 0)
+        view.layer?.transform = t
     }
 }
 
@@ -712,12 +827,20 @@ struct OnbKeycap: View {
 /// and going through `foregroundStyle` means it cannot render flat if Xcode's
 /// SVG support ever declines to resolve the gradient itself.
 struct OttoWordmark: View {
+    /// White for now, per Marcello 2026-08-23. The gradient is kept a line
+    /// away rather than deleted — the asset is a template either way, so this
+    /// is the only thing that decides how the mark reads.
     var body: some View {
         Image("OttoWordmark")
             .renderingMode(.template)
             .resizable()
-            .aspectRatio(302.0 / 211.0, contentMode: .fit)
-            .foregroundStyle(OnbColor.markGradient)
+            .aspectRatio(contentMode: .fit)
+            // The mark is 302x211 in the vector. Stating BOTH stops it being
+            // sized by whatever space happens to be going: with only a height
+            // it took the full window width to fit into and came out huge and
+            // off-centre.
+            .frame(width: 302, height: 211)
+            .foregroundStyle(OnbColor.text)
             .accessibilityLabel("Otto")
     }
 }

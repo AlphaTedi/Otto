@@ -744,7 +744,6 @@ struct OnboardingWelcomeView: View {
         VStack(spacing: 64) {
             VStack(spacing: 29) {
                 OttoWordmark()
-                    .frame(height: 210)
                     .scaleEffect(appeared ? 1 : 0.94)
                     .opacity(appeared ? 1 : 0)
                     .animation(OnbMotion.screen.delay(0.05), value: appeared)
