@@ -45,6 +45,8 @@ private enum OnboardingStep {
 
 struct OnboardingFlowView: View {
     @State private var stepIndex = 0
+    /// Which way the flow is moving, so the transition can retrace its path.
+    @State private var goingBack = false
     @AppStorage("onboardingVersion") var onboardingVersion: Int = 0
     @AppStorage("onboardingFocus") private var focusRaw: String = OnboardingFocus.both.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -103,7 +105,10 @@ struct OnboardingFlowView: View {
                 .foregroundStyle(OnbColor.text)
                 .environment(\.onbCompact, step == .practice)
                 .transition(stepTransition)
-            .animation(.spring(response: 0.45, dampingFraction: 0.85), value: stepIndex)
+                // Critically damped. A screen pushed by a button press
+                // carried no momentum, so it has no business overshooting —
+                // bounce belongs only where a gesture threw something.
+                .animation(OnbMotion.screen, value: stepIndex)
 
             // Non-blocking, bottom-left, above whatever screen is showing.
             if let toast {
@@ -119,7 +124,7 @@ struct OnboardingFlowView: View {
                 .allowsHitTesting(false)
             }
         }
-        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: toast)
+        .animation(OnbMotion.standard, value: toast)
         // Bounded, not `maxWidth/maxHeight: .infinity`. This view sits in a
         // plain NSHostingView (not NSHostingController, which would manage
         // sizing safely) — telling it "I can be arbitrarily large" is what
@@ -136,6 +141,16 @@ struct OnboardingFlowView: View {
         // The window controls are ours: the real ones are hidden, and the
         // design draws its own.
         .overlay(alignment: .topLeading) { OnbWindowControls() }
+        // A way out of every screen, not just one. The grid keeps its own in
+        // the nav bar, so it is excluded here rather than given two.
+        .overlay(alignment: .topLeading) {
+            if stepIndex > 0 && step != .value {
+                OnbBackButton(action: goBack)
+                    .padding(.leading, 18)
+                    .padding(.top, 52)
+                    .transition(.opacity)
+            }
+        }
         .onAppear { OnboardingWindowController.setCompact(step == .practice) }
         // Single-parameter form: the two-parameter onChange is macOS 14+, and
         // Otto's deployment target is 13.0.
@@ -146,7 +161,7 @@ struct OnboardingFlowView: View {
         // quick fade — one override here instead of gating each subview.
         .transaction { t in
             if reduceMotion, t.animation != nil {
-                t.animation = .easeInOut(duration: 0.15)
+                t.animation = OnbMotion.reduced
             }
         }
     }
@@ -190,10 +205,20 @@ struct OnboardingFlowView: View {
         }
     }
 
+    /// Direction-aware, because "if something disappears one way, we expect
+    /// it to emerge from where it came".
+    ///
+    /// This was fixed: screens always entered from the right and left to the
+    /// left, so going BACK animated exactly like going forward — the flow told
+    /// you that you were advancing while it took you backwards. Now the path
+    /// reverses with the direction, and the return journey retraces the way
+    /// out.
     private var stepTransition: AnyTransition {
         .asymmetric(
-            insertion: .move(edge: .trailing).combined(with: .opacity),
-            removal:   .move(edge: .leading).combined(with: .opacity)
+            insertion: .move(edge: goingBack ? .leading : .trailing)
+                .combined(with: .opacity),
+            removal: .move(edge: goingBack ? .trailing : .leading)
+                .combined(with: .opacity)
         )
     }
 
@@ -206,12 +231,19 @@ struct OnboardingFlowView: View {
     /// The grid screen's back arrow. Nothing else in the flow offers one —
     /// the other screens either ask for something or confirm it.
     private func goBack() {
-        withAnimation { stepIndex = max(0, stepIndex - 1) }
+        SoundManager.shared.play(.stepAdvance)
+        goingBack = true
+        withAnimation(OnbMotion.screen) {
+            stepIndex = max(0, stepIndex - 1)
+        }
     }
 
     func advanceStep() {
         SoundManager.shared.play(.stepAdvance)
-        withAnimation { stepIndex = min(stepIndex + 1, steps.count - 1) }
+        goingBack = false
+        withAnimation(OnbMotion.screen) {
+            stepIndex = min(stepIndex + 1, steps.count - 1)
+        }
     }
 
     /// Show a confirmation without stopping the flow. Auto-dismisses; the
@@ -286,12 +318,14 @@ private struct OnboardingHeader: View {
             }
             Text(title)
                 .font(OnbFont.title(compact: compact))
+                .kerning(OnbFont.titleTracking(compact: compact))
                 .foregroundStyle(OnbColor.text)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             if let subtitle {
                 Text(subtitle)
                     .font(OnbFont.tagline(compact: compact))
+                    .kerning(OnbFont.taglineTracking(compact: compact))
                     .foregroundStyle(OnbColor.subtext)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -381,7 +415,7 @@ private struct OnboardingValueView: View {
             .padding(.bottom, OnbMetric.gridBottom)
             .opacity(appeared ? 1 : 0)
             .offset(y: appeared ? 0 : 14)
-            .animation(.spring(response: 0.55, dampingFraction: 0.85).delay(0.1),
+            .animation(OnbMotion.screen.delay(0.1),
                        value: appeared)
 
             OnbBottomNav(onBack: onBack,
@@ -555,7 +589,7 @@ private struct FocusOptionRow: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(OnbPressStyle(scale: 0.985))
         .onHover { hover = $0 }
     }
 }
@@ -567,11 +601,19 @@ struct FrostedGlassBackground: View {
     /// two blobs move in a loose, non-synchronised way rather than in lockstep.
     @State private var drift = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         ZStack {
-            // Layer 1: behind-window blur of the wallpaper
-            VisualEffectBackground(material: .fullScreenUI, blendingMode: .behindWindow)
+            // Layer 1: behind-window blur of the wallpaper.
+            //
+            // Reduce Transparency turns this off entirely rather than
+            // softening it. Someone asking for it is saying they cannot read
+            // text over a moving background, and a half-measure still fails
+            // them — the gradient below is opaque on its own.
+            if !reduceTransparency {
+                VisualEffectBackground(material: .fullScreenUI, blendingMode: .behindWindow)
+            }
 
             // Layer 2: the window itself — purple at the top falling to
             // near-black at the foot. This replaces the white tint the old
@@ -589,6 +631,7 @@ struct FrostedGlassBackground: View {
             // Saturated at the edges, nothing in the centre: content always
             // sits on calm background, which is the rule that keeps this from
             // competing with the copy.
+            if !reduceTransparency {
             GeometryReader { geo in
                 ZStack {
                     ambientBlob(
@@ -610,6 +653,7 @@ struct FrostedGlassBackground: View {
                 .blendMode(.plusLighter)
                 .allowsHitTesting(false)
             }
+            }
 
             // Layer 4: vignette, anchoring the cards against the gradient.
             RadialGradient(
@@ -622,7 +666,9 @@ struct FrostedGlassBackground: View {
         .onAppear {
             // Reduce Motion: keep the colour, drop the drift. The glow is
             // decorative, so holding it still costs nothing.
-            guard !reduceMotion else { return }
+            // A full-viewport moving background is the first thing Reduce
+            // Motion is meant to stop. The colour stays; only the drift goes.
+            guard !reduceMotion, !reduceTransparency else { return }
             withAnimation(.easeInOut(duration: 11).repeatForever(autoreverses: true)) {
                 drift = true
             }
@@ -659,7 +705,7 @@ private struct OnboardingEyebrowPill: View {
             .foregroundStyle(OnbColor.subtext)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(Capsule().fill(OnbColor.button))
+            .onbGlass()
             .accessibilityHidden(true)   // decorative; the headline carries meaning
     }
 }
@@ -739,18 +785,19 @@ struct OnboardingWelcomeView: View {
                     .frame(height: 210)
                     .scaleEffect(appeared ? 1 : 0.94)
                     .opacity(appeared ? 1 : 0)
-                    .animation(.spring(response: 0.6, dampingFraction: 0.75).delay(0.05),
+                    .animation(OnbMotion.screen.delay(0.05),
                                value: appeared)
 
                 Text("Your to-dos and today's meetings, always in reach of the notch.")
-                    .font(OnbFont.tagline)
+                    .font(OnbFont.tagline(compact: false))
+                    .kerning(OnbFont.taglineTracking(compact: false))
                     .foregroundStyle(OnbColor.subtext)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: 922)
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 10)
-                    .animation(.spring(response: 0.5, dampingFraction: 0.85).delay(0.18),
+                    .animation(OnbMotion.screen.delay(0.18),
                                value: appeared)
             }
 
@@ -758,7 +805,7 @@ struct OnboardingWelcomeView: View {
                 .keyboardShortcut(.return, modifiers: [])
                 .opacity(appeared ? 1 : 0)
                 .offset(y: appeared ? 0 : 8)
-                .animation(.spring(response: 0.45, dampingFraction: 0.85).delay(0.3),
+                .animation(OnbMotion.standard.delay(0.3),
                            value: appeared)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -826,7 +873,7 @@ private struct OnboardingNotchView: View {
                 .frame(width: 340, height: 170)
                 .opacity(appeared ? 1 : 0)
                 .scaleEffect(appeared ? 1 : 0.96)
-                .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.1), value: appeared)
+                .animation(OnbMotion.screen.delay(0.1), value: appeared)
 
             Spacer().frame(height: 20)
 
@@ -932,7 +979,7 @@ private struct OnboardingPracticeView: View {
         // handler the shipped shortcut runs through.
         .onReceive(NotificationCenter.default.publisher(for: .quickEntryFired)) { _ in
             guard stage == .awaitingShortcut else { return }
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+            withAnimation(OnbMotion.standard) {
                 stage = .awaitingTodo
             }
         }
@@ -1000,7 +1047,7 @@ private struct ShortcutKeys: View {
                         .animation(
                             reduceMotion
                                 ? .easeOut(duration: 0.2)
-                                : .spring(response: 0.45, dampingFraction: 0.60)
+                                : OnbMotion.standard
                                     .delay(Double(index) * 0.07),
                             value: landed
                         )
@@ -1136,12 +1183,12 @@ private struct OnboardingCalendarView: View {
                             NSWorkspace.shared.open(url)
                         }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(OnbPressStyle(scale: 0.94))
                     .foregroundStyle(.secondary)
                     .font(.system(size: 12))
 
                     Button("Not now") { onAdvance() }
-                        .buttonStyle(.plain)
+                        .buttonStyle(OnbPressStyle(scale: 0.94))
                         .foregroundStyle(.tertiary)
                         .font(.system(size: 12))
                 }
@@ -1348,7 +1395,7 @@ private struct SignInButton: View {
             )
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(OnbPressStyle())
         .disabled(busy)
         .onHover { hover = $0 }
         .help(provider == .apple
@@ -1470,7 +1517,7 @@ struct NotchMiniPreview: View {
                 }
                 // The app's own contentHug spring — the miniature opens with
                 // exactly the motion the real notch uses.
-                .animation(.spring(response: 0.45, dampingFraction: 0.60), value: phase)
+                .animation(OnbMotion.standard, value: phase)
 
                 // Cursor travelling up to the notch, then resting there.
                 Image(systemName: "cursorarrow")
@@ -1578,7 +1625,7 @@ private struct FeatureDemoLoop: View {
                     .opacity(t >= 1 ? 1 : 0)
                     .offset(y: t >= 1 ? 0 : -5)
             }
-            .animation(.spring(response: 0.45, dampingFraction: 0.60), value: t)
+            .animation(OnbMotion.standard, value: t)
 
         case .meetingNudge:
             // A card slides in from the top edge, the way an alert arrives.
@@ -1594,7 +1641,7 @@ private struct FeatureDemoLoop: View {
                     .opacity(t >= 1 ? 1 : 0)
                 Spacer(minLength: 0)
             }
-            .animation(.spring(response: 0.45, dampingFraction: 0.60), value: t)
+            .animation(OnbMotion.standard, value: t)
 
         case .goesQuiet:
             // The panel shrinks back to a resting pill.
@@ -1604,7 +1651,7 @@ private struct FeatureDemoLoop: View {
                     .frame(width: t >= 1 ? 16 : 34, height: t >= 1 ? 5 : 18)
                 Spacer(minLength: 0)
             }
-            .animation(.spring(response: 0.45, dampingFraction: 0.60), value: t)
+            .animation(OnbMotion.standard, value: t)
         }
     }
 
@@ -1648,7 +1695,7 @@ struct OnboardingAllSetView: View {
             }
             .scaleEffect(headerAppeared ? 1.0 : 0.6)
             .opacity(headerAppeared ? 1 : 0)
-            .animation(.spring(response: 0.55, dampingFraction: 0.6).delay(0.05), value: headerAppeared)
+            .animation(OnbMotion.screen.delay(0.05), value: headerAppeared)
             .padding(.top, 36)
 
             Spacer().frame(height: 16)
@@ -1660,7 +1707,7 @@ struct OnboardingAllSetView: View {
                 .font(.system(size: 28, weight: .bold))
                 .opacity(headerAppeared ? 1 : 0)
                 .offset(y: headerAppeared ? 0 : 8)
-                .animation(.spring(response: 0.5, dampingFraction: 0.85).delay(0.18), value: headerAppeared)
+                .animation(OnbMotion.screen.delay(0.18), value: headerAppeared)
 
             Text("Otto will stay quiet until you need it.")
                 .font(.system(size: 14))
@@ -1692,7 +1739,7 @@ struct OnboardingAllSetView: View {
             .padding(.horizontal, 32)
             .opacity(tipsAppeared ? 1 : 0)
             .offset(y: tipsAppeared ? 0 : 14)
-            .animation(.spring(response: 0.5, dampingFraction: 0.85).delay(0.35), value: tipsAppeared)
+            .animation(OnbMotion.screen.delay(0.35), value: tipsAppeared)
 
             Spacer()
 
@@ -1700,7 +1747,7 @@ struct OnboardingAllSetView: View {
                 .keyboardShortcut(.return, modifiers: [])
             .opacity(buttonAppeared ? 1 : 0)
             .offset(y: buttonAppeared ? 0 : 8)
-            .animation(.spring(response: 0.4, dampingFraction: 0.85).delay(0.55), value: buttonAppeared)
+            .animation(OnbMotion.standard.delay(0.55), value: buttonAppeared)
             .padding(.bottom, 40)
         }
         .onAppear {
