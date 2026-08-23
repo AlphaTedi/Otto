@@ -567,24 +567,35 @@ struct OnbFeatureCard<Art: View>: View {
 
 /// Confetti for the final step.
 ///
-/// Drawn rather than shipped as the design's 1200x926 image: at this size a
-/// bitmap would be a megabyte of asset for four seconds of screen, and drawn
-/// pieces can start from the top edge of whatever the window happens to be
-/// rather than assuming one height.
+/// Drawn rather than shipped as the design's 1200x926 bitmap: at that size it
+/// would be a megabyte of asset for four seconds of screen, and drawn pieces
+/// start from the top edge of whatever the window actually is instead of
+/// assuming one height.
 ///
-/// It fires ONCE and settles. A loop would turn a moment of "you're done"
-/// into decoration that never stops, and it is the last thing between the
-/// user and their desk.
+/// Driven by a TIMELINE, not by an implicit animation. The first version set
+/// a `fallen` flag in `onAppear` and let `.animation(_:value:)` carry it — and
+/// that state change lands in the same layout pass the view first appears in,
+/// so the animation never ran: every piece jumped straight to its end state,
+/// which was off-screen at zero opacity. Confetti that is always already over
+/// looks exactly like no confetti at all (Marcello, 2026-08-23). A timeline
+/// computes each frame from elapsed time, so there is no transition to be
+/// swallowed.
+///
+/// It fires ONCE and stops — the view removes itself when the last piece
+/// lands, which also stops the timeline rather than leaving it ticking behind
+/// a finished screen.
 struct OnbConfetti: View {
-    @State private var fallen = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var start = Date()
+    @State private var finished = false
+    @State private var pieces: [Piece] = OnbConfetti.make()
 
     private static let palette: [Color] = [
         Color(hex: "#FF5A5F"), Color(hex: "#FFC93C"), Color(hex: "#37D67A"),
         Color(hex: "#3B9EFF"), Color(hex: "#C86DD7"), Color(hex: "#FF8A4C")
     ]
 
-    private struct Piece: Identifiable {
+    struct Piece: Identifiable {
         let id = UUID()
         let x: CGFloat          // 0...1 across the window
         let delay: Double
@@ -595,44 +606,65 @@ struct OnbConfetti: View {
         let drift: CGFloat
     }
 
-    private let pieces: [Piece] = (0..<48).map { i in
-        Piece(x: CGFloat.random(in: 0.02...0.98),
-              delay: Double.random(in: 0...0.5),
-              duration: Double.random(in: 1.9...3.2),
-              spin: Double.random(in: -540...540),
-              size: CGSize(width: CGFloat.random(in: 6...11),
-                           height: CGFloat.random(in: 9...16)),
-              color: palette[i % palette.count],
-              drift: CGFloat.random(in: -60...60))
+    private static func make() -> [Piece] {
+        (0..<70).map { i in
+            Piece(x: CGFloat.random(in: 0.02...0.98),
+                  delay: Double.random(in: 0...0.9),
+                  duration: Double.random(in: 1.8...3.0),
+                  spin: Double.random(in: -540...540),
+                  size: CGSize(width: CGFloat.random(in: 6...11),
+                               height: CGFloat.random(in: 10...17)),
+                  color: palette[i % palette.count],
+                  drift: CGFloat.random(in: -70...70))
+        }
+    }
+
+    private var life: Double {
+        (pieces.map { $0.delay + $0.duration }.max() ?? 3) + 0.2
     }
 
     var body: some View {
-        // Reduce Motion gets nothing at all here: confetti is pure motion, so
-        // a "gentler" version of it is just confetti, and there is no
-        // information in it to preserve.
-        if reduceMotion {
+        // Reduce Motion gets nothing: confetti is pure motion, so a gentler
+        // version of it is still confetti, and there is no information in it
+        // to preserve.
+        if reduceMotion || finished {
             EmptyView()
         } else {
-            GeometryReader { geo in
-                ZStack(alignment: .top) {
-                    ForEach(pieces) { piece in
-                        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                            .fill(piece.color)
-                            .frame(width: piece.size.width, height: piece.size.height)
-                            .rotationEffect(.degrees(fallen ? piece.spin : 0))
-                            .offset(x: piece.x * geo.size.width - geo.size.width / 2
-                                       + (fallen ? piece.drift : 0),
-                                    y: fallen ? geo.size.height + 40 : -40)
-                            .opacity(fallen ? 0 : 1)
-                            .animation(.easeIn(duration: piece.duration)
-                                        .delay(piece.delay),
-                                       value: fallen)
+            TimelineView(.animation) { timeline in
+                Canvas { context, size in
+                    let now = timeline.date.timeIntervalSince(start)
+                    for piece in pieces {
+                        let t = now - piece.delay
+                        guard t > 0 else { continue }
+                        let progress = t / piece.duration
+                        guard progress < 1 else { continue }
+
+                        var layer = context
+                        layer.translateBy(
+                            x: piece.x * size.width + piece.drift * progress,
+                            y: -20 + progress * (size.height + 60)
+                        )
+                        layer.rotate(by: .degrees(piece.spin * progress))
+                        // Only the last stretch fades, so a piece is solid for
+                        // almost the whole way down.
+                        layer.opacity = progress > 0.8 ? (1 - (progress - 0.8) / 0.2) : 1
+
+                        let rect = CGRect(x: -piece.size.width / 2,
+                                          y: -piece.size.height / 2,
+                                          width: piece.size.width,
+                                          height: piece.size.height)
+                        layer.fill(Path(roundedRect: rect, cornerRadius: 1.5),
+                                   with: .color(piece.color))
                     }
                 }
-                .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
             }
             .allowsHitTesting(false)
-            .onAppear { fallen = true }
+            .onAppear {
+                start = Date()
+                DispatchQueue.main.asyncAfter(deadline: .now() + life) {
+                    finished = true
+                }
+            }
         }
     }
 }
