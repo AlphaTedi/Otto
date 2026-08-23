@@ -161,10 +161,7 @@ struct OnboardingFlowView: View {
         case .welcome:
             OnboardingWelcomeView(onAdvance: advanceStep)
         case .value:
-            OnboardingValueView(onAdvance: advanceStep,
-                                onBack: backAction,
-                                current: stepIndex,
-                                total: steps.count)
+            OnboardingValueView()
         case .focus:
             OnboardingFocusView(selection: $focusRaw, onAdvance: advanceStep)
         case .whereItLives:
@@ -190,12 +187,12 @@ struct OnboardingFlowView: View {
     /// remember to draw.
     @ViewBuilder
     private var bottomBar: some View {
-        if step != .welcome && step != .value {
+        if step != .welcome {
             OnbBottomNav(onBack: step == .practice ? nil : backAction,
-                         current: stepIndex,
-                         total: steps.count,
+                         current: max(0, stepIndex - 1),
+                         total: max(1, steps.count - 1),
                          primary: barPrimary,
-                         onSelectStep: goToStep)
+                         onSelectStep: { goToStep($0 + 1) })
                 .padding(.bottom, OnbMetric.navBottom)
                 .transition(.opacity)
         }
@@ -209,8 +206,9 @@ struct OnboardingFlowView: View {
     /// indicator-only pill for exactly that reason.
     private var barPrimary: (title: String, action: () -> Void)? {
         switch step {
-        case .welcome, .value:   return nil
+        case .welcome:           return nil
         case .practice:          return nil
+        case .value:             return ("Continue", advanceStep)
         case .focus:             return ("Continue", advanceStep)
         case .whereItLives:      return ("Show me", advanceStep)
         case .calendar, .signIn: return ("Continue", advanceStep)
@@ -399,11 +397,6 @@ private struct OnbFeature: Identifiable {
 }
 
 private struct OnboardingValueView: View {
-    var onAdvance: () -> Void
-    var onBack: (() -> Void)?
-    let current: Int
-    let total: Int
-
     @State private var appeared = false
 
     /// Three of these are Otto's real features and keep the animated demos the
@@ -429,28 +422,20 @@ private struct OnboardingValueView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            VStack(spacing: OnbMetric.cardGap) {
-                row(row1)
-                row(row2)
-            }
+        // No footer of its own: the flow draws one bar for every screen that
+        // has one, which is what keeps it identical across all of them.
+        VStack(spacing: OnbMetric.cardGap) {
+            row(row1)
+            row(row2)
+        }
             .padding(.horizontal, OnbMetric.gridInset)
             .padding(.top, OnbMetric.gridTop)
             .padding(.bottom, OnbMetric.gridBottom)
             .opacity(appeared ? 1 : 0)
             .offset(y: appeared ? 0 : 14)
-            .animation(OnbMotion.screen.delay(0.1),
-                       value: appeared)
-
-            OnbBottomNav(onBack: onBack,
-                         current: current,
-                         total: total,
-                         primary: (title: "Continue", action: onAdvance))
-                .padding(.horizontal, OnbMetric.gridInset)
-                .padding(.bottom, OnbMetric.navBottom)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { appeared = true }
+            .animation(OnbMotion.screen.delay(0.1), value: appeared)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onAppear { appeared = true }
     }
 
     /// Widths are proportional, not fixed: the window clamps to the screen on
@@ -471,24 +456,12 @@ private struct OnboardingValueView: View {
     }
 
     private func card(_ feature: OnbFeature) -> some View {
-        OnbCard {
-            VStack(spacing: OnbMetric.cardGap) {
-                Text(feature.title)
-                    .font(OnbFont.cardTitle)
-                    .foregroundStyle(OnbColor.text)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity)
-
-                // Every card gets a full-size image area — one with the demo
-                // in it, one with stand-in art. Before, the demo drew at its
-                // own 46x34 in the middle of a large empty card and the two
-                // cards without one showed nothing at all.
-                if let demo = feature.demo {
-                    OnbCardImageSlot { EnlargedDemo(demo: demo) }
-                } else {
-                    OnbCardImageSlot { OnbPlaceholderArt() }
-                }
+        OnbFeatureCard(title: feature.title) {
+            // The art is the card's GROUND, with the title laid over it.
+            if let demo = feature.demo {
+                EnlargedDemo(demo: demo)
+            } else {
+                OnbPlaceholderArt()
             }
         }
         .frame(maxHeight: .infinity)
@@ -798,7 +771,7 @@ private struct OnboardingNotchView: View {
             // fills it rather than a placeholder image — it is the one visual
             // in the flow that shows the actual gesture being described.
             NotchMiniPreview()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: OnbMetric.heroWidth, maxHeight: OnbMetric.heroHeight)
                 .clipShape(RoundedRectangle(cornerRadius: OnbMetric.imageRadius,
                                             style: .continuous))
                 .overlay(
@@ -843,12 +816,12 @@ private struct OnboardingPracticeView: View {
         // underneath, not the other way round — "Press the shortcut" over "to
         // open the notch". I had them swapped, so the screen led with the
         // outcome and buried the thing to actually do.
+        // No subtext here: the spec gives these two a secondary 20pt headline
+        // and nothing under it. A line explaining a keystroke that is drawn
+        // full size right below it was mine, not the design's.
         OnbScreen(title: stage == .awaitingShortcut
                     ? "Press the shortcut"
-                    : "And type your first To-do",
-                  subtitle: stage == .awaitingShortcut
-                    ? "to open the notch"
-                    : "then confirm it with") {
+                    : "And type your first To-do") {
             VStack(spacing: 0) {
                 Spacer(minLength: 0)
 
@@ -856,14 +829,14 @@ private struct OnboardingPracticeView: View {
                 // each so the group reads as placed rather than laid out.
                 if stage == .awaitingShortcut {
                     HStack(spacing: OnbMetric.keycapGap) {
-                        OnbKeycap(glyph: "\u{2303}", rotation: -6.17, glyphSize: 62)
-                        OnbKeycap(glyph: "\u{21E7}", rotation: 4.58, glyphSize: 46)
-                        OnbKeycap(glyph: "N", rotation: -5.57, glyphSize: 42)
+                        OnbKeycap(glyph: "\u{2303}", rotation: -6.17, glyphSize: 34)
+                        OnbKeycap(glyph: "\u{21E7}", rotation: 4.58, glyphSize: 25)
+                        OnbKeycap(glyph: "N", rotation: -5.57, glyphSize: 23)
                     }
                     .onbGlassGroup(spacing: 0)
                     .transition(.opacity)
                 } else {
-                    OnbKeycap(glyph: "\u{21B5}", rotation: 4.58, glyphSize: 46)
+                    OnbKeycap(glyph: "\u{21B5}", rotation: 4.58, glyphSize: 25)
                         .transition(.opacity)
                 }
 

@@ -58,13 +58,18 @@ enum OnbMotion {
 enum OnbColor {
     /// The window itself: purple at the top falling to near-black at the foot.
     ///
-    /// The export runs #7F6CC5 at -24.81% to #251953 at 104.37% — stops
-    /// OUTSIDE the box, which CSS allows and SwiftUI does not. So the colours
-    /// are resolved at the two points where that ramp actually crosses the
-    /// window edges (t=0.192 and t=0.966 along it) and the gradient is drawn
-    /// between those. Same pixels, stated in a form SwiftUI can draw.
+    /// #7F6CC5 at 0% to #251852 at 87%.
+    ///
+    /// The 87 matters and is not a rounding of 100: the ramp finishes early
+    /// and the last eighth of the window holds the dark tone flat, which is
+    /// what keeps the foot of the window from continuing to darken under the
+    /// nav bar. An earlier export quoted stops outside the box; this one is
+    /// inside it and can be stated as-is.
     static let windowGradient = LinearGradient(
-        colors: [Color(hex: "#6D5CAF"), Color(hex: "#281B57")],
+        stops: [
+            .init(color: Color(hex: "#7F6CC5"), location: 0.0),
+            .init(color: Color(hex: "#251852"), location: 0.87)
+        ],
         startPoint: .top,
         endPoint: .bottom
     )
@@ -99,7 +104,7 @@ enum OnbColor {
     /// the background, so the steps you have not reached simply were not
     /// there (Marcello, 2026-08-23: "now they're just invisible"). Dimmed
     /// white instead: the same idea, actually visible.
-    static let progressIdle = Color.white.opacity(0.32)
+    static let progressIdle = Color.white.opacity(0.4)
 
     static let markGradient = LinearGradient(
         colors: [Color(hex: "#B5A5F0"), Color(hex: "#6338FF")],
@@ -121,11 +126,12 @@ enum OnbMetric {
     /// The practice screens. 640x564 in the export, replacing the old
     /// 520x300 — the window still gets out of the notch's way, at the size
     /// the design was drawn at.
-    static let compactWidth: CGFloat = 640
-    /// 456, measured off design-05/06 rather than taken from the CSS block,
-    /// which described a taller frame. It also has to clear the notch panel
-    /// that opens above it during these two steps.
-    static let compactHeight: CGFloat = 456
+    /// The practice window. Derived, not given: the spec fixes the keycaps at
+    /// 52.55 and the screenshots put them at about a tenth of the window's
+    /// width, which lands here. It is also small enough to sit clear of the
+    /// notch panel opening above it, which is the whole reason it shrinks.
+    static let compactWidth: CGFloat = 525
+    static let compactHeight: CGFloat = 300
 
     /// Everything from step 3 onward lives inside this. The feature grid
     /// (step 2) is the one screen that stays full width.
@@ -133,6 +139,8 @@ enum OnbMetric {
     static let columnTop: CGFloat = 72
     /// Clears the nav bar: 45 up from the bottom + 96 tall + air.
     static let columnBottom: CGFloat = 168
+    /// The gap under the content column on the screens that state one.
+    static let columnBottomInset: CGFloat = 40
     static let columnGap: CGFloat = 24
     /// The inset box the content sits in — 640 less 32 either side = 576.
     static let bodyPadding: CGFloat = 32
@@ -150,13 +158,12 @@ enum OnbMetric {
     static let radioStroke: CGFloat = 2
 
     /// The keycaps on the practice screens.
-    /// 96, off the designs. 138 came from a CSS block drawn at another size
-    /// and filled most of the window.
-    static let keycap: CGFloat = 96
-    static let keycapRadius: CGFloat = 24
-    /// They sit ALMOST touching — a 4pt gap, not the 21pt overlap I had,
-    /// which fused them into one slab.
-    static let keycapGap: CGFloat = 4
+    /// 52.55 and 12.19 are the design's own numbers, not rounded — I had
+    /// been measuring these off screenshots and landing somewhere else each
+    /// time. They DO overlap, by 8.
+    static let keycap: CGFloat = 52.55
+    static let keycapRadius: CGFloat = 12.19
+    static let keycapGap: CGFloat = -8
 
     static let navWidth: CGFloat = 640
     static let navHeight: CGFloat = 96
@@ -175,6 +182,12 @@ enum OnbMetric {
 
     static let cardRadius: CGFloat = 24
     static let cardPadding: CGFloat = 24
+    /// A card is an image with its title laid ON it, 32 down from the top —
+    /// not a title above a separate picture, which is how I had built it.
+    static let cardTitleTop: CGFloat = 32
+    /// Screens 5 and 6: one 576x454 visual inside a 32pt-padded box.
+    static let heroWidth: CGFloat = 576
+    static let heroHeight: CGFloat = 454
     static let cardGap: CGFloat = 24
     static let imageRadius: CGFloat = 16
 
@@ -218,7 +231,8 @@ enum OnbMetric {
 // definition — and the flow had exactly that: none at all, at every size.
 
 enum OnbFont {
-    static let cardTitle = Font.system(size: 18, weight: .semibold)
+    /// Marked Semi Bold in the design but exporting at weight 700 — bold.
+    static let cardTitle = Font.system(size: 18, weight: .bold)
     static let button = Font.system(size: 16, weight: .medium)
     static let badge = Font.system(size: 10, weight: .semibold)
     static let rowTitle = Font.system(size: 16, weight: .semibold)
@@ -227,10 +241,18 @@ enum OnbFont {
     /// 30/36 SemiBold, at both sizes. The compact screens in the export use
     /// the SAME headline as the wide ones — they are 640 wide either way, so
     /// there is nothing to shrink for.
+    /// 34/600 — and on the two practice screens a SECONDARY 20/600, which is
+    /// a different style in the design rather than the same one shrunk.
+    ///
+    /// The design calls for Bricolage Grotesque here and Inter everywhere
+    /// else. Otto bundles neither, so both resolve to SF at the stated size
+    /// and weight. Both faces are openly licensed and could be bundled — that
+    /// is a real decision about binary size and licence files, not something
+    /// to slip in silently.
     static func title(compact: Bool) -> Font {
-        .system(size: 30, weight: .semibold)
+        .system(size: compact ? 20 : 34, weight: .semibold)
     }
-    /// 14/17 Regular, full white — not the 60% the taglines elsewhere use.
+    /// Inter 14/400, full white.
     static func tagline(compact: Bool) -> Font {
         .system(size: 14, weight: .regular)
     }
@@ -242,7 +264,7 @@ enum OnbFont {
     static func tracking(forSize size: CGFloat) -> CGFloat {
         size >= 30 ? -size * 0.02 : (size >= 20 ? -size * 0.012 : 0)
     }
-    static func titleTracking(compact: Bool) -> CGFloat { tracking(forSize: 30) }
+    static func titleTracking(compact: Bool) -> CGFloat { tracking(forSize: compact ? 20 : 34) }
     static func taglineTracking(compact: Bool) -> CGFloat { 0 }
 }
 
@@ -488,6 +510,46 @@ struct OnbCardImageSlot<Content: View>: View {
     }
 }
 
+/// One feature card: a cover image, a 50% black wash, and the title laid ON
+/// it 32pt down from the top.
+///
+/// Not a title above a separate picture in a box, which is how I had it —
+/// that is why the cards read as a caption with a hole under it rather than
+/// as artwork with a name on it.
+struct OnbFeatureCard<Art: View>: View {
+    let title: String
+    @ViewBuilder var art: Art
+
+    init(title: String, @ViewBuilder art: () -> Art) {
+        self.title = title
+        self.art = art()
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            art
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+            // The wash is what keeps the title legible over any artwork.
+            Color.black.opacity(0.5)
+            Text(title)
+                .font(OnbFont.cardTitle)
+                .foregroundStyle(OnbColor.text)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, OnbMetric.cardPadding)
+                .padding(.top, OnbMetric.cardTitleTop)
+                .frame(maxWidth: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: OnbMetric.cardRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: OnbMetric.cardRadius, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+}
+
 /// Stand-in art for the two features that have no visual yet.
 ///
 /// Visible on purpose. The slot used to be white at 6% — present in the
@@ -606,16 +668,24 @@ struct OnbBackButton: View {
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
+    @State private var hovering = false
+
     var body: some View {
         Button(action: action) {
             Image(systemName: "chevron.left")
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(OnbColor.text)
                 .frame(width: OnbMetric.navIconButton, height: OnbMetric.navIconButton)
-                .onbGlass()
+                // rgba(0,0,0,0.004) in the design: a hit target, not a fill.
+                // It had glass on it, which made a quiet secondary action look
+                // like a second primary one. The only thing it shows now is a
+                // faint answer to the pointer.
+                .background(Circle().fill(Color.white.opacity(hovering ? 0.08 : 0.001)))
                 .contentShape(Circle())
         }
         .buttonStyle(OnbPressStyle())
+        .onHover { hovering = $0 }
+        .animation(OnbMotion.standard, value: hovering)
         .accessibilityLabel("Back")
     }
 }
