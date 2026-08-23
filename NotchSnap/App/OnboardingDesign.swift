@@ -95,7 +95,11 @@ enum OnbColor {
     /// alpha rather than flat grey, which would muddy against the gradient.
     static let subtext = Color.white.opacity(0.6)
     static let badge = Color(hex: "#E6E6E6")
-    static let progressIdle = Color(hex: "#413374")
+    /// #413374 in the export — and on the purple gradient it is very nearly
+    /// the background, so the steps you have not reached simply were not
+    /// there (Marcello, 2026-08-23: "now they're just invisible"). Dimmed
+    /// white instead: the same idea, actually visible.
+    static let progressIdle = Color.white.opacity(0.32)
 
     static let markGradient = LinearGradient(
         colors: [Color(hex: "#B5A5F0"), Color(hex: "#6338FF")],
@@ -118,7 +122,10 @@ enum OnbMetric {
     /// 520x300 — the window still gets out of the notch's way, at the size
     /// the design was drawn at.
     static let compactWidth: CGFloat = 640
-    static let compactHeight: CGFloat = 564
+    /// 456, measured off design-05/06 rather than taken from the CSS block,
+    /// which described a taller frame. It also has to clear the notch panel
+    /// that opens above it during these two steps.
+    static let compactHeight: CGFloat = 456
 
     /// Everything from step 3 onward lives inside this. The feature grid
     /// (step 2) is the one screen that stays full width.
@@ -143,16 +150,21 @@ enum OnbMetric {
     static let radioStroke: CGFloat = 2
 
     /// The keycaps on the practice screens.
-    static let keycap: CGFloat = 138
-    static let keycapRadius: CGFloat = 32
-    /// They overlap rather than sit in a row.
-    static let keycapOverlap: CGFloat = -21
+    /// 96, off the designs. 138 came from a CSS block drawn at another size
+    /// and filled most of the window.
+    static let keycap: CGFloat = 96
+    static let keycapRadius: CGFloat = 24
+    /// They sit ALMOST touching — a 4pt gap, not the 21pt overlap I had,
+    /// which fused them into one slab.
+    static let keycapGap: CGFloat = 4
 
     static let navWidth: CGFloat = 640
     static let navHeight: CGFloat = 96
     /// Indicator-only, on the practice screens.
     static let navCompactWidth: CGFloat = 154
     static let navCompactHeight: CGFloat = 56
+    /// The rail's own width inside that pill.
+    static let navCompactContentWidth: CGFloat = navCompactWidth - navPadding * 2
 
     /// Window controls: three 14pt circles, 9pt apart, 18pt in from the
     /// corner. Top-LEFT, because on macOS close is always top-left and
@@ -174,6 +186,10 @@ enum OnbMetric {
     static let navBottom: CGFloat = 45
     static let navIconButton: CGFloat = 48
     static let navInnerGap: CGFloat = 14
+    /// 640 less 24 either side. Stated, because `.padding` then
+    /// `.frame(width:)` sizes the row to its CONTENT and centres it — the
+    /// controls ended up clustered instead of reaching the bar's ends.
+    static let navContentWidth: CGFloat = navWidth - navPadding * 2
 
     static let buttonPaddingH: CGFloat = 24
     static let buttonPaddingV: CGFloat = 12
@@ -505,20 +521,30 @@ struct OnbPlaceholderArt: View {
 struct OnbProgress: View {
     let current: Int
     let total: Int
+    /// Tapping a step you have already been through goes back to it. On the
+    /// practice screens this is the ONLY way back, because those two carry no
+    /// buttons at all — so the rail stops being a readout and becomes the
+    /// navigation.
+    var onSelect: ((Int) -> Void)? = nil
 
     var body: some View {
         HStack(spacing: OnbMetric.progressGap) {
             ForEach(0..<total, id: \.self) { i in
+                let isCurrent = i == current
                 Capsule()
-                    .fill(i == current ? OnbColor.text : OnbColor.progressIdle)
-                    .frame(width: i == current ? OnbMetric.progressPill.width
-                                              : OnbMetric.progressDot,
-                           height: i == current ? OnbMetric.progressPill.height
-                                                : OnbMetric.progressDot)
+                    .fill(isCurrent ? OnbColor.text : OnbColor.progressIdle)
+                    .frame(width: isCurrent ? OnbMetric.progressPill.width
+                                            : OnbMetric.progressDot,
+                           height: isCurrent ? OnbMetric.progressPill.height
+                                             : OnbMetric.progressDot)
+                    // Forward is not offered: a step you have not reached has
+                    // not asked its question yet.
+                    .contentShape(Rectangle().inset(by: -8))
+                    .onTapGesture { if i < current { onSelect?(i) } }
+                    .accessibilityAddTraits(i < current ? [.isButton] : [])
             }
         }
         .animation(OnbMotion.standard, value: current)
-        .accessibilityElement()
         .accessibilityLabel("Step \(current + 1) of \(total)")
     }
 }
@@ -610,16 +636,22 @@ struct OnbBottomNav: View {
     /// nil on the practice screens, where the action is the shortcut itself
     /// and a button would be a second, wrong way to do it.
     var primary: (title: String, action: () -> Void)?
+    var onSelectStep: ((Int) -> Void)? = nil
+
+    /// The practice steps show the rail and nothing else. It is one bar
+    /// throughout, narrowing rather than being replaced, so the change reads
+    /// as the chrome getting out of the way for a step that wants the screen.
+    private var isMinimal: Bool { onBack == nil && primary == nil }
 
     var body: some View {
-        Group {
-            if onBack == nil && primary == nil {
-                // Indicator only — 154x56 in the export.
-                OnbProgress(current: current, total: total)
-                    .frame(width: OnbMetric.navCompactWidth,
-                           height: OnbMetric.navCompactHeight)
-                    .background(Capsule().fill(OnbColor.glassTint))
-            } else {
+        ZStack {
+            // Centred in the BAR, independent of how wide the two buttons
+            // happen to be. It used to sit next to the primary button, which
+            // is why it looked off-centre — and it moved whenever the button's
+            // label changed length.
+            OnbProgress(current: current, total: total, onSelect: onSelectStep)
+
+            if !isMinimal {
                 HStack(spacing: OnbMetric.navInnerGap) {
                     if let onBack {
                         OnbBackButton(action: onBack)
@@ -630,8 +662,6 @@ struct OnbBottomNav: View {
 
                     Spacer(minLength: 0)
 
-                    OnbProgress(current: current, total: total)
-
                     if let primary {
                         OnbButton(title: primary.title, action: primary.action)
                     } else {
@@ -639,22 +669,26 @@ struct OnbBottomNav: View {
                                           height: OnbMetric.navIconButton)
                     }
                 }
-                .frame(height: OnbMetric.navIconButton)
-                // One container for the two glass CONTROLS.
                 .onbGlassGroup()
-                .padding(OnbMetric.navPadding)
-                .frame(width: OnbMetric.navWidth, height: OnbMetric.navHeight)
-                // The tray is a plain fill, NOT glass.
-                //
-                // Glass cannot sample other glass: a glass bar holding glass
-                // buttons gives each control its own sampling region over a
-                // surface that is itself sampling, and they come out
-                // inconsistent. The export agrees — it specifies the bar as
-                // rgba(0,0,0,0.2), a flat fill. The controls are the glass;
-                // the tray is what they sit on.
-                .background(Capsule().fill(OnbColor.glassTint))
+                .transition(.opacity)
             }
         }
+        // Stated, not derived. Padding first and a frame after sizes the row
+        // to its content and centres it, which left the controls clustered
+        // instead of reaching the bar's ends.
+        .frame(width: isMinimal ? OnbMetric.navCompactContentWidth
+                                : OnbMetric.navContentWidth,
+               height: OnbMetric.navIconButton)
+        .padding(OnbMetric.navPadding)
+        .frame(height: isMinimal ? OnbMetric.navCompactHeight : OnbMetric.navHeight)
+        // The tray is a plain fill, NOT glass.
+        //
+        // Glass cannot sample other glass: a glass bar holding glass buttons
+        // gives each control its own sampling region over a surface that is
+        // itself sampling, and they come out inconsistent. The export agrees —
+        // it specifies the bar as rgba(0,0,0,0.2), a flat fill.
+        .background(Capsule().fill(OnbColor.glassTint))
+        .animation(OnbMotion.screen, value: isMinimal)
     }
 }
 

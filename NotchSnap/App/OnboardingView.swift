@@ -191,10 +191,11 @@ struct OnboardingFlowView: View {
     @ViewBuilder
     private var bottomBar: some View {
         if step != .welcome && step != .value {
-            OnbBottomNav(onBack: backAction,
+            OnbBottomNav(onBack: step == .practice ? nil : backAction,
                          current: stepIndex,
                          total: steps.count,
-                         primary: barPrimary)
+                         primary: barPrimary,
+                         onSelectStep: goToStep)
                 .padding(.bottom, OnbMetric.navBottom)
                 .transition(.opacity)
         }
@@ -242,6 +243,15 @@ struct OnboardingFlowView: View {
 
     /// The grid screen's back arrow. Nothing else in the flow offers one —
     /// the other screens either ask for something or confirm it.
+    /// Jump back to a step by tapping its dot. The practice screens have no
+    /// buttons at all, so without this they would be a one-way door.
+    private func goToStep(_ index: Int) {
+        guard index < stepIndex else { return }
+        SoundManager.shared.play(.stepAdvance)
+        goingBack = true
+        withAnimation(OnbMotion.screen) { stepIndex = index }
+    }
+
     private func goBack() {
         SoundManager.shared.play(.stepAdvance)
         goingBack = true
@@ -829,25 +839,31 @@ private struct OnboardingPracticeView: View {
     @State private var done = false
 
     var body: some View {
+        // The designs put the instruction in the HEADLINE and the reason
+        // underneath, not the other way round — "Press the shortcut" over "to
+        // open the notch". I had them swapped, so the screen led with the
+        // outcome and buried the thing to actually do.
         OnbScreen(title: stage == .awaitingShortcut
-                    ? "Open the notch"
+                    ? "Press the shortcut"
                     : "And type your first To-do",
-                  subtitle: "Press the shortcut") {
+                  subtitle: stage == .awaitingShortcut
+                    ? "to open the notch"
+                    : "then confirm it with") {
             VStack(spacing: 0) {
                 Spacer(minLength: 0)
 
                 // 138pt glass caps, overlapping by 21 and tilted a few degrees
                 // each so the group reads as placed rather than laid out.
                 if stage == .awaitingShortcut {
-                    HStack(spacing: OnbMetric.keycapOverlap) {
-                        OnbKeycap(glyph: "\u{2303}", rotation: -6.17, glyphSize: 96)
-                        OnbKeycap(glyph: "\u{21E7}", rotation: 4.58)
-                        OnbKeycap(glyph: "N", rotation: -5.57, glyphSize: 58)
+                    HStack(spacing: OnbMetric.keycapGap) {
+                        OnbKeycap(glyph: "\u{2303}", rotation: -6.17, glyphSize: 62)
+                        OnbKeycap(glyph: "\u{21E7}", rotation: 4.58, glyphSize: 46)
+                        OnbKeycap(glyph: "N", rotation: -5.57, glyphSize: 42)
                     }
                     .onbGlassGroup(spacing: 0)
                     .transition(.opacity)
                 } else {
-                    OnbKeycap(glyph: "\u{21B5}", rotation: 4.58)
+                    OnbKeycap(glyph: "\u{21B5}", rotation: 4.58, glyphSize: 46)
                         .transition(.opacity)
                 }
 
