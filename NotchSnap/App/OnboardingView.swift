@@ -136,21 +136,10 @@ struct OnboardingFlowView: View {
         // a margin and nothing more.
         .frame(minWidth: 480, maxWidth: OnbMetric.windowWidth,
                minHeight: 260, maxHeight: OnbMetric.windowHeight)
-        // Its own strip, below everything — never on top of a button.
-        .safeAreaInset(edge: .bottom, spacing: 0) { bottomRail }
+        .overlay(alignment: .bottom) { bottomBar }
         // The window controls are ours: the real ones are hidden, and the
         // design draws its own.
         .overlay(alignment: .topLeading) { OnbWindowControls() }
-        // A way out of every screen, not just one. The grid keeps its own in
-        // the nav bar, so it is excluded here rather than given two.
-        .overlay(alignment: .topLeading) {
-            if stepIndex > 0 && step != .value {
-                OnbBackButton(action: goBack)
-                    .padding(.leading, 18)
-                    .padding(.top, 52)
-                    .transition(.opacity)
-            }
-        }
         .onAppear { OnboardingWindowController.setCompact(step == .practice) }
         // Single-parameter form: the two-parameter onChange is macOS 14+, and
         // Otto's deployment target is 13.0.
@@ -191,17 +180,40 @@ struct OnboardingFlowView: View {
         }
     }
 
-    /// Not on the grid screen, whose nav bar already carries the rail, and not
-    /// on the welcome screen, which the design keeps bare. Two rails on one
-    /// screen is the same collision the rail was moved out of an overlay to
-    /// avoid in the first place.
+    /// The bar, 45pt up from the bottom edge, on every screen the design gives
+    /// one to.
+    ///
+    /// Welcome (Sketch A) is a bare centred opener and the feature grid
+    /// (Sketch B) carries its own inside its own layout, so those two are
+    /// excluded — everything from step 3 on gets this, which is what makes
+    /// "the bar is always there" true rather than something each screen has to
+    /// remember to draw.
     @ViewBuilder
-    private var bottomRail: some View {
-        if step != .value && step != .welcome {
-            StepDotIndicator(current: stepIndex, total: steps.count)
-                .padding(.top, 2)
-                .padding(.bottom, 22)
-                .frame(maxWidth: .infinity)
+    private var bottomBar: some View {
+        if step != .welcome && step != .value {
+            OnbBottomNav(onBack: backAction,
+                         current: stepIndex,
+                         total: steps.count,
+                         primary: barPrimary)
+                .padding(.bottom, OnbMetric.navBottom)
+                .transition(.opacity)
+        }
+    }
+
+    /// What the bar's right-hand button does on this screen.
+    ///
+    /// nil on the practice steps: there the action IS pressing the shortcut,
+    /// and a button beside it would be a second, wrong way to do the one thing
+    /// the screen is asking for. The export draws those two as an
+    /// indicator-only pill for exactly that reason.
+    private var barPrimary: (title: String, action: () -> Void)? {
+        switch step {
+        case .welcome, .value:   return nil
+        case .practice:          return nil
+        case .focus:             return ("Continue", advanceStep)
+        case .whereItLives:      return ("Show me", advanceStep)
+        case .calendar, .signIn: return ("Continue", advanceStep)
+        case .allSet:            return ("Done", completeOnboarding)
         }
     }
 
@@ -290,7 +302,9 @@ private struct OnboardingScaffold<Content: View, Footer: View>: View {
             footer
                 .padding(.horizontal, gutter)
                 .padding(.top, compact ? 6 : 12)
-                .padding(.bottom, compact ? 14 : 28)
+                // Clearance for the bar the flow draws at the bottom. Without
+                // it a screen's own footer sits underneath the bar.
+                .padding(.bottom, OnbMetric.columnBottom)
         }
         // Every screen is now dark-on-purple, so the whole flow states its
         // colours rather than inheriting the system's — .primary/.secondary
@@ -421,8 +435,7 @@ private struct OnboardingValueView: View {
             OnbBottomNav(onBack: onBack,
                          current: current,
                          total: total,
-                         continueTitle: "Continue",
-                         onContinue: onAdvance)
+                         primary: (title: "Continue", action: onAdvance))
                 .padding(.horizontal, OnbMetric.gridInset)
                 .padding(.bottom, OnbMetric.navBottom)
         }
@@ -503,94 +516,43 @@ private struct OnboardingFocusView: View {
     @Binding var selection: String
     var onAdvance: () -> Void
 
-    private let options: [(OnboardingFocus, String, String, String)] = [
-        (.tasks,    "checklist",       "Tasks",    "Keep a list I can reach instantly"),
-        (.meetings, "calendar",        "Meetings", "Know what's next without opening my calendar"),
-        (.both,     "sparkles",        "Both",     "The whole day, in one place"),
+    private struct Option {
+        let focus: OnboardingFocus
+        let icon: String
+        let title: String
+        let subtitle: String
+    }
+
+    private let options: [Option] = [
+        .init(focus: .tasks, icon: "checklist",
+              title: "Tasks", subtitle: "Keep a list I can reach instantly"),
+        .init(focus: .meetings, icon: "calendar",
+              title: "Meetings", subtitle: "Know what's next without opening my calendar"),
+        .init(focus: .both, icon: "sparkles",
+              title: "Both", subtitle: "The whole day, in one place")
     ]
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer().frame(height: 58)
-
-            OnboardingEyebrowPill(text: "Setup")
-                .padding(.bottom, 12)
-
-            Text("What should Otto help with first?")
-                .font(.system(size: 24, weight: .bold))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 48)
-
-            Text("You can change this later — it just decides what we set up now.")
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .padding(.top, 8)
-
-            Spacer().frame(height: 28)
-
-            VStack(spacing: 10) {
-                ForEach(options, id: \.0) { option in
-                    FocusOptionRow(
-                        icon: option.1, title: option.2, detail: option.3,
-                        isSelected: selection == option.0.rawValue
+        // 640 column, 32pt inset body, three 70pt rows 8pt apart.
+        OnbScreen(title: "What should Otto help with first?",
+                  subtitle: "You can change this later - it just decides what we set up now.") {
+            VStack(spacing: 8) {
+                ForEach(options, id: \.focus) { option in
+                    OnbPreferenceRow(
+                        icon: option.icon,
+                        title: option.title,
+                        subtitle: option.subtitle,
+                        isSelected: selection == option.focus.rawValue
                     ) {
-                        selection = option.0.rawValue
+                        selection = option.focus.rawValue
                     }
                 }
-            }
-            .padding(.horizontal, 40)
-
-            Spacer()
-
-            OnbButton(title: "Continue", action: onAdvance)
-                .keyboardShortcut(.return, modifiers: [])
-                .padding(.bottom, 40)
-        }
-    }
-}
-
-private struct FocusOptionRow: View {
-    let icon: String
-    let title: String
-    let detail: String
-    let isSelected: Bool
-    let action: () -> Void
-    @State private var hover = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 15))
-                    .foregroundStyle(isSelected ? OnbColor.text : OnbColor.subtext)
-                    .frame(width: 26)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.system(size: 13, weight: .medium))
-                    Text(detail).font(.system(size: 11)).foregroundStyle(.secondary)
-                }
                 Spacer(minLength: 0)
-
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 15))
-                    .foregroundStyle(isSelected ? OnbColor.text : Color.white.opacity(0.35))
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .background(
-                RoundedRectangle(cornerRadius: OnbMetric.imageRadius, style: .continuous)
-                    .fill(OnbColor.card)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: OnbMetric.imageRadius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(isSelected ? 0.45
-                                                                 : (hover ? 0.16 : 0.08)),
-                                  lineWidth: isSelected ? 1.5 : 1)
-            )
-            .contentShape(Rectangle())
+            // The rows group as one material rather than three panes of glass
+            // stacked 8pt apart.
+            .onbGlassGroup(spacing: 8)
         }
-        .buttonStyle(OnbPressStyle(scale: 0.985))
-        .onHover { hover = $0 }
     }
 }
 
@@ -785,58 +747,28 @@ struct OnboardingWelcomeView: View {
                     .frame(height: 210)
                     .scaleEffect(appeared ? 1 : 0.94)
                     .opacity(appeared ? 1 : 0)
-                    .animation(OnbMotion.screen.delay(0.05),
-                               value: appeared)
+                    .animation(OnbMotion.screen.delay(0.05), value: appeared)
 
                 Text("Your to-dos and today's meetings, always in reach of the notch.")
-                    .font(OnbFont.tagline(compact: false))
-                    .kerning(OnbFont.taglineTracking(compact: false))
+                    .font(.system(size: 22, weight: .medium))
+                    .kerning(OnbFont.tracking(forSize: 22))
                     .foregroundStyle(OnbColor.subtext)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: 922)
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 10)
-                    .animation(OnbMotion.screen.delay(0.18),
-                               value: appeared)
+                    .animation(OnbMotion.standard.delay(0.18), value: appeared)
             }
 
-            OnbButton(title: "Get Started", action: onAdvance)
+            OnbButton(title: "Start setup", action: onAdvance)
                 .keyboardShortcut(.return, modifiers: [])
                 .opacity(appeared ? 1 : 0)
                 .offset(y: appeared ? 0 : 8)
-                .animation(OnbMotion.standard.delay(0.3),
-                           value: appeared)
+                .animation(OnbMotion.standard.delay(0.3), value: appeared)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { appeared = true }
-    }
-}
-
-/// The Otto mark.
-///
-/// The sketch uses the drawn "otto" wordmark — a vector that does not exist in
-/// this repo (Assets.xcassets holds the app icon and nothing else), and a
-/// hand-lettered logotype cannot be reconstructed from a CSS export of its
-/// paths. So this sets the word in the mark's gradient at the sketch's size,
-/// which reads as the mark at a glance and holds the layout exactly.
-/// Dropping the real asset in here later changes nothing around it: give it
-/// the same 210pt height and the screen is finished.
-private struct OttoWordmark: View {
-    var body: some View {
-        Text("otto")
-            .font(.system(size: 140, weight: .bold, design: .rounded))
-            .kerning(-4)
-            .foregroundStyle(OnbColor.markGradient)
-            .overlay(
-                // The checkmark the real mark hides inside its final "o".
-                Image(systemName: "checkmark")
-                    .font(.system(size: 44, weight: .bold))
-                    .foregroundStyle(OnbColor.markGradient)
-                    .offset(x: 118, y: 6),
-                alignment: .center
-            )
-            .fixedSize()
     }
 }
 
@@ -851,41 +783,22 @@ private struct OnboardingNotchView: View {
     @State private var appeared = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer().frame(height: 50)
-
-            OnboardingEyebrowPill(text: "Where it lives")
-                .padding(.bottom, 12)
-
-            Text("Otto lives in the notch")
-                .font(.system(size: 24, weight: .bold))
-
-            Text("Not in the Dock, not in a window. Move your cursor up to the notch and it opens.")
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 60)
-                .padding(.top, 8)
-
-            Spacer().frame(height: 24)
-
+        OnbScreen(title: "Otto lives in the notch",
+                  subtitle: "Not in the Dock, not in a window. Move your cursor up to the notch and it opens.") {
+            // 576x395 at radius 16 in the export. The real animated preview
+            // fills it rather than a placeholder image — it is the one visual
+            // in the flow that shows the actual gesture being described.
             NotchMiniPreview()
-                .frame(width: 340, height: 170)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: OnbMetric.imageRadius,
+                                            style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: OnbMetric.imageRadius, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                )
                 .opacity(appeared ? 1 : 0)
-                .scaleEffect(appeared ? 1 : 0.96)
+                .scaleEffect(appeared ? 1 : 0.98)
                 .animation(OnbMotion.screen.delay(0.1), value: appeared)
-
-            Spacer().frame(height: 20)
-
-            Text("There's a keyboard way too — that's next.")
-                .font(.system(size: 12))
-                .foregroundStyle(.tertiary)
-
-            Spacer()
-
-            OnbButton(title: "Show me", action: onAdvance)
-                .keyboardShortcut(.return, modifiers: [])
-                .padding(.bottom, 40)
         }
         .onAppear { appeared = true }
     }
@@ -913,84 +826,68 @@ private struct OnboardingPracticeView: View {
 
     private enum Stage { case awaitingShortcut, awaitingTodo }
     @State private var stage: Stage = .awaitingShortcut
-    @State private var pulse = false
     @State private var showSkip = false
     @State private var done = false
 
     var body: some View {
-        OnboardingScaffold {
+        OnbScreen(title: stage == .awaitingShortcut
+                    ? "Open the notch"
+                    : "And type your first To-do",
+                  subtitle: "Press the shortcut") {
             VStack(spacing: 0) {
-                OnboardingHeader(
-                    eyebrow: "Shortcut",
-                    title: stage == .awaitingShortcut
-                        ? "Add your first to-do"
-                        : "Now type it",
-                    subtitle: stage == .awaitingShortcut
-                        ? "Press the shortcut. It works from any app — you don't have to be in Otto."
-                        : "Otto is open at the notch with the cursor already in the field. Write anything and press Return."
-                )
+                Spacer(minLength: 0)
 
-                Spacer(minLength: 20)
-
+                // 138pt glass caps, overlapping by 21 and tilted a few degrees
+                // each so the group reads as placed rather than laid out.
                 if stage == .awaitingShortcut {
-                    ShortcutKeys(keys: ["\u{2303}", "\u{21E7}", "N"])
-                        .scaleEffect(pulse ? 1.03 : 1)
-                        .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true),
-                                   value: pulse)
-                } else {
-                    ShortcutKeys(keys: ["\u{21A9}"])
-                        .scaleEffect(pulse ? 1.03 : 1)
-                        .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true),
-                                   value: pulse)
-                }
-
-                Spacer(minLength: 18)
-
-                Label(stage == .awaitingShortcut
-                        ? "Waiting for the shortcut\u{2026}"
-                        : "Waiting for your first to-do\u{2026}",
-                      systemImage: stage == .awaitingShortcut ? "keyboard" : "pencil.line")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    HStack(spacing: OnbMetric.keycapOverlap) {
+                        OnbKeycap(glyph: "\u{2303}", rotation: -6.17, glyphSize: 96)
+                        OnbKeycap(glyph: "\u{21E7}", rotation: 4.58)
+                        OnbKeycap(glyph: "N", rotation: -5.57, glyphSize: 58)
+                    }
+                    .onbGlassGroup(spacing: 0)
                     .transition(.opacity)
-
-                Spacer(minLength: 12)
-            }
-        } footer: {
-            // The footer keeps its height whether or not the skip is showing,
-            // so the screen does not jump when it appears.
-            Group {
-                if showSkip {
-                    OnboardingQuietButton(title: "Skip this step", action: onAdvance)
-                        .transition(.opacity)
                 } else {
-                    Color.clear
+                    OnbKeycap(glyph: "\u{21B5}", rotation: 4.58)
+                        .transition(.opacity)
+                }
+
+                Spacer(minLength: 0)
+
+                if showSkip {
+                    OnbQuietButton(title: "Skip this step", action: onAdvance)
+                        .transition(.opacity)
                 }
             }
-            .frame(height: 20)
         }
         .onAppear {
-            pulse = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
-                withAnimation { showSkip = true }
+                withAnimation(OnbMotion.standard) { showSkip = true }
             }
         }
         // Stage 1 → 2. The real hot key: HotkeyManager posts this from the same
         // handler the shipped shortcut runs through.
         .onReceive(NotificationCenter.default.publisher(for: .quickEntryFired)) { _ in
             guard stage == .awaitingShortcut else { return }
-            withAnimation(OnbMotion.standard) {
-                stage = .awaitingTodo
-            }
+            withAnimation(OnbMotion.standard) { stage = .awaitingTodo }
         }
         // Stage 2 → done. A real row in the real store.
         .onReceive(NotificationCenter.default.publisher(for: .todoCreated)) { _ in
             guard !done else { return }
             done = true
-            // Confirmation rides along instead of taking a screen of its own.
+
+            // Shut the notch on the same beat as the Return that filed the
+            // to-do. It expands DOWNWARD over the screen, and this window is
+            // parked below it — so leaving it open would sit the panel on top
+            // of the very instructions telling you what to do next, and the
+            // Continue you are meant to press would be underneath it
+            // (Marcello, 2026-08-23). The panel animates shut on its own
+            // collapse spring, so this reads as the to-do landing, not as
+            // something being taken away.
+            NotchController.shared.collapse()
+
             onToast("Nice \u{2014} that\u{2019}s it.")
-            // Let the row land in the notch before the window moves on.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { onAdvance() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { onAdvance() }
         }
     }
 }
@@ -1742,12 +1639,6 @@ struct OnboardingAllSetView: View {
             .animation(OnbMotion.screen.delay(0.35), value: tipsAppeared)
 
             Spacer()
-
-            OnbButton(title: "Done", action: onFinish)
-                .keyboardShortcut(.return, modifiers: [])
-            .opacity(buttonAppeared ? 1 : 0)
-            .offset(y: buttonAppeared ? 0 : 8)
-            .animation(OnbMotion.standard.delay(0.55), value: buttonAppeared)
             .padding(.bottom, 40)
         }
         .onAppear {

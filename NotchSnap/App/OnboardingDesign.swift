@@ -56,8 +56,14 @@ enum OnbMotion {
 
 enum OnbColor {
     /// The window itself: purple at the top falling to near-black at the foot.
+    ///
+    /// The export runs #7F6CC5 at -24.81% to #251953 at 104.37% — stops
+    /// OUTSIDE the box, which CSS allows and SwiftUI does not. So the colours
+    /// are resolved at the two points where that ramp actually crosses the
+    /// window edges (t=0.192 and t=0.966 along it) and the gradient is drawn
+    /// between those. Same pixels, stated in a form SwiftUI can draw.
     static let windowGradient = LinearGradient(
-        colors: [Color(hex: "#816BD2"), Color(hex: "#160D35")],
+        colors: [Color(hex: "#6D5CAF"), Color(hex: "#281B57")],
         startPoint: .top,
         endPoint: .bottom
     )
@@ -71,7 +77,10 @@ enum OnbColor {
     /// encodes hierarchy: dark separates regions, light draws the eye to what
     /// you can actually press.
     static let card = Color.black.opacity(0.3)
-    /// The nav bar. Heavier still — a bigger surface should read as thicker.
+    /// rgba(0,0,0,0.2) in the export — the tint carried by the glass on the
+    /// preference rows, the nav bar, the indicator and the keycaps, all of
+    /// which are Liquid Glass rather than flat fills.
+    static let glassTint = Color.black.opacity(0.2)
     static let nav = Color.black.opacity(0.28)
 
     /// The pre-macOS-26 stand-in for Liquid Glass.
@@ -104,6 +113,45 @@ enum OnbMetric {
     static let windowWidth: CGFloat = 1200
     static let windowHeight: CGFloat = 800
     static let windowRadius: CGFloat = 26
+    /// The practice screens. 640x564 in the export, replacing the old
+    /// 520x300 — the window still gets out of the notch's way, at the size
+    /// the design was drawn at.
+    static let compactWidth: CGFloat = 640
+    static let compactHeight: CGFloat = 564
+
+    /// Everything from step 3 onward lives inside this. The feature grid
+    /// (step 2) is the one screen that stays full width.
+    static let columnWidth: CGFloat = 640
+    static let columnTop: CGFloat = 72
+    /// Clears the nav bar: 45 up from the bottom + 96 tall + air.
+    static let columnBottom: CGFloat = 168
+    static let columnGap: CGFloat = 24
+    /// The inset box the content sits in — 640 less 32 either side = 576.
+    static let bodyPadding: CGFloat = 32
+
+    /// A preference row: 70 tall, tighter on the left where the icon is.
+    static let rowHeight: CGFloat = 70
+    static let rowRadius: CGFloat = 12
+    static let rowPaddingLeading: CGFloat = 12
+    static let rowPaddingTrailing: CGFloat = 20
+    static let rowPaddingV: CGFloat = 8
+    static let rowGap: CGFloat = 6
+    static let rowIcon: CGFloat = 48
+    static let rowTextGap: CGFloat = 4
+    static let radioSize: CGFloat = 18
+    static let radioStroke: CGFloat = 2
+
+    /// The keycaps on the practice screens.
+    static let keycap: CGFloat = 138
+    static let keycapRadius: CGFloat = 32
+    /// They overlap rather than sit in a row.
+    static let keycapOverlap: CGFloat = -21
+
+    static let navWidth: CGFloat = 640
+    static let navHeight: CGFloat = 96
+    /// Indicator-only, on the practice screens.
+    static let navCompactWidth: CGFloat = 154
+    static let navCompactHeight: CGFloat = 56
 
     /// Window controls: three 14pt circles, 9pt apart, 18pt in from the
     /// corner. Top-LEFT, because on macOS close is always top-left and
@@ -124,6 +172,7 @@ enum OnbMetric {
     static let navPadding: CGFloat = 24
     static let navBottom: CGFloat = 45
     static let navIconButton: CGFloat = 48
+    static let navInnerGap: CGFloat = 14
 
     static let buttonPaddingH: CGFloat = 24
     static let buttonPaddingV: CGFloat = 12
@@ -155,24 +204,26 @@ enum OnbFont {
     static let rowTitle = Font.system(size: 16, weight: .semibold)
     static let rowSubtitle = Font.system(size: 13.5, weight: .regular)
 
+    /// 30/36 SemiBold, at both sizes. The compact screens in the export use
+    /// the SAME headline as the wide ones — they are 640 wide either way, so
+    /// there is nothing to shrink for.
     static func title(compact: Bool) -> Font {
-        .system(size: compact ? 22 : 34, weight: .bold)
+        .system(size: 30, weight: .semibold)
     }
+    /// 14/17 Regular, full white — not the 60% the taglines elsewhere use.
     static func tagline(compact: Bool) -> Font {
-        .system(size: compact ? 13.5 : 22, weight: .medium)
+        .system(size: 14, weight: .regular)
     }
+    static let rowTitleType = Font.system(size: 14, weight: .medium)
+    static let rowSubtitleType = Font.system(size: 11, weight: .medium)
 
     /// −0.02em at display sizes, easing to 0 by body. Applied as points
     /// because SwiftUI's `kerning` is absolute.
     static func tracking(forSize size: CGFloat) -> CGFloat {
         size >= 30 ? -size * 0.02 : (size >= 20 ? -size * 0.012 : 0)
     }
-    static func titleTracking(compact: Bool) -> CGFloat {
-        tracking(forSize: compact ? 22 : 34)
-    }
-    static func taglineTracking(compact: Bool) -> CGFloat {
-        tracking(forSize: compact ? 13.5 : 22)
-    }
+    static func titleTracking(compact: Bool) -> CGFloat { tracking(forSize: 30) }
+    static func taglineTracking(compact: Bool) -> CGFloat { 0 }
 }
 
 // MARK: - Liquid Glass
@@ -190,7 +241,12 @@ enum OnbFont {
 
 /// Three ways a surface can be drawn, chosen by OS and accessibility settings
 /// rather than by each call site guessing.
-struct OnbGlassSurface: ViewModifier {
+///
+/// Generic over the shape, because Liquid Glass in this flow is not only on
+/// pills: the preference rows are 12pt rounded rects, the keycaps are 32pt
+/// ones, and the nav bar is a full capsule. All of them are the real material.
+struct OnbGlassSurface<S: Shape & InsettableShape>: ViewModifier {
+    let shape: S
     var isInteractive: Bool = false
     var tint: Color? = nil
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -200,14 +256,19 @@ struct OnbGlassSurface: ViewModifier {
             // Reduce Transparency is not a preference about taste — it is
             // someone telling the system they cannot read text on glass. The
             // surface goes solid and the blur goes away entirely.
-            content.background(Capsule().fill(OnbColor.opaque))
-                   .overlay(Capsule().strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
+            content.background(shape.fill(OnbColor.opaque))
+                   .overlay(shape.strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
         } else if #available(macOS 26.0, *) {
-            content.glassEffect(glass, in: Capsule())
+            content.glassEffect(glass, in: shape)
         } else {
-            content.background(Capsule().fill(OnbColor.glassFallback))
-                   .overlay(Capsule().strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+            content.background(shape.fill(fallbackFill))
+                   .overlay(shape.strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
         }
+    }
+
+    /// Below 26 there is no refraction to tint, so the tint IS the fill.
+    private var fallbackFill: Color {
+        tint ?? OnbColor.glassFallback
     }
 
     @available(macOS 26.0, *)
@@ -219,10 +280,19 @@ struct OnbGlassSurface: ViewModifier {
 }
 
 extension View {
-    /// Liquid Glass on macOS 26, a translucent capsule below it, and a solid
+    /// Liquid Glass on macOS 26, a translucent shape below it, and a solid
     /// fill under Reduce Transparency.
+    func onbGlass<S: Shape & InsettableShape>(
+        _ shape: S,
+        interactive: Bool = false,
+        tint: Color? = nil
+    ) -> some View {
+        modifier(OnbGlassSurface(shape: shape, isInteractive: interactive, tint: tint))
+    }
+
+    /// The common case: a pill.
     func onbGlass(interactive: Bool = false, tint: Color? = nil) -> some View {
-        modifier(OnbGlassSurface(isInteractive: interactive, tint: tint))
+        modifier(OnbGlassSurface(shape: Capsule(), isInteractive: interactive, tint: tint))
     }
 
     /// Groups nearby glass elements so the material can blend them the way
@@ -460,37 +530,195 @@ struct OnbBackButton: View {
     }
 }
 
-/// The floating bar under the feature grid: back, progress, continue.
+/// The bar at the foot of every screen: back, where you are, what's next.
+///
+/// It is drawn by the FLOW, not by each screen, which is why it can be
+/// promised to always be there. Before, it existed on exactly one screen and
+/// the other seven each invented their own footer.
+///
+/// Liquid Glass, tinted to the export's rgba(0,0,0,0.2), with the two controls
+/// inside one GlassEffectContainer so the material blends them rather than
+/// refracting each alone.
 struct OnbBottomNav: View {
     var onBack: (() -> Void)?
     let current: Int
     let total: Int
-    let continueTitle: String
-    let onContinue: () -> Void
-
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    /// nil on the practice screens, where the action is the shortcut itself
+    /// and a button would be a second, wrong way to do it.
+    var primary: (title: String, action: () -> Void)?
 
     var body: some View {
-        HStack(spacing: 14) {
-            if let onBack {
-                OnbBackButton(action: onBack)
+        Group {
+            if onBack == nil && primary == nil {
+                // Indicator only — 154x56 in the export.
+                OnbProgress(current: current, total: total)
+                    .padding(OnbMetric.navPadding)
+                    .onbGlass(Capsule(), tint: OnbColor.glassTint)
             } else {
-                Color.clear.frame(width: OnbMetric.navIconButton, height: OnbMetric.navIconButton)
+                HStack(spacing: OnbMetric.navInnerGap) {
+                    if let onBack {
+                        OnbBackButton(action: onBack)
+                    } else {
+                        Color.clear.frame(width: OnbMetric.navIconButton,
+                                          height: OnbMetric.navIconButton)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    OnbProgress(current: current, total: total)
+
+                    if let primary {
+                        OnbButton(title: primary.title, action: primary.action)
+                    } else {
+                        Color.clear.frame(width: OnbMetric.navIconButton,
+                                          height: OnbMetric.navIconButton)
+                    }
+                }
+                .frame(height: OnbMetric.navIconButton)
+                .onbGlassGroup()
+                .padding(OnbMetric.navPadding)
+                .frame(width: OnbMetric.navWidth, height: OnbMetric.navHeight)
+                .onbGlass(Capsule(), tint: OnbColor.glassTint)
+            }
+        }
+    }
+}
+
+/// The 640pt column every screen from step 3 onward lives in.
+///
+/// The feature grid is the one exception and stays full width; everything
+/// after it is this. Stated once so no screen can drift out of the column.
+struct OnbScreen<Content: View>: View {
+    let title: String
+    var subtitle: String? = nil
+    @ViewBuilder var content: Content
+    @Environment(\.onbCompact) private var compact
+
+    var body: some View {
+        VStack(spacing: OnbMetric.columnGap) {
+            VStack(spacing: OnbMetric.columnGap) {
+                Text(title)
+                    .font(OnbFont.title(compact: compact))
+                    .kerning(OnbFont.titleTracking(compact: compact))
+                    .foregroundStyle(OnbColor.text)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
+
+                if let subtitle {
+                    Text(subtitle)
+                        .font(OnbFont.tagline(compact: compact))
+                        .foregroundStyle(OnbColor.text)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity)
+                }
             }
 
-            Spacer(minLength: 0)
-
-            OnbProgress(current: current, total: total)
-
-            OnbButton(title: continueTitle, action: onContinue)
+            content
+                .padding(OnbMetric.bodyPadding)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        // One container for the two glass controls, so the material blends
-        // them instead of each refracting on its own.
-        .onbGlassGroup()
-        .padding(OnbMetric.navPadding)
-        // The bar itself is the HEAVY layer and the buttons on it are the
-        // light one — dark under light, never light on light.
-        .background(Capsule().fill(reduceTransparency ? OnbColor.opaque : OnbColor.nav))
+        .frame(width: OnbMetric.columnWidth)
+        .padding(.top, OnbMetric.columnTop)
+        .padding(.bottom, OnbMetric.columnBottom)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// One choice on the preference screen: icon, two lines, and a radio.
+///
+/// Liquid Glass at the export's 12pt radius and 0.2 black tint — a card you
+/// press, so the material is `interactive` and answers the pointer itself.
+struct OnbPreferenceRow: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: OnbMetric.rowGap) {
+                Image(systemName: icon)
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(OnbColor.text)
+                    .frame(width: OnbMetric.rowIcon, height: OnbMetric.rowIcon)
+
+                VStack(alignment: .leading, spacing: OnbMetric.rowTextGap) {
+                    Text(title)
+                        .font(OnbFont.rowTitleType)
+                        .foregroundStyle(OnbColor.text)
+                    Text(subtitle)
+                        .font(OnbFont.rowSubtitleType)
+                        .foregroundStyle(OnbColor.subtext)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                // The radio fills rather than swapping to a different glyph,
+                // so the control keeps its shape and only its state changes.
+                Circle()
+                    .strokeBorder(Color.white.opacity(0.9), lineWidth: OnbMetric.radioStroke)
+                    .frame(width: OnbMetric.radioSize, height: OnbMetric.radioSize)
+                    .overlay(
+                        Circle()
+                            .fill(OnbColor.text)
+                            .frame(width: OnbMetric.radioSize - 8,
+                                   height: OnbMetric.radioSize - 8)
+                            .opacity(isSelected ? 1 : 0)
+                    )
+            }
+            .padding(.leading, OnbMetric.rowPaddingLeading)
+            .padding(.trailing, OnbMetric.rowPaddingTrailing)
+            .padding(.vertical, OnbMetric.rowPaddingV)
+            .frame(height: OnbMetric.rowHeight)
+            .onbGlass(RoundedRectangle(cornerRadius: OnbMetric.rowRadius, style: .continuous),
+                      interactive: true,
+                      tint: OnbColor.glassTint)
+            .overlay(
+                RoundedRectangle(cornerRadius: OnbMetric.rowRadius, style: .continuous)
+                    .strokeBorder(Color.white.opacity(isSelected ? 0.5 : 0), lineWidth: 1.5)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: OnbMetric.rowRadius, style: .continuous))
+        }
+        .buttonStyle(OnbPressStyle(scale: 0.99))
+        .animation(OnbMotion.standard, value: isSelected)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+}
+
+/// A key, as a physical object: 138pt of Liquid Glass at 32pt radius, tilted a
+/// few degrees so a row of them reads as placed rather than laid out.
+struct OnbKeycap: View {
+    let glyph: String
+    let rotation: Double
+    var glyphSize: CGFloat = 66
+
+    var body: some View {
+        Text(glyph)
+            .font(.system(size: glyphSize, weight: .semibold))
+            .foregroundStyle(OnbColor.badge)
+            .frame(width: OnbMetric.keycap, height: OnbMetric.keycap)
+            .onbGlass(RoundedRectangle(cornerRadius: OnbMetric.keycapRadius, style: .continuous),
+                      tint: OnbColor.glassTint)
+            .rotationEffect(.degrees(rotation))
+    }
+}
+
+/// The Otto mark, from the real vector.
+///
+/// Imported as a template asset and filled with the flow's own gradient rather
+/// than carrying the SVG's — the two are the same ramp (#B5A5F0 to #6338FF),
+/// and going through `foregroundStyle` means it cannot render flat if Xcode's
+/// SVG support ever declines to resolve the gradient itself.
+struct OttoWordmark: View {
+    var body: some View {
+        Image("OttoWordmark")
+            .renderingMode(.template)
+            .resizable()
+            .aspectRatio(302.0 / 211.0, contentMode: .fit)
+            .foregroundStyle(OnbColor.markGradient)
+            .accessibilityLabel("Otto")
     }
 }
 

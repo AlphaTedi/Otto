@@ -58,7 +58,11 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         // become unusable on a smaller display than the one it was drawn for.
         let full = NSSize(width: min(OnbMetric.windowWidth, vis.width - 80),
                           height: min(OnbMetric.windowHeight, vis.height - 80))
-        let size = compact ? NSSize(width: 520, height: 300) : full
+        // 640x564 — the size the practice screens are drawn at. It still
+        // parks below anything the notch can grow into.
+        let compactSize = NSSize(width: min(OnbMetric.compactWidth, vis.width - 80),
+                                 height: min(OnbMetric.compactHeight, vis.height - 80))
+        let size = compact ? compactSize : full
         let origin: NSPoint
         if compact {
             // Sit just above the Dock, well clear of anything the notch can
