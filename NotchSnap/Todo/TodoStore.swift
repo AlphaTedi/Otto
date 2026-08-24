@@ -590,13 +590,20 @@ final class TodoStore: ObservableObject {
         expandedItemID = nil
     }
 
+    /// Every route into a different section funnels through here, so the tap
+    /// is stated once rather than at each of ⇥, ⌘1…9 and the tab chips.
     func selectCollection(_ id: UUID) {
+        // Only when it actually changes. Re-selecting the tab you are already
+        // on is not a navigation, and tapping for it would fire on every stray
+        // click at the foot of the panel.
+        let changed = activeCollectionID != id
         withAnimation(NotchAnimation.contentHug) {
             activeCollectionID = id
             panelMode = .browsing
         }
         focusedItemID = nil
         expandedItemID = nil
+        if changed { HapticManager.shared.sectionChanged() }
     }
 
     // MARK: - Items
@@ -629,7 +636,7 @@ final class TodoStore: ObservableObject {
         // Step 5 of the capture flow: the created to-do's collection becomes
         // the active tab, so it's visibly filed where the user put it.
         activeCollectionID = target
-        HapticManager.shared.copyConfirmed()
+        HapticManager.shared.todoCreated()
         scheduleSave()
         // Onboarding's practice step waits for this: the shortcut opening the
         // notch is only half the lesson, and someone who stops there has not
@@ -660,6 +667,10 @@ final class TodoStore: ObservableObject {
                 items[idx].isCompleted = false
                 items[idx].completedAt = nil
             }
+            // Putting one back is not the same event as finishing it.
+            HapticManager.shared.todoUncompleted()
+            scheduleSave()
+            return
         } else {
             withAnimation(.spring(response: 0.28, dampingFraction: 0.6)) {
                 items[idx].isCompleted = true
@@ -675,7 +686,7 @@ final class TodoStore: ObservableObject {
                 self.settleTasks[id] = nil
             }
         }
-        HapticManager.shared.thumbnailSelect()
+        HapticManager.shared.todoCompleted()
         scheduleSave()
     }
 

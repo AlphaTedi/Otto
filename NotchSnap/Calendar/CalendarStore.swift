@@ -378,6 +378,7 @@ final class CalendarStore: ObservableObject {
     /// alerting simply suppresses its alert; the panel stays put, because the
     /// user opened it and nothing has interrupted them.
     func snooze(_ meeting: DetectedMeeting) {
+        HapticManager.shared.meetingSnoozed()
         snoozedUntil[meeting.id] = Date().addingTimeInterval(TimeInterval(snoozeMinutes * 60))
         alertedIDs.remove(meeting.id)
         guard activeAlert?.id == meeting.id else { return }

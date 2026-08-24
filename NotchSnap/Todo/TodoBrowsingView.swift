@@ -1061,6 +1061,8 @@ struct TodoBrowsingView: View {
                 if draggedItemID != item.id {
                     draggedItemID = item.id
                     TodoStore.shared.expandedItemID = nil
+                    // The row leaving the list, felt at the moment it lifts.
+                    HapticManager.shared.dragBegan()
                 }
                 dragOffset = value.translation.height
                 updateDropTarget(pointerY: value.location.y, dragged: item.id, rows: rows)
@@ -1080,8 +1082,10 @@ struct TodoBrowsingView: View {
 
         guard let landing else {
             // Below every row. Nothing to mark if it is already last.
+            let toEnd = rows.last?.id != dragged
+            if toEnd && !dropAtEnd { HapticManager.shared.reorderTick() }
             dropBeforeID = nil
-            dropAtEnd = rows.last?.id != dragged
+            dropAtEnd = toEnd
             return
         }
 
@@ -1096,6 +1100,11 @@ struct TodoBrowsingView: View {
             return
         }
 
+        // One tick per slot ENTERED. `updateDropTarget` runs on every
+        // pointer move, so tapping unconditionally here would be a continuous
+        // buzz rather than a sequence of snaps — the difference between
+        // feeling the row click into place and feeling the trackpad vibrate.
+        if dropBeforeID != landing.id { HapticManager.shared.reorderTick() }
         dropBeforeID = landing.id
         dropAtEnd = false
     }
@@ -1103,8 +1112,10 @@ struct TodoBrowsingView: View {
     private func commitReorder(dragged: UUID) {
         if let before = dropBeforeID, before != dragged {
             TodoStore.shared.reorder(dragged, before: before)
+            HapticManager.shared.reorderCommitted()
         } else if dropAtEnd {
             TodoStore.shared.moveToEnd(dragged)
+            HapticManager.shared.reorderCommitted()
         }
         draggedItemID = nil
         dropBeforeID = nil
