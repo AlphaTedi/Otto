@@ -1352,24 +1352,42 @@ private struct InlineDraftRow: View {
         // matter what is behind the window. Plus a hairline that is always
         // drawn, so the bar has an edge even when the fills are close.
         .frame(minHeight: LabMetrics.barHeight)
-        // linear-gradient(0deg, rgba(0,0,0,.4), rgba(0,0,0,.4)) over
-        // rgba(26,26,26,0.2) — a flat 40% black wash on a near-transparent
-        // dark base. Stated, so it is no longer a judgement call, and defined
-        // against the PANEL rather than the desktop, which is what keeps the
-        // bar legible whatever is behind the window.
+        // A LIGHTER layer than the panel, not a darker one.
+        //
+        // The export gave this bar a 40% black wash over a near-black base,
+        // and that is what shipped. On a dark desktop the panel behind it is
+        // already close to black, so a dark bar on a dark panel had nothing
+        // left to separate it — the field was there and invisible (Marcello,
+        // 2026-08-24).
+        //
+        // Apple's rule for translucent materials is the fix: weight is
+        // hierarchy. Heavy, dark surfaces separate structural regions; LIGHT
+        // ones draw the eye to what you can interact with. The panel is the
+        // dark region and this bar is the one thing on it you type into, so it
+        // has to be the light layer. It was doing the exact opposite.
+        //
+        // Not glass, deliberately: the panel is already Liquid Glass, and
+        // glass cannot sample glass. Another glass surface inside this one is
+        // the single thing the material must not do — what makes a control
+        // legible on glass is being lighter than it, not being more glass.
         .background(
             RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
-                .fill(Color(hex: "#1A1A1A").opacity(0.2))
+                .fill(Color.dynamicOverlay(light: focused ? 0.10 : (hover ? 0.07 : 0.05),
+                                           dark:  focused ? 0.16 : (hover ? 0.13 : 0.10)))
         )
-        .background(
-            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
-                .fill(Color.black.opacity(0.4))
-        )
-        // Only focus draws a ring; the export gives the bar no resting border.
+        // A resting edge, always drawn.
+        //
+        // The export gives the bar no border at rest, which works on the
+        // artboard because the artboard has one fixed background. In an app
+        // whose window is see-through, the edge is the only thing guaranteed
+        // to be there whatever the desktop is doing.
         .overlay(
             RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
-                .strokeBorder(focused ? accent.opacity(0.7) : .clear, lineWidth: 1)
+                .strokeBorder(focused ? accent.opacity(0.8)
+                                      : Color.dynamicOverlay(light: 0.12, dark: 0.16),
+                              lineWidth: 1)
         )
+        .animation(NotchAnimation.hintFade, value: focused)
 
         // Clicking anywhere in the box takes the caret, not just the ~17pt
         // strip of text view inside it.
