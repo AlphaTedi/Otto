@@ -1372,8 +1372,12 @@ private struct InlineDraftRow: View {
         // legible on glass is being lighter than it, not being more glass.
         .background(
             RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
-                .fill(Color.dynamicOverlay(light: focused ? 0.10 : (hover ? 0.07 : 0.05),
-                                           dark:  focused ? 0.16 : (hover ? 0.13 : 0.10)))
+                // Roughly half what it was. 10% white at rest read as a
+                // filled box rather than as a field waiting for you — the
+                // point is to be findable, not to be the brightest thing on
+                // the panel (Marcello, 2026-08-24).
+                .fill(Color.dynamicOverlay(light: focused ? 0.07 : (hover ? 0.045 : 0.03),
+                                           dark:  focused ? 0.105 : (hover ? 0.075 : 0.055)))
         )
         // A resting edge, always drawn.
         //
@@ -1383,8 +1387,11 @@ private struct InlineDraftRow: View {
         // to be there whatever the desktop is doing.
         .overlay(
             RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
-                .strokeBorder(focused ? accent.opacity(0.8)
-                                      : Color.dynamicOverlay(light: 0.12, dark: 0.16),
+                // The edge carries most of the work now that the fill is
+                // quiet: a hairline is what says "field" without adding
+                // brightness across the whole shape.
+                .strokeBorder(focused ? accent.opacity(0.75)
+                                      : Color.dynamicOverlay(light: 0.09, dark: 0.11),
                               lineWidth: 1)
         )
         .animation(NotchAnimation.hintFade, value: focused)
