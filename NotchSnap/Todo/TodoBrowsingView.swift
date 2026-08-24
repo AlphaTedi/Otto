@@ -1223,8 +1223,22 @@ private struct InlineDraftRow: View {
     @ObservedObject private var store = TodoStore.shared
     @State private var hover = false
 
+    /// The well is BLACK in both appearances, at different strengths, so it
+    /// cannot be written with `dynamicOverlay` — that flips to white in the
+    /// dark, which is the grey this is trying to stop being.
+    @Environment(\.colorScheme) private var colorScheme
+
     private var focused: Bool { store.draftFocused }
     private var parsed: NLDateMatch? { NLDateParser.parse(store.draftTitle) }
+
+    /// How far the well sits below the panel. Deeper in the dark, where there
+    /// is more room beneath the panel before a well turns into a hole.
+    private var wellOpacity: Double {
+        if colorScheme == .dark {
+            return focused ? 0.14 : (hover ? 0.18 : 0.22)
+        }
+        return focused ? 0.03 : (hover ? 0.04 : 0.05)
+    }
 
     /// FB5, inherited from the creation card: an NSViewRepresentable's own
     /// sizeThatFits is NOT re-invoked on a pure content change, so the height
@@ -1352,46 +1366,35 @@ private struct InlineDraftRow: View {
         // matter what is behind the window. Plus a hairline that is always
         // drawn, so the bar has an edge even when the fills are close.
         .frame(minHeight: LabMetrics.barHeight)
-        // A LIGHTER layer than the panel, not a darker one.
+        // A WELL: darker than the panel, with the edge doing the finding.
         //
-        // The export gave this bar a 40% black wash over a near-black base,
-        // and that is what shipped. On a dark desktop the panel behind it is
-        // already close to black, so a dark bar on a dark panel had nothing
-        // left to separate it — the field was there and invisible (Marcello,
-        // 2026-08-24).
+        // Two wrong answers came first. The export's flat black wash gave the
+        // bar no edge at all, so on a dark desktop it vanished into the panel.
+        // Lifting it with white made it findable and GREY — a filled slab, and
+        // the brightest thing on a panel whose job is to be calm (Marcello,
+        // 2026-08-24: "too grayish and too prominent").
         //
-        // Apple's rule for translucent materials is the fix: weight is
-        // hierarchy. Heavy, dark surfaces separate structural regions; LIGHT
-        // ones draw the eye to what you can interact with. The panel is the
-        // dark region and this bar is the one thing on it you type into, so it
-        // has to be the light layer. It was doing the exact opposite.
+        // A recessed well is the third answer and the ordinary one: the fill
+        // goes slightly DARKER than what surrounds it and a hairline draws the
+        // boundary. Depth is what marks a field, not brightness — text goes
+        // into an input, and it should look like somewhere text can go.
         //
-        // Not glass, deliberately: the panel is already Liquid Glass, and
-        // glass cannot sample glass. Another glass surface inside this one is
-        // the single thing the material must not do — what makes a control
-        // legible on glass is being lighter than it, not being more glass.
+        // Not glass, deliberately. The material is right for inputs in the
+        // NAVIGATION layer — that is what `.searchable()` gets on macOS 26,
+        // placed by the system in a toolbar. This one sits inside a panel that
+        // is itself glass, and glass cannot sample glass; the prescribed
+        // remedy is a shared container for NEARBY elements, which has no
+        // answer for a child nested in a glass parent.
         .background(
             RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
-                // Roughly half what it was. 10% white at rest read as a
-                // filled box rather than as a field waiting for you — the
-                // point is to be findable, not to be the brightest thing on
-                // the panel (Marcello, 2026-08-24).
-                .fill(Color.dynamicOverlay(light: focused ? 0.07 : (hover ? 0.045 : 0.03),
-                                           dark:  focused ? 0.105 : (hover ? 0.075 : 0.055)))
+                .fill(Color.black.opacity(wellOpacity))
         )
-        // A resting edge, always drawn.
-        //
-        // The export gives the bar no border at rest, which works on the
-        // artboard because the artboard has one fixed background. In an app
-        // whose window is see-through, the edge is the only thing guaranteed
-        // to be there whatever the desktop is doing.
+        // Soft. It only has to separate the well from the panel, and the well
+        // already sits a shade below it.
         .overlay(
             RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
-                // The edge carries most of the work now that the fill is
-                // quiet: a hairline is what says "field" without adding
-                // brightness across the whole shape.
-                .strokeBorder(focused ? accent.opacity(0.75)
-                                      : Color.dynamicOverlay(light: 0.09, dark: 0.11),
+                .strokeBorder(focused ? accent.opacity(0.7)
+                                      : Color.dynamicOverlay(light: 0.07, dark: 0.08),
                               lineWidth: 1)
         )
         .animation(NotchAnimation.hintFade, value: focused)
