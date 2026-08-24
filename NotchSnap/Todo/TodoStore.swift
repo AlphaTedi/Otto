@@ -808,6 +808,15 @@ final class TodoStore: ObservableObject {
         focusedItemID = rows[next].id
     }
 
+    /// Where a row sits in the section currently on screen.
+    ///
+    /// The list uses it to tell which way the focus is travelling, so it can
+    /// scroll the row to the near edge rather than always the same one.
+    func visibleFocusIndex(of id: UUID) -> Int? {
+        guard let collection = activeCollection else { return nil }
+        return openItems(in: collection).firstIndex { $0.id == id }
+    }
+
     // MARK: - Persistence
 
     private var backupURL: URL { Self.directory.appendingPathComponent("todos.backup.json") }

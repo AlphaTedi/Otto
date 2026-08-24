@@ -109,7 +109,12 @@ enum LabMetrics {
     static let notchGap: CGFloat = 72
     /// Between the two panels.
     static let blockGap: CGFloat = 24
-    static let blockPadding: CGFloat = 16
+    /// 24, matching `listInset` — the to-do panel's own side spacing.
+    ///
+    /// At 16 the meeting card's contents sat 8pt closer to the edge than the
+    /// list did directly below it, and against a 32pt corner that reads as the
+    /// two blocks being built to different rules (Marcello, 2026-08-23).
+    static let blockPadding: CGFloat = 24
     static let meetingRadius: CGFloat = 32
 
     /// CONCENTRIC CORNERS. An inner radius must be the outer one minus the gap
@@ -523,10 +528,21 @@ struct LabPanelsView: View {
             // rose and fell with however many to-dos a section happened to
             // hold — the one row that must never move, moving most. The panel
             // is 556 whatever is in it; the list takes the slack.
-            TodoTabView()
-                .frame(height: LabMetrics.todoBlockMaxHeight, alignment: .top)
-                .labBlock()
+            // While an alert is live the card is ALONE.
+            //
+            // The notch opened itself for the meeting; putting the whole to-do
+            // panel under it makes the user find the one thing that summoned
+            // it. It also removes the duplicate: the panel used to draw its
+            // own copy of the alert card inside itself, so the same meeting
+            // appeared twice, once above the other (Marcello, 2026-08-23).
+            if calendar.activeAlert == nil {
+                TodoTabView()
+                    .frame(height: LabMetrics.todoBlockMaxHeight, alignment: .top)
+                    .labBlock()
+                    .transition(.opacity)
+            }
         }
+        .animation(NotchAnimation.contentHug, value: calendar.activeAlert?.id)
         // The two panels are neighbours, so they sample as one.
         //
         // Without this each block opens its own sampling region and the two

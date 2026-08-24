@@ -191,15 +191,13 @@ struct TodoTabView: View {
         // §2.3: the shortcuts overlay sits ON TOP of the live content —
         // dismissing is instant, nothing re-renders underneath.
         ZStack(alignment: .topLeading) {
-            // CA-3: while a meeting alert is live it OWNS the panel — the
-            // notch opened itself for this, so it shouldn't compete with the
-            // to-do list underneath.
-            if let alert = calendar.activeAlert {
-                MeetingAlertView(meeting: alert)
-                    .transition(.opacity)
-            } else {
-                todoPanelContent
-            }
+            // No alert card in here any more.
+            //
+            // This predates the split into two detached blocks. Now that the
+            // meeting card is its own block above, drawing the alert in here
+            // as well put the same meeting on screen twice. The column hides
+            // this whole panel while an alert is live — see LabPanelsView.
+            todoPanelContent
         }
         .padding(.top, LabMetrics.panelTopPadding)
         // UG-2: immediate tooltip near the hovered/focused row's urgency dot,
@@ -367,6 +365,16 @@ private struct TodoTabRow: View {
     var body: some View {
         HStack(spacing: LabMetrics.tabsGap) {
             tabScroller
+
+            // OUTSIDE the scroller, like the account button beside it.
+            //
+            // The "+" used to be the last thing INSIDE the scrolling strip, so
+            // at five sections it scrolled off the end and there was no way
+            // left to make a new one (Marcello, 2026-08-23: "I have lost the
+            // plus"). The sole entry point for creating something cannot be
+            // allowed to leave the screen.
+            NewSectionButton()
+
             Spacer(minLength: LabMetrics.tabsGap)
             // Outside the scroller: the account is not a tab.
             AccountButton()
@@ -532,8 +540,6 @@ private struct TodoTabRow: View {
                         ))
                 }
 
-                NewSectionButton()
-                    .padding(.leading, 4)
             }
             .animation(NotchAnimation.hintFade, value: dropBeforeCollectionID)
             .animation(NotchAnimation.hintFade, value: dropCollectionAtEnd)
@@ -801,6 +807,11 @@ struct TodoBrowsingView: View {
     /// How far the capped region has been scrolled. Drives the edge fades.
     @State private var scrollOffset: CGFloat = 0
     @State private var draggedItemID: UUID?
+    /// Which edge `scrollTo` aims at. Walking down, keep the focused row at
+    /// the bottom; walking up, at the top. One fixed anchor makes the list
+    /// leap a whole viewport the moment the user reverses direction.
+    @State private var scrollAnchor: UnitPoint = .bottom
+    @State private var lastFocusedIndex: Int?
     /// Where each row sits, in `rowSpace`. Published by the rows themselves so
     /// the gesture can resolve a pointer position to a gap.
     @State private var rowFrames: [UUID: CGRect] = [:]
@@ -901,6 +912,25 @@ struct TodoBrowsingView: View {
                     Color.clear.frame(height: 1).id(Self.bottomAnchor)
                 }
                 .coordinateSpace(name: Self.scrollSpace)
+                // Arrow keys move a focus ring the list was not following, so
+                // past the fold you were selecting rows you could not see —
+                // still moving, still invisible (Marcello, 2026-08-23). The
+                // region now brings the focused row into view.
+                //
+                // `.bottom` going down and `.top` going up, rather than one
+                // anchor for both: aiming at the same edge in both directions
+                // makes the list jump a whole viewport the moment you reverse.
+                .onChange(of: store.focusedItemID) { focused in
+                    guard let focused else { return }
+                    let index = store.visibleFocusIndex(of: focused)
+                    if let index, let last = lastFocusedIndex {
+                        scrollAnchor = index >= last ? .bottom : .top
+                    }
+                    lastFocusedIndex = index
+                    withAnimation(NotchAnimation.hintFade) {
+                        proxy.scrollTo(focused, anchor: scrollAnchor)
+                    }
+                }
                 .onPreferenceChange(SectionHeightKey.self) { regionNaturalHeight = $0 }
                 .onPreferenceChange(ScrollOffsetKey.self) { scrollOffset = $0 }
                 .frame(height: viewport)
@@ -996,6 +1026,9 @@ struct TodoBrowsingView: View {
                 .offset(y: draggedItemID == item.id ? dragOffset : 0)
                 .zIndex(draggedItemID == item.id ? 1 : 0)
                 .gesture(reorderGesture(for: item, in: rows))
+                // The target `scrollTo` aims at when the arrow keys walk the
+                // focus past the fold.
+                .id(item.id)
             }
 
             // No landing strip. Inserting a view when the drag began moved
