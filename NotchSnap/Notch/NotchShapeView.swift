@@ -357,6 +357,15 @@ struct NotchShapeView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // EVERYTHING here is drawn on `Color.black` — the silhouette is
+        // pretending to be a hole in the hardware, so it cannot lighten in
+        // Light mode and neither can what sits on it.
+        //
+        // Without this the presence line ("in 34′") took `labelColor` and
+        // turned near-black on Light: black text on the black notch. The
+        // panels that hang BELOW the notch are siblings of this view, not
+        // children, so they keep following the system as they should.
+        .darkGroundSurface()
     }
 
     // MARK: - Squish Animation (multi-phase spring sequence)

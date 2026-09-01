@@ -100,7 +100,7 @@ private struct MoreBelowPill: View {
                 Capsule().strokeBorder(DSColor.panelBorder, lineWidth: 0.5)
             )
             // Lifts off the rows sliding underneath it.
-            .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+            .shadow(color: DSColor.shadowSoft, radius: 6, y: 2)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -180,6 +180,7 @@ private extension View {
 struct TodoTabView: View {
     @ObservedObject private var store = TodoStore.shared
     @ObservedObject private var calendar = CalendarStore.shared
+    @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
 
     // FB2: one transition, every direction. A pure in-place crossfade —
     // no y-offset, no edge-move — so switching tabs or modes never "slides
@@ -191,13 +192,23 @@ struct TodoTabView: View {
         // §2.3: the shortcuts overlay sits ON TOP of the live content —
         // dismissing is instant, nothing re-renders underneath.
         ZStack(alignment: .topLeading) {
-            // No alert card in here any more.
+            // Who draws the live meeting alert depends on the layout.
             //
-            // This predates the split into two detached blocks. Now that the
-            // meeting card is its own block above, drawing the alert in here
-            // as well put the same meeting on screen twice. The column hides
-            // this whole panel while an alert is live — see LabPanelsView.
-            todoPanelContent
+            // In `.panels` nobody draws it here: the meeting card is its own
+            // block above, and a copy in here put the same meeting on screen
+            // twice, one above the other. The column hides this whole panel
+            // while an alert is live — see LabPanelsView.
+            //
+            // In `.container` there is no block above, so the panel carries
+            // the alert again as it did before the split, and it OWNS the
+            // panel while it is up: the notch opened itself for this, so it
+            // must not compete with the list underneath (CA-3).
+            if notchLayout == .container, let alert = calendar.activeAlert {
+                MeetingAlertView(meeting: alert)
+                    .transition(.opacity)
+            } else {
+                todoPanelContent
+            }
         }
         .padding(.top, LabMetrics.panelTopPadding)
         // UG-2: immediate tooltip near the hovered/focused row's urgency dot,
@@ -395,7 +406,7 @@ private struct TodoTabRow: View {
         .padding(.top, LabMetrics.tabsDividerPaddingV)
         .overlay(alignment: .top) {
             Rectangle()
-                .fill(Color.white.opacity(0.05))
+                .fill(DSColor.hairlineOnPanel)
                 .frame(height: 1)
         }
         .padding(.top, LabMetrics.tabsTopPadding)
@@ -694,7 +705,7 @@ private struct NewSectionButton: View {
                 Rectangle().frame(width: 12, height: 1)
                 Rectangle().frame(width: 1, height: 12)
             }
-            .foregroundStyle(Color.white.opacity(hover ? 0.85 : 0.5))
+            .foregroundStyle(hover ? DSColor.glyphStrong : DSColor.glyph)
             .frame(width: 24, height: 24)
             .contentShape(Rectangle())
         }
@@ -1337,15 +1348,15 @@ private struct InlineDraftRow: View {
                 HStack(spacing: 8) {
                     Text(L10n.t("todo.switchSpace"))
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Color.white.opacity(0.35))
+                        .foregroundStyle(DSColor.textFaint)
                         .fixedSize()
                     Text(L10n.t("key.tab"))
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.35))
+                        .foregroundStyle(DSColor.textFaint)
                         .frame(width: 32, height: 19)
                         .overlay(
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.35), lineWidth: 1)
+                                .strokeBorder(DSColor.textFaint, lineWidth: 1)
                         )
                 }
             }
@@ -1559,7 +1570,9 @@ private struct TodoItemRow: View {
                             .frame(width: LabMetrics.checkboxSize, height: LabMetrics.checkboxSize)
                         Image(systemName: "checkmark")
                             .font(.system(size: 10, weight: .black))
-                            .foregroundStyle(.black.opacity(0.85))
+                            // On the category's own fill, which is light in
+                            // both appearances — see DSColor.onAccentFill.
+                            .foregroundStyle(DSColor.onAccentFill.opacity(0.85))
                     }
                 }
                 .contentShape(Rectangle())
@@ -1846,7 +1859,7 @@ private struct RowActions: View {
             // separate.
             if showEnter && showGrip {
                 Rectangle()
-                    .fill(Color.white.opacity(0.3))
+                    .fill(DSColor.rowAffordance)
                     .frame(width: 1, height: LabMetrics.enterBadgeHeight)
             }
 

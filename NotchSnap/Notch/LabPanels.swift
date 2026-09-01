@@ -162,7 +162,7 @@ private extension View {
             // The shadow stays and matters MORE on glass: a translucent panel
             // needs the ground shadow to sit above the desktop rather than
             // dissolve into it.
-            .shadow(color: .black.opacity(0.40),
+            .shadow(color: DSColor.shadowStrong,
                     radius: LabMetrics.shadowRadius, y: LabMetrics.shadowOffsetY)
     }
 }
@@ -362,15 +362,20 @@ struct LabMeetingBlock: View {
                         // A fill is indistinguishable here and free.
                         RoundedRectangle(cornerRadius: LabMetrics.meetingRadius,
                                          style: .continuous)
-                            .fill(Color.black.opacity(0.45 - 0.10 * depth))
+                            // The slivers are the same object as the card in
+                            // front of them, seen from further back — so they
+                            // deepen the appearance rather than being black.
+                            // On a light panel a black sliver read as a shadow
+                            // cast by nothing.
+                            .fill(DSColor.stackedCardFill.opacity(1 - 0.22 * depth))
                             .overlay(
                                 RoundedRectangle(cornerRadius: LabMetrics.meetingRadius,
                                                  style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                                    .strokeBorder(DSColor.hairlineOnPanel, lineWidth: 1)
                             )
                             .scaleEffect(1 - LabMetrics.stackScaleStep * depth, anchor: .top)
                             .offset(y: LabMetrics.stackOffset * depth)
-                            .shadow(color: .black.opacity(0.30), radius: 8, y: 3)
+                            .shadow(color: DSColor.shadowSoft, radius: 8, y: 3)
                             // Furthest back, furthest down the z-order.
                             .zIndex(-depth)
                     }

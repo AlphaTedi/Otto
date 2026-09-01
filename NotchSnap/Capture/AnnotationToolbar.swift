@@ -166,10 +166,10 @@ struct AnnotationToolbar: View {
         // never refracts or responds to what is behind it.
         .floatingGlass(in: Capsule())
         .shadow(color: .black.opacity(0.22), radius: 14, y: 5)
-        // Force a dark appearance so the toolbar keeps its familiar look (and
-        // readable white/secondary icons) even when it floats over a bright
-        // screenshot in light mode.
-        .environment(\.colorScheme, .dark)
+        // Chrome over media: it keeps its familiar look (and readable
+        // white/secondary icons) over a screenshot of any brightness, so it
+        // supplies its own dark ground instead of following the system.
+        .darkGroundSurface()
     }
 
     private var toolbarDivider: some View {

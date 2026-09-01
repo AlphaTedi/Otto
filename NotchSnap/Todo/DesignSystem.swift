@@ -88,6 +88,92 @@ enum DSColor {
     static let rowAffordance = Color.dynamic(light: NSColor(white: 0.463, alpha: 1),
                                              dark: NSColor(white: 0.529, alpha: 1))
 
+    /// A rule drawn INSIDE a panel — under the tab row, between two row
+    /// affordances. Deliberately not `panelBorder`: that is Apple's window
+    /// separator, which is meant to divide one surface from another and is far
+    /// too strong for a line within one.
+    static let hairlineOnPanel = Color.dynamicOverlay(light: 0.08, dark: 0.06)
+
+    /// Glyphs that are DRAWN rather than set — the "+" cross, the six-dot
+    /// grip. They carry the same weight as secondary text and must fade the
+    /// same way, so they take the icon end of the same ladder rather than a
+    /// hand-mixed grey.
+    static let glyph = Color(nsColor: .secondaryLabelColor)
+    static let glyphStrong = Color(nsColor: .labelColor)
+
+    /// Anything drawn ON a filled accent, category dot or checkbox.
+    ///
+    /// This is the one place a near-black is correct in BOTH appearances, and
+    /// it is not an oversight: those fills are light in both — a pastel
+    /// category colour, the system accent, a cyan checkbox — so the thing on
+    /// top of them is always dark. Making these semantic would turn the
+    /// checkmark white on a pale blue box in Dark mode.
+    static let onAccentFill = Color.black
+    static let onAccentFillMuted = Color.black.opacity(0.5)
+
+    /// The ring that marks a chosen swatch. It has to beat both the swatch's
+    /// own colour and the panel behind it, which is what `labelColor` is:
+    /// white on a dark panel, near-black on a light one.
+    static let selectionRing = Color(nsColor: .labelColor)
+
+    /// Text and glyphs drawn ON the notch silhouette.
+    ///
+    /// Literal white on purpose, and the one token in this file that has no
+    /// opposite — because its GROUND has none either. The silhouette is
+    /// `Color.black` in every appearance (it is pretending to be a hole in the
+    /// hardware), so a semantic label colour is exactly wrong there: on a
+    /// Light system it resolved near-black and the countdown line disappeared
+    /// into the notch. Views on the notch also sit under
+    /// `darkGroundSurface()`; this states the same thing in the one place it
+    /// must hold even if that environment is ever lost.
+    static let onNotchSurface = Color.white
+    static let onNotchSurfaceMuted = Color.white.opacity(0.75)
+
+    /// A grouped card in an ordinary window — the Settings sections.
+    ///
+    /// Settings used to borrow the ONBOARDING's tile, which is a flat 30%
+    /// black built for that flow's dark purple ground. In a Light window that
+    /// drew every section as a dark slab carrying dark system text, which is
+    /// the single biggest reason Settings was unreadable in Light mode.
+    ///
+    /// Elevation flips with the appearance, the way Apple's own grouped boxes
+    /// do: a card rises ABOVE a light window and sinks BELOW a dark one.
+    static let cardSurface = Color.dynamic(light: NSColor.white.withAlphaComponent(0.70),
+                                           dark: NSColor.black.withAlphaComponent(0.30))
+
+    /// The meeting cards peeking out from under the one in front. They are
+    /// the same surface seen from further back, so they take the appearance's
+    /// side: deeper than the panel in Dark, lighter-but-greyer in Light. A
+    /// fixed black read as a shadow cast by nothing on a light panel.
+    static let stackedCardFill = Color.dynamic(light: NSColor.black.withAlphaComponent(0.10),
+                                               dark: NSColor.black.withAlphaComponent(0.45))
+
+    /// A field that sits IN a panel — the new-section name box. The same
+    /// idea as the creation bar's well (which varies with hover and focus and
+    /// so stays local to it): it goes DOWN from the panel, and how far down
+    /// depends on how much room there is beneath it. A fixed 40% black is a
+    /// well on a dark panel and a hole punched in a light one.
+    static let fieldWell = Color.dynamic(light: NSColor.black.withAlphaComponent(0.05),
+                                         dark: NSColor.black.withAlphaComponent(0.40))
+
+    /// The disc behind an attendee with no photo and no address to colour it
+    /// by. A wash of the appearance's opposite, like every other surface that
+    /// sits on the panel.
+    static let placeholderFill = Color.dynamicOverlay(light: 0.07, dark: 0.08)
+
+    // Shadows.
+    //
+    // A shadow is not appearance-neutral. The same 40% black that reads as
+    // depth under a dark panel reads as dirt under a light one, because on
+    // white there is nothing for it to sink into — Apple's own light surfaces
+    // carry a far softer one. Two levels, both stated here so no view has to
+    // guess: `shadowSoft` lifts a chip off its panel, `shadowStrong` lifts a
+    // whole panel off the desktop.
+    static let shadowSoft = Color.dynamic(light: NSColor.black.withAlphaComponent(0.10),
+                                          dark: NSColor.black.withAlphaComponent(0.30))
+    static let shadowStrong = Color.dynamic(light: NSColor.black.withAlphaComponent(0.18),
+                                            dark: NSColor.black.withAlphaComponent(0.45))
+
     // Primary action. The pair inverts together: a near-white button carries
     // near-black text in Dark, and the reverse in Light, so the button never
     // disappears into the panel behind it.
@@ -271,7 +357,9 @@ struct CategoryTabChip: View {
         HStack(spacing: 5) {
             Text(title)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(isActive ? .black : .white)
+                // Active sits on the category's own fill and is therefore
+                // always dark; inactive sits on the panel and follows it.
+                .foregroundColor(isActive ? DSColor.onAccentFill : DSColor.textPrimary)
 
             if let remaining {
                 if remaining == 0 {
@@ -284,8 +372,8 @@ struct CategoryTabChip: View {
                     Text("\(remaining)")
                         .font(.system(size: 12, weight: .medium))
                         .monospacedDigit()
-                        .foregroundColor(isActive ? Color.black.opacity(0.5)
-                                                  : Color.white.opacity(0.5))
+                        .foregroundColor(isActive ? DSColor.onAccentFillMuted
+                                                  : DSColor.textSecondary)
                         .contentTransition(.numericText())
                 }
             }
@@ -633,7 +721,7 @@ struct ColorSwatchButton: View {
             .frame(width: size, height: size)
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(isSelected ? Color.white : DSColor.panelBorder,
+                    .stroke(isSelected ? DSColor.selectionRing : DSColor.panelBorder,
                             lineWidth: isSelected ? 2 : 1)
             )
             .overlay {
@@ -645,7 +733,7 @@ struct ColorSwatchButton: View {
             }
             // Lift the selected swatch slightly so the choice reads at a glance.
             .scaleEffect(isSelected ? 1.0 : 0.92)
-            .shadow(color: .black.opacity(isSelected ? 0.35 : 0), radius: 4, y: 1)
+            .shadow(color: DSColor.shadowSoft.opacity(isSelected ? 1 : 0), radius: 4, y: 1)
             // Selection is NEVER implied by position alone — always pair
             // the border + checkmark, per CT-6 in notchsnap_todo_pivot_prd.md.
     }
@@ -709,7 +797,7 @@ struct UrgencyTooltip: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .stroke(Color(hex: "#444444"), lineWidth: 0.5)
+                    .stroke(DSColor.hairlineOnPanel, lineWidth: 0.5)
             )
             .overlay(alignment: .bottom) {
                 // Pointer: the rotated-square trick from the mockup.
@@ -719,7 +807,7 @@ struct UrgencyTooltip: View {
                     .rotationEffect(.degrees(45))
                     .offset(y: 3.5)
             }
-            .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
+            .shadow(color: DSColor.shadowStrong, radius: 6, y: 2)
             .fixedSize()
     }
 }
@@ -937,7 +1025,7 @@ struct AccountAvatar: View {
                     )
             } else {
                 Circle()
-                    .fill(Color.white.opacity(0.08))
+                    .fill(DSColor.placeholderFill)
                     .frame(width: diameter, height: diameter)
                     .overlay(
                         Image(systemName: "person.fill")

@@ -116,12 +116,18 @@ struct SettingsSection_Card<Content: View>: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
-        .background(GlassTile(cornerRadius: 16))
+        // NOT the onboarding's GlassTile: that one is a fixed 30% black,
+        // correct on the onboarding's own dark purple and wrong in every
+        // Light window. See DSColor.cardSurface.
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(DSColor.cardSurface)
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                .stroke(DSColor.hairlineOnPanel, lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.12), radius: 16, y: 6)
+        .shadow(color: DSColor.shadowSoft, radius: 16, y: 6)
     }
 }
 
@@ -475,6 +481,7 @@ struct NotchSettingsView: View {
     @AppStorage("notchCornerRadius")   private var cornerRadius: Double = 10
     @AppStorage("notchExpandedWidth")  private var expandedWidth: Double = 680
     @AppStorage("notchExpandedHeight") private var expandedHeight: Double = 200
+    @AppStorage("notchLayout")         private var notchLayout: NotchLayout = .panels
 
     private var currentPreset: NotchSizePreset {
         NotchSizePreset.match(width: expandedWidth, height: expandedHeight)
@@ -495,8 +502,45 @@ struct NotchSettingsView: View {
             }
 
             SettingsSection_Card(
+                title: "Layout",
+                subtitle: "Two designs for the open notch. Switching closes it so it reopens in the new shape."
+            ) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Picker("", selection: Binding(
+                        get: { notchLayout },
+                        set: { newValue in
+                            guard newValue != notchLayout else { return }
+                            notchLayout = newValue
+                            // The two layouts measure themselves differently,
+                            // and the height one of them published is
+                            // meaningless to the other. Close first, drop the
+                            // stale measurement, and let the new layout
+                            // measure itself on the next open — otherwise the
+                            // silhouette animates to a size nothing on screen
+                            // asked for.
+                            NotchController.shared.forceCollapse()
+                            NotchController.shared.applyNotchAppearance()
+                            appState.labColumnHeight = 0
+                            appState.objectWillChange.send()
+                        }
+                    )) {
+                        ForEach(NotchLayout.allCases, id: \.self) { layout in
+                            Text(layout.label).tag(layout)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+
+                    Text(notchLayout.summary)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            SettingsSection_Card(
                 title: "Size",
-                subtitle: "Choose a preset. Width, height and curvature adapt together."
+                subtitle: "Choose a preset. Width, height and curvature adapt together. The presets size the notch container; the floating panels keep their own width."
             ) {
                 VStack(spacing: 8) {
                     ForEach(NotchSizePreset.allCases) { preset in

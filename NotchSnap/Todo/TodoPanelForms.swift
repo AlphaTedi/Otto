@@ -212,26 +212,26 @@ struct CategoryFormView: View {
             Text(L10n.t("todo.newCollection").uppercased())
                 .font(.system(size: 10, weight: .medium))
                 .tracking(0.4)
-                .foregroundStyle(Color.white.opacity(0.35))
+                .foregroundStyle(DSColor.textFaint)
 
             // The name field IS the creation bar, one radius step smaller for
             // sitting inside the panel's inset.
             TextField("", text: $name, prompt:
-                Text(L10n.t("todo.categoryName")).foregroundColor(Color.white.opacity(0.4)))
+                Text(L10n.t("todo.categoryName")).foregroundColor(DSColor.textHint))
                 .textFieldStyle(.plain)
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(DSColor.textPrimary)
                 .focused($nameFocused)
                 .padding(.horizontal, LabMetrics.barPaddingH)
                 .padding(.vertical, LabMetrics.barPaddingV)
                 .background(
                     RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
-                        .fill(Color.black.opacity(0.4))
+                        .fill(DSColor.fieldWell)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
                         .strokeBorder(nameFocused ? chosen.opacity(0.8)
-                                                  : Color.white.opacity(0.10), lineWidth: 1)
+                                                  : DSColor.hairlineOnPanel, lineWidth: 1)
                 )
                 .onSubmit(create)
 
@@ -249,7 +249,7 @@ struct CategoryFormView: View {
                             .overlay(
                                 RoundedRectangle(cornerRadius: LabMetrics.checkboxRadius,
                                                  style: .continuous)
-                                    .strokeBorder(.white,
+                                    .strokeBorder(DSColor.selectionRing,
                                                   lineWidth: colorHex == hex ? 2 : 0)
                             )
                             .contentShape(Rectangle())
@@ -263,13 +263,13 @@ struct CategoryFormView: View {
                 Button { store.setMode(.browsing) } label: {
                     Text(L10n.t("snippet.cancel"))
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color.white.opacity(0.6))
+                        .foregroundStyle(DSColor.textSecondary)
                         .padding(.horizontal, LabMetrics.tabPaddingH)
                         .padding(.vertical, LabMetrics.tabPaddingV)
                         .overlay(
                             RoundedRectangle(cornerRadius: LabMetrics.tabActiveRadius,
                                              style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
+                                .strokeBorder(DSColor.panelBorder, lineWidth: 1)
                         )
                         .contentShape(Rectangle())
                 }

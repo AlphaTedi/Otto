@@ -145,6 +145,7 @@ class NotchController: ObservableObject {
 
         panel.orderFront(nil)
         self.panel = panel
+        applyNotchAppearance()
 
         // Start mouse tracking
         startMouseTracking()
@@ -308,12 +309,36 @@ class NotchController: ObservableObject {
     /// This is the column itself: the panels' own width, from the top of the
     /// notch down to the last thing drawn.
     private func contentScreenRect(screen: NSScreen) -> NSRect {
+        // In the container layout the drawn thing IS the grown silhouette,
+        // and that rect is already computed in one place.
+        guard AppState.shared.notchLayout == .panels else {
+            return visibleShapeScreenRect()
+        }
         let notchRect = calculateNotchRect(screen: screen)
         let height = notchSize.height + AppState.shared.labColumnHeight
         return NSRect(x: notchRect.midX - LabMetrics.blockWidth / 2,
                       y: screen.frame.maxY - height,
                       width: LabMetrics.blockWidth,
                       height: height)
+    }
+
+    /// Pins the panel window to the dark appearance in the container layout.
+    ///
+    /// `darkGroundSurface()` states the same thing for SwiftUI, and for the
+    /// panels layout that is enough — the only thing on black there is the
+    /// notch strip itself. The container layout draws the WHOLE to-do panel
+    /// inside the black silhouette, and two things in there do not read
+    /// SwiftUI's environment at all: NSVisualEffectView materials, and the
+    /// NSTextViews behind the draft row and the title field, which colour
+    /// themselves from their window's `effectiveAppearance`. On a Light
+    /// system that put near-black text on the black notch.
+    ///
+    /// nil, not `.aqua`, for the panels layout: the glass has to follow the
+    /// system, which is what an unset appearance means.
+    func applyNotchAppearance() {
+        panel?.appearance = AppState.shared.notchLayout == .container
+            ? NSAppearance(named: .darkAqua)
+            : nil
     }
 
     /// Collapse that overrides the modal pin — the one guaranteed exit.
@@ -999,13 +1024,23 @@ class NotchController: ObservableObject {
             width = notificationWide ? 320 : notchSize.width + 80 + fillet * 2
             height = notchSize.height
         case .expanded:
-            // LAB: the column is centred and the notch sits above it, so the
-            // live region is the wider of the two, from the screen top down
-            // past the last panel. Without this the "pointer left" test fires
-            // the moment you move off the notch and onto the panel you opened.
-            width = max(expandedSize.width,
-                        LabMetrics.blockWidth + LabMetrics.shadowMargin * 2)
-            height = notchSize.height + AppState.shared.labColumnHeight + 24
+            switch AppState.shared.notchLayout {
+            case .panels:
+                // The column is centred and the notch sits above it, so the
+                // live region is the wider of the two, from the screen top
+                // down past the last panel. Without this the "pointer left"
+                // test fires the moment you move off the notch and onto the
+                // panel you opened.
+                width = max(expandedSize.width,
+                            LabMetrics.blockWidth + LabMetrics.shadowMargin * 2)
+                height = notchSize.height + AppState.shared.labColumnHeight + 24
+            case .container:
+                // The silhouette itself is the whole of what is drawn, so the
+                // live region is the grown shape — the same geometry the
+                // renderer uses, hugging height included.
+                width = expandedSize.width
+                height = expandedSize.height + currentExtraExpandedHeight
+            }
         }
         return NSRect(x: notchRect.midX - width / 2,
                       y: screen.frame.maxY - height,
@@ -1383,13 +1418,13 @@ struct QuickLookPreviewView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        .stroke(DSColor.hairlineOnPanel, lineWidth: 1)
                 )
 
             content
                 .padding(24)
         }
-        .shadow(color: .black.opacity(0.45), radius: 28, y: 10)
+        .shadow(color: DSColor.shadowStrong, radius: 28, y: 10)
     }
 
     @ViewBuilder
@@ -1471,7 +1506,7 @@ private struct ClipboardPreview: View {
                             .frame(width: 160, height: 160)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(.white.opacity(0.15), lineWidth: 1)
+                                    .stroke(DSColor.panelBorder, lineWidth: 1)
                             )
                         Text(item.previewText ?? "")
                             .font(.system(size: 24, weight: .semibold).monospacedDigit())

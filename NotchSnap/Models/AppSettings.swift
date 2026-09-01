@@ -20,6 +20,38 @@ enum CaptureMode: String, Codable, CaseIterable {
     case fullscreen
 }
 
+/// Which shape the notch takes when it opens.
+///
+/// Two designs are kept side by side on purpose. `.panels` is the current
+/// one: the notch stays a small object and the blocks float below it with
+/// real gaps, so the desktop shows through. `.container` is the design that
+/// preceded it — the notch itself grows downward and the content lives
+/// INSIDE the silhouette, one object rather than three.
+///
+/// Everything that measures or hit-tests the expanded notch has to ask which
+/// of the two is up, because the two draw to different rectangles: the
+/// column's own measured height versus the grown silhouette.
+enum NotchLayout: String, Codable, CaseIterable {
+    case panels
+    case container
+
+    var label: String {
+        switch self {
+        case .panels:    return "Floating panels"
+        case .container: return "Notch container"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .panels:
+            return "The notch stays small and the meeting and to-do blocks hang below it as separate cards."
+        case .container:
+            return "The notch itself grows downward and holds the content inside the silhouette."
+        }
+    }
+}
+
 enum AppTheme: String, Codable, CaseIterable {
     case system
     case light

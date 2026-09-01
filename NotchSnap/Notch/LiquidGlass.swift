@@ -301,3 +301,41 @@ struct FloatingGlassSurface<S: InsettableShape>: ViewModifier {
         }
     }
 }
+
+// MARK: - Surfaces that are dark whatever the system is set to
+//
+// Two rules, and every colour decision in the app falls under one of them.
+//
+//  1. A surface that FOLLOWS the appearance — the glass panels, Settings, the
+//     to-do panel drawn on them — takes its colours from DSColor and never
+//     writes a raw white or black. Those tokens have an opposite; a literal
+//     does not, which is precisely how Light mode ended up with white text on
+//     a white panel.
+//
+//  2. A surface that CARRIES ITS OWN DARK GROUND is exempt, on the condition
+//     that it says so. There are two of them:
+//
+//       * the notch silhouette, which is filled `Color.black` on purpose — it
+//         is pretending to be a hole in the hardware, and hardware is not
+//         translucent, so it cannot lighten in Light mode and neither can
+//         anything drawn inside it;
+//       * chrome floating over the user's own content — the annotation
+//         toolbar, the capture bar, the text-extraction overlay — which keeps
+//         one familiar look over a screenshot that might be any brightness.
+//
+//     Both pin the appearance rather than each view hand-picking whites, so
+//     the semantic tokens underneath resolve to their dark values and a view
+//     can be moved between the two worlds without being rewritten.
+//
+// The notch PANEL WINDOW is pinned in AppKit as well (NotchController), not
+// only here: in the container layout every pixel in that window sits on the
+// black silhouette, and an NSAppearance is the one thing both AppKit
+// materials and SwiftUI's semantic colours agree to read.
+
+extension View {
+    /// Marks a surface that supplies its own dark ground — see the two rules
+    /// above. Everything inside resolves as if the system were in Dark.
+    func darkGroundSurface() -> some View {
+        environment(\.colorScheme, .dark)
+    }
+}
