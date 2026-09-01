@@ -100,7 +100,7 @@ private struct MoreBelowPill: View {
                 Capsule().strokeBorder(DSColor.panelBorder, lineWidth: 0.5)
             )
             // Lifts off the rows sliding underneath it.
-            .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+            .shadow(color: DSColor.shadowSoft, radius: 6, y: 2)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -406,7 +406,7 @@ private struct TodoTabRow: View {
         .padding(.top, LabMetrics.tabsDividerPaddingV)
         .overlay(alignment: .top) {
             Rectangle()
-                .fill(Color.white.opacity(0.05))
+                .fill(DSColor.hairlineOnPanel)
                 .frame(height: 1)
         }
         .padding(.top, LabMetrics.tabsTopPadding)
@@ -705,7 +705,7 @@ private struct NewSectionButton: View {
                 Rectangle().frame(width: 12, height: 1)
                 Rectangle().frame(width: 1, height: 12)
             }
-            .foregroundStyle(Color.white.opacity(hover ? 0.85 : 0.5))
+            .foregroundStyle(hover ? DSColor.glyphStrong : DSColor.glyph)
             .frame(width: 24, height: 24)
             .contentShape(Rectangle())
         }
@@ -1348,15 +1348,15 @@ private struct InlineDraftRow: View {
                 HStack(spacing: 8) {
                     Text(L10n.t("todo.switchSpace"))
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Color.white.opacity(0.35))
+                        .foregroundStyle(DSColor.textFaint)
                         .fixedSize()
                     Text(L10n.t("key.tab"))
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.35))
+                        .foregroundStyle(DSColor.textFaint)
                         .frame(width: 32, height: 19)
                         .overlay(
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.35), lineWidth: 1)
+                                .strokeBorder(DSColor.textFaint, lineWidth: 1)
                         )
                 }
             }
@@ -1570,7 +1570,9 @@ private struct TodoItemRow: View {
                             .frame(width: LabMetrics.checkboxSize, height: LabMetrics.checkboxSize)
                         Image(systemName: "checkmark")
                             .font(.system(size: 10, weight: .black))
-                            .foregroundStyle(.black.opacity(0.85))
+                            // On the category's own fill, which is light in
+                            // both appearances — see DSColor.onAccentFill.
+                            .foregroundStyle(DSColor.onAccentFill.opacity(0.85))
                     }
                 }
                 .contentShape(Rectangle())
@@ -1857,7 +1859,7 @@ private struct RowActions: View {
             // separate.
             if showEnter && showGrip {
                 Rectangle()
-                    .fill(Color.white.opacity(0.3))
+                    .fill(DSColor.rowAffordance)
                     .frame(width: 1, height: LabMetrics.enterBadgeHeight)
             }
 

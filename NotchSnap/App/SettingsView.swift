@@ -116,12 +116,18 @@ struct SettingsSection_Card<Content: View>: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
-        .background(GlassTile(cornerRadius: 16))
+        // NOT the onboarding's GlassTile: that one is a fixed 30% black,
+        // correct on the onboarding's own dark purple and wrong in every
+        // Light window. See DSColor.cardSurface.
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(DSColor.cardSurface)
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                .stroke(DSColor.hairlineOnPanel, lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.12), radius: 16, y: 6)
+        .shadow(color: DSColor.shadowSoft, radius: 16, y: 6)
     }
 }
 

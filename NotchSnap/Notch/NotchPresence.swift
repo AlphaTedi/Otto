@@ -71,8 +71,10 @@ enum MeetingPlatform: Equatable {
         case .meet:        return Color(hex: "#3BA55C")
         case .zoom:        return Color(hex: "#4A8CFF")
         case .teams:       return Color(hex: "#6264A7")
-        case .otherVideo:  return DSColor.textPrimaryBright
-        case .inPerson:    return DSColor.textSecondary
+        // The indicator lives on the black silhouette, so these two take the
+        // on-notch pair rather than the panel's semantic ladder.
+        case .otherVideo:  return DSColor.onNotchSurface
+        case .inPerson:    return DSColor.onNotchSurfaceMuted
         }
     }
 }
@@ -265,7 +267,7 @@ struct NotchPresenceView: View {
                 // A to-do: its own checkbox, at the size the app draws it.
                 RoundedRectangle(cornerRadius: DSRadius.checklistCheckboxCorner,
                                  style: .continuous)
-                    .strokeBorder(DSColor.textPrimaryBright.opacity(0.8), lineWidth: 1.4)
+                    .strokeBorder(DSColor.onNotchSurface.opacity(0.8), lineWidth: 1.4)
                     .frame(width: 11, height: 11)
             }
         }
@@ -288,7 +290,9 @@ struct NotchPresenceView: View {
                     // Monospaced digits so the label does not reflow — and so
                     // the width the wing is sized against is a constant.
                     .font(.system(size: 11, weight: .medium).monospacedDigit())
-                    .foregroundStyle(DSColor.textPrimaryBright)
+                    // On the black silhouette, not on a panel — see
+                    // DSColor.onNotchSurface.
+                    .foregroundStyle(DSColor.onNotchSurface)
                     .fixedSize()
             }
             .transition(.opacity)

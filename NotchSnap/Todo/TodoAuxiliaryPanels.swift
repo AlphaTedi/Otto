@@ -93,17 +93,17 @@ private struct MovePickerView: View {
             Text(L10n.t("todo.moveTo").uppercased())
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(1.2)
-                .foregroundStyle(.white.opacity(0.4))
+                .foregroundStyle(DSColor.textFaint)
 
             TextField(L10n.t("todo.searchCollections"), text: $query)
                 .textFieldStyle(.plain)
                 .font(.system(size: 14))
-                .foregroundStyle(.white)
+                .foregroundStyle(DSColor.textPrimary)
                 .focused($queryFocused)
                 .padding(10)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.white.opacity(0.05))
+                        .fill(DSColor.fieldBackground)
                 )
                 .onSubmit { commit(matches.first) }
 
@@ -117,7 +117,7 @@ private struct MovePickerView: View {
                                     .frame(width: 12, height: 12)
                                 Text(c.name)
                                     .font(.system(size: 12))
-                                    .foregroundStyle(.white.opacity(0.85))
+                                    .foregroundStyle(DSColor.textPrimary)
                                 Spacer()
                             }
                             .padding(.horizontal, 6)

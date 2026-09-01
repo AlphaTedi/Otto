@@ -56,6 +56,10 @@ struct TextExtractionView: View {
             }
         }
         .frame(width: imageSize.width, height: imageSize.height)
+        // Chrome over media, like the toolbars: it lies on top of a captured
+        // image of any brightness, so it supplies its own dark ground rather
+        // than following the system appearance.
+        .darkGroundSurface()
         .task { await runOCR() }
         .onReceive(NotificationCenter.default.publisher(for: .ocrCopySelected)) { _ in
             if state == .ready { copySelected() }

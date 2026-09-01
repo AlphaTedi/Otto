@@ -82,6 +82,10 @@ struct CaptureActionBar: View {
         // Floating chrome over a capture — real glass on 26.
         .floatingGlass(in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .shadow(color: .black.opacity(0.4), radius: 16, y: 4)
+        // Same rule as the annotation toolbar beside it: this bar floats over
+        // a screenshot that can be any brightness, so it keeps one look and
+        // supplies its own dark ground rather than following the system.
+        .darkGroundSurface()
         .scaleEffect(appeared ? 1.0 : 0.7)
         .opacity(appeared ? 1.0 : 0.0)
         .animation(.spring(response: 0.35, dampingFraction: 0.7), value: appeared)

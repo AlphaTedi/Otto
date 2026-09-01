@@ -70,6 +70,18 @@ enum NotchContentFilter: String, CaseIterable, Identifiable {
 }
 
 // MARK: - Expanded Notch View — Gallery with screenshots + clipboard items
+//
+// This is the CONTAINER layout's content (Settings > Notch > Layout), and
+// everything below it — the gallery, the Tray, Notes, the snippet editor — is
+// drawn INSIDE the black silhouette. That is why the literal whites in this
+// file and its children are correct rather than an oversight: their ground is
+// literal too. NotchShapeView pins the appearance for them
+// (`darkGroundSurface()`), and NotchController pins the panel WINDOW to
+// darkAqua in this layout so the AppKit text views inside follow as well.
+//
+// Anything that can also appear on the GLASS panels — the to-do panel, the
+// meeting card — must keep taking DSColor tokens instead. See LiquidGlass.swift
+// for the two rules.
 
 struct NotchExpandedView: View {
     @EnvironmentObject var appState: AppState

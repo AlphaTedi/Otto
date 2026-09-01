@@ -29,7 +29,7 @@ struct NotchSnapColorPicker: View {
                         .frame(width: 22, height: 22)
                         .overlay(
                             Circle()
-                                .stroke(Color.white, lineWidth: selectedColor == color ? 2.5 : 0)
+                                .stroke(DSColor.selectionRing, lineWidth: selectedColor == color ? 2.5 : 0)
                         )
                         .overlay(
                             Circle()

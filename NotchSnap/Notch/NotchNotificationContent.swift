@@ -74,7 +74,8 @@ struct NotchNotificationContent: View {
         } else if let text = controller.notificationRightText {
             Text(text)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundColor(.white.opacity(0.8))
+                // On the silhouette — see DSColor.onNotchSurface.
+                .foregroundColor(DSColor.onNotchSurface.opacity(0.8))
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
