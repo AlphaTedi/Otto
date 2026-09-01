@@ -180,6 +180,7 @@ private extension View {
 struct TodoTabView: View {
     @ObservedObject private var store = TodoStore.shared
     @ObservedObject private var calendar = CalendarStore.shared
+    @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
 
     // FB2: one transition, every direction. A pure in-place crossfade —
     // no y-offset, no edge-move — so switching tabs or modes never "slides
@@ -191,13 +192,23 @@ struct TodoTabView: View {
         // §2.3: the shortcuts overlay sits ON TOP of the live content —
         // dismissing is instant, nothing re-renders underneath.
         ZStack(alignment: .topLeading) {
-            // No alert card in here any more.
+            // Who draws the live meeting alert depends on the layout.
             //
-            // This predates the split into two detached blocks. Now that the
-            // meeting card is its own block above, drawing the alert in here
-            // as well put the same meeting on screen twice. The column hides
-            // this whole panel while an alert is live — see LabPanelsView.
-            todoPanelContent
+            // In `.panels` nobody draws it here: the meeting card is its own
+            // block above, and a copy in here put the same meeting on screen
+            // twice, one above the other. The column hides this whole panel
+            // while an alert is live — see LabPanelsView.
+            //
+            // In `.container` there is no block above, so the panel carries
+            // the alert again as it did before the split, and it OWNS the
+            // panel while it is up: the notch opened itself for this, so it
+            // must not compete with the list underneath (CA-3).
+            if notchLayout == .container, let alert = calendar.activeAlert {
+                MeetingAlertView(meeting: alert)
+                    .transition(.opacity)
+            } else {
+                todoPanelContent
+            }
         }
         .padding(.top, LabMetrics.panelTopPadding)
         // UG-2: immediate tooltip near the hovered/focused row's urgency dot,

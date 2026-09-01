@@ -56,6 +56,15 @@ class AppState: ObservableObject {
         UserDefaults.standard.bool(forKey: "showLegacyPanels")
     }
 
+    /// Which of the two expanded designs is up. Same shape as
+    /// `showLegacyPanels`: the value lives in UserDefaults so views can bind
+    /// to it with @AppStorage and re-render themselves, while the geometry
+    /// code — which is not a view — reads it through here.
+    var notchLayout: NotchLayout {
+        NotchLayout(rawValue: UserDefaults.standard.string(forKey: "notchLayout") ?? "")
+            ?? .panels
+    }
+
     /// Hugging height (pivot PRD §3): the to-do view MEASURES its natural
     /// content height and publishes it here; the panel is a direct animated
     /// function of this value — never a fixed container that scrolls.
@@ -131,7 +140,14 @@ class AppState: ObservableObject {
             // when legacy panels are shown.
             // LAB: the column measures itself — meeting block included — so
             // the to-do panel's own height is no longer the whole story.
-            let content = labColumnHeight > 0 ? labColumnHeight : todoContentHeight + 8
+            //
+            // In the container layout there is no column: the panel is drawn
+            // inside the silhouette, so the silhouette has to hug the to-do
+            // panel alone, exactly as it did before the split. Reading a
+            // stale `labColumnHeight` here would size the notch to a column
+            // that is not on screen.
+            let usesColumn = notchLayout == .panels && labColumnHeight > 0
+            let content = usesColumn ? labColumnHeight : todoContentHeight + 8
             let desiredTotal = notchBarHeight + content + filterBar
             let cappedTotal = min(desiredTotal, Self.expandedBaseHeight + Self.maxExtraHeight)
             return cappedTotal - Self.expandedBaseHeight
