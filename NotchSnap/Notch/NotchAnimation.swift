@@ -69,9 +69,14 @@ enum NotchAnimation {
 
     // CONTENT HUG: the hero spring — panel height, row enter/exit, and the
     // Completed section all share this ONE spring so container and content
-    // visibly move together instead of racing each other (§8.3). Slightly
-    // underdamped on purpose: the panel should feel alive, not utilitarian.
-    static let contentHug = Animation.spring(response: 0.45, dampingFraction: 0.60)
+    // visibly move together instead of racing each other (§8.3).
+    //
+    // Was 0.45 / 0.60. With the panel hugging again this spring fires on
+    // every height change — each new row, each section switch — and at 0.60
+    // the overshoot read as the whole panel bouncing rather than settling
+    // ("still too heavy", Thomas 2026-09-01). 0.82 is the same chrome band
+    // contentEntry sits in: a clean settle with a trace of life, no rebound.
+    static let contentHug = Animation.spring(response: 0.38, dampingFraction: 0.82)
 
     // HINT FADE: contextual shortcut hints and ⌘-held badges (§7.1/7.2).
     // Deliberately a different weight of motion from contentHug — quick and

@@ -233,7 +233,15 @@ struct TodoTabView: View {
         .onPreferenceChange(TodoContentHeightKey.self) { height in
             AppState.shared.todoContentHeight = height
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // Width only — NOT maxHeight: .infinity. That frame took whatever
+        // height was proposed, and in the panels layout the column proposes
+        // its 556 cap, so the glass block drew 556 tall with the tabs
+        // floating a third of the way down it while the measurement above
+        // (which sits inside this frame) dutifully reported the hugged
+        // height. The silhouette hugged; the block the user looks at did
+        // not (Thomas, 2026-09-01, screenshot). The view is its content's
+        // height, full stop; whoever draws around it hugs for free.
+        .frame(maxWidth: .infinity, alignment: .top)
         // Click anywhere the panel isn't otherwise using — the empty band
         // beside the tabs, the gaps between rows, the padding — and whatever
         // is being edited commits and gives up the caret.

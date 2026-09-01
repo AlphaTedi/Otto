@@ -166,6 +166,15 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             case 53:                            // Esc — step out, keep the text
                 notchWindow?.makeFirstResponder(nil)
                 store.blurDraft()
+                // Nothing typed → nothing to keep, so one Esc closes the
+                // notch outright. The two-step exit (leave the field, then
+                // close) exists to protect a half-written to-do; with an
+                // empty field it was only a second keypress for nothing
+                // (Thomas, 2026-09-01). Every explicit open now lands the
+                // caret here, so this IS the common close.
+                if store.draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    NotchController.shared.forceCollapse()
+                }
                 return true
             default:
                 // ⇥ is NOT handled here: it means the same thing in the field
