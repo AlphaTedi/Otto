@@ -200,15 +200,15 @@ final class TodoStore: ObservableObject {
         expandedItemID = nil
     }
 
-    /// ⏎ — file the draft into the destination the row is pointing at, and
-    /// hand the caret back.
+    /// ⏎ — file the draft into the destination the row is pointing at. The
+    /// caret STAYS in the field, so the next to-do is just more typing.
     ///
-    /// Keeping focus so a second to-do was "just more typing" cost more than
-    /// it saved: writing one to-do and then closing the notch took two
-    /// Escapes, one to leave a field the user had already finished with
-    /// (Marcello, 2026-08-16). Committing is the end of the sentence, so the
-    /// row returns to its resting placeholder state and a single Escape now
-    /// closes the panel. ⌃⇧N is one keystroke away for the next one.
+    /// It used to let go on ⏎ (Marcello, 2026-08-16), because closing the
+    /// notch after one to-do then cost two Escapes — one to leave a field
+    /// the user had already finished with. That cost is gone: Esc in an
+    /// EMPTY field closes the notch outright, so a burst of to-dos is
+    /// type-⏎-type-⏎-Esc and a single one is type-⏎-Esc. Keeping the caret
+    /// is now free, and it is what Thomas asked for (2026-09-01).
     @discardableResult
     func commitDraft() -> Bool {
         // NL-4: a recognized date phrase leaves the title and becomes a real
@@ -220,7 +220,9 @@ final class TodoStore: ObservableObject {
               addItem(title: title, collectionID: target,
                       urgency: .low, dueDate: parsed?.date) != nil else { return false }
         draftTitle = ""
-        blurDraft()
+        // Re-assert rather than assume: the field reports its own focus, and
+        // the list re-rendering underneath must not be able to take it.
+        draftWantsFocus = true
         return true
     }
 
