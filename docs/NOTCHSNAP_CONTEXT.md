@@ -303,10 +303,12 @@ One change ("app refactoring fundamentals", Thomas) that set four foundations:
   `~/Documents/Otto`, lab builds use `Otto Lab`). Obsidian Tasks conventions
   (📅 due, ⏫/🔼 priority, ✅ done). Write-only mirror, debounced with the JSON
   save; a `.otto-vault.json` manifest lets renames/deletes clean up without
-  ever touching user-authored files. Completed to-dos older than a day move to
-  `Archive/<completion-day>.md` (append-only, id-confirmed before removal from
-  the live store) — sweep runs at launch and once per day on collapse, never
-  while the panel is open. `AppSettings` decode is now `decodeIfPresent` per
+  ever touching user-authored files. **Ticking off a to-do writes it to
+  `Archive/<completion-day>.md` immediately** (`recordCompletion`, keyed by
+  the task line — title, section, minute; un-ticking removes the block
+  again). After a day the completed item leaves the live store (`archive`
+  confirms the entry is on disk before pruning) — sweep runs at launch and
+  once per day on collapse, never while the panel is open. `AppSettings` decode is now `decodeIfPresent` per
   field (adding a settings field used to reset ALL settings), and every store
   flushes synchronously in `applicationWillTerminate` (the 500 ms debounce
   used to drop the last edit on quit).

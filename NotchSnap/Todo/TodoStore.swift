@@ -687,10 +687,16 @@ final class TodoStore: ObservableObject {
         if items[idx].isCompleted {
             settleTasks[id]?.cancel()
             settleTasks[id] = nil
+            let wasCompletedAt = items[idx].completedAt
             withAnimation(NotchAnimation.contentHug) {
                 settlingItemIDs.remove(id)
                 items[idx].isCompleted = false
                 items[idx].completedAt = nil
+            }
+            // The archive follows the checkbox: un-ticking takes the entry
+            // written at tick-off back out again.
+            if let wasCompletedAt {
+                MarkdownVault.shared.removeCompletion(items[idx], completedAt: wasCompletedAt, from: self)
             }
             // Putting one back is not the same event as finishing it.
             HapticManager.shared.todoUncompleted()
@@ -702,6 +708,10 @@ final class TodoStore: ObservableObject {
                 items[idx].completedAt = Date()
                 settlingItemIDs.insert(id)
             }
+            // Ticking off IS the record: the entry lands in
+            // Archive/<today>.md now, not a day later when the row leaves
+            // the panel (Thomas, 2026-09-01).
+            MarkdownVault.shared.recordCompletion(items[idx], from: self)
             settleTasks[id] = Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: 350_000_000)
                 guard !Task.isCancelled, let self else { return }

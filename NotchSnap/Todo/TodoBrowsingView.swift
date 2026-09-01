@@ -165,6 +165,24 @@ private struct DeselectCatcher: View {
     }
 }
 
+/// Opacity plus a few points of blur, in and out. SwiftUI ships no blur
+/// transition, so it is a modifier pair; the radius is small enough that
+/// nothing reads as an effect — the content just softens on its way out.
+private struct BlurModifier: ViewModifier {
+    let radius: CGFloat
+    func body(content: Content) -> some View { content.blur(radius: radius) }
+}
+
+private extension AnyTransition {
+    // Computed, not stored: AnyTransition isn't Sendable, so a static let
+    // fails Swift 6's isolation check.
+    static var crossfadeBlur: AnyTransition {
+        .opacity.combined(
+            with: .modifier(active: BlurModifier(radius: 4), identity: BlurModifier(radius: 0))
+        )
+    }
+}
+
 private extension View {
     func measureHeight<K: PreferenceKey>(_ key: K.Type) -> some View where K.Value == CGFloat {
         background(
@@ -185,8 +203,10 @@ struct TodoTabView: View {
     // FB2: one transition, every direction. A pure in-place crossfade —
     // no y-offset, no edge-move — so switching tabs or modes never "slides
     // in from the top" or bleeds over the tab row, and Work→Today looks
-    // identical to Today→Personal (Marcello 2026-07-23).
-    private var modeTransition: AnyTransition { .opacity }
+    // identical to Today→Personal (Marcello 2026-07-23). A touch of blur
+    // rides on the fade (Thomas, 2026-09-01) so the outgoing content
+    // dissolves rather than ghosting over the incoming one mid-hug.
+    private var modeTransition: AnyTransition { .crossfadeBlur }
 
     var body: some View {
         // §2.3: the shortcuts overlay sits ON TOP of the live content —
@@ -845,7 +865,7 @@ struct TodoBrowsingView: View {
                     browsingBody(for: collection)
                         .id(collection.id)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .transition(.opacity)   // FB2: same in-place crossfade
+                        .transition(.crossfadeBlur)   // FB2: same in-place crossfade
                 }
             }
         }

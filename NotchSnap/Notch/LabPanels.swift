@@ -91,7 +91,9 @@ enum LabMetrics {
     static let tabsInset: CGFloat = 24
     static let tabsDividerPaddingV: CGFloat = 12
     static let tabsTopPadding: CGFloat = 8
-    static let tabsBottomPadding: CGFloat = 24
+    // 24 → 16: with the block hugging, the foot read as a slab of empty
+    // glass under the tabs (Thomas, 2026-09-01).
+    static let tabsBottomPadding: CGFloat = 16
     static let tabsGap: CGFloat = 14
     static let tabPaddingH: CGFloat = 12
     static let tabPaddingV: CGFloat = 8

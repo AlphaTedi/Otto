@@ -769,7 +769,7 @@ struct StorageSettingsView: View {
             ) {
                 VStack(alignment: .leading, spacing: 6) {
                     bullet("The app keeps its own database and mirrors it here after every change — nothing extra to manage.")
-                    bullet("Completed to-dos older than a day move to Archive/<date>.md and leave the panel's Completed list.")
+                    bullet("Ticking off a to-do records it in Archive/<date>.md right away (un-ticking removes it again). After a day it leaves the panel's Completed list; the archive keeps it.")
                     bullet("Files here are the app's copy: edits made in another editor are overwritten on the next change. Your own files in the folder are never touched.")
                 }
             }

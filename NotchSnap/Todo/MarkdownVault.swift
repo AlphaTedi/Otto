@@ -23,10 +23,11 @@ import Foundation
 // actually queryable by the plugin people already run.
 //
 // Section files are REWRITTEN whole on every change (atomic, debounced —
-// same rhythm as todos.json). Archive files are APPEND-ONLY: once a
-// completed to-do is older than a day it is moved out of the live store and
-// its archive file becomes its only home, so those files are history and
-// are never regenerated. A manifest (.otto-vault.json) records which section
+// same rhythm as todos.json). Archive files are the RECORD OF COMPLETIONS:
+// an entry is written the moment a to-do is ticked off and removed if it is
+// un-ticked; once the completion is older than a day the to-do leaves the
+// live store and the archive file is its only home. Those files are never
+// regenerated wholesale. A manifest (.otto-vault.json) records which section
 // files the app wrote, so renaming or deleting a section removes its old
 // file rather than stranding it — without ever touching a file the user
 // created themselves.
@@ -108,45 +109,89 @@ final class MarkdownVault {
         exportNow()
     }
 
-    // MARK: Archive (append-only history)
+    // MARK: Archive (the record of completions)
+    //
+    // A to-do is written to `Archive/<completion day>.md` the moment it is
+    // ticked off (Thomas, 2026-09-01) — not a day later when it leaves the
+    // panel. The archive is therefore the record of WHAT WAS DONE, kept in
+    // step with the checkbox: un-ticking removes the entry again, and the
+    // daily sweep that prunes old completions from the live store finds them
+    // already recorded and only confirms it. One entry is one block — the
+    // task line, then its indented steps and note — keyed by the task line,
+    // which carries the title, section and minute of completion.
 
-    /// Move `items` (already-completed to-dos older than the live window)
-    /// into per-day archive files. Returns the ids that were durably
-    /// written — the caller only removes those from the live store, so a
-    /// failed write can never lose a to-do.
-    func archive(_ items: [TodoItem], from store: TodoStore) -> Set<UUID> {
-        guard !items.isEmpty else { return [] }
+    /// Record a completion. Idempotent: an entry already present is left
+    /// alone, so the sweep can call this for items ticked off hours ago.
+    /// Returns true once the entry is durably on disk.
+    @discardableResult
+    func recordCompletion(_ item: TodoItem, from store: TodoStore) -> Bool {
+        guard let at = item.completedAt else { return false }
         let fm = FileManager.default
         try? fm.createDirectory(at: archiveDirectory, withIntermediateDirectories: true)
-
-        let dayKey = VaultFormatters.cached("yyyy-MM-dd")
-        let timeKey = VaultFormatters.cached("HH:mm")
-        var archived = Set<UUID>()
-
-        let byDay = Dictionary(grouping: items) {
-            dayKey.string(from: $0.completedAt ?? $0.createdAt)
+        let day = VaultFormatters.cached("yyyy-MM-dd").string(from: at)
+        let url = archiveDirectory.appendingPathComponent("\(day).md")
+        var lines = ((try? String(contentsOf: url, encoding: .utf8)) ?? "# \(day)\n")
+            .components(separatedBy: "\n")
+        let key = archiveKeyLine(for: item, at: at, store: store)
+        if lines.contains(key) { return true }
+        // Trailing blank kept, so the file ends in a newline after the block.
+        while lines.last == "" { lines.removeLast() }
+        lines.append("")
+        lines.append(key)
+        lines.append(contentsOf: detailLines(for: item, indent: "  ")
+            .split(separator: "\n", omittingEmptySubsequences: true).map(String.init))
+        lines.append("")
+        do {
+            try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+            return true
+        } catch {
+            return false
         }
-        for (day, dayItems) in byDay {
-            let url = archiveDirectory.appendingPathComponent("\(day).md")
-            var body = (try? String(contentsOf: url, encoding: .utf8)) ?? "# \(day)\n"
-            for item in dayItems.sorted(by: {
-                ($0.completedAt ?? .distantPast) < ($1.completedAt ?? .distantPast)
-            }) {
-                let section = store.collection(id: item.collectionID)?.name
-                var line = "\n- [x] \(item.title)"
-                if let section { line += " (\(section))" }
-                if let at = item.completedAt { line += " ✅ \(day) \(timeKey.string(from: at))" }
-                body += line + "\n"
-                body += detailLines(for: item, indent: "  ")
-            }
-            do {
-                try body.write(to: url, atomically: true, encoding: .utf8)
-                dayItems.forEach { archived.insert($0.id) }
-            } catch {
-                // Leave these in the live store; they'll be retried next time.
-            }
+    }
+
+    /// Un-ticking: take the entry back out. `completedAt` is passed
+    /// separately because the item has already been cleared by the time
+    /// this runs. A day file left with no entries is removed.
+    func removeCompletion(_ item: TodoItem, completedAt at: Date, from store: TodoStore) {
+        let day = VaultFormatters.cached("yyyy-MM-dd").string(from: at)
+        let url = archiveDirectory.appendingPathComponent("\(day).md")
+        guard let body = try? String(contentsOf: url, encoding: .utf8) else { return }
+        var lines = body.components(separatedBy: "\n")
+        let key = archiveKeyLine(for: item, at: at, store: store)
+        guard let start = lines.firstIndex(of: key) else { return }
+        var end = start + 1
+        while end < lines.count, lines[end].hasPrefix("  ") { end += 1 }
+        lines.removeSubrange(start..<end)
+        if start > 0, start - 1 < lines.count, lines[start - 1].isEmpty,
+           start >= lines.count || lines[start].isEmpty {
+            lines.remove(at: start - 1)
+        }
+        if !lines.contains(where: { $0.hasPrefix("- [x] ") }) {
+            try? FileManager.default.removeItem(at: url)
+            return
+        }
+        try? lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    /// The daily sweep: confirm every old completion is recorded, and report
+    /// which ids are — the caller only removes those from the live store, so
+    /// a failed write can never lose a to-do.
+    func archive(_ items: [TodoItem], from store: TodoStore) -> Set<UUID> {
+        var archived = Set<UUID>()
+        for item in items where recordCompletion(item, from: store) {
+            archived.insert(item.id)
         }
         return archived
+    }
+
+    private func archiveKeyLine(for item: TodoItem, at: Date, store: TodoStore) -> String {
+        var line = "- [x] \(item.title)"
+        if let section = store.collection(id: item.collectionID)?.name {
+            line += " (\(section))"
+        }
+        line += " ✅ \(VaultFormatters.cached("yyyy-MM-dd").string(from: at))"
+            + " \(VaultFormatters.cached("HH:mm").string(from: at))"
+        return line
     }
 
     // MARK: Rendering
