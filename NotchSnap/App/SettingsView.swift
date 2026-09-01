@@ -37,6 +37,7 @@ struct SettingsView: View {
                     case .general:    GeneralSettingsView()
                     case .appearance: AppearanceSettingsView()
                     case .notch:      NotchSettingsView()
+                    case .storage:    StorageSettingsView()
                     case .calendar:   CalendarSettingsView()
                     case .shortcuts:  ShortcutsSettingsView()
                     case .about:      AboutSettingsView()
@@ -71,7 +72,7 @@ struct SettingsView: View {
 }
 
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case general, appearance, notch, calendar, shortcuts, about
+    case general, appearance, notch, storage, calendar, shortcuts, about
     var id: String { rawValue }
 
     var title: String {
@@ -79,6 +80,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .general:    return "General"
         case .appearance: return "Appearance"
         case .notch:      return "Notch"
+        case .storage:    return "Storage"
         case .calendar:   return "Calendar"
         case .shortcuts:  return "Shortcuts"
         case .about:      return "About"
@@ -90,6 +92,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .general:    return "gearshape"
         case .appearance: return "paintpalette"
         case .notch:      return "macbook"
+        case .storage:    return "folder"
         case .calendar:   return "calendar"
         case .shortcuts:  return "keyboard"
         case .about:      return "info.circle"
@@ -521,6 +524,11 @@ struct NotchSettingsView: View {
                             NotchController.shared.forceCollapse()
                             NotchController.shared.applyNotchAppearance()
                             appState.labColumnHeight = 0
+                            // Both measurements, not just the column's: a
+                            // panels-era todoContentHeight surviving into the
+                            // container sized the silhouette to a panel that
+                            // was no longer on screen.
+                            appState.todoContentHeight = 0
                             appState.objectWillChange.send()
                         }
                     )) {
@@ -694,6 +702,106 @@ private struct SizePresetRow: View {
         case .wide:      return 44
         case .extraWide: return 56
         }
+    }
+}
+
+// MARK: - Storage
+
+/// Where the Markdown copy of everything lives. The panel is the daily
+/// interface; this folder is the guarantee behind it — every to-do and note,
+/// always on disk as plain .md, findable without the app. See MarkdownVault.
+struct StorageSettingsView: View {
+    @EnvironmentObject var appState: AppState
+
+    private var vaultPath: String {
+        appState.settings.vaultDirectory.path
+            .replacingOccurrences(of: FileManager.default.homeDirectoryForCurrentUser.path,
+                                  with: "~")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            PageTitle(
+                title: "Storage",
+                subtitle: "Everything you write is also saved as plain Markdown, so it is always yours to find."
+            )
+
+            SettingsSection_Card(
+                title: "Markdown folder",
+                subtitle: "One .md file per section, a Notes.md for quick notes, and an Archive folder holding completed to-dos by day. Open it in Finder, grep it, or point Obsidian at it."
+            ) {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "folder.fill")
+                            .foregroundStyle(.secondary)
+                        Text(vaultPath)
+                            .font(.system(size: 12, design: .monospaced))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer()
+                    }
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(DSColor.fieldBackground)
+                    )
+
+                    HStack(spacing: 10) {
+                        Button("Choose Folder…") { chooseFolder() }
+                        Button("Show in Finder") {
+                            let dir = appState.settings.vaultDirectory
+                            try? FileManager.default.createDirectory(
+                                at: dir, withIntermediateDirectories: true)
+                            NSWorkspace.shared.activateFileViewerSelecting([dir])
+                        }
+                        Spacer()
+                        Button("Use Default") {
+                            setDirectory(MarkdownVault.defaultDirectory)
+                        }
+                        .disabled(appState.settings.vaultDirectory == MarkdownVault.defaultDirectory)
+                    }
+                }
+            }
+
+            SettingsSection_Card(
+                title: "How it works",
+                subtitle: nil
+            ) {
+                VStack(alignment: .leading, spacing: 6) {
+                    bullet("The app keeps its own database and mirrors it here after every change — nothing extra to manage.")
+                    bullet("Ticking off a to-do records it in Archive/<date>.md right away (un-ticking removes it again). After a day it leaves the panel's Completed list; the archive keeps it.")
+                    bullet("Files here are the app's copy: edits made in another editor are overwritten on the next change. Your own files in the folder are never touched.")
+                }
+            }
+        }
+    }
+
+    private func bullet(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text("•").font(.system(size: 12)).foregroundStyle(.secondary)
+            Text(text).font(.system(size: 12)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = appState.settings.vaultDirectory
+        panel.prompt = "Use This Folder"
+        panel.message = "Choose where Otto keeps the Markdown copy of your to-dos and notes."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        setDirectory(url)
+    }
+
+    private func setDirectory(_ url: URL) {
+        appState.updateSettings { $0.vaultDirectory = url }
+        // Write the current state to the new location immediately, so the
+        // choice visibly did something.
+        MarkdownVault.shared.locationChanged()
     }
 }
 

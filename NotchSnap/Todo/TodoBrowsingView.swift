@@ -165,6 +165,55 @@ private struct DeselectCatcher: View {
     }
 }
 
+/// Opacity plus a few points of blur, in and out. SwiftUI ships no blur
+/// transition, so it is a modifier pair; the radius is small enough that
+/// nothing reads as an effect — the content just softens on its way out.
+private struct BlurModifier: ViewModifier {
+    let radius: CGFloat
+    func body(content: Content) -> some View { content.blur(radius: radius) }
+}
+
+/// Zero LAYOUT height, full drawing. The content overflows its frame (SwiftUI
+/// does not clip by default), so it is still painted while it fades — it just
+/// no longer has a say in how tall its parent is.
+private struct ZeroLayoutHeight: ViewModifier {
+    let active: Bool
+    func body(content: Content) -> some View {
+        content.frame(height: active ? 0 : nil, alignment: .top)
+    }
+}
+
+private extension AnyTransition {
+    // Computed, not stored: AnyTransition isn't Sendable, so a static let
+    // fails Swift 6's isolation check.
+    static var crossfadeBlur: AnyTransition {
+        .opacity.combined(
+            with: .modifier(active: BlurModifier(radius: 4), identity: BlurModifier(radius: 0))
+        )
+    }
+
+    /// The section / mode swap: crossfade in, crossfade out — and the
+    /// outgoing view drops out of LAYOUT the moment it starts leaving.
+    ///
+    /// Both views overlap in a ZStack during the crossfade, and a ZStack is
+    /// as tall as its tallest child. So Work (12 rows) → Personal (2 rows)
+    /// kept the panel at twelve rows' height until the old list had fully
+    /// faded, then snapped to two — outside any animation, because a
+    /// transition's removal is discrete — and the tab row snapped with it
+    /// (Thomas, 2026-09-01). With the outgoing view at zero layout height
+    /// the ZStack is the incoming list's height from the first frame, the
+    /// change happens inside the withAnimation that switched sections, and
+    /// the panel, the scroll region and the tabs all ride one spring.
+    static var sectionSwap: AnyTransition {
+        .asymmetric(
+            insertion: crossfadeBlur,
+            removal: crossfadeBlur.combined(with: .modifier(
+                active: ZeroLayoutHeight(active: true),
+                identity: ZeroLayoutHeight(active: false)))
+        )
+    }
+}
+
 private extension View {
     func measureHeight<K: PreferenceKey>(_ key: K.Type) -> some View where K.Value == CGFloat {
         background(
@@ -185,8 +234,10 @@ struct TodoTabView: View {
     // FB2: one transition, every direction. A pure in-place crossfade —
     // no y-offset, no edge-move — so switching tabs or modes never "slides
     // in from the top" or bleeds over the tab row, and Work→Today looks
-    // identical to Today→Personal (Marcello 2026-07-23).
-    private var modeTransition: AnyTransition { .opacity }
+    // identical to Today→Personal (Marcello 2026-07-23). A touch of blur
+    // rides on the fade (Thomas, 2026-09-01) so the outgoing content
+    // dissolves rather than ghosting over the incoming one mid-hug.
+    private var modeTransition: AnyTransition { .sectionSwap }
 
     var body: some View {
         // §2.3: the shortcuts overlay sits ON TOP of the live content —
@@ -233,7 +284,15 @@ struct TodoTabView: View {
         .onPreferenceChange(TodoContentHeightKey.self) { height in
             AppState.shared.todoContentHeight = height
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // Width only — NOT maxHeight: .infinity. That frame took whatever
+        // height was proposed, and in the panels layout the column proposes
+        // its 556 cap, so the glass block drew 556 tall with the tabs
+        // floating a third of the way down it while the measurement above
+        // (which sits inside this frame) dutifully reported the hugged
+        // height. The silhouette hugged; the block the user looks at did
+        // not (Thomas, 2026-09-01, screenshot). The view is its content's
+        // height, full stop; whoever draws around it hugs for free.
+        .frame(maxWidth: .infinity, alignment: .top)
         // Click anywhere the panel isn't otherwise using — the empty band
         // beside the tabs, the gaps between rows, the padding — and whatever
         // is being edited commits and gives up the caret.
@@ -298,21 +357,14 @@ struct TodoTabView: View {
                     }
                 }
 
-                // The Spacer alone pins the tab row to the foot. The panel is
-                // already a fixed 556, so the VStack is handed a definite
-                // height and the Spacer takes the slack.
-                //
-                // The `.frame(maxHeight: .infinity)` that used to be here as
-                // well made the content ask for UNBOUNDED height, which is
-                // exactly what invited the hosting view to resize the window
-                // around it — see NotchController's sizingOptions.
-                //
-                // A fixed panel height was not enough on its own: the VStack
-                // still packed to the top, so the tabs sat directly under
-                // whatever the list happened to be and jumped every time ⇥
-                // moved to a section with a different number of to-dos — the
-                // one row that must never move (Marcello, 2026-08-22).
-                Spacer(minLength: 0)
+                // No Spacer here. With the panel hugging its content again
+                // (Thomas, 2026-09-01) there is no slack to absorb: the tabs
+                // sit directly under the list and ride with it. A Spacer in a
+                // definite-height proposal is also what closed the container
+                // layout's measurement loop — the content stretched to
+                // whatever height it was handed, so the measured "natural"
+                // height was just the proposal echoed back and the hug could
+                // never converge.
 
                 if store.panelMode == .browsing || store.panelMode == .voice {
                     TodoTabRow()
@@ -814,7 +866,21 @@ struct TodoBrowsingView: View {
     private static let scrollSpace = "todoScrollRegion"
     private static let bottomAnchor = "todoScrollBottom"
 
-    @State private var regionNaturalHeight: CGFloat = 0
+    /// Natural (unclipped) height of each section's scroll content, keyed by
+    /// section. PER SECTION, not one shared number: the old and new list
+    /// overlap during a switch, and `onPreferenceChange` only fires on a
+    /// CHANGE — so when SwiftUI revived the outgoing Work list because the
+    /// user switched back mid-crossfade, its measurement was unchanged,
+    /// nothing fired, and the shared value stayed at Personal's two rows.
+    /// Work then rendered twelve rows into a two-row viewport and the panel
+    /// "kept the same height" (Thomas, 2026-09-01; reproduced with rapid
+    /// switch 1/0/1/0 → Work at 205 instead of 334). Each section reading
+    /// its own entry makes a revived view correct by construction.
+    @State private var regionNaturalHeights: [UUID: CGFloat] = [:]
+    /// The most recent measurement of any section — the seed for a section
+    /// seen for the first time, so its first frame starts from a plausible
+    /// height rather than jumping to the full budget and shrinking back.
+    @State private var lastRegionNaturalHeight: CGFloat = 0
     /// How far the capped region has been scrolled. Drives the edge fades.
     @State private var scrollOffset: CGFloat = 0
     @State private var draggedItemID: UUID?
@@ -844,7 +910,7 @@ struct TodoBrowsingView: View {
                     browsingBody(for: collection)
                         .id(collection.id)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .transition(.opacity)   // FB2: same in-place crossfade
+                        .transition(.sectionSwap)   // FB2: same in-place crossfade
                 }
             }
         }
@@ -894,15 +960,23 @@ struct TodoBrowsingView: View {
             // draftInset 0: the typing bar lives above the sections now, in
             // TodoTabView, not inside this scrolling column.
             let budget = Self.maxRegion(draftInset: 0)
-            // The FULL budget, not min(natural, budget). Sizing the region to
-            // its content meant every section had its own panel height: Work
-            // with 16 rows filled the budget while Personal with three hugged
-            // them, so the divider, the tabs and the panel's bottom edge all
-            // moved when you switched (Marcello, 2026-08-22). The export gives
-            // the block one height — 556 — and switching sections now only
-            // changes what is inside it.
-            let viewport = budget
-            let hasBelow = regionNaturalHeight - scrollOffset - viewport > 2
+            // min(natural, budget): the region hugs its content again.
+            //
+            // This was the full budget for a while — the export pinned the
+            // block at 556 so the tab row never moved between sections
+            // (Marcello, 2026-08-22). That traded the app's own second
+            // product principle away: a panel that is 556 with three to-dos
+            // in it is mostly empty glass. Hugging is back by explicit call
+            // (Thomas, 2026-09-01) — the panel is a function of what is in
+            // it, and the tabs riding up and down with the content is the
+            // accepted cost, animated on the same contentHug spring as the
+            // silhouette so the two move as one.
+            //
+            // First pass after a cold mount measures 0; fall back to the
+            // budget for that frame rather than collapsing to nothing.
+            let natural = regionNaturalHeights[collection.id] ?? lastRegionNaturalHeight
+            let viewport = natural > 0 ? min(natural, budget) : budget
+            let hasBelow = natural - scrollOffset - viewport > 2
             // Indicators ON. They were hidden, so a capped region gave the eye
             // nothing at all to say "there is more" — rows below the fold and
             // the entire Completed section read as missing rather than
@@ -942,7 +1016,10 @@ struct TodoBrowsingView: View {
                         proxy.scrollTo(focused, anchor: scrollAnchor)
                     }
                 }
-                .onPreferenceChange(SectionHeightKey.self) { regionNaturalHeight = $0 }
+                .onPreferenceChange(SectionHeightKey.self) { height in
+                    regionNaturalHeights[collection.id] = height
+                    lastRegionNaturalHeight = height
+                }
                 .onPreferenceChange(ScrollOffsetKey.self) { scrollOffset = $0 }
                 .frame(height: viewport)
                 // The list ENDS at its own bottom edge. Without this a row
@@ -953,7 +1030,7 @@ struct TodoBrowsingView: View {
                 // The edge that is cut off softens, so the list visibly
                 // continues past it instead of ending on a hard crop.
                 .modifier(ScrollEdgeFade(scrollOffset: scrollOffset,
-                                         contentHeight: regionNaturalHeight,
+                                         contentHeight: natural,
                                          viewportHeight: viewport))
                 // A fade says "there is more"; this says how to get there, and
                 // takes you. Even at full height a long enough list still
@@ -968,9 +1045,11 @@ struct TodoBrowsingView: View {
                 // device carrying one message.
                 .animation(NotchAnimation.hintFade, value: hasBelow)
             }
-            // The panel must animate to the new budget, or opening Completed
-            // snaps instead of growing.
-            .animation(NotchAnimation.contentHug, value: store.completedExpanded)
+            // The panel must animate every viewport change — opening
+            // Completed, adding a row, switching to a shorter section — or
+            // the hug snaps instead of growing. Keyed on the viewport itself
+            // so any route into a new height takes the same spring.
+            .animation(NotchAnimation.contentHug, value: viewport)
         }
     }
 
@@ -1537,6 +1616,24 @@ private struct TodoItemRow: View {
         .onChange(of: isExpanded) { expanded in
             if !expanded { commitTitle() }
         }
+        // ⏎ on the focused row: the key router can't reach this view's
+        // private edit machinery, so it raises a one-shot request on the
+        // store and the row consumes it here — same flag pattern as
+        // draftWantsFocus, and it funnels into the exact code path a click
+        // takes, so the two inputs can never diverge.
+        .onReceive(TodoStore.shared.$titleEditRequestID) { requested in
+            guard requested == item.id else { return }
+            TodoStore.shared.titleEditRequestID = nil
+            beginEditingTitle()
+        }
+        // Escape while this row's title editor holds the caret: DISCARD.
+        // The key router consumes Esc itself (it must — loose, the key
+        // would close the whole notch) and announces the cancel instead;
+        // clearing the draft before the blur lands means the commit-on-blur
+        // that follows finds nothing to save.
+        .onReceive(NotificationCenter.default.publisher(for: .todoEditorEscape)) { _ in
+            if titleFieldFocused { titleDraft = nil }
+        }
         .contextMenu { contextMenuItems }
     }
 
@@ -1991,6 +2088,12 @@ private struct StepRow: View {
         // would stranded the draft in view state and silently lose it, so
         // leaving the screen saves too.
         .onDisappear { commit() }
+        // Escape while this step's editor holds the caret: DISCARD — same
+        // announcement TodoItemRow listens for, for the same reason (the key
+        // router consumes Esc before .onExitCommand can ever run).
+        .onReceive(NotificationCenter.default.publisher(for: .todoEditorEscape)) { _ in
+            if focused { draft = nil }
+        }
         .contextMenu {
             Button(L10n.t("todo.editTitle")) { beginEditing() }
             Divider()
@@ -2079,7 +2182,8 @@ private struct StepDraftRow: View {
 private struct ShortcutsOverlay: View {
     private let rows: [(String, String)] = [
         ("\u{2191} \u{2193}", "todo.sc.moveFocus"),
-        ("\u{21A9}", "todo.sc.toggleComplete"),
+        ("\u{2423}", "todo.sc.toggleComplete"),
+        ("\u{21A9}", "todo.sc.editTitle"),
         ("\u{2192} \u{2190}", "todo.sc.expandRow"),
         ("\u{2318}N", "todo.sc.newTodo"),
         ("\u{21E5}", "todo.switchSection"),

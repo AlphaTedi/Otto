@@ -91,7 +91,9 @@ enum LabMetrics {
     static let tabsInset: CGFloat = 24
     static let tabsDividerPaddingV: CGFloat = 12
     static let tabsTopPadding: CGFloat = 8
-    static let tabsBottomPadding: CGFloat = 24
+    // 24 → 16: with the block hugging, the foot read as a slab of empty
+    // glass under the tabs (Thomas, 2026-09-01).
+    static let tabsBottomPadding: CGFloat = 16
     static let tabsGap: CGFloat = 14
     static let tabPaddingH: CGFloat = 12
     static let tabPaddingV: CGFloat = 8
@@ -527,12 +529,21 @@ struct LabPanelsView: View {
             // No padding here: TodoTabView carries its own, to the same
             // number. Applying both is what made the panel's insets read as
             // roughly twice the design.
-            // FIXED height, not a maximum.
+            // NO height frame at all: the block is its content's height.
             //
-            // As a maximum the panel shrank to its content, so the tab bar
-            // rose and fell with however many to-dos a section happened to
-            // hold — the one row that must never move, moving most. The panel
-            // is 556 whatever is in it; the list takes the slack.
+            // It was pinned at 556 for a while so the tab bar never moved
+            // between sections — but that left a three-item list floating in
+            // mostly empty glass, and hugging is the product's own second
+            // principle. Restored by explicit call (Thomas, 2026-09-01).
+            //
+            // Not even `.frame(maxHeight: 556)`: in SwiftUI a max frame is
+            // "grow to this if the parent offers it", exactly as
+            // `maxWidth: .infinity` claims the width — so with the column
+            // proposing the whole window the block still drew 556 with the
+            // list top-aligned inside it (Thomas's screenshot, 2026-09-01).
+            // The ceiling lives where it can be enforced without stretching:
+            // the scroll region's own budget (TodoBrowsingView.maxRegion),
+            // which is derived from todoBlockMaxHeight.
             // While an alert is live the card is ALONE.
             //
             // The notch opened itself for the meeting; putting the whole to-do
@@ -542,7 +553,6 @@ struct LabPanelsView: View {
             // appeared twice, once above the other (Marcello, 2026-08-23).
             if calendar.activeAlert == nil {
                 TodoTabView()
-                    .frame(height: LabMetrics.todoBlockMaxHeight, alignment: .top)
                     .labBlock()
                     .transition(.opacity)
             }

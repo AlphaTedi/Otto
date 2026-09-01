@@ -70,6 +70,20 @@ final class TodoStore: ObservableObject {
     @Published var showShortcuts = false
     /// NC-1/NC-2: at most one row shows its note + checklist at a time.
     @Published var expandedItemID: UUID?
+    /// One-shot request to put the caret in a row's TITLE — the keyboard
+    /// mirror of clicking the row. Set by ⏎ in the key router, consumed by
+    /// the row the moment it has begun editing. A flag rather than a direct
+    /// call for the same reason `draftWantsFocus` is one: the row view is
+    /// the only thing that can focus its own field.
+    @Published var titleEditRequestID: UUID?
+
+    /// ⏎ on a focused row: open it and hand the caret to its title, exactly
+    /// as a click does (activateRow). One gesture, two inputs.
+    func requestTitleEdit(_ id: UUID) {
+        guard let item = items.first(where: { $0.id == id }), !item.isCompleted else { return }
+        withAnimation(NotchAnimation.contentHug) { expandedItemID = id }
+        titleEditRequestID = id
+    }
 
     // MARK: - Inline creation
     //
@@ -146,10 +160,16 @@ final class TodoStore: ObservableObject {
     func blurDraft() {
         draftWantsFocus = false
         draftFocused = false
-        guard let window = NSApp.keyWindow,
-              (window.firstResponder as? NSView)?.identifier
-                  == HighlightingTitleField.fieldIdentifier else { return }
-        window.makeFirstResponder(nil)
+        // Find the window actually holding the draft's caret rather than
+        // trusting NSApp.keyWindow: the notch is a non-activating panel, so
+        // it can host a live caret while some other window (or no window at
+        // all) is key — and asking the wrong window to resign left the caret
+        // blinking in a field the app had already decided was unfocused.
+        let window = NSApp.windows.first {
+            ($0.firstResponder as? NSView)?.identifier
+                == HighlightingTitleField.fieldIdentifier
+        }
+        window?.makeFirstResponder(nil)
     }
 
     /// The panel closed: the caret is gone with it, but the text is not.
@@ -180,15 +200,15 @@ final class TodoStore: ObservableObject {
         expandedItemID = nil
     }
 
-    /// ⏎ — file the draft into the destination the row is pointing at, and
-    /// hand the caret back.
+    /// ⏎ — file the draft into the destination the row is pointing at. The
+    /// caret STAYS in the field, so the next to-do is just more typing.
     ///
-    /// Keeping focus so a second to-do was "just more typing" cost more than
-    /// it saved: writing one to-do and then closing the notch took two
-    /// Escapes, one to leave a field the user had already finished with
-    /// (Marcello, 2026-08-16). Committing is the end of the sentence, so the
-    /// row returns to its resting placeholder state and a single Escape now
-    /// closes the panel. ⌃⇧N is one keystroke away for the next one.
+    /// It used to let go on ⏎ (Marcello, 2026-08-16), because closing the
+    /// notch after one to-do then cost two Escapes — one to leave a field
+    /// the user had already finished with. That cost is gone: Esc in an
+    /// EMPTY field closes the notch outright, so a burst of to-dos is
+    /// type-⏎-type-⏎-Esc and a single one is type-⏎-Esc. Keeping the caret
+    /// is now free, and it is what Thomas asked for (2026-09-01).
     @discardableResult
     func commitDraft() -> Bool {
         // NL-4: a recognized date phrase leaves the title and becomes a real
@@ -200,7 +220,9 @@ final class TodoStore: ObservableObject {
               addItem(title: title, collectionID: target,
                       urgency: .low, dueDate: parsed?.date) != nil else { return false }
         draftTitle = ""
-        blurDraft()
+        // Re-assert rather than assume: the field reports its own focus, and
+        // the list re-rendering underneath must not be able to take it.
+        draftWantsFocus = true
         return true
     }
 
@@ -419,6 +441,11 @@ final class TodoStore: ObservableObject {
         if collections.isEmpty { seedStarterCollections() }
         activeCollectionID = firstUserCollection?.id ?? collections.first?.id
         lastUsedCollectionID = lastUsedCollectionID ?? firstUserCollection?.id
+        // Old completions leave the live store for the Markdown archive on
+        // every launch; while the app stays running, the collapse path calls
+        // this once a day. Deferred a turn so the singleton finishes
+        // initializing before the vault (which reads other singletons) runs.
+        Task { @MainActor [weak self] in self?.archiveOldCompletedIfNeeded(force: true) }
     }
 
     /// TD-1: a starter set, fully renameable/deletable.
@@ -662,10 +689,16 @@ final class TodoStore: ObservableObject {
         if items[idx].isCompleted {
             settleTasks[id]?.cancel()
             settleTasks[id] = nil
+            let wasCompletedAt = items[idx].completedAt
             withAnimation(NotchAnimation.contentHug) {
                 settlingItemIDs.remove(id)
                 items[idx].isCompleted = false
                 items[idx].completedAt = nil
+            }
+            // The archive follows the checkbox: un-ticking takes the entry
+            // written at tick-off back out again.
+            if let wasCompletedAt {
+                MarkdownVault.shared.removeCompletion(items[idx], completedAt: wasCompletedAt, from: self)
             }
             // Putting one back is not the same event as finishing it.
             HapticManager.shared.todoUncompleted()
@@ -677,6 +710,10 @@ final class TodoStore: ObservableObject {
                 items[idx].completedAt = Date()
                 settlingItemIDs.insert(id)
             }
+            // Ticking off IS the record: the entry lands in
+            // Archive/<today>.md now, not a day later when the row leaves
+            // the panel (Thomas, 2026-09-01).
+            MarkdownVault.shared.recordCompletion(items[idx], from: self)
             settleTasks[id] = Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: 350_000_000)
                 guard !Task.isCancelled, let self else { return }
@@ -863,23 +900,72 @@ final class TodoStore: ObservableObject {
     }
 
     private func scheduleSave() {
+        // The Markdown mirror follows every save, on its own debounce.
+        MarkdownVault.shared.scheduleExport()
         saveWork?.cancel()
         saveWork = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard !Task.isCancelled, let self else { return }
-            let payload = Payload(
-                collections: self.collections,
-                items: self.items,
-                lastUsedCollectionID: self.lastUsedCollectionID
-            )
-            guard let data = try? JSONEncoder().encode(payload) else { return }
-            // Promote the last-known-good primary to the backup BEFORE
-            // overwriting it, then write the new primary atomically so a
-            // crash mid-write can never leave a truncated file.
-            if let existing = try? Data(contentsOf: self.fileURL), !existing.isEmpty {
-                try? existing.write(to: self.backupURL, options: .atomic)
-            }
-            try? data.write(to: self.fileURL, options: .atomic)
+            self.writePayload()
         }
+    }
+
+    /// Quit-time flush. The debounced save leaves a 500 ms window in which a
+    /// quit silently dropped the last edit — the debounce exists to batch
+    /// keystrokes, not to make the final one optional.
+    func saveNow() {
+        saveWork?.cancel()
+        saveWork = nil
+        writePayload()
+        MarkdownVault.shared.exportNow()
+    }
+
+    private func writePayload() {
+        let payload = Payload(
+            collections: collections,
+            items: items,
+            lastUsedCollectionID: lastUsedCollectionID
+        )
+        guard let data = try? JSONEncoder().encode(payload) else { return }
+        // Promote the last-known-good primary to the backup BEFORE
+        // overwriting it, then write the new primary atomically so a
+        // crash mid-write can never leave a truncated file.
+        if let existing = try? Data(contentsOf: fileURL), !existing.isEmpty {
+            try? existing.write(to: backupURL, options: .atomic)
+        }
+        try? data.write(to: fileURL, options: .atomic)
+    }
+
+    // MARK: - Archiving (completed → Markdown history)
+
+    /// When completed items were last swept to the archive, so the collapse
+    /// path can call this freely without re-scanning on every close.
+    private var lastArchiveSweep: Date?
+
+    /// Completed to-dos older than a day leave the live store for
+    /// `Archive/<completion day>.md` in the storage folder (Thomas,
+    /// 2026-09-01). They were history pretending to be data: the Completed
+    /// pile grew forever (19 sitting in Work by August), todos.json grew
+    /// with it, and "what did I finish last Tuesday" had no answer at all.
+    /// Now the panel's Completed section holds only the fresh day, and every
+    /// older completion is a dated, greppable Markdown line.
+    ///
+    /// An item is only removed once its archive line is durably written —
+    /// `MarkdownVault.archive` reports which ids landed — so a failed write
+    /// keeps the item in the store and the sweep retries later.
+    func archiveOldCompletedIfNeeded(force: Bool = false) {
+        if !force, let last = lastArchiveSweep,
+           Calendar.current.isDateInToday(last) { return }
+        lastArchiveSweep = Date()
+
+        let cutoff = Date().addingTimeInterval(-86400)
+        let old = items.filter {
+            $0.isCompleted && ($0.completedAt ?? .distantFuture) < cutoff
+        }
+        guard !old.isEmpty else { return }
+        let archived = MarkdownVault.shared.archive(old, from: self)
+        guard !archived.isEmpty else { return }
+        items.removeAll { archived.contains($0.id) }
+        scheduleSave()
     }
 }

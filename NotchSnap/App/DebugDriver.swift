@@ -264,7 +264,9 @@ enum DebugDriver {
         findQuery='\(store.findQuery)' findMatches=\(store.findMatches.count) \
         draftFocused=\(store.draftFocused) dest=\(store.draftDestination?.name ?? "nil") \
         draft='\(store.draftTitle)' \
+        layout=\(app.notchLayout) \
         todoContentHeight=\(app.todoContentHeight) \
+        labColumnHeight=\(app.labColumnHeight) \
         notchExtraHeight=\(app.notchExtraHeight)
         """)
     }

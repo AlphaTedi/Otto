@@ -151,7 +151,13 @@ struct NotchExpandedView: View {
                 emptyState
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // TOP-aligned, explicitly. The default alignment of a max frame is
+        // centre, and the silhouette proposes an ANIMATING height: for the
+        // duration of a big-to-small section switch the proposal is taller
+        // than the content, so the content sat centred in the slack and the
+        // draft row slid up and down with every switch (Thomas, 2026-09-01).
+        // The input must stay put; only the bottom edge moves.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         // The expanded notch is the tray's drop target: files, images, text
         // and links dragged here fall into the Tray section.
         .onDrop(of: ShelfDropHandler.acceptedTypes, isTargeted: $shelfDropTargeted) { providers in

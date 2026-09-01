@@ -69,9 +69,14 @@ enum NotchAnimation {
 
     // CONTENT HUG: the hero spring — panel height, row enter/exit, and the
     // Completed section all share this ONE spring so container and content
-    // visibly move together instead of racing each other (§8.3). Slightly
-    // underdamped on purpose: the panel should feel alive, not utilitarian.
-    static let contentHug = Animation.spring(response: 0.45, dampingFraction: 0.60)
+    // visibly move together instead of racing each other (§8.3).
+    //
+    // Was 0.45 / 0.60. With the panel hugging again this spring fires on
+    // every height change — each new row, each section switch — and at 0.60
+    // the overshoot read as the whole panel bouncing rather than settling
+    // ("still too heavy", Thomas 2026-09-01). 0.82 is the same chrome band
+    // contentEntry sits in: a clean settle with a trace of life, no rebound.
+    static let contentHug = Animation.spring(response: 0.38, dampingFraction: 0.82)
 
     // HINT FADE: contextual shortcut hints and ⌘-held badges (§7.1/7.2).
     // Deliberately a different weight of motion from contentHug — quick and
@@ -98,16 +103,21 @@ enum NotchAnimation {
 // sliding in on a tab switch looked wrong (FB2).
 
 extension NotchAnimation {
-    /// Stagger step. Small enough that four cards finish within the shape's own
-    /// expansion, so the whole thing still reads as one gesture.
-    static let contentStaggerStep: Double = 0.035
+    /// Stagger step. Small enough that the rows finish within the shape's own
+    /// expansion, so the whole thing still reads as one gesture — but each
+    /// row perceptibly behind the one above it (was 35 ms over six rows,
+    /// which read as no stagger at all; Thomas, 2026-09-01).
+    static let contentStaggerStep: Double = 0.045
+    /// Rows past this land together: a long list must not take a second to
+    /// assemble, and by the tenth row the eye has stopped counting.
+    static let contentStaggerCap = 10
 
     /// Entry spring for one child of the expanded panel.
     /// Damping 0.82 sits in the "UI chrome" band — it settles cleanly, with no
     /// overshoot that would read as bouncy on a utilitarian card.
     static func contentEntry(index: Int) -> Animation {
         .spring(response: 0.34, dampingFraction: 0.82)
-        .delay(0.05 + Double(min(index, 6)) * contentStaggerStep)
+        .delay(0.05 + Double(min(index, contentStaggerCap)) * contentStaggerStep)
     }
 }
 
@@ -146,7 +156,7 @@ private struct NotchEntryModifier: ViewModifier {
             .opacity(appeared ? 1 : 0)
             // Rises the last few points into place. Small: this is a settle,
             // not an entrance.
-            .offset(y: appeared || reduceMotion ? 0 : 10)
+            .offset(y: appeared || reduceMotion ? 0 : 12)
             .scaleEffect(appeared || reduceMotion ? 1 : 0.97, anchor: .top)
             .animation(reduceMotion ? .easeOut(duration: 0.12)
                                     : NotchAnimation.contentEntry(index: index),

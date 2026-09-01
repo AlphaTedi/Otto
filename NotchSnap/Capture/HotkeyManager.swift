@@ -184,6 +184,12 @@ class HotkeyManager {
             Task { @MainActor in
                 AppState.shared.pendingNotchFilter = .todos
                 NotchController.shared.triggerExpand()
+                // Opening IS the intent to interact: the caret lands in the
+                // draft row so typing works immediately, and — since a
+                // nonactivating panel never takes focus on its own — this is
+                // also what lets Esc and every other shortcut reach the
+                // panel at all (keyboard-first, Thomas 2026-09-01).
+                NotchController.shared.makeKeyForTyping()
             }
         }
     }

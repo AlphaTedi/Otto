@@ -34,12 +34,32 @@ interactive panel in/below the MacBook notch. It began as a screenshot utility a
    (rare, one-time configuration). No floating windows for daily flows.
 2. **Fixed width, variable height.** The panel *hugs* its content; height is a
    measured, animated function of what's inside — never a fixed scroll box.
+   (Re-affirmed 2026-09-01 after the panels export pinned the block at 556pt;
+   the hug is back and the tab row riding with the content is the accepted cost.)
 3. **Creation is never implicit.** Nothing is written to the store as a side effect;
    an explicit action always commits.
 4. **No permanent shortcut legends.** Hints appear contextually (focused row),
    on modifier-hold, or in an on-demand `?` overlay.
 5. **Replace, don't add.** When a spec supersedes an element, delete the old one in
    the same change (this was a repeated failure mode — see §7).
+6. **Keyboard-first.** (Thomas, 2026-09-01.) Every daily flow — create, edit,
+   complete, navigate, close — must be fully drivable without the mouse, and a
+   feature is not done until its keyboard path exists in the same change. The
+   concrete contract: opening the notch by any *explicit* act (click, hotkey,
+   intent) puts the caret in the draft row immediately; Esc always backs out one
+   level and, from plain browsing, closes the notch — there is no state Esc
+   cannot leave, and a click outside the drawn content means the same thing;
+   the draft field is row zero of the list (↓ walks into the list, ↑ from the
+   first row returns to the field); ⏎ on a focused row edits it, Space
+   completes it. Hover-opens
+   are the one exception to focus-taking: a pointer passing the notch must
+   never steal typing from another app.
+7. **Files over silos.** (Thomas, 2026-09-01.) Everything the user writes is
+   also on disk as plain Markdown in a folder they choose (Settings › Storage,
+   default `~/Documents/Otto`) — findable, greppable, Obsidian-openable without
+   this app. todos.json stays the machine's source of truth; the Markdown is
+   the human's copy and is never the only copy of live data (the append-only
+   Archive of old completions is the deliberate exception). See MarkdownVault.
 
 ---
 
@@ -165,6 +185,7 @@ prioritise other work. Re-enable with one line or
 | 08-16 | New to-dos land at the TOP of their section | Appended below a long list they were off-screen, which reads as nothing having happened |
 | 08-16 | Esc in the draft steps out and KEEPS the text | Esc backs out one level everywhere else; a second Esc closes the notch, and a half-written to-do survives both |
 | 08-16 | `⏎` releases the caret instead of holding it for the next to-do | Writing one to-do then closing the notch cost two Escapes, one just to leave a finished field |
+| 09-01 | **REVERSED:** `⏎` keeps the caret in the draft field | Esc in an empty field now closes the notch outright, so the two-Escape cost is gone; a burst of to-dos is type-⏎-type-⏎-Esc (Thomas) |
 | 08-16 | Clicking dead panel space blurs the draft as well as ending a row edit | "Stop typing" cannot mean one of the two live editors and not the other |
 | 08-16 | Close policy rule 8 WITHDRAWN — a global-shortcut capture no longer closes the notch | The new row is at the top of the list where you can see it; closing over it hid the only confirmation anything happened |
 | 08-16 | `WordKeycap` for named keys (Tab, Esc), separate from `Keycap` | `Keycap` draws one cap per character by design ("⌘↩" is two keys), so "tab" rendered as t·a·b and read as a three-key chord |
@@ -277,7 +298,49 @@ Repo skill: `.claude/skills/verify/SKILL.md`.
 
 ---
 
-## 8. Open threads
+## 8. The 2026-09-01 fundamentals pass
+
+One change ("app refactoring fundamentals", Thomas) that set four foundations:
+
+- **Markdown storage (`Todo/MarkdownVault.swift`).** One `.md` per section plus
+  `Notes.md` in a user-chosen folder (Settings › Storage; default
+  `~/Documents/Otto`, lab builds use `Otto Lab`). Obsidian Tasks conventions
+  (📅 due, ⏫/🔼 priority, ✅ done). Write-only mirror, debounced with the JSON
+  save; a `.otto-vault.json` manifest lets renames/deletes clean up without
+  ever touching user-authored files. **Ticking off a to-do writes it to
+  `Archive/<completion-day>.md` immediately** (`recordCompletion`, keyed by
+  the task line — title, section, minute; un-ticking removes the block
+  again). After a day the completed item leaves the live store (`archive`
+  confirms the entry is on disk before pruning) — sweep runs at launch and
+  once per day on collapse, never while the panel is open. `AppSettings` decode is now `decodeIfPresent` per
+  field (adding a settings field used to reset ALL settings), and every store
+  flushes synchronously in `applicationWillTerminate` (the 500 ms debounce
+  used to drop the last edit on quit).
+- **The hug restored.** The panels export had pinned the to-do block at a fixed
+  556 (`LabMetrics.todoBlockMaxHeight` as a *fixed* frame + `viewport = budget`),
+  which also fed the revived container layout a constant measurement. Now
+  `viewport = min(natural, budget)`, the block frame is a `maxHeight`, and the
+  slack-absorbing Spacer is gone — it was what closed the container's
+  measurement loop (content stretched to the proposal, so the "measured" height
+  was the proposal echoed back). Switching layouts resets BOTH stale
+  measurements (`labColumnHeight` and `todoContentHeight`).
+- **Keyboard-first mechanics** (principle 6). Esc-to-close routes through
+  `forceCollapse()` — `resignKey()` alone never gives key status up, so the
+  unforced collapse was vetoed by the engagement Esc itself created. Explicit
+  opens (click, ⌃⇧T, intents) call `makeKeyForTyping()`. ⏎ edits the focused
+  row via `TodoStore.requestTitleEdit` (same path as clicking); Space
+  completes. The key router is scoped to `NotchPanel` windows (it was eating
+  the Move picker's Esc) and announces `.todoEditorEscape` so title/step
+  editors can DISCARD on Esc even though the monitor must consume the key.
+- **App Intents (`Intents/TodoIntents.swift`).** AddTodo (NL dates via the same
+  parser as the draft row), CompleteTodo, GetOpenTodos, OpenTodos + App
+  Shortcuts — the seam Shortcuts/Spotlight/Siri and Apple's AI surfaces route
+  through. Thin by design: parameter resolution here, one TodoStore call, done.
+  Gotcha: App Shortcut phrases may only interpolate AppEntity/AppEnum — a
+  `\(\.$text)` String parameter in a phrase fails the build at metadata
+  extraction, not compile.
+
+## 9. Open threads
 
 - **Google OAuth provider** — the structural fix for calendar sync fragility; reads
   Google's API live. Needs a Google Cloud OAuth client ID from Marcello. The

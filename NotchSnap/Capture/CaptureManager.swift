@@ -35,6 +35,11 @@ extension Notification.Name {
     /// Posted when a to-do is actually committed. Onboarding uses it to know
     /// the user finished the job, not just opened the panel.
     static let todoCreated = Notification.Name("otto.todoCreated")
+    /// Posted by the key router when Escape lands while a row's title or
+    /// step editor holds the caret. The editors listen and DISCARD their
+    /// draft — the router must consume Esc itself (letting it through would
+    /// close the notch), so "Escape means cancel" has to travel this way.
+    static let todoEditorEscape = Notification.Name("otto.todoEditorEscape")
 }
 
 // MARK: - CaptureManager
