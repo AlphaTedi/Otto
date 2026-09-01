@@ -27,6 +27,12 @@ struct NotchRootView: View {
             if notchLayout == .panels, controller.state == .expanded {
                 LabPanelsView()
                     .environmentObject(appState)
+                    // The staggered entry (`notchEntry`) reads this. Inside
+                    // the silhouette NotchShapeView sets it; out here the
+                    // column is a sibling and inherited the default (true),
+                    // so in the panels layout the rows never staggered at
+                    // all — they were simply there when the fade ended.
+                    .environment(\.notchContentAppeared, controller.contentVisible)
                     .transition(.opacity.combined(with: .offset(y: -10)))
             }
             notchShape

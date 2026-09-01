@@ -163,6 +163,21 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             case 36:                            // ⏎ — file it, caret stays put
                 store.commitDraft()
                 return true
+            case 125:                           // ↓ — walk from the field into the list
+                // The draft is row zero of the list, not a separate mode:
+                // ↓ hands the caret back and lands focus on the first to-do,
+                // so Space/⏎/→ mean what they always mean there, and ↑ from
+                // that first row returns to the field (see handleBrowsing).
+                // One key, one direction, the whole panel drivable from the
+                // place every open lands you (Thomas, 2026-09-01).
+                guard let collection = store.activeCollection,
+                      !store.openItems(in: collection).isEmpty else { return true }
+                notchWindow?.makeFirstResponder(nil)
+                store.blurDraft()
+                store.moveFocus(1)              // nil → first row
+                return true
+            case 126:                           // ↑ — nothing above the field
+                return true
             case 53:                            // Esc — step out, keep the text
                 notchWindow?.makeFirstResponder(nil)
                 store.blurDraft()
@@ -332,6 +347,13 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
 
             switch keyCode {
             case 126:                           // ↑
+                // From the first row, ↑ goes back UP into the draft field —
+                // the field is row zero (see handleDraft's ↓).
+                if let focused = store.focusedItemID,
+                   store.visibleFocusIndex(of: focused) == 0 {
+                    store.focusDraft(fromGlobalShortcut: false)
+                    return true
+                }
                 store.moveFocus(-1); return true
             case 125:                           // ↓
                 store.moveFocus(1); return true

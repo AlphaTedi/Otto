@@ -48,7 +48,10 @@ interactive panel in/below the MacBook notch. It began as a screenshot utility a
    concrete contract: opening the notch by any *explicit* act (click, hotkey,
    intent) puts the caret in the draft row immediately; Esc always backs out one
    level and, from plain browsing, closes the notch — there is no state Esc
-   cannot leave; ⏎ on a focused row edits it, Space completes it. Hover-opens
+   cannot leave, and a click outside the drawn content means the same thing;
+   the draft field is row zero of the list (↓ walks into the list, ↑ from the
+   first row returns to the field); ⏎ on a focused row edits it, Space
+   completes it. Hover-opens
    are the one exception to focus-taking: a pointer passing the notch must
    never steal typing from another app.
 7. **Files over silos.** (Thomas, 2026-09-01.) Everything the user writes is

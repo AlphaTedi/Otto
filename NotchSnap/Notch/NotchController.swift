@@ -811,11 +811,13 @@ class NotchController: ObservableObject {
 
         localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown, .rightMouseDown, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
             let type = event.type
+            // Snapshot before hopping actors — NSEvent isn't Sendable.
+            let inNotchWindow = event.window is NotchPanel
             Task { @MainActor in
                 guard let self else { return }
                 switch type {
                 case .leftMouseDown:
-                    self.handleClick()
+                    self.handleClick(inNotchWindow: inNotchWindow)
                 case .rightMouseDown:
                     self.handleRightClick(event)
                 case .leftMouseDragged:
@@ -948,12 +950,26 @@ class NotchController: ObservableObject {
         return true
     }
 
-    private func handleClick() {
+    private func handleClick(inNotchWindow: Bool) {
         // Tested against the DRAWN shape, not the trigger zone: the trigger
         // zone is a deliberately forgiving hover target, and "I was near it"
         // must not mean "I clicked it". Opening the notch requires landing on
         // the notch (Marcello, 2026-08-05).
         let onNotch = visibleShapeScreenRect().contains(NSEvent.mouseLocation)
+        // Our own window is far larger than what it draws, and not every
+        // click outside the drawn content falls through to the app beneath:
+        // where the glass shadow leaves the pixels faintly non-transparent
+        // the window server hands the click to US, hitTest says "not mine",
+        // and the event died here — a click just beside the panel did
+        // nothing, while the same click a little further out (reaching the
+        // global monitor) closed it. A click outside the content is outside,
+        // whichever window it arrived through; it means what Escape means
+        // (Thomas, 2026-09-01). Only for the notch's own window: a click in
+        // Settings or the Move picker is not a click outside the notch.
+        if state == .expanded, inNotchWindow {
+            handleOutsideClick(NSEvent.mouseLocation)
+            return
+        }
         switch state {
         case .idle, .hovering:
             if onNotch {
