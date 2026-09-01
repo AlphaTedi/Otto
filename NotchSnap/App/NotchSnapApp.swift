@@ -71,6 +71,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyManager?.stop()
         ClipboardMonitor.shared.stopMonitoring()
         TempFileManager.shared.cleanupAll()
+        // Flush the debounced stores. Every save path waits 500 ms to batch
+        // keystrokes, so without this a quit inside that window silently
+        // dropped the last edit — the one bug a to-do app must not have.
+        MainActor.assumeIsolated {
+            TodoStore.shared.saveNow()
+            NotesStore.shared.saveNow()
+        }
     }
 
     // MARK: - Settings & Quit actions (called from menu and notifications)

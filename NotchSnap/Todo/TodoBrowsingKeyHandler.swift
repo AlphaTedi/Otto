@@ -39,6 +39,16 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
         func install() {
             guard monitor == nil else { return }
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                // Only the notch's own keys. A local monitor hears every key
+                // the APP receives, so with Settings or the Move picker key
+                // this router was still answering — the picker's first Esc
+                // was consumed here (resigning its field) and the second one
+                // fell through to the notch-close monitor, collapsing the
+                // notch while the picker stayed up. Keys addressed to another
+                // window are that window's business.
+                if let window = event.window, !(window is NotchPanel) {
+                    return event
+                }
                 // NSEvent isn't Sendable — snapshot fields before hopping
                 // onto the actor.
                 let cmd = event.modifierFlags.contains(.command)
@@ -131,8 +141,13 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
         /// was looking at (Marcello, 2026-08-22). Asking the panel itself is
         /// true regardless of who holds focus.
         @MainActor
+        private static var notchWindow: NSWindow? {
+            NSApp.keyWindow ?? NSApp.windows.first { $0 is NotchPanel }
+        }
+
+        @MainActor
         private static var notchResponder: NSResponder? {
-            (NSApp.keyWindow ?? NSApp.windows.first { $0 is NotchPanel })?.firstResponder
+            notchWindow?.firstResponder
         }
 
         @MainActor
@@ -149,7 +164,7 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 store.commitDraft()
                 return true
             case 53:                            // Esc — step out, keep the text
-                NSApp.keyWindow?.makeFirstResponder(nil)
+                notchWindow?.makeFirstResponder(nil)
                 store.blurDraft()
                 return true
             default:
@@ -243,7 +258,16 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                     return true
                 }
                 if keyCode == 53 {
-                    NSApp.keyWindow?.makeFirstResponder(nil)
+                    // Escape means DISCARD in a row's title or step editor —
+                    // their .onExitCommand says so — but this monitor consumes
+                    // the key before AppKit can deliver it (letting it through
+                    // would hand it to the notch-close monitor instead, which
+                    // closes the whole panel mid-edit). So the discard is
+                    // announced explicitly, synchronously, BEFORE the blur:
+                    // the editors listen and drop their draft, and the
+                    // commit-on-blur that follows finds nothing to commit.
+                    NotificationCenter.default.post(name: .todoEditorEscape, object: nil)
+                    notchWindow?.makeFirstResponder(nil)
                     return true
                 }
                 return false
@@ -314,9 +338,20 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                     store.expandedItemID = nil
                 }
                 return true
-            case 49, 36:                        // Space / Return — complete
+            case 49:                            // Space — complete
                 guard let focused = store.focusedItemID else { return false }
                 store.toggleComplete(focused)
+                return true
+            case 36:                            // ⏎ — open the row and edit it
+                // The keyboard mirror of clicking a row (activateRow): the
+                // details open and the caret lands in the title. Finder's ⏎
+                // renames for the same reason — Return on a selected thing
+                // means "work on this one", and completing stays on Space,
+                // one key with one meaning each. Before this, editing a
+                // to-do was the only daily act that REQUIRED the mouse
+                // (a user of Marcello's, then Thomas, 2026-09-01).
+                guard let focused = store.focusedItemID else { return false }
+                store.requestTitleEdit(focused)
                 return true
             default:
                 // QF-2: any printable character starts Quick Find, seeded

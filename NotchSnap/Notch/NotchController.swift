@@ -425,6 +425,12 @@ class NotchController: ObservableObject {
             panel?.resignKey()
             panel?.ignoresMouseEvents = true
 
+            // Day-old completions move to the Markdown archive on the way
+            // OUT, never while the panel is open — rows silently vanishing
+            // from a Completed section the user is looking at would read as
+            // data loss. Once per day; the call is a no-op otherwise.
+            TodoStore.shared.archiveOldCompletedIfNeeded()
+
             collapseTask = nil
         }
     }
@@ -787,8 +793,15 @@ class NotchController: ObservableObject {
                     // panel closes outright.
                     guard !TodoStore.shared.isPanelPinnedOpen else { return false }
                     guard self.state == .expanded else { return false }
-                    self.panel?.resignKey()
-                    self.triggerCollapse()
+                    // forceCollapse, not resignKey + triggerCollapse: the
+                    // panel being key counts as "engaged", resignKey alone
+                    // does not give key status up (allowKey has to drop
+                    // first — see forceCollapse), and an unforced collapse
+                    // is vetoed by the very engagement pressing Esc created.
+                    // The event was consumed and nothing closed: the exact
+                    // "Esc doesn't work while the notch is open" report
+                    // (Thomas, 2026-09-01).
+                    self.forceCollapse()
                     return true
                 }
                 if handled { return nil }
@@ -943,13 +956,26 @@ class NotchController: ObservableObject {
         let onNotch = visibleShapeScreenRect().contains(NSEvent.mouseLocation)
         switch state {
         case .idle, .hovering:
-            if onNotch { triggerExpand() }
+            if onNotch {
+                triggerExpand()
+                // A click is an explicit open, and opening is the intent to
+                // interact: the caret lands in the draft row immediately
+                // (keyboard-first, Thomas 2026-09-01). This also activates
+                // the app, which is what lets Esc, arrows and Quick Find
+                // reach the panel at all — a nonactivating panel opened by
+                // click otherwise keeps sending every key to the app the
+                // user came from. Hover-opens deliberately do NOT do this:
+                // stealing keyboard focus on a mouse pass-over would yank
+                // typing out of whatever the user is writing in.
+                makeKeyForTyping()
+            }
         case .captureNotification:
             if onNotch {
                 // Interrupt notification → expand to full gallery
                 notificationTask?.cancel()
                 notificationContentVisible = false
                 triggerExpand()
+                makeKeyForTyping()
             }
         case .expanded:
             break
@@ -1192,8 +1218,11 @@ class NotchController: ObservableObject {
     func toggleCreate() {
         if state == .expanded && TodoStore.shared.draftFocused {
             TodoStore.shared.blurDraft()
-            panel?.resignKey()
-            triggerCollapse()
+            // forceCollapse for the same reason Escape uses it: resignKey
+            // alone does not surrender key status, and a still-key panel
+            // counts as "engaged", so the unforced collapse this used to
+            // call was vetoed by the very state it was trying to leave.
+            forceCollapse()
         } else {
             openCreate()
         }

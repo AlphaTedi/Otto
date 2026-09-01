@@ -527,12 +527,14 @@ struct LabPanelsView: View {
             // No padding here: TodoTabView carries its own, to the same
             // number. Applying both is what made the panel's insets read as
             // roughly twice the design.
-            // FIXED height, not a maximum.
+            // A MAXIMUM, not a fixed height: the block hugs its content.
             //
-            // As a maximum the panel shrank to its content, so the tab bar
-            // rose and fell with however many to-dos a section happened to
-            // hold — the one row that must never move, moving most. The panel
-            // is 556 whatever is in it; the list takes the slack.
+            // It was pinned at 556 for a while so the tab bar never moved
+            // between sections — but that left a three-item list floating in
+            // mostly empty glass, and hugging is the product's own second
+            // principle. Restored by explicit call (Thomas, 2026-09-01); the
+            // scroll region inside caps itself to the same budget, so the
+            // cap here is a guard rail, not the working size.
             // While an alert is live the card is ALONE.
             //
             // The notch opened itself for the meeting; putting the whole to-do
@@ -542,7 +544,7 @@ struct LabPanelsView: View {
             // appeared twice, once above the other (Marcello, 2026-08-23).
             if calendar.activeAlert == nil {
                 TodoTabView()
-                    .frame(height: LabMetrics.todoBlockMaxHeight, alignment: .top)
+                    .frame(maxHeight: LabMetrics.todoBlockMaxHeight, alignment: .top)
                     .labBlock()
                     .transition(.opacity)
             }

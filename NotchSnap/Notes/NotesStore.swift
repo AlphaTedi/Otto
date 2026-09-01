@@ -95,14 +95,29 @@ final class NotesStore: ObservableObject {
     // MARK: - Persistence (debounced)
 
     private func scheduleSave() {
+        // Notes ride along in the Markdown storage folder too (Notes.md).
+        MarkdownVault.shared.scheduleExport()
         saveWork?.cancel()
         saveWork = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard !Task.isCancelled, let self else { return }
-            if let data = try? JSONEncoder().encode(self.notes) {
-                try? data.write(to: self.indexURL)
-            }
-            try? self.draft.write(to: self.draftURL, atomically: true, encoding: .utf8)
+            self.write()
         }
+    }
+
+    /// Quit-time flush — same contract as TodoStore.saveNow().
+    func saveNow() {
+        saveWork?.cancel()
+        saveWork = nil
+        write()
+    }
+
+    private func write() {
+        if let data = try? JSONEncoder().encode(notes) {
+            // Atomic, matching every other store — a crash mid-write must
+            // not be able to truncate the notes index.
+            try? data.write(to: indexURL, options: .atomic)
+        }
+        try? draft.write(to: draftURL, atomically: true, encoding: .utf8)
     }
 }

@@ -135,6 +135,46 @@ struct AppSettings: Codable {
     var showInDock: Bool = false
     var appTheme: AppTheme = .system
 
+    // Storage — the user-visible Markdown home of every to-do and note.
+    // A plain URL, no security-scoped bookmark: the app is not sandboxed,
+    // same as saveDirectory above. See MarkdownVault.
+    var vaultDirectory: URL = MarkdownVault.defaultDirectory
+
+    init() {}
+
+    // Hand-rolled, decodeIfPresent for EVERY field — the same forward-compat
+    // hook TodoItem has. The synthesized decoder throws on any missing key,
+    // and `load()` answers a throw with factory defaults: with synthesized
+    // decoding, ADDING a settings field silently reset every setting a user
+    // had (hotkeys, save folder, theme) on their first launch of the new
+    // version. Adding a field now means adding one line here.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = AppSettings()
+        captureHotkey = (try? c.decodeIfPresent(KeyCombo.self, forKey: .captureHotkey)) ?? defaults.captureHotkey
+        windowHotkey = (try? c.decodeIfPresent(KeyCombo.self, forKey: .windowHotkey)) ?? defaults.windowHotkey
+        fullscreenHotkey = (try? c.decodeIfPresent(KeyCombo.self, forKey: .fullscreenHotkey)) ?? defaults.fullscreenHotkey
+        repeatHotkey = (try? c.decodeIfPresent(KeyCombo.self, forKey: .repeatHotkey)) ?? defaults.repeatHotkey
+        defaultCaptureMode = (try? c.decodeIfPresent(CaptureMode.self, forKey: .defaultCaptureMode)) ?? defaults.defaultCaptureMode
+        playSound = (try? c.decodeIfPresent(Bool.self, forKey: .playSound)) ?? defaults.playSound
+        windowShadow = (try? c.decodeIfPresent(Bool.self, forKey: .windowShadow)) ?? defaults.windowShadow
+        notchTrigger = (try? c.decodeIfPresent(NotchTrigger.self, forKey: .notchTrigger)) ?? defaults.notchTrigger
+        hoverDelayMs = (try? c.decodeIfPresent(Int.self, forKey: .hoverDelayMs)) ?? defaults.hoverDelayMs
+        autoCollapseSeconds = (try? c.decodeIfPresent(Int.self, forKey: .autoCollapseSeconds)) ?? defaults.autoCollapseSeconds
+        showBadgeCounter = (try? c.decodeIfPresent(Bool.self, forKey: .showBadgeCounter)) ?? defaults.showBadgeCounter
+        autoCopyToClipboard = (try? c.decodeIfPresent(Bool.self, forKey: .autoCopyToClipboard)) ?? defaults.autoCopyToClipboard
+        autoSaveFile = (try? c.decodeIfPresent(Bool.self, forKey: .autoSaveFile)) ?? defaults.autoSaveFile
+        saveDirectory = (try? c.decodeIfPresent(URL.self, forKey: .saveDirectory)) ?? defaults.saveDirectory
+        fileFormat = (try? c.decodeIfPresent(FileFormat.self, forKey: .fileFormat)) ?? defaults.fileFormat
+        jpegQuality = (try? c.decodeIfPresent(Double.self, forKey: .jpegQuality)) ?? defaults.jpegQuality
+        maxSessionScreenshots = (try? c.decodeIfPresent(Int.self, forKey: .maxSessionScreenshots)) ?? defaults.maxSessionScreenshots
+        clearSessionOnLaunch = (try? c.decodeIfPresent(Bool.self, forKey: .clearSessionOnLaunch)) ?? defaults.clearSessionOnLaunch
+        launchAtLogin = (try? c.decodeIfPresent(Bool.self, forKey: .launchAtLogin)) ?? defaults.launchAtLogin
+        showInDock = (try? c.decodeIfPresent(Bool.self, forKey: .showInDock)) ?? defaults.showInDock
+        appTheme = (try? c.decodeIfPresent(AppTheme.self, forKey: .appTheme)) ?? defaults.appTheme
+        vaultDirectory = (try? c.decodeIfPresent(URL.self, forKey: .vaultDirectory)) ?? defaults.vaultDirectory
+    }
+
     // MARK: Persistence
 
     private static let storageKey = "notchsnap.settings"
