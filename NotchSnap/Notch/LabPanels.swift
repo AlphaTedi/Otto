@@ -369,7 +369,11 @@ struct LabMeetingBlock: View {
                             // deepen the appearance rather than being black.
                             // On a light panel a black sliver read as a shadow
                             // cast by nothing.
-                            .fill(DSColor.stackedCardFill.opacity(1 - 0.22 * depth))
+                            // `depth` is a CGFloat because the scale and offset
+                            // below need one; `opacity` wants a Double, and the
+                            // literal on its own left the compiler unable to
+                            // choose. Stated rather than inferred.
+                            .fill(DSColor.stackedCardFill.opacity(Double(1 - 0.22 * depth)))
                             .overlay(
                                 RoundedRectangle(cornerRadius: LabMetrics.meetingRadius,
                                                  style: .continuous)
