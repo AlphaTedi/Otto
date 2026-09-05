@@ -135,6 +135,63 @@ private struct SectionHeightKey: PreferenceKey {
     }
 }
 
+/// The panel's chrome, MEASURED.
+///
+/// The scroll region's ceiling is what is left of the block after everything
+/// that is not the list has taken its share, so the budget has to know how
+/// tall those things actually are. It used to know by arithmetic on
+/// constants — and the constants drifted every time one of the pieces was
+/// restyled, each time by an amount nobody noticed until the section pills
+/// were hanging out of the bottom of the panel: the creation bar grew 10pt
+/// when it became a recessed well, the Completed header arrived carrying 24pt
+/// of padding the number for it did not include. Three overflows, one cause.
+///
+/// Measured, the budget cannot drift. The pieces report what they drew and
+/// the list gets the remainder.
+///
+/// No feedback loop: none of these heights is a function of the viewport they
+/// are shrinking, so a change settles in one pass.
+@MainActor final class PanelChrome: ObservableObject {
+    static let shared = PanelChrome()
+    /// Creation bar plus the gap under it. Seeded at the old constant so the
+    /// first frame is plausible before anything has been measured.
+    @Published var draftBlock: CGFloat = LabMetrics.barHeight + LabMetrics.sectionGap
+    /// The section row with both its rules and paddings.
+    @Published var tabRow: CGFloat = LabMetrics.tabsDividerPaddingV
+        + LabMetrics.tabsTopPadding + 31 + LabMetrics.tabsBottomPadding
+}
+
+private struct DraftBlockKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct TabRowHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// The drawn height of the pinned Completed section, measured rather than
+/// assumed.
+///
+/// It was a constant (`completedHeaderHeight`, 24), and the constant was
+/// wrong twice over: the header carries 24pt of its own top padding on top of
+/// its 24pt of content, and when the section is OPEN it grows to 160. A
+/// budget that subtracts a guess is a budget that overflows by the size of the
+/// guess — which is exactly what pushed the section pills through the bottom
+/// edge of the panel (Marcello, 2026-09-06). Measured, it is right in every
+/// state including the ones nobody enumerated.
+private struct CompletedInsetKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 /// UG-2 tooltip plumbing: the hovered/focused row's dot reports its anchor;
 /// TodoTabView renders the bubble at PANEL level so the list ScrollView's
 /// clipping can't cut it off (for the first row it floats over the tabs).
@@ -212,6 +269,40 @@ private extension AnyTransition {
                 active: ZeroLayoutHeight(active: true),
                 identity: ZeroLayoutHeight(active: false)))
         )
+    }
+}
+
+/// Put the caret at the end of whatever field just took focus, instead of
+/// leaving the whole contents selected.
+///
+/// A macOS text field selects everything when it becomes first responder.
+/// That is right for ⇥ through a form — you are replacing the value — and
+/// wrong for ↑/↓ walking a to-do, where the user is moving PAST fields on the
+/// way to one of them. Selected, the next character typed silently wipes a
+/// title or a note the user only meant to step over (Marcello, 2026-09-06).
+///
+/// Only the arrow-driven path calls this. A click already places the caret
+/// where the user aimed, and collapsing it to the end would move it away from
+/// the letter they clicked between.
+enum FieldCaret {
+    static func collapseToEnd(attempts: Int = 3) {
+        // One hop after the focus assignment, which is itself dispatched: the
+        // field editor does not exist until AppKit has made the field first
+        // responder, so there is nothing to place a caret in before then.
+        DispatchQueue.main.async {
+            // Key window first, then any window holding a field editor. The
+            // notch panel is not always key — it is a floating NSPanel and the
+            // app is an accessory — so keying off `NSApp.keyWindow` alone
+            // would have made this work in some situations and not others.
+            let editors = NSApp.windows.compactMap { $0.firstResponder as? NSTextView }
+            let editor = editors.first { $0.window?.isKeyWindow == true } ?? editors.first
+            if let editor {
+                let end = (editor.string as NSString).length
+                editor.setSelectedRange(NSRange(location: end, length: 0))
+            } else if attempts > 1 {
+                collapseToEnd(attempts: attempts - 1)
+            }
+        }
     }
 }
 
@@ -338,6 +429,11 @@ struct TodoTabView: View {
                         .padding(.horizontal, LabMetrics.barOuterInset)
                         .notchEntry(index: 0)
                         .padding(.bottom, LabMetrics.sectionGap)
+                        // Reported, not assumed — see PanelChrome. The bar
+                        // grew 10pt when it became a recessed well and the
+                        // list's budget went on subtracting the old number,
+                        // so the panel overran its own block by exactly that.
+                        .measureHeight(DraftBlockKey.self)
                 }
 
                 // In the NOTCH CONTAINER the sections sit at the top instead.
@@ -362,6 +458,7 @@ struct TodoTabView: View {
                     // asked for on a panel whose height is the complaint.
                     TodoTabRow(rulePosition: .below)
                         .notchEntry(index: 1)
+                        .measureHeight(TabRowHeightKey.self)
                 }
 
                 // ZStack, not bare switch: during a transition BOTH the
@@ -409,7 +506,18 @@ struct TodoTabView: View {
                 if !isContainerLayout, store.panelMode == .browsing || store.panelMode == .voice {
                     TodoTabRow(rulePosition: .above)
                         .notchEntry(index: 1)
+                        .measureHeight(TabRowHeightKey.self)
                 }
+            }
+            // The two pieces of furniture report upward; the list's budget
+            // reads them back down through PanelChrome. onPreferenceChange
+            // rather than a write from inside the geometry reader: this fires
+            // after the update, so it cannot mutate state mid-layout.
+            .onPreferenceChange(DraftBlockKey.self) { h in
+                if h > 0 { PanelChrome.shared.draftBlock = h }
+            }
+            .onPreferenceChange(TabRowHeightKey.self) { h in
+                if h > 0 { PanelChrome.shared.tabRow = h }
             }
 
             if store.showShortcuts {
@@ -897,29 +1005,35 @@ struct TodoBrowsingView: View {
     /// content — so the region cheerfully laid out rows the notch could never
     /// display (Marcello, 2026-08-05). One source now, two consumers.
     ///
-    /// `draftInset` is the space the pinned draft row takes above the list.
-    /// It has to come out of the same budget: the draft is chrome from the
-    /// scroll region's point of view, and a region that ignored it would lay
-    /// out rows in the strip the draft is standing on.
-    private static func maxRegion(draftInset: CGFloat) -> CGFloat {
-        // The panel's ceiling minus its furniture, computed once in
-        // LabMetrics. It used to be derived from the SCREEN, which is why an
-        // unbounded list grew until it covered one.
-        // 556 total, less the creation-bar block and the tab bar that now
-        // sits under the list. Derived so changing either end carries.
+    /// Everything that is not the list comes out of the same budget: the
+    /// creation bar, the section row, the pinned Completed section. A region
+    /// that ignored any of them would lay out rows in the strip that thing is
+    /// standing on — which is precisely what it did, three times, each time
+    /// with a different piece of furniture (see `PanelChrome`).
+    private static func maxRegion(chrome: PanelChrome, completedInset: CGFloat) -> CGFloat {
+        // The panel's ceiling, 556, minus its furniture — MEASURED, so
+        // restyling any of it carries through here without a second edit.
         LabMetrics.todoBlockMaxHeight
-            - (LabMetrics.panelTopPadding + LabMetrics.barHeight + LabMetrics.sectionGap)
-            - (LabMetrics.tabsDividerPaddingV + LabMetrics.tabsTopPadding
-               + 31 + LabMetrics.tabsBottomPadding)
-            // The pinned Completed header, which sits BELOW the scroll region.
+            - LabMetrics.panelTopPadding
+            - chrome.draftBlock
+            - chrome.tabRow
+            // The pinned Completed section, which sits BELOW the scroll
+            // region — MEASURED, not assumed.
             //
-            // Adding it last round without subtracting it here is what pushed
-            // the panel 24pt past the block's fixed 556 — so on a full list the
-            // tab row was shoved through the bottom edge and the first chip,
-            // being the filled one, was the one you could see was cut
-            // (Marcello, 2026-09-05). A budget that does not count everything
-            // competing for the space is not a budget.
-            - LabMetrics.completedHeaderHeight
+            // Adding it without subtracting it at all is what pushed the panel
+            // past the block's fixed 556 the first time; subtracting a 24pt
+            // constant left half of it still unaccounted for, because the
+            // header also carries 24pt of top padding and grows to 160 when
+            // the section is open. Both times the tab row was shoved through
+            // the bottom edge and the first chip, being the filled one, was
+            // the one you could see was cut (Marcello, 2026-09-05, 2026-09-06).
+            // A budget that does not count everything competing for the space
+            // is not a budget — and a constant standing in for something that
+            // changes size is not counting it.
+            //
+            // No feedback loop: what Completed draws does not depend on the
+            // viewport it is shrinking, so this settles in one pass.
+            - completedInset
     }
 
     /// One line of draft plus its padding and the gap under it. An estimate,
@@ -953,6 +1067,13 @@ struct TodoBrowsingView: View {
     @State private var lastRegionNaturalHeight: CGFloat = 0
     /// How far the capped region has been scrolled. Drives the edge fades.
     @State private var scrollOffset: CGFloat = 0
+    @ObservedObject private var chrome = PanelChrome.shared
+    /// Measured height of the pinned Completed section. Seeded at the
+    /// collapsed size so the first frame — before any measurement exists — is
+    /// approximately right rather than a full-budget overshoot that then
+    /// snaps back.
+    @State private var completedInsetHeight: CGFloat = LabMetrics.completedHeaderHeight
+        + DSSpacing.tabRowBottomMargin + 10
     @State private var draggedItemID: UUID?
     /// Which edge `scrollTo` aims at. Walking down, keep the focused row at
     /// the bottom; walking up, at the top. One fixed anchor makes the list
@@ -1028,7 +1149,10 @@ struct TodoBrowsingView: View {
             // single unit and the panel height stops at the budget.
             // draftInset 0: the typing bar lives above the sections now, in
             // TodoTabView, not inside this scrolling column.
-            let budget = Self.maxRegion(draftInset: 0)
+            let completedInset = store.completedItems(in: collection).isEmpty
+                ? 0
+                : min(completedInsetHeight, LabMetrics.completedExpandedMaxHeight)
+            let budget = Self.maxRegion(chrome: chrome, completedInset: completedInset)
             // min(natural, budget): the region hugs its content again.
             //
             // This was the full budget for a while — the export pinned the
@@ -1113,14 +1237,27 @@ struct TodoBrowsingView: View {
                 // Capped and scrolling when expanded, so opening a long
                 // archive cannot push the open list off its own panel.
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    ScrollView(.vertical, showsIndicators: false) {
-                        completedSection(for: collection)
-                            .padding(.horizontal, LabMetrics.listInset)
+                    // Nothing at all when nothing is finished.
+                    //
+                    // The open/closed flag is global, not per-section, so an
+                    // empty section visited while Completed happened to be
+                    // open was handing 160pt of its list budget to a section
+                    // with no rows in it.
+                    if !store.completedItems(in: collection).isEmpty {
+                        ScrollView(.vertical, showsIndicators: false) {
+                            completedSection(for: collection)
+                                .padding(.horizontal, LabMetrics.listInset)
+                                .measureHeight(CompletedInsetKey.self)
+                        }
+                        // Hugs its content up to the cap, rather than taking
+                        // the cap whether it needs it or not: a ScrollView
+                        // given `maxHeight` claims all of it, so two finished
+                        // to-dos cost the open list the same 160pt as twenty.
+                        .frame(height: min(completedInsetHeight,
+                                           LabMetrics.completedExpandedMaxHeight))
                     }
-                    .frame(maxHeight: store.completedExpanded
-                           ? LabMetrics.completedExpandedMaxHeight : nil)
-                    .fixedSize(horizontal: false, vertical: !store.completedExpanded)
                 }
+                .onPreferenceChange(CompletedInsetKey.self) { completedInsetHeight = $0 }
                 // A fade says "there is more"; this says how to get there, and
                 // takes you. Even at full height a long enough list still
                 // overflows, and the fade alone is easy to miss on a first run.
@@ -1803,6 +1940,19 @@ private struct TodoItemRow: View {
                     .font(DSFont.todoTitle)
                     .foregroundStyle(DSColor.textPrimaryBright)
                     .lineLimit(1...5)
+                    // The SAME vertical box the read view carries below.
+                    //
+                    // Without it the row was one height while the caret was in
+                    // the title and another the instant the caret moved to the
+                    // note, so walking the fields with ↑/↓ made the whole
+                    // panel breathe under the text you were trying to read
+                    // (Marcello, 2026-09-06). Two renderers for one line of
+                    // text have to agree on its box.
+                    //
+                    // Measured both ways: without it the row is 305pt with the
+                    // caret in the title and 312pt the moment the caret moves
+                    // to the note. With it, 312 throughout.
+                    .padding(.vertical, LabMetrics.rowTextInset)
                     .focused($titleFieldFocused)
                     .onSubmit { commitTitle() }
                     // Losing focus commits too — clicking away is a save
@@ -1949,6 +2099,10 @@ private struct TodoItemRow: View {
         titleDraft = item.title
         // The field has to exist before it can take focus.
         DispatchQueue.main.async { titleFieldFocused = true }
+        // Caret, not a selection — see FieldCaret. The title is a read view
+        // until this moment, so there is no click position to preserve and
+        // every route in wants the same thing.
+        FieldCaret.collapseToEnd()
     }
 
     /// Save and leave edit mode. An empty title is refused by the store, so
@@ -1989,6 +2143,7 @@ private struct TodoItemRow: View {
                         && store.focusedDetail?.target == .note
                     guard wanted else { return }
                     DispatchQueue.main.async { noteFocused = true }
+                    FieldCaret.collapseToEnd()
                 }
                 .onChange(of: noteFocused) { isFocused in
                     if isFocused { store.focusedDetail = (item.id, .note) }
@@ -2235,6 +2390,7 @@ private struct StepRow: View {
             guard wanted else { return }
             if draft == nil { draft = step.title }
             DispatchQueue.main.async { focused = true }
+            FieldCaret.collapseToEnd()
         }
         .onReceive(NotificationCenter.default.publisher(for: .todoEditorEscape)) { _ in
             if focused { draft = nil }
@@ -2337,6 +2493,7 @@ private struct StepDraftRow: View {
                     // publishes, and focus asked for inside that pass is
                     // exactly what used to get dropped.
                     DispatchQueue.main.async { focused = true }
+                    FieldCaret.collapseToEnd()
                 }
                 // Clicking straight into the field is still a way in, so the
                 // store has to learn about it too or the arrow keys would move
@@ -2450,3 +2607,5 @@ private struct SweepButton: View {
         .help(L10n.t("todo.clearCompleted"))
     }
 }
+
+
