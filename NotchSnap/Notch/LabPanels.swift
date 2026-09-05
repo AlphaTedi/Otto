@@ -106,6 +106,8 @@ enum LabMetrics {
 
     /// The to-do panel STOPS. 556 is the drawn height.
     static let todoBlockMaxHeight: CGFloat = 556
+    /// The collapsed Completed row: chevron, label, count.
+    static let completedHeaderHeight: CGFloat = 24
     /// How far the pinned Completed section may grow before it scrolls on its
     /// own. Enough for a handful of rows — the archive is a record, not a
     /// second list to work in.

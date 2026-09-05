@@ -386,14 +386,25 @@ struct TodoTabView: View {
                     }
                 }
 
-                // No Spacer here. With the panel hugging its content again
-                // (Thomas, 2026-09-01) there is no slack to absorb: the tabs
-                // sit directly under the list and ride with it. A Spacer in a
-                // definite-height proposal is also what closed the container
-                // layout's measurement loop — the content stretched to
-                // whatever height it was handed, so the measured "natural"
-                // height was just the proposal echoed back and the hug could
-                // never converge.
+                // A Spacer, but ONLY in the floating panels.
+                //
+                // That block is a definite 556 again, so the tabs have to be
+                // pushed to its foot or they ride up under the list and sit
+                // wherever the content happens to end — floating in the middle
+                // of the card on a short section, and jumping every time you
+                // switch (Marcello, 2026-09-05: "fanno un floating continuo").
+                //
+                // It must NOT appear in the notch container. There the panel
+                // measures its own natural height and the silhouette animates
+                // to match; a Spacer inside a definite-height proposal stretches
+                // the content to whatever it was handed, so the measurement is
+                // just the proposal echoed back and the hug never converges.
+                // That is the loop this comment used to warn about — it is real,
+                // and it is the reason this is conditional rather than simply
+                // restored.
+                if !isContainerLayout {
+                    Spacer(minLength: 0)
+                }
 
                 if !isContainerLayout, store.panelMode == .browsing || store.panelMode == .voice {
                     TodoTabRow(rulePosition: .above)
@@ -900,6 +911,15 @@ struct TodoBrowsingView: View {
             - (LabMetrics.panelTopPadding + LabMetrics.barHeight + LabMetrics.sectionGap)
             - (LabMetrics.tabsDividerPaddingV + LabMetrics.tabsTopPadding
                + 31 + LabMetrics.tabsBottomPadding)
+            // The pinned Completed header, which sits BELOW the scroll region.
+            //
+            // Adding it last round without subtracting it here is what pushed
+            // the panel 24pt past the block's fixed 556 — so on a full list the
+            // tab row was shoved through the bottom edge and the first chip,
+            // being the filled one, was the one you could see was cut
+            // (Marcello, 2026-09-05). A budget that does not count everything
+            // competing for the space is not a budget.
+            - LabMetrics.completedHeaderHeight
     }
 
     /// One line of draft plus its padding and the gap under it. An estimate,
@@ -1788,6 +1808,14 @@ private struct TodoItemRow: View {
                     // Losing focus commits too — clicking away is a save
                     // everywhere else in this app, so it is here as well.
                     .onChange(of: titleFieldFocused) { focused in
+                        // Register with the store. Without this line the whole
+                        // arrow chain was dead on arrival: opening a to-do put
+                        // the caret in the title but left `focusedDetail` nil,
+                        // and the router's ↑/↓ branch is gated on knowing which
+                        // field holds it. The model walked correctly in
+                        // isolation — the keys just never reached it
+                        // (Marcello, 2026-09-05, second report).
+                        if focused { store.focusedDetail = (item.id, .title) }
                         if !focused { commitTitle() }
                     }
                     .onExitCommand { titleDraft = nil }   // Escape discards

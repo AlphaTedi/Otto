@@ -293,17 +293,17 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                    !cmd, !option, !control {
                     let down = keyCode == 125
                     if !store.moveDetailFocus(down ? 1 : -1, in: focus.item) {
-                        // Above the title the form is finished: the caret
-                        // leaves it and the row goes back to being one item in
-                        // a list you can walk with the same two keys.
-                        if !down {
+                        // Off the end of this to-do's form: carry on into the
+                        // neighbouring one rather than stopping. Writing a list
+                        // is one continuous act, and having to open each to-do
+                        // by hand to keep typing breaks it.
+                        if !store.moveDetailToAdjacentItem(down ? 1 : -1, from: focus.item) {
+                            // Genuinely the end of the section: hand the caret
+                            // back to the list, which the same two keys walk.
                             store.clearDetailFocus()
                             notchWindow?.makeFirstResponder(nil)
                             store.focusedItemID = focus.item
                         }
-                        // Downward past the draft is the end of the form —
-                        // stay put rather than dumping the caret into the list
-                        // mid-checklist.
                     }
                     return true
                 }

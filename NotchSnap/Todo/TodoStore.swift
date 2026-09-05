@@ -151,6 +151,33 @@ final class TodoStore: ObservableObject {
         focusedDetail = nil
     }
 
+    /// Step out of one to-do's form and into the next one's, still typing.
+    ///
+    /// The chain inside a to-do ends at its draft slot; before this the caret
+    /// stopped there, so writing down a list of things meant opening each one
+    /// by hand. Down from the last field opens the next to-do and lands in its
+    /// title; up from the title does the same backwards. Returns false at
+    /// either end of the section, where the caret leaves the form entirely.
+    @discardableResult
+    func moveDetailToAdjacentItem(_ offset: Int, from itemID: UUID) -> Bool {
+        guard let collection = activeCollection else { return false }
+        let rows = openItems(in: collection)
+        guard let here = rows.firstIndex(where: { $0.id == itemID }) else { return false }
+        let next = here + offset
+        guard next >= 0, next < rows.count else { return false }
+
+        let target = rows[next].id
+        withAnimation(Motion.contentHug) {
+            expandedItemID = target
+        }
+        focusedItemID = target
+        // The title is the predictable landing: going down you arrive at the
+        // top of the next form, going up at the top of the previous one, so
+        // the key always means the same thing.
+        focusedDetail = (target, .title)
+        return true
+    }
+
     /// ⏎ on a focused row: open it and hand the caret to its title, exactly
     /// as a click does (activateRow). One gesture, two inputs.
     func requestTitleEdit(_ id: UUID) {
