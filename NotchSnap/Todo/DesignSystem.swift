@@ -304,20 +304,15 @@ enum DSFont {
     static let buttonLabel: Font = .system(size: 12, weight: .medium)
 }
 
-enum DSAnimation {
-    // The one primary spring used for height changes, row enter/exit,
-    // Completed section expand/collapse, tab switches, and progress-ring
-    // fill changes. See notchsnap_todo_pivot_prd.md Section 8.2.
-    static let primary: Animation = .interpolatingSpring(mass: 1, stiffness: 170, damping: 20)
-    // Rough SwiftUI equivalent of response: 0.45, dampingFraction: 0.60 —
-    // tune numerically against a real build rather than trusting this
-    // conversion blindly; the important part is reusing ONE spring
-    // definition everywhere rather than ad hoc values per view.
+// DSAnimation is gone.
+//
+// It was a second, near-duplicate token set — its own comment conceded it was
+// a "rough SwiftUI equivalent" of the PRD spring — and by the end it had one
+// live call site, on a component that had already been retired. Two vocabularies
+// for one idea is how a codebase ends up with sixty hand-written springs:
+// whichever one you happen to reach for is defensible, so neither wins.
+// NotchAnimation, and Motion in front of it, is the whole vocabulary now.
 
-    // Secondary, faster transitions: contextual hint fade, modifier-held
-    // badge reveal. Never use the primary spring for these.
-    static let secondary: Animation = .easeOut(duration: 0.18)
-}
 
 // MARK: - Color hex convenience
 
@@ -353,6 +348,11 @@ struct CategoryTabChip: View {
     /// in notchsnap_design_reference_prd.md §10.
     let remaining: Int?
 
+    /// Shared with every other chip in the row, so the active fill can be one
+    /// object that MOVES rather than two that cross-fade. Optional because the
+    /// static reference rendering in this file has no row to belong to.
+    var pillNamespace: Namespace.ID? = nil
+
     var body: some View {
         HStack(spacing: 5) {
             Text(title)
@@ -380,10 +380,32 @@ struct CategoryTabChip: View {
         }
         .padding(.horizontal, LabMetrics.tabPaddingH)
         .padding(.vertical, LabMetrics.tabPaddingV)
-        .background(isActive ? categoryColor : Color.clear)
-        // A full pill when active, barely rounded when not. The asymmetry is
-        // deliberate: it is what makes the selected tab read as selected
-        // rather than merely tinted, and it is not an inconsistency to tidy.
+        // The active fill TRAVELS between tabs.
+        //
+        // It used to be `isActive ? categoryColor : .clear` on every chip
+        // independently: switching section cross-faded one fill out and
+        // another in, and the corner radius jumped between the pill and the
+        // 8pt resting shape in a single frame because a `clipShape` radius is
+        // a discrete swap, not an interpolation. Nothing moved — two things
+        // blinked.
+        //
+        // With one matched geometry the fill is a single object that slides
+        // and resizes into the new tab, which is also what makes ⇥ readable:
+        // you see WHERE you went, not just that something changed.
+        .background {
+            if isActive {
+                let shape = RoundedRectangle(cornerRadius: LabMetrics.tabActiveRadius,
+                                             style: .continuous)
+                if let pillNamespace {
+                    shape.fill(categoryColor)
+                        .matchedGeometryEffect(id: "activeTabPill", in: pillNamespace)
+                } else {
+                    shape.fill(categoryColor)
+                }
+            }
+        }
+        // Inactive chips still clip to their resting shape; only the active
+        // fill is shared, so nothing else has to know about the namespace.
         .clipShape(RoundedRectangle(
             cornerRadius: isActive ? LabMetrics.tabActiveRadius : LabMetrics.tabInactiveRadius,
             style: .continuous))
@@ -438,7 +460,7 @@ struct ProgressRing: View {
                 .stroke(tint, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
                 .rotationEffect(.degrees(-90))
         }
-        .animation(DSAnimation.primary, value: progress)
+        .animation(Motion.contentHug, value: progress)
     }
 }
 

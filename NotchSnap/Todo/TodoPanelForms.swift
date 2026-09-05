@@ -232,6 +232,9 @@ struct CategoryFormView: View {
                     RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
                         .strokeBorder(nameFocused ? chosen.opacity(0.8)
                                                   : DSColor.hairlineOnPanel, lineWidth: 1)
+                        // After the stroke, not before: `.animation` on a
+                        // Shape returns a View, and a View has no strokeBorder.
+                        .animation(Motion.hoverFade, value: nameFocused)
                 )
                 .onSubmit(create)
 
@@ -251,6 +254,10 @@ struct CategoryFormView: View {
                                                  style: .continuous)
                                     .strokeBorder(DSColor.selectionRing,
                                                   lineWidth: colorHex == hex ? 2 : 0)
+                            // A 0→2 stroke width is a pop, not a transition;
+                            // the fill around it already animates, so the ring
+                            // was the one part that jumped.
+                            .animation(Motion.swap, value: colorHex)
                             )
                             .contentShape(Rectangle())
                     }
@@ -400,6 +407,16 @@ struct QuickFindView: View {
                 .padding(.vertical, 6)
                 .background(
                     RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous)
+                        // NOT animated, deliberately.
+                        //
+                        // The selection here moves under ↑/↓ while the user is
+                        // typing a query — dozens of times in a few seconds.
+                        // The animation guidance is explicit that keyboard
+                        // paths and actions repeated a hundred times a day get
+                        // no animation: a highlight that eases between rows at
+                        // that rate reads as lag, and it lands late enough to
+                        // be behind the key you already pressed. It should
+                        // snap, and it does.
                         .fill(selected ? DSColor.fieldBackground : .clear)
                 )
                 .contentShape(Rectangle())

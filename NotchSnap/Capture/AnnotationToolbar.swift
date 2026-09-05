@@ -263,7 +263,11 @@ private struct ToolbarToolButton: View {
         }
         .buttonStyle(.plain)
         .scaleEffect(isHovered ? 1.06 : 1.0)
-        .animation(.spring(duration: 0.18, bounce: 0.4), value: isHovered)
+        // bounce 0.4 was over the 0.3 ceiling, and on a HOVER — the
+        // lightest thing a control does. A tool bouncing because the
+        // pointer crossed it is the definition of motion that was not
+        // asked for.
+        .animation(Motion.hoverFade, value: isHovered)
         .onHover { isHovered = $0 }
         .help(shortcutHint)
     }

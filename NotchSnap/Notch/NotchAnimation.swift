@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 // MARK: - NotchAnimation — Centralized spring parameters
@@ -82,6 +83,87 @@ enum NotchAnimation {
     // Deliberately a different weight of motion from contentHug — quick and
     // light, never competing with the height/row animation (§8.4).
     static let hintFade = Animation.spring(response: 0.18, dampingFraction: 1.0)
+}
+
+// MARK: - The motion vocabulary, from the animation skills
+//
+// `animate` and `improve-animations` are written for the web — cubic-beziers,
+// Framer Motion, media queries. There is nothing to import into a SwiftUI app,
+// so what follows is their RULES translated, not their code.
+//
+// The translation is closer than it sounds: `spring(duration:bounce:)` is
+// exactly the `{ duration, bounce }` shape the skill prescribes, and it is
+// `@_alwaysEmitIntoClient`, so it works at this app's macOS 13 floor. Where a
+// token below still reads `response:/dampingFraction:`, the mapping is
+// duration ≈ response and bounce ≈ 1 − dampingFraction.
+//
+// The bands, verbatim from the skill:
+//
+//   button feedback      100–160ms
+//   tooltips, hints      125–200ms
+//   dropdowns, swaps     150–250ms
+//   modals, drawers      200–500ms
+//   everything else      under 300ms
+//   bounce               0.1–0.3, and sparingly
+//
+// One rule is worth stating out loud because it points the opposite way from
+// instinct: NO ANIMATION on keyboard paths and on anything done a hundred
+// times a day. Quick Find's selection moving under the arrow keys and the
+// list's focus ring are the two places in Otto that look like they are
+// "missing" an animation and must stay that way — see the note in
+// TodoPanelForms.
+
+extension NotchAnimation {
+    /// A control answering a press. Shortest band there is.
+    static let press = Animation.spring(duration: 0.12, bounce: 0)
+
+    /// A surface acknowledging the pointer. Not a state change — a highlight.
+    static let hoverFade = Animation.spring(duration: 0.14, bounce: 0)
+
+    /// One thing becoming another in place: a mode swap, a filter change, a
+    /// selection ring moving.
+    static let swap = Animation.spring(duration: 0.22, bounce: 0)
+
+    /// Ticking a to-do off.
+    ///
+    /// This spring used to be written by hand in TWO places — half in the
+    /// store (the model's mutation) and half on the checkbox (the view's
+    /// fill) — so one gesture had two owners that could drift apart. It is one
+    /// token now. Bounce 0.2 rather than the old 0.4: the skill's ceiling is
+    /// 0.3, and completing something should feel firm, not springy.
+    static let complete = Animation.spring(duration: 0.28, bounce: 0.2)
+}
+
+// MARK: - Motion — the same vocabulary, with Reduce Motion answered
+//
+// The to-do panel had NO reduce-motion path at all, and it was not an
+// oversight that a few modifiers could fix: most of its motion is authored
+// inside TodoStore, at the site of the mutation, in `withAnimation(...)`. A
+// store has no SwiftUI environment, so `@Environment(\.accessibilityReduceMotion)`
+// — the way the rest of the app reads this — is unavailable exactly where the
+// animations live.
+//
+// NSWorkspace exposes the same system setting to AppKit, with no view
+// hierarchy required. So the store can ask, and every `withAnimation`
+// in it goes through here instead of reaching for a raw token.
+//
+// Reduced does not mean absent: a short fade still carries the comprehension
+// that something changed, without the travel that causes the problem.
+
+enum Motion {
+    static var isReduced: Bool {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
+    /// What every token collapses to when the user has asked for less.
+    private static let fade = Animation.easeOut(duration: 0.12)
+
+    static var contentHug: Animation { isReduced ? fade : NotchAnimation.contentHug }
+    static var hintFade: Animation   { isReduced ? fade : NotchAnimation.hintFade }
+    static var complete: Animation   { isReduced ? fade : NotchAnimation.complete }
+    static var swap: Animation       { isReduced ? fade : NotchAnimation.swap }
+    static var hoverFade: Animation  { isReduced ? fade : NotchAnimation.hoverFade }
+    static var press: Animation      { isReduced ? fade : NotchAnimation.press }
 }
 
 // MARK: - Panel content entry (Marcello, 2026-07-26)

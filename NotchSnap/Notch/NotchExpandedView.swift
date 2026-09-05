@@ -167,7 +167,7 @@ struct NotchExpandedView: View {
             let handled = ShelfDropHandler.handle(providers: providers)
             if handled {
                 // Stay on the Tray so the user sees the item fall in.
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                withAnimation(Motion.swap) {
                     filter = .tray
                 }
             }
@@ -179,7 +179,7 @@ struct NotchExpandedView: View {
                 .padding(6)
                 .opacity(shelfDropTargeted ? 1 : 0)
                 .allowsHitTesting(false)
-                .animation(.easeOut(duration: 0.15), value: shelfDropTargeted)
+                .animation(Motion.hintFade, value: shelfDropTargeted)
         )
         .onAppear {
             appeared = false
@@ -214,7 +214,7 @@ struct NotchExpandedView: View {
             appState.pendingNotchFilter = nil
             return
         }
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+        withAnimation(Motion.swap) {
             filter = requested
         }
         appState.pendingNotchFilter = nil
@@ -233,7 +233,7 @@ struct NotchExpandedView: View {
                 HStack(spacing: 14) {
                     ForEach([NotchContentFilter.all] + availableFilters) { f in
                         FilterChip(filter: f, isActive: filter == f) {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                            withAnimation(Motion.swap) {
                                 filter = f
                             }
                         }
@@ -271,14 +271,14 @@ struct NotchExpandedView: View {
                 .foregroundColor(.white.opacity(0.5))
                 .scaleEffect(appeared ? 1.0 : 0.6)
                 .opacity(appeared ? 1.0 : 0.0)
-                .animation(.spring(response: 0.38, dampingFraction: 0.62), value: appeared)
+                .animation(NotchAnimation.contentHug, value: appeared)
 
             Text(L10n.t("notch.empty"))
                 .font(.system(size: 11))
                 .foregroundColor(.white.opacity(0.5))
                 .multilineTextAlignment(.center)
                 .opacity(appeared ? 1.0 : 0.0)
-                .animation(.spring(response: 0.38, dampingFraction: 0.62).delay(0.04), value: appeared)
+                .animation(NotchAnimation.contentHug.delay(0.04), value: appeared)
         }
         .padding()
     }
@@ -359,8 +359,8 @@ struct NotchExpandedView: View {
         .animation(NotchAnimation.newScreenshot, value: appState.screenshots.count)
         .animation(NotchAnimation.newScreenshot, value: appState.clipboardItems.count)
         // Bouncier spring for the tray so drops visibly "land"
-        .animation(.spring(response: 0.42, dampingFraction: 0.6), value: shelf.items.count)
-        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: filter)
+        .animation(NotchAnimation.contentHug, value: shelf.items.count)
+        .animation(Motion.swap, value: filter)
         // PF-10: bulk-clear must never depend on one button's layout —
         // right-clicking anywhere in the gallery always offers it.
         .contextMenu {
@@ -374,7 +374,7 @@ struct NotchExpandedView: View {
             }
             if !appState.clipboardItems.isEmpty {
                 Button(L10n.t("menu.clearHistory"), role: .destructive) {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                    withAnimation(Motion.swap) {
                         appState.clipboardItems.removeAll()
                     }
                 }
@@ -418,7 +418,7 @@ private struct ClearTrayChip: View {
         }
         .buttonStyle(.plain)
         .onHover { hover = $0 }
-        .animation(.easeOut(duration: 0.12), value: hover)
+        .animation(Motion.hintFade, value: hover)
     }
 }
 
@@ -448,7 +448,7 @@ private struct FilterChip: View {
         }
         .buttonStyle(.plain)
         .onHover { hover = $0 }
-        .animation(.spring(response: 0.28, dampingFraction: 0.85), value: isActive)
+        .animation(Motion.swap, value: isActive)
     }
 }
 

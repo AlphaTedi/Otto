@@ -75,7 +75,7 @@ final class NotesStore: ObservableObject {
     }
 
     func delete(_ id: UUID) {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+        withAnimation(Motion.swap) {
             notes.removeAll { $0.id == id }
         }
         HapticManager.shared.itemDeleted()

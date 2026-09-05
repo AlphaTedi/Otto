@@ -124,7 +124,7 @@ struct NotesTabView: View {
                 )
                 .disabled(draftIsEmpty)
             }
-            .animation(.spring(response: 0.25, dampingFraction: 0.85), value: makeReminder)
+            .animation(Motion.swap, value: makeReminder)
         }
     }
 
@@ -232,6 +232,8 @@ private struct ReminderRow: View {
             RoundedRectangle(cornerRadius: 5, style: .continuous)
                 .fill(Color.white.opacity(hover ? 0.06 : 0))
         )
+        // A highlight, not a state change: the shortest band there is.
+        .animation(Motion.hoverFade, value: hover)
         .onHover { hover = $0 }
     }
 
@@ -280,6 +282,8 @@ private struct NoteRow: View {
                 .fill(Color.white.opacity(hover ? 0.06 : 0))
         )
         .contentShape(Rectangle())
+        // A highlight, not a state change: the shortest band there is.
+        .animation(Motion.hoverFade, value: hover)
         .onHover { hover = $0 }
         .onTapGesture { NotesStore.shared.edit(note.id) }
         .contextMenu {

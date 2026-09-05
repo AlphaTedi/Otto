@@ -277,11 +277,39 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             // While a text control has focus (note field, add-step), don't
             // steal keys; Esc hands focus back to the list.
             if isEditingText() {
+                // ↑/↓ walk the checklist while a step field has the caret.
+                //
+                // This has to sit INSIDE the editing branch and before it
+                // returns: a step field is an NSTextField, so `isEditingText`
+                // is true and every arrow used to fall straight through to the
+                // field editor — where moveUp:/moveDown: on a single line just
+                // park the caret at either end. Nothing moved, which is why
+                // there was no way to walk a checklist from the keyboard
+                // (Marcello, 2026-09-05).
+                //
+                // Past the last step is the draft slot; above the first, the
+                // caret leaves the block and the row's title takes it back.
+                if let focus = store.focusedStep, keyCode == 126 || keyCode == 125,
+                   !cmd, !option, !control {
+                    let down = keyCode == 125
+                    if !store.moveStepFocus(down ? 1 : -1, in: focus.item) {
+                        if !down {
+                            store.clearStepFocus()
+                            notchWindow?.makeFirstResponder(nil)
+                            store.requestTitleEdit(focus.item)
+                        }
+                        // Downward past the draft is the end of the block —
+                        // stay put rather than dumping the caret into the list
+                        // mid-checklist.
+                    }
+                    return true
+                }
                 if cmd, lower == "n" {
                     NotchController.shared.openCreate()
                     return true
                 }
                 if keyCode == 53 {
+                    store.clearStepFocus()
                     // Escape means DISCARD in a row's title or step editor —
                     // their .onExitCommand says so — but this monitor consumes
                     // the key before AppKit can deliver it (letting it through

@@ -16,9 +16,10 @@ import AppKit
 //
 // Layout law (pivot PRD §3): fixed width, VARIABLE height. This view
 // measures its natural height and publishes it; the notch shape animates to
-// match on NotchAnimation.contentHug (the exact response 0.45 / damping 0.60
-// spring the PRD §8.2 mandates — DSAnimation.primary is a rough conversion
-// of the same spring and its own comment says to prefer tuned values).
+// match on NotchAnimation.contentHug — retuned since to 0.38 / 0.82, because
+// at 0.60 the overshoot read as the whole panel bouncing rather than settling.
+// DSAnimation, the second near-duplicate token set, is gone; NotchAnimation
+// with Motion in front of it is the only vocabulary now.
 
 // MARK: - Height measurement
 
@@ -231,6 +232,10 @@ struct TodoTabView: View {
     @ObservedObject private var calendar = CalendarStore.shared
     @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
 
+    /// The notch silhouette hugs its content, so its height moves with the
+    /// section; the floating panels are a fixed 556 and do not.
+    private var isContainerLayout: Bool { notchLayout == .container }
+
     // FB2: one transition, every direction. A pure in-place crossfade —
     // no y-offset, no edge-move — so switching tabs or modes never "slides
     // in from the top" or bleeds over the tab row, and Work→Today looks
@@ -335,6 +340,30 @@ struct TodoTabView: View {
                         .padding(.bottom, LabMetrics.sectionGap)
                 }
 
+                // In the NOTCH CONTAINER the sections sit at the top instead.
+                //
+                // The reasoning above holds for the floating panels, where the
+                // block is a fixed 556 and the tabs never move. Inside the
+                // notch the silhouette hugs its content, so the panel's height
+                // follows how many to-dos the current section happens to hold
+                // — which puts the row you click to CHANGE section at a
+                // different place for every section. Aiming at a target that
+                // moves because of what you are aiming away from is the
+                // problem (Marcello, 2026-09-05).
+                //
+                // Anchoring them under the field fixes their position for good:
+                // the field is always the same height, so everything above the
+                // list stops moving.
+                if isContainerLayout, store.panelMode == .browsing || store.panelMode == .voice {
+                    // No extra gap under it. The row already carries its own
+                    // breathing room plus the rule's — measured, the added
+                    // sectionGap made the panel 16pt taller than the same
+                    // content was at the bottom, which is a change nobody
+                    // asked for on a panel whose height is the complaint.
+                    TodoTabRow(rulePosition: .below)
+                        .notchEntry(index: 1)
+                }
+
                 // ZStack, not bare switch: during a transition BOTH the
                 // outgoing and incoming views exist for a few frames — as
                 // VStack siblings they'd stack vertically and the whole
@@ -366,8 +395,8 @@ struct TodoTabView: View {
                 // height was just the proposal echoed back and the hug could
                 // never converge.
 
-                if store.panelMode == .browsing || store.panelMode == .voice {
-                    TodoTabRow()
+                if !isContainerLayout, store.panelMode == .browsing || store.panelMode == .voice {
+                    TodoTabRow(rulePosition: .above)
                         .notchEntry(index: 1)
                 }
             }
@@ -398,6 +427,21 @@ struct TodoTabView: View {
 // context menu, so it was a second door to one room.
 
 private struct TodoTabRow: View {
+    /// Which side of the row the separating rule is drawn on.
+    ///
+    /// It is a parameter and not a nudge because the rule's placement is
+    /// load-bearing: it exists to divide the tabs from the LIST, so it has to
+    /// be on whichever side the list is. Getting this wrong is what once drew
+    /// the rule inside the list's own area and made the last row appear to
+    /// continue past the panel's edge.
+    enum RulePosition { case above, below }
+
+    var rulePosition: RulePosition = .above
+
+    /// One namespace for the whole row, so the active fill is a single object
+    /// that moves between chips instead of two that cross-fade.
+    @Namespace private var pillNamespace
+
     @ObservedObject private var store = TodoStore.shared
     /// The category tab currently being dragged (nil when idle).
     @State private var draggedCollectionID: UUID?
@@ -446,8 +490,8 @@ private struct TodoTabRow: View {
         // stay: they were the breathing room either side of the line, and
         // together they are what now separates the tabs from the list.
         .padding(.horizontal, LabMetrics.tabsInset)
-        // The rule is part of the tab row's own LAYOUT now, not an overlay
-        // pushed up out of it.
+        // The rule is part of the tab row's own LAYOUT, not an overlay pushed
+        // out of it.
         //
         // It used to be drawn at `-tabsDividerPaddingV`, 12pt above this row's
         // top edge — which is inside the area the list occupies. So the last
@@ -455,14 +499,22 @@ private struct TodoTabRow: View {
         // to continue past its own boundary (Marcello, 2026-08-22). In the
         // flow it cannot overlap anything, and the list is clipped to stop at
         // it. See `.clipped()` on the scroll region.
-        .padding(.top, LabMetrics.tabsDividerPaddingV)
-        .overlay(alignment: .top) {
+        //
+        // The SAME reasoning is why the side flips with the row: at the top of
+        // the panel the list is below, so the rule goes below too.
+        .padding(.top, rulePosition == .above ? LabMetrics.tabsDividerPaddingV : 0)
+        .padding(.bottom, rulePosition == .below ? LabMetrics.tabsDividerPaddingV : 0)
+        .overlay(alignment: rulePosition == .above ? .top : .bottom) {
             Rectangle()
                 .fill(DSColor.hairlineOnPanel)
                 .frame(height: 1)
         }
-        .padding(.top, LabMetrics.tabsTopPadding)
-        .padding(.bottom, LabMetrics.tabsBottomPadding)
+        // The outer breathing room mirrors as well, so the row keeps the same
+        // distance from the panel edge whichever end it sits at.
+        .padding(.top, rulePosition == .above ? LabMetrics.tabsTopPadding
+                                              : LabMetrics.tabsBottomPadding)
+        .padding(.bottom, rulePosition == .above ? LabMetrics.tabsBottomPadding
+                                                 : LabMetrics.tabsTopPadding)
     }
 
     private var tabScroller: some View {
@@ -487,7 +539,8 @@ private struct TodoTabRow: View {
                         categoryColor: collection.color,
                         isActive: store.panelMode == .browsing
                             && collection.id == store.activeCollectionID,
-                        remaining: store.remainingCount(for: collection)
+                        remaining: store.remainingCount(for: collection),
+                        pillNamespace: pillNamespace
                     )
                     .contentShape(RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous))
                     .onTapGesture { store.selectCollection(collection.id) }
@@ -727,6 +780,8 @@ private struct VoiceChip: View {
                 .contentShape(RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous))
         }
         .buttonStyle(.plain)
+        // A highlight, not a state change: the shortest band there is.
+        .animation(Motion.hoverFade, value: hover)
         .onHover { hover = $0 }
         .help(L10n.t("voice.start") + "  \u{2318}\u{21E7}V")
     }
@@ -1607,7 +1662,13 @@ private struct TodoItemRow: View {
             RoundedRectangle(cornerRadius: LabMetrics.rowRadius, style: .continuous)
                 .stroke(isExpanded ? DSColor.focusAccent : .clear, lineWidth: 0.5)
         )
-        .animation(NotchAnimation.hintFade, value: isFocused)
+        .animation(Motion.hintFade, value: isFocused)
+        // Was a bare assignment. The row's own background snapped, and so did
+        // the hover half of the RowActions reveal — its condition includes
+        // `hover`, so with nothing animating that value there was no
+        // transaction for `.transition(.opacity)` to attach to. One line fixes
+        // both.
+        .animation(Motion.hoverFade, value: hover)
         .onHover { hover = $0 }
         // A row can also be closed from outside this view — clicking a
         // different row, Escape, the whole panel collapsing. Any of those
@@ -1676,7 +1737,7 @@ private struct TodoItemRow: View {
             }
             .buttonStyle(.plain)
             // §8.3: near-instant fill; row exit + shrink follow on contentHug.
-            .animation(.spring(response: 0.28, dampingFraction: 0.6), value: item.isCompleted)
+            .animation(Motion.complete, value: item.isCompleted)
 
             if item.isCompleted {
                 Text(item.title)
@@ -1997,6 +2058,7 @@ private struct DragGrip: View {
 private struct StepRow: View {
     let step: ChecklistItem
     let parentID: UUID
+    @ObservedObject private var store = TodoStore.shared
     /// The section's own colour, the same one the parent to-do's checkbox
     /// wears. A step's box was a flat grey, which made a checklist look like
     /// it belonged to no list in particular (Marcello, 2026-08-19).
@@ -2043,9 +2105,19 @@ private struct StepRow: View {
                     .foregroundStyle(DSColor.textPrimaryBright)
                     .focused($focused)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .onSubmit { commit() }
+                    // Return confirms and moves ON, the same rhythm as the
+                    // draft slot below: a checklist is written in one pass, so
+                    // finishing a step should land you in the next one rather
+                    // than back in the list.
+                    .onSubmit {
+                        commit()
+                        if !store.moveStepFocus(1, in: parentID) {
+                            store.focusStepDraft(in: parentID)
+                        }
+                    }
                     // Clicking away is a save everywhere else in this app.
                     .onChange(of: focused) { isFocused in
+                        if isFocused { store.focusedStep = (parentID, .step(step.id)) }
                         if !isFocused { commit() }
                     }
                     .onExitCommand { self.draft = nil }   // Escape discards
@@ -2091,6 +2163,16 @@ private struct StepRow: View {
         // Escape while this step's editor holds the caret: DISCARD — same
         // announcement TodoItemRow listens for, for the same reason (the key
         // router consumes Esc before .onExitCommand can ever run).
+        // The store decides which step holds the caret; this row answers when
+        // it is the one named. Same reasoning as StepDraftRow: a request
+        // answered after the redraw, not a value the redraw can eat.
+        .onReceive(store.$stepFocusRequest) { _ in
+            let wanted = store.focusedStep?.item == parentID
+                && store.focusedStep?.target == .step(step.id)
+            guard wanted else { return }
+            if draft == nil { draft = step.title }
+            DispatchQueue.main.async { focused = true }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .todoEditorEscape)) { _ in
             if focused { draft = nil }
         }
@@ -2131,6 +2213,7 @@ private struct StepRow: View {
 private struct StepDraftRow: View {
     let parentID: UUID
     let accent: Color
+    @ObservedObject private var store = TodoStore.shared
     @State private var text = ""
     @FocusState private var focused: Bool
 
@@ -2166,9 +2249,37 @@ private struct StepDraftRow: View {
                 .onSubmit {
                     TodoStore.shared.addChecklistItem(text, to: parentID)
                     text = ""
-                    // Stay put. Losing focus after each step would make the
-                    // second one cost a click.
-                    focused = true
+                    // Ask the store to put the caret back, rather than
+                    // assigning it here.
+                    //
+                    // The commit mutates `items`, which rebuilds this row's
+                    // parent; a synchronous `focused = true` could be lost in
+                    // that rebuild, and whether it survived came down to
+                    // timing — which is why Return chained here and stopped
+                    // after one step on another Mac (Marcello, 2026-09-05).
+                    // As a request, it is answered after the redraw instead of
+                    // racing it.
+                    TodoStore.shared.focusStepDraft(in: parentID)
+                }
+                // The store is the one that knows where the caret should be,
+                // including when it should come back to a slot it never left.
+                .onReceive(store.$stepFocusRequest) { _ in
+                    let wanted = store.focusedStep?.item == parentID
+                        && store.focusedStep?.target == .draft
+                    guard wanted else {
+                        if focused { focused = false }
+                        return
+                    }
+                    // One runloop hop: SwiftUI is mid-update when the store
+                    // publishes, and focus asked for inside that pass is
+                    // exactly what used to get dropped.
+                    DispatchQueue.main.async { focused = true }
+                }
+                // Clicking straight into the field is still a way in, so the
+                // store has to learn about it too or the arrow keys would move
+                // from a stale position.
+                .onChange(of: focused) { isFocused in
+                    if isFocused { store.focusedStep = (parentID, .draft) }
                 }
 
             // Matches StepRow's delete gutter so the two align.

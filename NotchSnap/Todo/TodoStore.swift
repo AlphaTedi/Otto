@@ -77,11 +77,76 @@ final class TodoStore: ObservableObject {
     /// the only thing that can focus its own field.
     @Published var titleEditRequestID: UUID?
 
+    // MARK: Step focus
+    //
+    // Steps had NO focus identity outside their own views — just a local
+    // `@FocusState` in each row. Two things followed from that.
+    //
+    // Return in the step draft re-asserted `focused = true` synchronously,
+    // but the commit mutates `items`, which redraws the parent row, and that
+    // assignment could be lost in the rebuild. Whether it survived came down
+    // to timing, which is why it worked here and not on Marcello's other Mac
+    // (2026-09-05). Routing focus through the store makes it a request the
+    // view answers AFTER the redraw, instead of a value the redraw can eat.
+    //
+    // And the key router could not address a step at all — it cannot reach
+    // into a view's `@FocusState` — so the arrow keys had nothing to move
+    // between. Now there is a name for "which step has the caret".
+
+    /// Which step field holds the caret, if any. `.draft` is the always-open
+    /// trailing slot; it is a case rather than a nil-UUID so the two cannot be
+    /// confused.
+    enum StepFocus: Equatable {
+        case step(UUID)
+        case draft
+    }
+
+    /// The step the caret is in, and the to-do it belongs to.
+    @Published var focusedStep: (item: UUID, target: StepFocus)? {
+        didSet { stepFocusRequest &+= 1 }
+    }
+
+    /// Bumped on every assignment, including one that re-selects the same
+    /// target. The draft row needs to regain focus after committing a step
+    /// while still pointing at `.draft` — with only the value to observe,
+    /// that is not a change and nothing would happen.
+    @Published private(set) var stepFocusRequest: UInt = 0
+
+    /// Move the caret within one to-do's steps. Returns false when the move
+    /// would leave the block, so the caller can decide what is above or below
+    /// it.
+    @discardableResult
+    func moveStepFocus(_ offset: Int, in itemID: UUID) -> Bool {
+        guard let item = items.first(where: { $0.id == itemID }) else { return false }
+        // The draft sits one past the last real step, so the whole block is
+        // just [steps..., draft] and the move is an index walk.
+        let count = item.checklist.count
+        let current: Int
+        switch focusedStep?.target {
+        case .step(let id): current = item.checklist.firstIndex { $0.id == id } ?? 0
+        case .draft:        current = count
+        case nil:           return false
+        }
+        let next = current + offset
+        guard next >= 0, next <= count else { return false }
+        focusedStep = (itemID, next == count ? .draft : .step(item.checklist[next].id))
+        return true
+    }
+
+    /// Put the caret in the trailing draft slot of a to-do.
+    func focusStepDraft(in itemID: UUID) {
+        focusedStep = (itemID, .draft)
+    }
+
+    func clearStepFocus() {
+        focusedStep = nil
+    }
+
     /// ⏎ on a focused row: open it and hand the caret to its title, exactly
     /// as a click does (activateRow). One gesture, two inputs.
     func requestTitleEdit(_ id: UUID) {
         guard let item = items.first(where: { $0.id == id }), !item.isCompleted else { return }
-        withAnimation(NotchAnimation.contentHug) { expandedItemID = id }
+        withAnimation(Motion.contentHug) { expandedItemID = id }
         titleEditRequestID = id
     }
 
@@ -135,13 +200,20 @@ final class TodoStore: ObservableObject {
     /// app has no idea which tab it was left on.
     func focusDraft(fromGlobalShortcut: Bool) {
         if fromGlobalShortcut, let target = defaultCreationCollectionID {
-            withAnimation(NotchAnimation.contentHug) { activeCollectionID = target }
+            withAnimation(Motion.contentHug) { activeCollectionID = target }
         }
-        panelMode = .browsing
-        // The caret is about to belong to the draft; nothing in the list below
-        // should still look selected or open underneath it.
-        focusedItemID = nil
-        expandedItemID = nil
+        // All three inside the transaction, not just the collection swap.
+        //
+        // Closing an expanded row is a height change; done outside an
+        // animation it snapped shut while the panel around it was still
+        // settling from the section change.
+        withAnimation(Motion.contentHug) {
+            panelMode = .browsing
+            // The caret is about to belong to the draft; nothing in the list
+            // below should still look selected or open underneath it.
+            focusedItemID = nil
+            expandedItemID = nil
+        }
         draftWantsFocus = true
     }
 
@@ -193,7 +265,7 @@ final class TodoStore: ObservableObject {
         let idx = row.firstIndex { $0.id == activeCollectionID } ?? 0
         let count = row.count
         let next = ((idx + offset) % count + count) % count
-        withAnimation(NotchAnimation.contentHug) {
+        withAnimation(Motion.contentHug) {
             activeCollectionID = row[next].id
         }
         focusedItemID = nil
@@ -263,7 +335,7 @@ final class TodoStore: ObservableObject {
     func setMode(_ mode: TodoPanelMode) {
         guard panelMode != mode else { return }
         exitVoiceIfNeeded(mode)
-        withAnimation(NotchAnimation.contentHug) {
+        withAnimation(Motion.contentHug) {
             panelMode = mode
             if mode == .find { findQuery = ""; findSelection = 0 }
             // A surface that replaces the list replaces the draft row sitting
@@ -286,7 +358,7 @@ final class TodoStore: ObservableObject {
         let matches = findMatches
         guard !matches.isEmpty else { setMode(.browsing); return }
         let item = matches[min(findSelection, matches.count - 1)]
-        withAnimation(NotchAnimation.contentHug) {
+        withAnimation(Motion.contentHug) {
             panelMode = .browsing
             activeCollectionID = item.collectionID
             focusedItemID = item.id
@@ -316,7 +388,7 @@ final class TodoStore: ObservableObject {
         // mode the user has been put into and cannot leave.
         focusedItemID = nil
         guard expandedItemID != nil else { return }
-        withAnimation(NotchAnimation.contentHug) { expandedItemID = nil }
+        withAnimation(Motion.contentHug) { expandedItemID = nil }
     }
 
     /// Rename an existing to-do.
@@ -338,9 +410,12 @@ final class TodoStore: ObservableObject {
         scheduleSave()
     }
 
+    /// Wrapped, unlike before: a note growing past a line changes the row's
+    /// height, and an unanimated height change inside a panel that is itself
+    /// animating is the one place where the two visibly disagree.
     func setNote(_ note: String, for id: UUID) {
         guard let idx = items.firstIndex(where: { $0.id == id }) else { return }
-        items[idx].note = note
+        withAnimation(Motion.contentHug) { items[idx].note = note }
         scheduleSave()
     }
 
@@ -348,7 +423,7 @@ final class TodoStore: ObservableObject {
         let trimmed = title.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty,
               let idx = items.firstIndex(where: { $0.id == id }) else { return }
-        withAnimation(NotchAnimation.contentHug) {
+        withAnimation(Motion.contentHug) {
             items[idx].checklist.append(ChecklistItem(id: UUID(), title: trimmed, isDone: false))
         }
         scheduleSave()
@@ -378,7 +453,7 @@ final class TodoStore: ObservableObject {
     func toggleChecklistItem(_ stepID: UUID, in id: UUID) {
         guard let idx = items.firstIndex(where: { $0.id == id }),
               let step = items[idx].checklist.firstIndex(where: { $0.id == stepID }) else { return }
-        withAnimation(NotchAnimation.hintFade) {
+        withAnimation(Motion.hintFade) {
             items[idx].checklist[step].isDone.toggle()
         }
         scheduleSave()
@@ -386,7 +461,7 @@ final class TodoStore: ObservableObject {
 
     func deleteChecklistItem(_ stepID: UUID, in id: UUID) {
         guard let idx = items.firstIndex(where: { $0.id == id }) else { return }
-        withAnimation(NotchAnimation.contentHug) {
+        withAnimation(Motion.contentHug) {
             items[idx].checklist.removeAll { $0.id == stepID }
         }
         scheduleSave()
@@ -540,14 +615,14 @@ final class TodoStore: ObservableObject {
             id: UUID(), name: name, colorHex: colorHex,
             sortOrder: next, shortcutKey: shortcut
         )
-        withAnimation(NotchAnimation.contentHug) { collections.append(collection) }
+        withAnimation(Motion.contentHug) { collections.append(collection) }
         scheduleSave()
         return collection
     }
 
     func deleteCollection(_ id: UUID) {
         guard let victim = collection(id: id), !victim.isSystemToday else { return }
-        withAnimation(NotchAnimation.contentHug) {
+        withAnimation(Motion.contentHug) {
             collections.removeAll { $0.id == id }
             items.removeAll { $0.collectionID == id }
         }
@@ -563,7 +638,7 @@ final class TodoStore: ObservableObject {
         guard let from = collections.firstIndex(where: { $0.id == id }) else { return }
         let to = from + offset
         guard to >= 0, to < collections.count else { return }
-        withAnimation(NotchAnimation.contentHug) {
+        withAnimation(Motion.contentHug) {
             collections.swapAt(from, to)
             for (i, _) in collections.enumerated() {
                 collections[i].sortOrder = i
@@ -579,7 +654,7 @@ final class TodoStore: ObservableObject {
         guard id != targetID,
               let from = collections.firstIndex(where: { $0.id == id }),
               let to = collections.firstIndex(where: { $0.id == targetID }) else { return }
-        withAnimation(NotchAnimation.contentHug) {
+        withAnimation(Motion.contentHug) {
             let moved = collections.remove(at: from)
             collections.insert(moved, at: to)
             for (i, _) in collections.enumerated() {
@@ -595,7 +670,7 @@ final class TodoStore: ObservableObject {
     func moveCollectionToEnd(_ id: UUID) {
         guard let from = collections.firstIndex(where: { $0.id == id }),
               from != collections.count - 1 else { return }
-        withAnimation(NotchAnimation.contentHug) {
+        withAnimation(Motion.contentHug) {
             let moved = collections.remove(at: from)
             collections.append(moved)
             for (i, _) in collections.enumerated() {
@@ -609,7 +684,7 @@ final class TodoStore: ObservableObject {
     func selectCollection(atIndex index: Int) {
         let ordered = visibleCollections.sorted { $0.sortOrder < $1.sortOrder }
         guard index >= 0, index < ordered.count else { return }
-        withAnimation(NotchAnimation.contentHug) {
+        withAnimation(Motion.contentHug) {
             activeCollectionID = ordered[index].id
             panelMode = .browsing
         }
@@ -624,7 +699,7 @@ final class TodoStore: ObservableObject {
         // on is not a navigation, and tapping for it would fire on every stray
         // click at the foot of the panel.
         let changed = activeCollectionID != id
-        withAnimation(NotchAnimation.contentHug) {
+        withAnimation(Motion.contentHug) {
             activeCollectionID = id
             panelMode = .browsing
         }
@@ -658,7 +733,7 @@ final class TodoStore: ObservableObject {
             urgency: urgency, isCompleted: false, completedAt: nil,
             dueDate: dueDate, sortOrder: next, createdAt: Date()
         )
-        withAnimation(NotchAnimation.contentHug) { items.append(item) }
+        withAnimation(Motion.contentHug) { items.append(item) }
         lastUsedCollectionID = target
         // Step 5 of the capture flow: the created to-do's collection becomes
         // the active tab, so it's visibly filed where the user put it.
@@ -690,7 +765,7 @@ final class TodoStore: ObservableObject {
             settleTasks[id]?.cancel()
             settleTasks[id] = nil
             let wasCompletedAt = items[idx].completedAt
-            withAnimation(NotchAnimation.contentHug) {
+            withAnimation(Motion.contentHug) {
                 settlingItemIDs.remove(id)
                 items[idx].isCompleted = false
                 items[idx].completedAt = nil
@@ -705,7 +780,7 @@ final class TodoStore: ObservableObject {
             scheduleSave()
             return
         } else {
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.6)) {
+            withAnimation(Motion.complete) {
                 items[idx].isCompleted = true
                 items[idx].completedAt = Date()
                 settlingItemIDs.insert(id)
@@ -717,7 +792,7 @@ final class TodoStore: ObservableObject {
             settleTasks[id] = Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: 350_000_000)
                 guard !Task.isCancelled, let self else { return }
-                withAnimation(NotchAnimation.contentHug) {
+                withAnimation(Motion.contentHug) {
                     _ = self.settlingItemIDs.remove(id)
                 }
                 self.settleTasks[id] = nil
@@ -729,7 +804,7 @@ final class TodoStore: ObservableObject {
 
     func setUrgency(_ urgency: TodoUrgency, for id: UUID) {
         guard let idx = items.firstIndex(where: { $0.id == id }) else { return }
-        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+        withAnimation(Motion.swap) {
             items[idx].urgency = urgency
         }
         scheduleSave()
@@ -739,14 +814,14 @@ final class TodoStore: ObservableObject {
     func move(_ id: UUID, toCollection collectionID: UUID) {
         guard let idx = items.firstIndex(where: { $0.id == id }),
               let target = collection(id: collectionID), !target.isSystemToday else { return }
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+        withAnimation(Motion.swap) {
             items[idx].collectionID = collectionID
         }
         scheduleSave()
     }
 
     func delete(_ id: UUID) {
-        withAnimation(NotchAnimation.contentHug) {
+        withAnimation(Motion.contentHug) {
             items.removeAll { $0.id == id }
         }
         HapticManager.shared.itemDeleted()
@@ -783,13 +858,13 @@ final class TodoStore: ObservableObject {
             // Today is a smart aggregation ordered by sortOrder, so "last"
             // just means one past the current maximum.
             let maxOrder = ordered.map(\.sortOrder).max() ?? 0
-            withAnimation(NotchAnimation.contentHug) {
+            withAnimation(Motion.contentHug) {
                 items[sourceIdx].sortOrder = maxOrder + 1
             }
         } else {
             var reordered = ordered.filter { $0.id != id }
             if let moved = ordered.first(where: { $0.id == id }) { reordered.append(moved) }
-            withAnimation(NotchAnimation.contentHug) {
+            withAnimation(Motion.contentHug) {
                 for (i, item) in reordered.enumerated() {
                     if let idx = items.firstIndex(where: { $0.id == item.id }) {
                         items[idx].sortOrder = i
@@ -809,7 +884,7 @@ final class TodoStore: ObservableObject {
               let targetIdx = items.firstIndex(where: { $0.id == targetID }) else { return }
 
         if collection.isSystemToday {
-            withAnimation(NotchAnimation.contentHug) {
+            withAnimation(Motion.contentHug) {
                 let sourceOrder = items[sourceIdx].sortOrder
                 items[sourceIdx].sortOrder = items[targetIdx].sortOrder
                 items[targetIdx].sortOrder = sourceOrder
@@ -818,7 +893,7 @@ final class TodoStore: ObservableObject {
             var reordered = ordered
             let moved = reordered.remove(at: from)
             reordered.insert(moved, at: to)
-            withAnimation(NotchAnimation.contentHug) {
+            withAnimation(Motion.contentHug) {
                 for (i, item) in reordered.enumerated() {
                     if let idx = items.firstIndex(where: { $0.id == item.id }) {
                         items[idx].sortOrder = i
