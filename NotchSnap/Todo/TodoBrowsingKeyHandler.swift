@@ -289,18 +289,31 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 //
                 // Past the last step is the draft slot; above the first, the
                 // caret leaves the block and the row's title takes it back.
-                if let focus = store.focusedStep, keyCode == 126 || keyCode == 125,
+                if let focus = store.focusedDetail, keyCode == 126 || keyCode == 125,
                    !cmd, !option, !control {
                     let down = keyCode == 125
-                    if !store.moveStepFocus(down ? 1 : -1, in: focus.item) {
+                    if !store.moveDetailFocus(down ? 1 : -1, in: focus.item) {
+                        // Above the title the form is finished: the caret
+                        // leaves it and the row goes back to being one item in
+                        // a list you can walk with the same two keys.
                         if !down {
-                            store.clearStepFocus()
+                            store.clearDetailFocus()
                             notchWindow?.makeFirstResponder(nil)
-                            store.requestTitleEdit(focus.item)
+                            store.focusedItemID = focus.item
                         }
-                        // Downward past the draft is the end of the block —
+                        // Downward past the draft is the end of the form —
                         // stay put rather than dumping the caret into the list
                         // mid-checklist.
+                    }
+                    return true
+                }
+                // ⌘⏎ ticks off whatever the caret is in.
+                if cmd, keyCode == 36, let focus = store.focusedDetail {
+                    switch focus.target {
+                    case .step(let stepID):
+                        store.toggleChecklistItem(stepID, in: focus.item)
+                    default:
+                        store.toggleComplete(focus.item)
                     }
                     return true
                 }
@@ -309,7 +322,7 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                     return true
                 }
                 if keyCode == 53 {
-                    store.clearStepFocus()
+                    store.clearDetailFocus()
                     // Escape means DISCARD in a row's title or step editor —
                     // their .onExitCommand says so — but this monitor consumes
                     // the key before AppKit can deliver it (letting it through
@@ -344,6 +357,22 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             // already "complete the focused to-do", so the meeting action
             // takes the modifier — the card advertises ⌘↩ on its Join button.
             // Falls through when there is nothing to join.
+            // ⌘⏎ completes the focused to-do.
+            //
+            // ⏎ used to complete; it now opens the row and hands over the
+            // caret, which is the right default — but it left completing with
+            // only Space, and Space is unreachable the moment any field has
+            // focus. ⌘⏎ is the modifier form of "finish this one" and works
+            // from the list and from inside the form alike (Marcello,
+            // 2026-09-05).
+            //
+            // Before the meeting-join, deliberately: a selected to-do is what
+            // the panel is about, and joining still answers ⌘⏎ whenever
+            // nothing is selected.
+            if cmd, !shift, keyCode == 36, let focused = store.focusedItemID {
+                store.toggleComplete(focused)
+                return true
+            }
             if cmd, !shift, keyCode == 36, CalendarStore.shared.joinNextMeeting() {
                 return true
             }

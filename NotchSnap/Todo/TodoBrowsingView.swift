@@ -438,10 +438,6 @@ private struct TodoTabRow: View {
 
     var rulePosition: RulePosition = .above
 
-    /// One namespace for the whole row, so the active fill is a single object
-    /// that moves between chips instead of two that cross-fade.
-    @Namespace private var pillNamespace
-
     @ObservedObject private var store = TodoStore.shared
     /// The category tab currently being dragged (nil when idle).
     @State private var draggedCollectionID: UUID?
@@ -539,8 +535,7 @@ private struct TodoTabRow: View {
                         categoryColor: collection.color,
                         isActive: store.panelMode == .browsing
                             && collection.id == store.activeCollectionID,
-                        remaining: store.remainingCount(for: collection),
-                        pillNamespace: pillNamespace
+                        remaining: store.remainingCount(for: collection)
                     )
                     .contentShape(RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous))
                     .onTapGesture { store.selectCollection(collection.id) }
@@ -993,7 +988,6 @@ struct TodoBrowsingView: View {
                 UpNextSection()
             }
             todoList(for: collection)
-            completedSection(for: collection)
         }
         .padding(.horizontal, LabMetrics.listInset)
         // A second catcher, INSIDE what will become the scroll region.
@@ -1087,6 +1081,26 @@ struct TodoBrowsingView: View {
                 .modifier(ScrollEdgeFade(scrollOffset: scrollOffset,
                                          contentHeight: natural,
                                          viewportHeight: viewport))
+                // Completed sits BELOW the scroll region, not inside it.
+                //
+                // It was the last thing in the scrolling content, so on any
+                // list long enough to scroll it was under the fold — and a
+                // section you have to go hunting for reads as a section that
+                // was removed (Marcello, 2026-09-05: "è sparita"). Pinned to
+                // the foot it is always one glance away, and the count in its
+                // header answers "what did I finish" without opening it.
+                //
+                // Capped and scrolling when expanded, so opening a long
+                // archive cannot push the open list off its own panel.
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        completedSection(for: collection)
+                            .padding(.horizontal, LabMetrics.listInset)
+                    }
+                    .frame(maxHeight: store.completedExpanded
+                           ? LabMetrics.completedExpandedMaxHeight : nil)
+                    .fixedSize(horizontal: false, vertical: !store.completedExpanded)
+                }
                 // A fade says "there is more"; this says how to get there, and
                 // takes you. Even at full height a long enough list still
                 // overflows, and the fade alone is easy to miss on a first run.
@@ -1607,6 +1621,8 @@ private struct TodoItemRow: View {
     /// away) never touches the stored title.
     @State private var titleDraft: String?
     @FocusState private var titleFieldFocused: Bool
+    @FocusState private var noteFocused: Bool
+    @ObservedObject private var store = TodoStore.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -1685,6 +1701,14 @@ private struct TodoItemRow: View {
         .onReceive(TodoStore.shared.$titleEditRequestID) { requested in
             guard requested == item.id else { return }
             TodoStore.shared.titleEditRequestID = nil
+            beginEditingTitle()
+        }
+        // The title is the first link in the chain, so ↓ from it reaches the
+        // note and the steps below without the caret ever leaving the keyboard.
+        .onReceive(store.$detailFocusRequest) { _ in
+            let wanted = store.focusedDetail?.item == item.id
+                && store.focusedDetail?.target == .title
+            guard wanted else { return }
             beginEditingTitle()
         }
         // Escape while this row's title editor holds the caret: DISCARD.
@@ -1930,6 +1954,17 @@ private struct TodoItemRow: View {
                 // right edge — text that was typed and then silently
                 // disappeared (Marcello, 2026-08-16).
                 .fixedSize(horizontal: false, vertical: true)
+                .focused($noteFocused)
+                // The note is a link in the arrow chain like any other field.
+                .onReceive(store.$detailFocusRequest) { _ in
+                    let wanted = store.focusedDetail?.item == item.id
+                        && store.focusedDetail?.target == .note
+                    guard wanted else { return }
+                    DispatchQueue.main.async { noteFocused = true }
+                }
+                .onChange(of: noteFocused) { isFocused in
+                    if isFocused { store.focusedDetail = (item.id, .note) }
+                }
         }
         .padding(.top, 2)
     }
@@ -2111,13 +2146,13 @@ private struct StepRow: View {
                     // than back in the list.
                     .onSubmit {
                         commit()
-                        if !store.moveStepFocus(1, in: parentID) {
+                        if !store.moveDetailFocus(1, in: parentID) {
                             store.focusStepDraft(in: parentID)
                         }
                     }
                     // Clicking away is a save everywhere else in this app.
                     .onChange(of: focused) { isFocused in
-                        if isFocused { store.focusedStep = (parentID, .step(step.id)) }
+                        if isFocused { store.focusedDetail = (parentID, .step(step.id)) }
                         if !isFocused { commit() }
                     }
                     .onExitCommand { self.draft = nil }   // Escape discards
@@ -2166,9 +2201,9 @@ private struct StepRow: View {
         // The store decides which step holds the caret; this row answers when
         // it is the one named. Same reasoning as StepDraftRow: a request
         // answered after the redraw, not a value the redraw can eat.
-        .onReceive(store.$stepFocusRequest) { _ in
-            let wanted = store.focusedStep?.item == parentID
-                && store.focusedStep?.target == .step(step.id)
+        .onReceive(store.$detailFocusRequest) { _ in
+            let wanted = store.focusedDetail?.item == parentID
+                && store.focusedDetail?.target == .step(step.id)
             guard wanted else { return }
             if draft == nil { draft = step.title }
             DispatchQueue.main.async { focused = true }
@@ -2263,9 +2298,9 @@ private struct StepDraftRow: View {
                 }
                 // The store is the one that knows where the caret should be,
                 // including when it should come back to a slot it never left.
-                .onReceive(store.$stepFocusRequest) { _ in
-                    let wanted = store.focusedStep?.item == parentID
-                        && store.focusedStep?.target == .draft
+                .onReceive(store.$detailFocusRequest) { _ in
+                    let wanted = store.focusedDetail?.item == parentID
+                        && store.focusedDetail?.target == .stepDraft
                     guard wanted else {
                         if focused { focused = false }
                         return
@@ -2279,7 +2314,7 @@ private struct StepDraftRow: View {
                 // store has to learn about it too or the arrow keys would move
                 // from a stale position.
                 .onChange(of: focused) { isFocused in
-                    if isFocused { store.focusedStep = (parentID, .draft) }
+                    if isFocused { store.focusedDetail = (parentID, .stepDraft) }
                 }
 
             // Matches StepRow's delete gutter so the two align.

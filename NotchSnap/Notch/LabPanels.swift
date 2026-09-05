@@ -106,6 +106,10 @@ enum LabMetrics {
 
     /// The to-do panel STOPS. 556 is the drawn height.
     static let todoBlockMaxHeight: CGFloat = 556
+    /// How far the pinned Completed section may grow before it scrolls on its
+    /// own. Enough for a handful of rows — the archive is a record, not a
+    /// second list to work in.
+    static let completedExpandedMaxHeight: CGFloat = 160
 
     /// From the bottom of the notch to the first panel.
     static let notchGap: CGFloat = 72
@@ -557,6 +561,25 @@ struct LabPanelsView: View {
             // appeared twice, once above the other (Marcello, 2026-08-23).
             if calendar.activeAlert == nil {
                 TodoTabView()
+                    // FIXED, in the floating panels only.
+                    //
+                    // This reverses a deliberate change (Thomas, 2026-09-01,
+                    // "Hug the block itself"), and the reasoning behind that
+                    // one still holds where it applies: inside the notch the
+                    // silhouette IS the window, so a half-empty block is
+                    // half-empty glass and hugging is right.
+                    //
+                    // A floating panel is a different object. It is a card on
+                    // the desktop, and a card that changes size every time you
+                    // look at a different section moves the tabs, the foot and
+                    // its own shadow with it — which is what Marcello asked to
+                    // stop (2026-09-05). Hugging stays in the container, where
+                    // it belongs.
+                    //
+                    // A definite height, not `maxHeight`: a max frame is "grow
+                    // to this if offered", which is exactly what drew the block
+                    // at 556 with the list stranded at the top of it.
+                    .frame(height: LabMetrics.todoBlockMaxHeight, alignment: .top)
                     .labBlock()
                     .transition(.opacity)
             }

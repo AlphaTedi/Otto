@@ -348,10 +348,12 @@ struct CategoryTabChip: View {
     /// in notchsnap_design_reference_prd.md §10.
     let remaining: Int?
 
-    /// Shared with every other chip in the row, so the active fill can be one
-    /// object that MOVES rather than two that cross-fade. Optional because the
-    /// static reference rendering in this file has no row to belong to.
-    var pillNamespace: Namespace.ID? = nil
+    /// Interpolated, not swapped: a `cornerRadius` handed a different number
+    /// animates to it, where a conditional `clipShape` simply becomes a
+    /// different shape on the next frame.
+    private var activeRadius: CGFloat {
+        isActive ? LabMetrics.tabActiveRadius : LabMetrics.tabInactiveRadius
+    }
 
     var body: some View {
         HStack(spacing: 5) {
@@ -380,35 +382,29 @@ struct CategoryTabChip: View {
         }
         .padding(.horizontal, LabMetrics.tabPaddingH)
         .padding(.vertical, LabMetrics.tabPaddingV)
-        // The active fill TRAVELS between tabs.
+        // The fill belongs to the chip, and its RADIUS interpolates.
         //
-        // It used to be `isActive ? categoryColor : .clear` on every chip
-        // independently: switching section cross-faded one fill out and
-        // another in, and the corner radius jumped between the pill and the
-        // 8pt resting shape in a single frame because a `clipShape` radius is
-        // a discrete swap, not an interpolation. Nothing moved — two things
-        // blinked.
+        // A `matchedGeometryEffect` pill travelling between chips was the
+        // better-looking idea and it caused a real bug: matched geometry
+        // resolves its frame in the NAMESPACE's coordinate space — the whole
+        // tab row — while the chips live inside a horizontal ScrollView that
+        // clips at its own bounds. The first chip sits on that boundary, so
+        // its pill was drawn partly outside the scroller and cut
+        // (Marcello, 2026-09-05: "la prima section rimane sempre tagliata").
+        // Both layouts, because the chip is shared.
         //
-        // With one matched geometry the fill is a single object that slides
-        // and resizes into the new tab, which is also what makes ⇥ readable:
-        // you see WHERE you went, not just that something changed.
-        .background {
-            if isActive {
-                let shape = RoundedRectangle(cornerRadius: LabMetrics.tabActiveRadius,
-                                             style: .continuous)
-                if let pillNamespace {
-                    shape.fill(categoryColor)
-                        .matchedGeometryEffect(id: "activeTabPill", in: pillNamespace)
-                } else {
-                    shape.fill(categoryColor)
-                }
-            }
-        }
-        // Inactive chips still clip to their resting shape; only the active
-        // fill is shared, so nothing else has to know about the namespace.
-        .clipShape(RoundedRectangle(
-            cornerRadius: isActive ? LabMetrics.tabActiveRadius : LabMetrics.tabInactiveRadius,
-            style: .continuous))
+        // The original complaint that pushed me there was real too: the radius
+        // used to jump between the pill and the 8pt resting shape in one frame
+        // because a `clipShape` radius is a discrete swap. Interpolating the
+        // radius on the fill itself fixes that without crossing the clip
+        // boundary — the shape grows into a pill rather than snapping to one.
+        .background(
+            RoundedRectangle(cornerRadius: activeRadius, style: .continuous)
+                .fill(categoryColor)
+                .opacity(isActive ? 1 : 0)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: activeRadius, style: .continuous))
+        .animation(Motion.swap, value: isActive)
         // No ⌘-held index badge (Marcello, 2026-08-05). ⌘1-9 still jumps
         // between categories; it is documented in the "?" shortcuts overlay
         // like every other shortcut, rather than printed over the tabs.

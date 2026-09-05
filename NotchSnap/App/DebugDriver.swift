@@ -245,7 +245,7 @@ enum DebugDriver {
                    let first = store.openItems(in: collection).first {
                     store.addChecklistItem(String(command.dropFirst(5)), to: first.id)
                 }
-            } else if command == "step-focus-draft" || command == "step-down" || command == "step-up" {
+            } else if command == "step-focus-draft" || command == "detail-title" || command == "step-down" || command == "step-up" {
                 // Step focus, drivable without a keyboard.
                 //
                 // The arrow-key walk lives in the key router, which needs real
@@ -256,16 +256,19 @@ enum DebugDriver {
                    let first = store.openItems(in: collection).first {
                     switch command {
                     case "step-focus-draft": store.focusStepDraft(in: first.id)
-                    case "step-down":        store.moveStepFocus(1, in: first.id)
-                    default:                 store.moveStepFocus(-1, in: first.id)
+                    case "detail-title":     store.focusDetail(.title, in: first.id)
+                    case "step-down":        store.moveDetailFocus(1, in: first.id)
+                    default:                 store.moveDetailFocus(-1, in: first.id)
                     }
                     let where_: String
-                    switch store.focusedStep?.target {
-                    case .draft:        where_ = "draft"
+                    switch store.focusedDetail?.target {
+                    case .title:     where_ = "title"
+                    case .note:      where_ = "note"
+                    case .stepDraft: where_ = "draft"
                     case .step(let id):
                         let idx = first.checklist.firstIndex { $0.id == id }
                         where_ = "step[\(idx.map(String.init) ?? "?")]"
-                    case nil:           where_ = "nil"
+                    case nil:        where_ = "nil"
                     }
                     // Into the state file, not stdout: the app is launched
                     // detached, so `print` goes nowhere an agent can read.

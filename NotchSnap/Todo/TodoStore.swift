@@ -93,53 +93,62 @@ final class TodoStore: ObservableObject {
     // into a view's `@FocusState` — so the arrow keys had nothing to move
     // between. Now there is a name for "which step has the caret".
 
-    /// Which step field holds the caret, if any. `.draft` is the always-open
-    /// trailing slot; it is a case rather than a nil-UUID so the two cannot be
-    /// confused.
-    enum StepFocus: Equatable {
+    /// Which field inside an opened to-do holds the caret.
+    ///
+    /// Was step-only. An opened to-do is a small form — title, note, then the
+    /// checklist — and the caret could reach the steps from the keyboard but
+    /// not the title or the note, so writing a note still cost a trip to the
+    /// trackpad (Marcello, 2026-09-05). One chain covers all of it.
+    enum DetailFocus: Equatable {
+        case title
+        case note
         case step(UUID)
-        case draft
+        /// The always-open trailing slot. A case rather than a nil UUID so the
+        /// two cannot be confused.
+        case stepDraft
     }
 
-    /// The step the caret is in, and the to-do it belongs to.
-    @Published var focusedStep: (item: UUID, target: StepFocus)? {
-        didSet { stepFocusRequest &+= 1 }
+    /// The field the caret is in, and the to-do it belongs to.
+    @Published var focusedDetail: (item: UUID, target: DetailFocus)? {
+        didSet { detailFocusRequest &+= 1 }
     }
 
     /// Bumped on every assignment, including one that re-selects the same
-    /// target. The draft row needs to regain focus after committing a step
-    /// while still pointing at `.draft` — with only the value to observe,
-    /// that is not a change and nothing would happen.
-    @Published private(set) var stepFocusRequest: UInt = 0
+    /// target. After committing a step the draft has to regain focus while
+    /// still pointing at `.stepDraft` — with only the value to observe, that
+    /// is not a change and nothing would happen.
+    @Published private(set) var detailFocusRequest: UInt = 0
 
-    /// Move the caret within one to-do's steps. Returns false when the move
-    /// would leave the block, so the caller can decide what is above or below
-    /// it.
+    /// The fields of one to-do, in the order the arrows walk them.
+    func detailChain(for itemID: UUID) -> [DetailFocus] {
+        guard let item = items.first(where: { $0.id == itemID }) else { return [] }
+        return [.title, .note] + item.checklist.map { .step($0.id) } + [.stepDraft]
+    }
+
+    /// Move the caret within one to-do. Returns false when the move would
+    /// leave the form, so the caller decides what is above or below it.
     @discardableResult
-    func moveStepFocus(_ offset: Int, in itemID: UUID) -> Bool {
-        guard let item = items.first(where: { $0.id == itemID }) else { return false }
-        // The draft sits one past the last real step, so the whole block is
-        // just [steps..., draft] and the move is an index walk.
-        let count = item.checklist.count
-        let current: Int
-        switch focusedStep?.target {
-        case .step(let id): current = item.checklist.firstIndex { $0.id == id } ?? 0
-        case .draft:        current = count
-        case nil:           return false
-        }
+    func moveDetailFocus(_ offset: Int, in itemID: UUID) -> Bool {
+        let chain = detailChain(for: itemID)
+        guard let target = focusedDetail?.target,
+              let current = chain.firstIndex(of: target) else { return false }
         let next = current + offset
-        guard next >= 0, next <= count else { return false }
-        focusedStep = (itemID, next == count ? .draft : .step(item.checklist[next].id))
+        guard next >= 0, next < chain.count else { return false }
+        focusedDetail = (itemID, chain[next])
         return true
+    }
+
+    func focusDetail(_ target: DetailFocus, in itemID: UUID) {
+        focusedDetail = (itemID, target)
     }
 
     /// Put the caret in the trailing draft slot of a to-do.
     func focusStepDraft(in itemID: UUID) {
-        focusedStep = (itemID, .draft)
+        focusedDetail = (itemID, .stepDraft)
     }
 
-    func clearStepFocus() {
-        focusedStep = nil
+    func clearDetailFocus() {
+        focusedDetail = nil
     }
 
     /// ⏎ on a focused row: open it and hand the caret to its title, exactly
