@@ -16,6 +16,20 @@ import AppKit
 
 // MARK: Metrics
 
+/// The composer's drawn height, reported upward so the stream below it knows
+/// how much room is actually left.
+///
+/// Measured, not assumed — the composer is the one piece of this surface whose
+/// height genuinely moves (76pt empty, up to 240 with a long draft), and the
+/// panel has already been overflowed twice by a budget that subtracted a
+/// constant for something that changes size. See PanelChrome.
+private struct ComposerHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 /// This file's own formatter cache. MarkdownVault's is private to that file,
 /// and a DateFormatter built per row is an allocation on every redraw of a
 /// scrolling list.
@@ -94,12 +108,40 @@ private struct StreamView: View {
     let isContainer: Bool
 
     @ObservedObject private var store = NotesStore.shared
+    @ObservedObject private var chrome = PanelChrome.shared
     @FocusState private var composerFocused: Bool
+    @State private var composerHeight: CGFloat = NotesMetrics.composerMinHeight
+
+    /// What is left of the panel once the composer and the space bar have
+    /// taken theirs.
+    ///
+    /// This has to be a NUMBER, and that is the whole of the first bug in this
+    /// surface. `maxHeight: .infinity` on a ScrollView means "grow to what you
+    /// are offered", and in a VStack whose other flexible child is a Spacer
+    /// the offer is the content's own ideal height — so twenty notes laid out
+    /// 1180pt tall inside a 556pt panel. They drew past the bottom of the
+    /// panel and, in the floating layout, past `visibleShapeScreenRect` as
+    /// well: outside that rect the hosting view returns nil from hitTest, so
+    /// the rows were not merely overflowing, they were unclickable
+    /// (Marcello, 2026-09-06). Under the notch the same overflow is what ran
+    /// them out of the silhouette.
+    private var streamBudget: CGFloat {
+        if isContainer { return NotesMetrics.notchStreamMaxHeight }
+        return max(120, LabMetrics.todoBlockMaxHeight
+                   - LabMetrics.panelTopPadding
+                   - composerHeight
+                   - chrome.tabRow
+                   - (store.searchActive ? 46 : 0))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Composer(focused: $composerFocused, isContainer: isContainer)
                 .padding(.horizontal, LabMetrics.barOuterInset)
+                .background(GeometryReader { geo in
+                    Color.clear.preference(key: ComposerHeightKey.self, value: geo.size.height)
+                })
+                .onPreferenceChange(ComposerHeightKey.self) { composerHeight = $0 }
 
             if store.searchActive {
                 SearchRow()
@@ -144,8 +186,20 @@ private struct StreamView: View {
                 .padding(.top, 20)
                 .padding(.bottom, 8)
             }
-            .frame(maxHeight: isContainer ? NotesMetrics.notchStreamMaxHeight : .infinity)
+            .frame(height: min(naturalHeight(of: entries), streamBudget), alignment: .top)
+            // The stream ENDS at its own bottom edge. Without this a run of
+            // notes taller than the budget kept drawing into the space bar and
+            // past the panel, which is how they became unclickable.
+            .clipped()
         }
+    }
+
+    /// Roughly how tall the entries want to be, so a short stream hugs instead
+    /// of reserving the whole budget — the panel's second principle. An
+    /// estimate on purpose: measuring would cost a layout round-trip on every
+    /// keystroke, and being a row out costs one row of scroll.
+    private func naturalHeight(of entries: [QuickNote]) -> CGFloat {
+        28 + CGFloat(entries.count) * 59
     }
 }
 
@@ -412,7 +466,14 @@ private struct NoteDetailView: View {
                     .padding(.top, 22)
                     .padding(.bottom, 8)
             }
-            .frame(maxHeight: isContainer ? NotesMetrics.notchStreamMaxHeight : .infinity)
+            .frame(height: isContainer
+                   ? NotesMetrics.notchStreamMaxHeight
+                   : max(120, LabMetrics.todoBlockMaxHeight
+                         - LabMetrics.panelTopPadding
+                         - NotesMetrics.composerMinHeight
+                         - NotesMetrics.bottomBarHeight),
+                   alignment: .top)
+            .clipped()
 
             bottomBar
         }
@@ -587,3 +648,7 @@ struct NotesPill: View {
         .accessibilityLabel(L10n.t("filter.notes"))
     }
 }
+
+
+
+

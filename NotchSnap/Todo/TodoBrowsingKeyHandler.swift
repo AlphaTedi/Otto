@@ -174,9 +174,35 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 }
             }
 
-            // ↑↓ walk the stream, ⏎ opens — but only while the caret is NOT in
-            // a text field, where those keys belong to the text.
-            guard !isEditingText() else { return false }
+            // ⇥ and ←/→ leave the space, whether or not the composer holds
+            // the caret.
+            //
+            // The composer is focused essentially all the time here — that is
+            // the point of the surface — so a rule of "only when not editing"
+            // would have meant "never", which is exactly what ⇥ did: it went
+            // to the field and inserted a tab (Marcello, 2026-09-06). These
+            // three keys are navigation between spaces and the field has no
+            // use for any of them.
+            if keyCode == 48, !cmd, !option, !control {          // ⇥
+                TodoStore.shared.cycleSpace(by: shift ? -1 : 1)
+                return true
+            }
+            if keyCode == 123 || keyCode == 124, !cmd, !option, !control {
+                TodoStore.shared.cycleSpace(by: keyCode == 124 ? 1 : -1)
+                return true
+            }
+
+            // ↑↓ walk the stream and ⏎ opens the selection — but only while
+            // the composer is EMPTY.
+            //
+            // "Only when not editing" fails here for the same reason: the
+            // caret lives in the composer, so the guard was permanently true
+            // and the arrows did nothing at all. Emptiness is the honest test
+            // instead — with a draft in the field those keys belong to the
+            // text being written, and with nothing in it they belong to the
+            // stream, which is the state you are in the moment after ⌘S.
+            let composerEmpty = notes.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            guard composerEmpty || !isEditingText() else { return false }
             switch keyCode {
             case 126: notes.moveSelection(-1); return true
             case 125: notes.moveSelection(1);  return true
@@ -359,7 +385,10 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             // over the user's shoulder.
             if keyCode == 48, !cmd, !option, !control,
                draftHasCaret() || !isEditingText() {
-                store.cycleCollection(by: shift ? -1 : 1)
+                // The whole bar, Notes included: ⇥ walks past the last list
+                // into Notes and round again, because they are one row on
+                // screen and one row is what the key should feel like.
+                store.cycleSpace(by: shift ? -1 : 1)
                 return true
             }
 
@@ -507,13 +536,24 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             case 125:                           // ↓
                 store.moveFocus(1); return true
             case 124:                           // → expand details (NC-1)
-                guard let focused = store.focusedItemID else { return false }
+                // With a row focused these still open and close its details:
+                // that is the nearer meaning when the keyboard is ON something.
+                // With nothing focused there is nothing to expand, and the
+                // arrow does the same thing ⇥ does — walks the space bar.
+                guard let focused = store.focusedItemID else {
+                    store.cycleSpace(by: 1)
+                    return true
+                }
                 withAnimation(NotchAnimation.contentHug) {
                     store.expandedItemID = focused
                 }
                 return true
             case 123:                           // ← collapse details
-                guard store.expandedItemID != nil else { return false }
+                guard store.expandedItemID != nil else {
+                    guard store.focusedItemID == nil else { return false }
+                    store.cycleSpace(by: -1)
+                    return true
+                }
                 withAnimation(NotchAnimation.contentHug) {
                     store.expandedItemID = nil
                 }

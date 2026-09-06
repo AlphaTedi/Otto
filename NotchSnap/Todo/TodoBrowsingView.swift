@@ -602,6 +602,15 @@ private struct TodoTabRow: View {
             // and the one space that is always there must always be reachable.
             NotesPill()
 
+            // A rule, because the two sides of it are different kinds of
+            // thing. Notes is one permanent space; the lists are many and they
+            // scroll. Without it the bar read as one row of equals in which
+            // the first item simply refused to move (Marcello, 2026-09-06).
+            Rectangle()
+                .fill(DSColor.hairlineOnPanel)
+                .frame(width: 1, height: 20)
+                .padding(.horizontal, 2)
+
             tabScroller
 
             // OUTSIDE the scroller, like the account button beside it.

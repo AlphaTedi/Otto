@@ -312,6 +312,35 @@ final class TodoStore: ObservableObject {
         expandedItemID = nil
     }
 
+    /// Walk the space bar as ONE ring: Notes, then every list, in the order
+    /// they are drawn.
+    ///
+    /// Notes is a space and the lists are spaces, and they sit in one row —
+    /// so the key that moves between them has to see one row too. Cycling the
+    /// lists while treating Notes as a place you can only leave by mouse is
+    /// what made the bar look like a row of equals that behaved like two
+    /// different things (Marcello, 2026-09-06).
+    func cycleSpace(by offset: Int) {
+        let row = visibleCollections
+        guard !row.isEmpty else { return }
+        // Index 0 is Notes; the lists follow.
+        let current: Int = {
+            guard panelMode != .notes else { return 0 }
+            guard let index = row.firstIndex(where: { $0.id == activeCollectionID }) else { return 1 }
+            return index + 1
+        }()
+        let count = row.count + 1
+        let next = ((current + offset) % count + count) % count
+        if next == 0 {
+            NotesStore.shared.enterSpace()
+        } else {
+            if panelMode == .notes { NotesStore.shared.leaveSpace() }
+            withAnimation(Motion.contentHug) { activeCollectionID = row[next - 1].id }
+            focusedItemID = nil
+            expandedItemID = nil
+        }
+    }
+
     /// ⏎ — file the draft into the destination the row is pointing at. The
     /// caret STAYS in the field, so the next to-do is just more typing.
     ///

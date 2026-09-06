@@ -185,11 +185,18 @@ enum DebugDriver {
                 if let open = NotesStore.shared.openNoteID {
                     NotesStore.shared.rename(open, to: String(command.dropFirst(13)))
                 }
+            } else if command.hasPrefix("space-cycle ") {
+                TodoStore.shared.cycleSpace(by: Int(command.dropFirst(12)) ?? 1)
+            } else if command.hasPrefix("notes-select ") {
+                NotesStore.shared.moveSelection(Int(command.dropFirst(13)) ?? 1)
+            } else if command == "notes-open-selected" {
+                if let s = NotesStore.shared.selectedNoteID { NotesStore.shared.open(s) }
             } else if command == "notes-status" {
                 let n = NotesStore.shared
                 appendState("notes count=\(n.notes.count) mode=\(TodoStore.shared.panelMode) "
                             + "open=\(n.openNote?.title ?? "nil") "
-                            + "draft='\(n.draft)' pendingDelete=\(n.pendingDelete?.title ?? "nil") "
+                            + "draft='\(n.draft)' selected=\(n.selectedNoteID.flatMap { id in n.note(id: id)?.title } ?? "nil") "
+                            + "collection=\(TodoStore.shared.activeCollection?.name ?? "nil") "
                             + "top=[" + n.stream.prefix(3).map {
                                 "'\($0.title)'/\($0.titleSource.rawValue)"
                             }.joined(separator: " ") + "]")
