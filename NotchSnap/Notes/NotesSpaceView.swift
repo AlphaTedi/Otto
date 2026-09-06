@@ -16,6 +16,62 @@ import AppKit
 
 // MARK: Metrics
 
+/// A real NSView that answers the mouse, laid over a SwiftUI row.
+///
+/// The rows were a `.onTapGesture`, then a `Button`, and neither ever fired.
+/// Measured rather than guessed at: an in-process hitTest at each row's screen
+/// point returns NotchHostingView with insideShape true, and a dump of the
+/// panel's AppKit tree shows nothing at all covering them — so the click
+/// reaches the window and is lost inside SwiftUI's own gesture resolution,
+/// where the row competes with the composer, the panel catcher and the scroll
+/// view for the same point (Marcello, 2026-09-06, three times).
+///
+/// This stops competing. AppKit hit-testing runs BEFORE SwiftUI gestures and
+/// finds real subviews first, which is exactly why the to-do rows have always
+/// been clickable — their taps go through EntityTextView, an NSView, not
+/// through SwiftUI at all. Same route here.
+///
+/// It also carries hover, so the row can light up under the pointer.
+private struct RowClickCatcher: NSViewRepresentable {
+    let onClick: () -> Void
+    let onHover: (Bool) -> Void
+
+    final class CatcherView: NSView {
+        var onClick: () -> Void = {}
+        var onHover: (Bool) -> Void = { _ in }
+        private var tracking: NSTrackingArea?
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            if let tracking { removeTrackingArea(tracking) }
+            let area = NSTrackingArea(rect: bounds,
+                                      options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                      owner: self)
+            addTrackingArea(area)
+            tracking = area
+        }
+
+        override func mouseEntered(with event: NSEvent) { onHover(true) }
+        override func mouseExited(with event: NSEvent) { onHover(false) }
+        override func mouseDown(with event: NSEvent) { onClick() }
+        /// The panel is a nonactivating panel in an accessory app, so the
+        /// first click into it would otherwise be spent activating rather than
+        /// acting — the "why does it take two clicks" family of bug.
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+        /// Let the scroll wheel through to the ScrollView underneath: this
+        /// view is here for clicks, and swallowing scrolls would trade one
+        /// broken interaction for another.
+        override func scrollWheel(with event: NSEvent) { nextResponder?.scrollWheel(with: event) }
+    }
+
+    func makeNSView(context: Context) -> CatcherView { CatcherView() }
+
+    func updateNSView(_ view: CatcherView, context: Context) {
+        view.onClick = onClick
+        view.onHover = onHover
+    }
+}
+
 /// The composer's drawn height, reported upward so the stream below it knows
 /// how much room is actually left.
 ///
@@ -163,11 +219,17 @@ private struct StreamView: View {
             }
 
             streamBody
-                // While the composer holds the caret the entry being written is
-                // the only thing in focus; the history steps back rather than
-                // competing with it.
-                .opacity(composerFocused ? 0.5 : 1)
-                .animation(Motion.hintFade, value: composerFocused)
+                // Dimmed while something is BEING WRITTEN, not merely while
+                // the field has focus.
+                //
+                // The composer takes the caret on appear and keeps it, so
+                // "focused" is permanently true and the whole history sat at
+                // half opacity for ever — every note read as disabled, which
+                // is exactly what it looked like (Marcello, 2026-09-06). The
+                // design's intent was the composing state, and the honest
+                // test for that is whether there is a draft in the field.
+                .opacity(store.draft.isEmpty ? 1 : 0.55)
+                .animation(Motion.hintFade, value: store.draft.isEmpty)
         }
         .onAppear {
             // The space opens ready to write. Nothing to read first, nothing
@@ -187,16 +249,28 @@ private struct StreamView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.top, 28)
         } else {
-            ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: NotesMetrics.entryGap) {
-                    ForEach(entries) { note in
-                        NoteEntryRow(note: note)
-                            .id(note.id)
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(alignment: .leading, spacing: NotesMetrics.entryGap) {
+                        ForEach(entries) { note in
+                            NoteEntryRow(note: note)
+                                .id(note.id)
+                        }
+                    }
+                    .padding(.horizontal, LabMetrics.barOuterInset + 10)
+                    .padding(.top, 20)
+                    .padding(.bottom, 8)
+                }
+                // The arrows moved a selection the list was not following, so
+                // past the sixth note you were selecting rows you could not
+                // see — still moving, still invisible. The same fault the
+                // to-do list had, and the same fix.
+                .onChange(of: store.selectedNoteID) { selected in
+                    guard let selected else { return }
+                    withAnimation(Motion.hintFade) {
+                        proxy.scrollTo(selected, anchor: .center)
                     }
                 }
-                .padding(.horizontal, LabMetrics.barOuterInset + 10)
-                .padding(.top, 20)
-                .padding(.bottom, 8)
             }
             .frame(height: min(naturalHeight(of: entries), streamBudget), alignment: .top)
             // The stream ENDS at its own bottom edge. Without this a run of
@@ -222,68 +296,98 @@ private struct Composer: View {
     let isContainer: Bool
 
     @ObservedObject private var store = NotesStore.shared
+    @State private var hover = false
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// The same well the to-do capture field sits in, at the same depths.
+    ///
+    /// It was a flat `fieldWell` fill with a 24pt radius and a 16pt font, and
+    /// beside the list's own field it read as another product: different type,
+    /// different depth, different key hints (Marcello, 2026-09-06 — "sembrano
+    /// veramente due prodotti diversi"). One bar, three roles, was the
+    /// handoff's own rule; three roles cannot mean three appearances.
+    private var wellOpacity: Double {
+        if colorScheme == .dark {
+            return focused ? 0.14 : (hover ? 0.18 : 0.22)
+        }
+        return focused ? 0.03 : (hover ? 0.04 : 0.05)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ZStack(alignment: .topLeading) {
-                if store.draft.isEmpty {
-                    Text(L10n.t("notes.composerPlaceholder"))
-                        .font(.system(size: 16))
-                        .foregroundStyle(DSColor.textHint)
-                        .allowsHitTesting(false)
+            HStack(alignment: .center, spacing: LabMetrics.rowInnerGap) {
+                ZStack(alignment: .topLeading) {
+                    if store.draft.isEmpty {
+                        Text(L10n.t("notes.composerPlaceholder"))
+                            .font(DSFont.todoTitle)
+                            .foregroundStyle(focused ? DSColor.textFaint : DSColor.textHint)
+                            .allowsHitTesting(false)
+                    }
+                    // The user's text is NEVER reformatted — lowercase,
+                    // missing punctuation and typos are preserved exactly.
+                    TextField("", text: $store.draft, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(DSFont.todoTitle)
+                        .foregroundStyle(DSColor.textPrimaryBright)
+                        .focused($focused)
+                        .lineLimit(isContainer ? 2 : 10)
+                        .onChange(of: store.draft) { _ in store.draftChanged() }
                 }
-                // The user's text is NEVER reformatted — lowercase, missing
-                // punctuation and typos are preserved exactly. This field
-                // stores what was typed and shows what was stored.
-                TextField("", text: $store.draft, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 16))
-                    .lineSpacing(4)
-                    .foregroundStyle(DSColor.textPrimaryBright)
-                    .focused($focused)
-                    .lineLimit(isContainer ? 2 : 10)
-                    .onChange(of: store.draft) { _ in store.draftChanged() }
-            }
-            .frame(maxHeight: isContainer ? NotesMetrics.notchComposerMaxHeight
-                                          : NotesMetrics.composerMaxHeight,
-                   alignment: .topLeading)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            footer
+                hint
+            }
         }
-        .padding(.horizontal, NotesMetrics.fieldPaddingH)
-        .padding(.vertical, NotesMetrics.fieldPaddingV)
-        .frame(minHeight: NotesMetrics.composerMinHeight, alignment: .top)
+        // 20 / 12, the creation bar's own insets.
+        .padding(.horizontal, LabMetrics.barPaddingH)
+        .padding(.vertical, LabMetrics.barPaddingV)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minHeight: LabMetrics.barHeight)
+        // A WELL: darker than the panel, with the edge doing the finding —
+        // the same reasoning, and the same numbers, as InlineDraftRow.
         .background(
-            RoundedRectangle(cornerRadius: NotesMetrics.fieldRadius, style: .continuous)
-                .fill(DSColor.fieldWell)
+            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+                .fill(Color.black.opacity(wellOpacity))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: NotesMetrics.fieldRadius, style: .continuous)
-                .strokeBorder(focused ? LabMetrics.accent.opacity(0.45) : DSColor.panelBorder,
-                              lineWidth: focused ? 1 : 0.5)
+            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+                .strokeBorder(focused ? NotesMetrics.pillStroke.opacity(0.7)
+                                      : Color.dynamicOverlay(light: 0.07, dark: 0.08),
+                              lineWidth: 1)
         )
-        .animation(Motion.hoverFade, value: focused)
-        .contentShape(RoundedRectangle(cornerRadius: NotesMetrics.fieldRadius, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous))
         .onTapGesture { focused = true }
+        .onHover { hovering in
+            withAnimation(Motion.hintFade) { hover = hovering }
+        }
+        .animation(Motion.hintFade, value: focused)
     }
 
-    /// One word for the status, and the keystroke shown the way the capture
-    /// field already shows ⇥. No Save button — saving is continuous, and ⌘S
-    /// means "close this entry", not "persist it".
-    private var footer: some View {
+    /// Two keys at the right edge, drawn the way the creation bar draws its
+    /// own — a word and a bordered cap at 10pt, not a pair of filled Keycaps.
+    private var hint: some View {
         HStack(spacing: 8) {
             if !store.draft.isEmpty {
                 Text(store.isWriting ? L10n.t("notes.saving") : L10n.t("notes.saved"))
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(LabMetrics.accent.opacity(0.85))
-                    .contentTransition(.opacity)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(NotesMetrics.pillStroke.opacity(0.8))
+                    .fixedSize()
+                    .transition(.opacity)
             }
-            Spacer(minLength: 8)
             Text(L10n.t("notes.save"))
-                .font(.system(size: 13))
-                .foregroundStyle(DSColor.textHint)
-            Keycap(text: "\u{2318}S", tone: .onDark, size: 9)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(DSColor.textFaint)
+                .fixedSize()
+            Text("\u{2318}S")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(DSColor.textFaint)
+                .frame(width: 32, height: 19)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(DSColor.textFaint, lineWidth: 1)
+                )
         }
+        .animation(Motion.hintFade, value: store.draft.isEmpty)
     }
 }
 
@@ -309,8 +413,13 @@ private struct NoteEntryRow: View {
         // (2026-09-06). The to-do rows are not a counter-example: their clicks
         // are handled by EntityTextView, a real NSView, not by SwiftUI
         // gesture resolution at all.
-        Button(action: { store.open(note.id) }) { rowContent }
-            .buttonStyle(.plain)
+        rowContent
+            // On TOP, not behind: AppKit hit-tests the frontmost subview
+            // first, and behind the content it would never be reached.
+            .overlay(RowClickCatcher(
+                onClick: { store.open(note.id) },
+                onHover: { hover = $0 }
+            ))
     }
 
     private var rowContent: some View {
@@ -343,7 +452,8 @@ private struct NoteEntryRow: View {
                 Spacer(minLength: 0)
             }
 
-            HighlightedPreview(text: note.previewLine, query: store.searchActive ? store.searchQuery : "")
+            HighlightedPreview(text: note.previewLine,
+                               query: store.searchActive ? store.searchQuery : "")
         }
         .padding(.horizontal, NotesMetrics.entryInset)
         .padding(.vertical, isLanding || isSelected ? NotesMetrics.entryInset : 0)
@@ -360,7 +470,6 @@ private struct NoteEntryRow: View {
                               lineWidth: 1)
         )
         .contentShape(Rectangle())
-        .onHover { hover = $0 }
         .contextMenu {
             Button(L10n.t("notes.rename")) { store.open(note.id); store.beginRename() }
             Button(L10n.t("notes.duplicate")) { store.duplicate(note.id) }

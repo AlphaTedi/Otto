@@ -191,6 +191,26 @@ enum DebugDriver {
                 NotesStore.shared.moveSelection(Int(command.dropFirst(13)) ?? 1)
             } else if command == "notes-open-selected" {
                 if let s = NotesStore.shared.selectedNoteID { NotesStore.shared.open(s) }
+            } else if command == "viewtree" {
+                // Every AppKit view in the notch panel, with its frame in
+                // SCREEN coordinates. AppKit hit-testing beats SwiftUI gesture
+                // resolution, so a real NSView lying over the content is the
+                // one thing that can make a SwiftUI row unclickable while the
+                // window-level hitTest still succeeds.
+                if let window = NSApp.windows.first(where: { $0 is NotchPanel }),
+                   let root = window.contentView {
+                    func walk(_ view: NSView, _ depth: Int) {
+                        let inWindow = view.convert(view.bounds, to: nil)
+                        let onScreen = window.convertToScreen(inWindow)
+                        appendState(String(repeating: "  ", count: depth)
+                                    + "\(type(of: view)) "
+                                    + "x=\(Int(onScreen.minX)) y=\(Int(onScreen.minY)) "
+                                    + "w=\(Int(onScreen.width)) h=\(Int(onScreen.height)) "
+                                    + "hidden=\(view.isHidden)")
+                        for sub in view.subviews { walk(sub, depth + 1) }
+                    }
+                    walk(root, 0)
+                }
             } else if command.hasPrefix("hittest ") {
                 // Ask the panel what it would hand a click at this SCREEN
                 // point. No synthetic input needed, and it tests the exact
