@@ -343,6 +343,11 @@ class NotchController: ObservableObject {
 
     /// Collapse that overrides the modal pin — the one guaranteed exit.
     func forceCollapse() {
+        // An alert on screen when the notch is forced shut has to be told, or
+        // it stays "active" with nothing drawing it: the panel then counts
+        // itself engaged forever and CalendarStore refuses to raise any later
+        // alert, because it believes one is still up.
+        CalendarStore.shared.alertLostAttention()
         TodoStore.shared.setMode(.browsing)
         TodoStore.shared.showShortcuts = false
         // Actually relinquish key status, don't just announce it. resignKey()
@@ -726,7 +731,15 @@ class NotchController: ObservableObject {
         Task { @MainActor in
             guard self.state == .expanded else { return }
             guard !self.isDragSessionActive else { return }
-            guard CalendarStore.shared.activeAlert == nil else { return }
+            // A live meeting alert used to return here, which is what made an
+            // interruption into a modal: clicking another app did nothing,
+            // the notch stayed over whatever was underneath, and the only way
+            // back to the screen was to deal with the alert first (Marcello,
+            // 2026-09-06: "blocca l'interfaccia"). An interruption you cannot
+            // walk away from is not a notification.
+            //
+            // forceCollapse snoozes it on the way out, so walking away costs
+            // nothing — the meeting comes back after the snooze interval.
             self.forceCollapse()
         }
     }
@@ -1198,9 +1211,15 @@ class NotchController: ObservableObject {
         // form, shortcuts overlay) pins the panel open — auto-collapse
         // mid-typing would destroy the draft.
         if TodoStore.shared.isPanelPinnedOpen { return true }
-        // A live meeting alert holds the panel too: it opened itself, so a
-        // stray mouse-out must not yank it away before it's been read. It
-        // still auto-collapses on its own timer (CalendarStore).
+        // A live meeting alert holds the panel against POINTER movement
+        // only: it opened itself, and the pointer is rarely near the notch, so
+        // a stray mouse-move must not yank it away before it has been read.
+        //
+        // This is not what made it blocking. Every deliberate action — an
+        // outside click, Escape, another app coming forward — goes through
+        // forceCollapse, which bypasses this and snoozes the alert. And the
+        // Snooze button itself now forces the collapse rather than being
+        // vetoed by this very line.
         if CalendarStore.shared.activeAlert != nil { return true }
         guard let panel else { return false }
         if panel.isKeyWindow { return true }
@@ -1257,9 +1276,17 @@ class NotchController: ObservableObject {
 
     /// Collapse after an alert unless the user is doing something else in the
     /// panel (typing a to-do, mid-voice capture) — their work wins.
-    func dismissMeetingAlert() {
-        guard state == .expanded, !TodoStore.shared.isPanelPinnedOpen else { return }
-        triggerCollapse()
+    /// - Returns: true if the panel is now closing, so the caller knows to
+    ///   hold the meeting card in place until it has.
+    @discardableResult
+    func dismissMeetingAlert() -> Bool {
+        guard state == .expanded, !TodoStore.shared.isPanelPinnedOpen else { return false }
+        // force: the alert pins the panel open against a stray mouse-out (see
+        // isUserEngaged), and that same pin was vetoing the collapse the
+        // alert itself asked for — so Snooze worked or did nothing depending
+        // on where the pointer happened to be.
+        triggerCollapse(force: true)
+        return true
     }
 
     /// Give the panel key status immediately (mode switches from inside the

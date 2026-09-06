@@ -20,6 +20,31 @@ final class CalendarStore: ObservableObject {
     @Published private(set) var meetings: [DetectedMeeting] = []
     /// Non-nil while the interruptive alert is on screen (CA-3).
     @Published private(set) var activeAlert: DetectedMeeting?
+    /// True from the moment an alert is sent away until the notch has
+    /// finished closing behind it.
+    ///
+    /// Clearing `activeAlert` is what tells the column to draw the to-do panel
+    /// again — so pressing Snooze swapped the meeting card for the whole to-do
+    /// list and THEN played the close animation, opening a window on its way
+    /// out that nobody asked for (Marcello, 2026-09-06). Held for the length
+    /// of the collapse, the card just fades with the notch and nothing else is
+    /// ever built.
+    @Published private(set) var alertLeaving = false
+    /// Seconds still to run on the alert's own countdown, and whether it is
+    /// running. The Snooze button draws its fill from these; it does not own
+    /// them.
+    ///
+    /// It used to own them, entirely: the clock lived in the button's
+    /// `onAppear` and its `@State`. So an alert whose card was never drawn —
+    /// and there is a real path to that, a refresh dropping the alerting
+    /// meeting out of `meetings` between the alert firing and the card
+    /// rendering — had no clock at all. It stayed "active" forever: the panel
+    /// counted itself engaged, `evaluateAlerts` refused to raise any later
+    /// alert because one was still live, and there was no Snooze button on
+    /// screen to press (Marcello, 2026-09-06). A deadline that only exists
+    /// while something is drawing it is not a deadline.
+    @Published private(set) var autoSnoozeRemaining: Double = LabMetrics.autoSnoozeSeconds
+    @Published private(set) var autoSnoozeRunning = false
     /// Non-nil while a meeting is inside the ambient window (CA-2).
     @Published private(set) var ambientMeeting: DetectedMeeting?
     @Published private(set) var lastError: String?
@@ -134,6 +159,9 @@ final class CalendarStore: ObservableObject {
     private var snoozedUntil: [String: Date] = [:]
     /// The alert auto-collapses if untouched (Marcello, 2026-07-25).
     private var autoCollapseTask: Task<Void, Never>?
+    private var alertLeavingTask: Task<Void, Never>?
+    private var autoSnoozeTask: Task<Void, Never>?
+    private var autoSnoozeResumedAt: Date?
 
     private init() {
         if connectedPreference, provider.isConnected {
@@ -173,6 +201,8 @@ final class CalendarStore: ObservableObject {
         alertedIDs = []
         snoozedUntil = [:]
         lastError = nil
+        alertLeavingTask?.cancel()
+        alertLeaving = false
         withAnimation(NotchAnimation.contentHug) {
             activeAlert = nil
             ambientMeeting = nil
@@ -184,6 +214,12 @@ final class CalendarStore: ObservableObject {
 
     func refresh() async {
         guard isConnected else { return }
+        #if DEBUG
+        // An injected test meeting has to survive the 10s tick, or the harness
+        // can never observe anything that takes longer than one tick to happen
+        // — the countdown, most obviously.
+        if debugHoldsInjectedMeetings { return }
+        #endif
         let fetched = await provider.upcomingToday()
         withAnimation(NotchAnimation.contentHug) { meetings = fetched }
         evaluateAlerts()
@@ -244,6 +280,7 @@ final class CalendarStore: ObservableObject {
         ticker = nil
         autoCollapseTask?.cancel()
         autoCollapseTask = nil
+        stopAutoSnooze()
     }
 
     @objc private func storeChanged() {
@@ -276,6 +313,15 @@ final class CalendarStore: ObservableObject {
         guard isConnected else { return }
         let now = Date()
 
+        // An alert whose meeting is no longer in the list has nothing left to
+        // draw, and a card that is not drawn cannot be dismissed. Refreshes
+        // replace `meetings` wholesale every 10 seconds, so this is a normal
+        // occurrence — a rescheduled or deleted event — not an edge case.
+        // Left alone it stranded the panel open around an empty column.
+        if let live = activeAlert, !meetings.contains(where: { $0.id == live.id }) {
+            clearAlert(whileCollapsing: NotchController.shared.dismissMeetingAlert())
+        }
+
         // Stage 1 — ambient (CA-2)
         let ambientWindow = TimeInterval(ambientLeadMinutes * 60)
         let ambient = upcomingToday.first {
@@ -302,11 +348,58 @@ final class CalendarStore: ObservableObject {
 
     private func present(_ meeting: DetectedMeeting) {
         alertedIDs.insert(meeting.id)
+        // A new alert inside the previous one's closing window would otherwise
+        // inherit its "leaving" flag and hide the to-do panel for no reason.
+        alertLeavingTask?.cancel()
+        alertLeaving = false
         withAnimation(NotchAnimation.contentHug) { activeAlert = meeting }
         // CA-6: the SAME expand path every other panel-open uses, so the
         // self-triggered open feels identical to a clicked one.
         NotchController.shared.presentMeetingAlert()
+        armAutoSnooze()
         scheduleAutoCollapse(for: meeting)
+    }
+
+    // MARK: The alert's own clock
+
+    /// Start the countdown from full. Called when the alert is raised, not
+    /// when a view appears.
+    private func armAutoSnooze() {
+        autoSnoozeRemaining = LabMetrics.autoSnoozeSeconds
+        resumeAutoSnooze()
+    }
+
+    /// Hovering the button pauses it: someone whose pointer is on Snooze is
+    /// deciding, and deciding must not be punished by having the thing decide
+    /// for them.
+    func pauseAutoSnooze() {
+        autoSnoozeTask?.cancel()
+        autoSnoozeTask = nil
+        autoSnoozeRunning = false
+        guard let started = autoSnoozeResumedAt else { return }
+        autoSnoozeRemaining = max(0, autoSnoozeRemaining - Date().timeIntervalSince(started))
+        autoSnoozeResumedAt = nil
+    }
+
+    func resumeAutoSnooze() {
+        guard activeAlert != nil, autoSnoozeRemaining > 0, autoSnoozeResumedAt == nil else { return }
+        autoSnoozeResumedAt = Date()
+        autoSnoozeRunning = true
+        let seconds = autoSnoozeRemaining
+        autoSnoozeTask?.cancel()
+        autoSnoozeTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            guard !Task.isCancelled, let self, self.activeAlert != nil else { return }
+            self.snooze()
+        }
+    }
+
+    private func stopAutoSnooze() {
+        autoSnoozeTask?.cancel()
+        autoSnoozeTask = nil
+        autoSnoozeResumedAt = nil
+        autoSnoozeRunning = false
+        autoSnoozeRemaining = LabMetrics.autoSnoozeSeconds
     }
 
     /// Untouched alerts collapse shortly after the meeting starts, so the
@@ -379,32 +472,74 @@ final class CalendarStore: ObservableObject {
     /// user opened it and nothing has interrupted them.
     func snooze(_ meeting: DetectedMeeting) {
         HapticManager.shared.meetingSnoozed()
-        snoozedUntil[meeting.id] = Date().addingTimeInterval(TimeInterval(snoozeMinutes * 60))
-        alertedIDs.remove(meeting.id)
+        suppress(meeting)
         guard activeAlert?.id == meeting.id else { return }
+        // No `attentionLeft()` chaser. dismissAlert already closes the notch,
+        // and the second call raced the first: it ran with the alert already
+        // cleared, so it took the ordinary collapse path at the same moment
+        // the alert path was taking it, and the to-do panel got a frame to
+        // appear in between.
         dismissAlert()
-        NotchController.shared.attentionLeft()
     }
 
     func snooze() {
         guard let meeting = activeAlert else { return }
-        snoozedUntil[meeting.id] = Date().addingTimeInterval(TimeInterval(snoozeMinutes * 60))
-        alertedIDs.remove(meeting.id)
-        dismissAlert()
+        suppress(meeting)
         // Snooze means "not now" — so the panel goes away, the same as Join
         // does. It used to fall back to the to-do list, leaving a panel open
         // that the user never asked to open: the notch had opened ITSELF for
         // the meeting, so dismissing the meeting should return the screen to
         // exactly where it was (Marcello, 2026-08-10).
-        NotchController.shared.attentionLeft()
+        dismissAlert()
+    }
+
+    /// The notch is closing for a reason that has nothing to do with the
+    /// meeting — an outside click, Escape, another app coming forward.
+    ///
+    /// That has to be a snooze, not a silent drop. `forceCollapse` used to
+    /// close the notch and leave `activeAlert` set, which had two costs: the
+    /// panel counted itself as engaged forever after, and `updateAlerts`
+    /// refuses to raise a new alert while one is live — so one outside click
+    /// during a meeting alert quietly turned every later alert off for the
+    /// rest of the session.
+    ///
+    /// Walking away is "not now": the meeting comes back after the snooze
+    /// interval rather than being lost.
+    func alertLostAttention() {
+        guard let meeting = activeAlert else { return }
+        suppress(meeting)
+        clearAlert(whileCollapsing: true)
     }
 
     func dismissAlert() {
+        guard activeAlert != nil else { return }
+        // Close FIRST, then clear — the order is the whole fix. Asked to
+        // collapse before the card is taken away, the panel has nothing to
+        // swap in and the meeting simply leaves with the notch.
+        clearAlert(whileCollapsing: NotchController.shared.dismissMeetingAlert())
+    }
+
+    /// Stop this meeting alerting for a while, without touching what is drawn.
+    private func suppress(_ meeting: DetectedMeeting) {
+        snoozedUntil[meeting.id] = Date().addingTimeInterval(TimeInterval(snoozeMinutes * 60))
+        alertedIDs.remove(meeting.id)
+    }
+
+    private func clearAlert(whileCollapsing: Bool) {
+        stopAutoSnooze()
         autoCollapseTask?.cancel()
         autoCollapseTask = nil
-        guard activeAlert != nil else { return }
+        alertLeavingTask?.cancel()
+        alertLeaving = whileCollapsing
         withAnimation(NotchAnimation.contentHug) { activeAlert = nil }
-        NotchController.shared.dismissMeetingAlert()
+        guard whileCollapsing else { return }
+        // Long enough to cover the close, short enough that a panel reopened
+        // straight afterwards is a normal to-do panel again.
+        alertLeavingTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            guard !Task.isCancelled else { return }
+            self?.alertLeaving = false
+        }
     }
 
     // MARK: Testing seam
@@ -412,7 +547,14 @@ final class CalendarStore: ObservableObject {
     #if DEBUG
     /// Inject a synthetic meeting so the alert stages can be exercised
     /// without waiting for a real one (see DebugDriver).
+    /// Set by `injectTestMeeting`, so a real provider refresh cannot replace
+    /// the fixture out from under a test.
+    private(set) var debugHoldsInjectedMeetings = false
+
+    func debugReleaseInjectedMeetings() { debugHoldsInjectedMeetings = false }
+
     func injectTestMeeting(minutesFromNow: Int, withLink: Bool) {
+        debugHoldsInjectedMeetings = true
         let start = Date().addingTimeInterval(TimeInterval(minutesFromNow * 60))
         let meeting = DetectedMeeting(
             id: "test-\(UUID().uuidString.prefix(6))",

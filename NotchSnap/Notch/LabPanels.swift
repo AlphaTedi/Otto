@@ -140,7 +140,10 @@ enum LabMetrics {
     static let meetingBlockMaxHeight: CGFloat = 300
 
     /// How long the alert waits before snoozing itself.
-    static let autoSnoozeSeconds: Double = 25
+    /// 25 was long enough that an alert nobody wanted sat there being
+    /// ignored (Marcello, 2026-09-06). Long enough to read a meeting title
+    /// and decide, not long enough to become furniture.
+    static let autoSnoozeSeconds: Double = 15
 
     // The drop shadow, and the room it needs.
     //
@@ -175,6 +178,22 @@ private extension View {
     }
 }
 
+/// The stack's tap target, present only when tapping it would do something.
+private struct StackTapGesture: ViewModifier {
+    let enabled: Bool
+    let action: () -> Void
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content
+                .contentShape(Rectangle())
+                .onTapGesture(perform: action)
+        } else {
+            content
+        }
+    }
+}
+
 // MARK: - Auto-snoozing Snooze
 
 /// Snooze that snoozes itself if you ignore it.
@@ -188,75 +207,84 @@ private extension View {
 /// Hovering pauses it. Someone whose pointer is on the button is deciding, and
 /// deciding must not be punished by having the thing decide for them.
 struct AutoSnoozeButton: View {
-    /// Whether the fill runs and fires on its own. False on a card the user
-    /// opened deliberately — nothing there has interrupted them, so nothing
-    /// there should time out.
+    /// Whether this card's Snooze shows a running countdown. False on a card
+    /// the user opened deliberately — nothing there has interrupted them, so
+    /// nothing there should time out.
     var countsDown: Bool = true
     let action: () -> Void
 
+    @ObservedObject private var calendar = CalendarStore.shared
+    /// The fill, 0...1 — PRESENTATION only. It is written once per resume and
+    /// animated to 1, so reading it back tells you nothing about how much time
+    /// is left: `withAnimation` sets the value immediately and interpolates
+    /// only the drawing. The old code did read it back, which is why one pass
+    /// of the pointer over this button filled the capsule instantly and
+    /// stopped the clock for good.
     @State private var progress: CGFloat = 0
     @State private var hover = false
-    @State private var fired = false
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text(L10n.t("cal.snoozeShort"))
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(hover ? DSColor.textPrimaryBright : DSColor.textSecondary)
-            Keycap(text: "S", tone: .onDark, size: 9)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 5)
-        .background(
-            // The fill is the clock. It grows from the leading edge inside the
-            // same capsule the label sits in, so there is one object here, not
-            // a button with a progress bar bolted underneath it.
-            GeometryReader { proxy in
-                Capsule(style: .continuous)
-                    .fill(Color.dynamicOverlay(light: 0.10, dark: 0.13))
-                    .frame(width: proxy.size.width * progress)
+        // A Button, not `.onTapGesture`.
+        //
+        // This is why Snooze "did not take the click the first or second time"
+        // while Join, right beside it, always worked: Join is a Button and
+        // this was a bare tap gesture sitting under an ancestor that claimed
+        // the whole card as its own tap target. Two peer tap gestures over one
+        // point resolve unpredictably; a Button's press gesture takes
+        // precedence over an ancestor's (Marcello, 2026-09-06).
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Text(L10n.t("cal.snoozeShort"))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(hover ? DSColor.textPrimaryBright : DSColor.textSecondary)
+                Keycap(text: "S", tone: .onDark, size: 9)
             }
-        )
-        .clipShape(Capsule(style: .continuous))
-        .overlay(
-            Capsule(style: .continuous)
-                .strokeBorder(DSColor.panelBorder, lineWidth: 0.5)
-        )
-        .contentShape(Capsule(style: .continuous))
-        .onTapGesture { fire() }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .background(
+                // The fill is the clock. It grows from the leading edge inside
+                // the same capsule the label sits in, so there is one object
+                // here, not a button with a progress bar bolted underneath it.
+                GeometryReader { proxy in
+                    Capsule(style: .continuous)
+                        .fill(Color.dynamicOverlay(light: 0.10, dark: 0.13))
+                        .frame(width: proxy.size.width * progress)
+                }
+            )
+            .clipShape(Capsule(style: .continuous))
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(DSColor.panelBorder, lineWidth: 0.5)
+            )
+            .contentShape(Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
         .onHover { hovering in
             hover = hovering
+            guard countsDown else { return }
             // Pause, do not reset. Restarting the clock every time the pointer
-            // crosses the button would make it effectively never fire.
-            withAnimation(.linear(duration: 0.15)) { }
-            if hovering { pause() } else { resume() }
+            // crossed the button would make it effectively never fire.
+            if hovering { calendar.pauseAutoSnooze() } else { calendar.resumeAutoSnooze() }
         }
-        .onAppear { resume() }
+        // The store owns the deadline; this only draws it. Mirror whatever it
+        // is doing now, and again whenever it starts or stops.
+        .onAppear { syncFill() }
+        .onChange(of: calendar.autoSnoozeRunning) { _ in syncFill() }
         .help(L10n.t("cal.snoozeAutoHint"))
     }
 
-    private func pause() {
-        // Freeze wherever it got to: re-asserting the current value with no
-        // animation cancels the in-flight one at its present position.
-        let now = progress
-        withAnimation(.linear(duration: 0)) { progress = now }
-    }
-
-    private func resume() {
-        guard countsDown, !fired, progress < 1 else { return }
-        let remaining = LabMetrics.autoSnoozeSeconds * Double(1 - progress)
-        withAnimation(.linear(duration: remaining)) { progress = 1 }
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
-            guard !Task.isCancelled, !hover, !fired else { return }
-            fire()
+    /// Drive the fill to match the store's clock: animate to full over
+    /// whatever is left while it runs, freeze where it got to while it does
+    /// not.
+    private func syncFill() {
+        guard countsDown else { return }
+        let elapsed = 1 - CGFloat(calendar.autoSnoozeRemaining / LabMetrics.autoSnoozeSeconds)
+        if calendar.autoSnoozeRunning {
+            withAnimation(.linear(duration: 0)) { progress = elapsed }
+            withAnimation(.linear(duration: calendar.autoSnoozeRemaining)) { progress = 1 }
+        } else {
+            withAnimation(.linear(duration: 0)) { progress = elapsed }
         }
-    }
-
-    private func fire() {
-        guard !fired else { return }
-        fired = true
-        action()
     }
 }
 
@@ -394,11 +422,17 @@ struct LabMeetingBlock: View {
                 }
                 // One target: the visible card and the slivers under it do the
                 // same thing, the way a notification stack behaves.
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    guard meetings.count > 1 else { return }
+                //
+                // Installed ONLY when there is a deck to open. It used to be
+                // unconditional with a `guard meetings.count > 1` inside, so
+                // on the ordinary single-meeting card there was a full-card
+                // tap target that swallowed clicks and did nothing with them —
+                // and `contentShape(Rectangle())` here covers the buttons.
+                // A gesture that competes with the controls it sits over and
+                // then declines to act is the worst of both.
+                .modifier(StackTapGesture(enabled: meetings.count > 1) {
                     withAnimation(NotchAnimation.contentHug) { expanded = true }
-                }
+                })
                 .transition(.opacity)
         }
     }
@@ -561,7 +595,7 @@ struct LabPanelsView: View {
             // it. It also removes the duplicate: the panel used to draw its
             // own copy of the alert card inside itself, so the same meeting
             // appeared twice, once above the other (Marcello, 2026-08-23).
-            if calendar.activeAlert == nil {
+            if calendar.activeAlert == nil, !calendar.alertLeaving {
                 TodoTabView()
                     // FIXED, in the floating panels only.
                     //

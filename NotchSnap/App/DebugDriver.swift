@@ -138,6 +138,7 @@ enum DebugDriver {
                             + "upcoming=\(cal.upcomingToday.count) "
                             + "ambient=\(cal.ambientMeeting?.title ?? "nil") "
                             + "activeAlert=\(cal.activeAlert?.title ?? "nil") "
+                            + "alertLeaving=\(cal.alertLeaving) "
                             + "leads=\(cal.ambientLeadMinutes)m/\(cal.alertLeadMinutes)m "
                             + "notch=\(NotchController.shared.state)")
             } else if command == "cal-debug" {
@@ -163,6 +164,8 @@ enum DebugDriver {
                 for line in CalendarStore.shared.probeWideWindow() { appendState(line) }
             } else if command == "cal-refresh" {
                 Task { @MainActor in await CalendarStore.shared.refresh() }
+            } else if command == "cal-release" {
+                CalendarStore.shared.debugReleaseInjectedMeetings()
             } else if command == "cal-snooze" {
                 CalendarStore.shared.snooze()
             } else if command == "cal-dismiss" {
