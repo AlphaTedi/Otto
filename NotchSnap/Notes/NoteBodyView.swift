@@ -54,10 +54,14 @@ struct NoteBodyView: NSViewRepresentable {
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let view = scroll.documentView as? NSTextView else { return }
         NoteEditorController.shared.textView = view
-        // Reload ONLY when the note changed underneath us — a note opened from
-        // the stream, say. Rewriting the storage on every keystroke would drop
-        // the caret to the start of the document on every character typed.
-        if context.coordinator.loadedNoteID != noteID {
+        // Reload when the note changed underneath us — a note opened from the
+        // stream — or when the text arrived from somewhere that is NOT this
+        // view. Rewriting the storage on every keystroke would drop the caret
+        // to the start of the document on every character typed, so the test
+        // is against what this view last emitted rather than against the
+        // storage: our own edit echoes back identical and is ignored, while a
+        // genuine outside change is taken.
+        if context.coordinator.shouldReload(noteID: noteID, markdown: markdown) {
             context.coordinator.load(markdown, into: view)
         }
     }
@@ -65,14 +69,22 @@ struct NoteBodyView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         private let parent: NoteBodyView
         private(set) var loadedNoteID: UUID?
+        /// The last markdown this view either loaded or produced. Anything
+        /// different arriving from outside is a change this view did not make.
+        private var lastKnownMarkdown: String?
         /// True while we are seeding the view, so the delegate does not treat
         /// our own write as the user's edit and echo it back to the store.
         private var loading = false
 
         init(_ parent: NoteBodyView) { self.parent = parent }
 
+        func shouldReload(noteID: UUID, markdown: String) -> Bool {
+            loadedNoteID != noteID || lastKnownMarkdown != markdown
+        }
+
         func load(_ markdown: String, into view: NSTextView) {
             loading = true
+            lastKnownMarkdown = markdown
             let attributed = NoteMarkdown.attributed(
                 from: markdown,
                 textColor: .labelColor,
@@ -89,7 +101,9 @@ struct NoteBodyView: NSViewRepresentable {
             guard !loading, let view = notification.object as? NSTextView,
                   let storage = view.textStorage else { return }
             MainActor.assumeIsolated {
-                parent.markdown = NoteMarkdown.markdown(from: storage)
+                let written = NoteMarkdown.markdown(from: storage)
+                lastKnownMarkdown = written
+                parent.markdown = written
                 NoteEditorController.shared.refreshState()
             }
         }

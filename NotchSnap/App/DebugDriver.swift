@@ -256,6 +256,17 @@ enum DebugDriver {
                     "# Titolo\n\nparagrafo con **bold** e *corsivo*\n\n## Sotto\n- uno\n- due\n\n1. a\n2. b\n\n- [ ] da fare\n- [x] fatto",
                     "",
                     "riga\n\nriga dopo una vuota",
+                    // Nesting, and the trailing blank line — the two things
+                    // the round-trip did not cover when it was written.
+                    "- padre\n  - figlio\n  - figlio due\n- padre due",
+                    "1. uno\n  1. uno a\n  2. uno b\n2. due",
+                    "- a\n  - b\n    - c\n      - d",
+                    "- [ ] compito\n  - [ ] sotto\n  - [x] sotto fatto",
+                    "- **grassetto**\n  - *corsivo* annidato",
+                    "riga finale seguita da una vuota\n",
+                    "\n",
+                    "1. a\n2. b\n- un punto interrompe\n1. riparte",
+                    "corpo\n  rientrato a mano, non un elenco\ncorpo di nuovo",
                 ]
                 var failures = 0
                 for source in cases {
@@ -269,6 +280,18 @@ enum DebugDriver {
                     }
                 }
                 appendState("roundtrip: \(cases.count - failures)/\(cases.count) identical")
+            } else if command == "notes-body" {
+                // What the EDITOR is holding, not what the store thinks. The
+                // two came apart once — the text view was built from an empty
+                // string and then refused to reload — and the only way to see
+                // that without pixels is to ask the view itself.
+                let view = NoteEditorController.shared.textView
+                let held = view.flatMap { $0.textStorage.map(NoteMarkdown.markdown(from:)) }
+                let stored = NotesStore.shared.openNote?.content
+                appendState("notes-body view=\(view == nil ? "nil" : "yes") "
+                            + "shown=\(held?.debugDescription ?? "nil") "
+                            + "stored=\(stored?.debugDescription ?? "nil") "
+                            + "match=\(held == stored)")
             } else if command == "notes-status" {
                 let n = NotesStore.shared
                 appendState("notes count=\(n.notes.count) mode=\(TodoStore.shared.panelMode) "

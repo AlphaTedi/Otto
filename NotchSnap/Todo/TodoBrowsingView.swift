@@ -168,7 +168,7 @@ private struct DraftBlockKey: PreferenceKey {
     }
 }
 
-private struct TabRowHeightKey: PreferenceKey {
+struct TabRowHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
@@ -306,7 +306,7 @@ enum FieldCaret {
     }
 }
 
-private extension View {
+extension View {
     func measureHeight<K: PreferenceKey>(_ key: K.Type) -> some View where K.Value == CGFloat {
         background(
             GeometryReader { proxy in
@@ -457,7 +457,18 @@ struct TodoTabView: View {
                 // Anchoring them under the field fixes their position for good:
                 // the field is always the same height, so everything above the
                 // list stops moving.
-                if isContainerLayout, store.showsSpaceBar {
+                //
+                // NOT in the Notes space, which places the same row itself.
+                // The rule the container follows is FIELD FIRST, SECTIONS
+                // UNDER IT: in a list that falls out for free, because the
+                // draft row above is a sibling here. Notes brings its own
+                // field — the composer, inside NotesSpaceView — so drawing the
+                // row at this level put the sections ABOVE the thing you type
+                // into, and Notes became the one space in the app with its
+                // furniture in the other order (Marcello, 2026-09-06). It is
+                // handed to StreamView instead, which owns the composer and
+                // can put it on the right side of it.
+                if isContainerLayout, store.showsSpaceBar, store.panelMode != .notes {
                     // No extra gap under it. The row already carries its own
                     // breathing room plus the rule's — measured, the added
                     // sectionGap made the panel 16pt taller than the same
@@ -560,7 +571,7 @@ struct TodoTabView: View {
 // it held (set default, reorder, delete) is already on each tab's own
 // context menu, so it was a second door to one room.
 
-private struct TodoTabRow: View {
+struct TodoTabRow: View {
     /// Which side of the row the separating rule is drawn on.
     ///
     /// It is a parameter and not a nudge because the rule's placement is
@@ -805,6 +816,25 @@ private struct TodoTabRow: View {
             }
             .animation(NotchAnimation.hintFade, value: dropBeforeCollectionID)
             .animation(NotchAnimation.hintFade, value: dropCollectionAtEnd)
+            // Two points of slack inside the scroller, given back outside it.
+            //
+            // THE FIRST TAB IS CUT, and this is the third attempt at it, so
+            // the cause is worth writing down. A ScrollView clips to its own
+            // bounds. The first chip's capsule starts at exactly x = 0 of the
+            // content, so the clip edge and the leftmost column of the
+            // capsule's curve are the same column — and an antialiased curve
+            // has nothing to spare there. The left cap loses its softest pixels
+            // and the chip reads as sliced off, most visibly on the ACTIVE tab
+            // because that one is filled (Marcello: "la prima section rimane
+            // sempre tagliata", 2026-09-05 and again 2026-09-06).
+            //
+            // Removing `matchedGeometryEffect` was the previous fix; it was a
+            // real bug and a different one. This is the boundary itself.
+            //
+            // The negative padding on the ScrollView below widens the clip by
+            // the same 2pt, so nothing MOVES: the chips keep their positions
+            // and only the edge they are measured against steps outward.
+            .padding(.horizontal, 2)
             .background(
                 GeometryReader { proxy in
                     Color.clear.preference(key: TabsContentWidthKey.self,
@@ -819,6 +849,7 @@ private struct TodoTabRow: View {
             // midline (Marcello, 2026-08-09).
         }
         .scrollDisabled(!tabsOverflow)
+        .padding(.horizontal, -2)          // see the slack above
         .onPreferenceChange(TabsContentWidthKey.self) { tabsContentWidth = $0 }
         .background(
             GeometryReader { proxy in
@@ -2558,6 +2589,7 @@ private struct ShortcutsOverlay: View {
         ("\u{2325}\u{2318}N", "todo.sc.quickEntry"),
         ("\u{2303}\u{21E7}E", "todo.sc.notes"),
         ("\u{2318}B / I / U", "todo.sc.format"),
+        ("\u{21E5} / \u{21E7}\u{21E5}", "todo.sc.nestList"),
     ]
 
     var body: some View {

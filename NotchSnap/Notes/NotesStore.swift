@@ -320,7 +320,19 @@ final class NotesStore: ObservableObject {
         TodoStore.shared.setMode(.browsing)
     }
 
+    /// The caret goes to the composer — and the stream's highlight goes out.
+    ///
+    /// The invariant: THE CARET AND THE HIGHLIGHT ARE THE SAME CURSOR, and
+    /// there is only one of them. Clearing it here rather than at the three
+    /// call sites is what keeps that true: entering the space, closing a note
+    /// and filing a draft all arrive through this one function.
+    ///
+    /// The space used to open with a row already lit, which reads as "this one
+    /// is about to happen" on a surface where the only thing about to happen
+    /// is the sentence you have not typed yet (Marcello, 2026-09-06). A
+    /// highlight appears on the first ↑ or ↓ and not before.
     func focusComposer() {
+        selectedNoteID = nil
         composerFocusRequest &+= 1
     }
 
@@ -360,7 +372,11 @@ final class NotesStore: ObservableObject {
         guard !entries.isEmpty else { return }
         guard let current = selectedNoteID,
               let index = entries.firstIndex(where: { $0.id == current }) else {
-            selectedNoteID = entries.first?.id
+            // Nothing selected yet: this key IS the selection. It enters from
+            // the side it was pressed from — ↓ at the top of the stream, ↑ at
+            // the bottom — rather than always landing on the first row, which
+            // made ↑ walk the wrong way on its first press.
+            selectedNoteID = offset < 0 ? entries.last?.id : entries.first?.id
             return
         }
         let next = min(max(index + offset, 0), entries.count - 1)

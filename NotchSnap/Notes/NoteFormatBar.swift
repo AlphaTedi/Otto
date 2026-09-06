@@ -8,10 +8,14 @@ import SwiftUI
 // download. The accepted cost is that the row is dense and the tools are shown
 // even when there is nothing to format.
 //
-// It is NOT drawn in the notch container, which has no such row. There the
-// shortcuts and markdown-as-you-type are the whole story, which is what the
-// handoff prescribes; growing the silhouette to fit a toolbar would trade the
-// one thing that layout is for.
+// It is drawn in BOTH layouts. It was held back from the notch container on
+// the grounds that the container has no 52pt row to spare — but it does: the
+// note's bottom bar is already there, in both, carrying the word count and the
+// download. Only the toolbar inside it was missing, so the container was
+// paying the row's height and getting none of its use, and the same note
+// offered different tools depending on which build you were in
+// (Marcello, 2026-09-06). Parity costs nothing here because the silhouette
+// does not grow.
 
 struct NoteFormatBar: View {
     @ObservedObject private var editor = NoteEditorController.shared
@@ -23,7 +27,7 @@ struct NoteFormatBar: View {
             Button { showsBlockMenu.toggle() } label: {
                 Text(blockLabel)
                     .font(.system(size: 12, weight: .semibold))
-                    .frame(minWidth: 24)
+                    .fixedSize()
             }
             .buttonStyle(FormatControlStyle(isActive: editor.activeBlock == .h1
                                                    || editor.activeBlock == .h2))
@@ -93,6 +97,17 @@ struct NoteFormatBar: View {
 /// Rest, hover, active, pressed — one style so the nine controls cannot drift
 /// apart. A 28×28 hit area under glyphs that are much smaller, so the row is
 /// dense to look at and not to use.
+///
+/// CIRCLES, not rounded squares. At 28×28 a corner radius of 8 is a square
+/// with the corners taken off, and nine of them sitting inside a capsule read
+/// as badges pasted onto a pill rather than as controls belonging to it
+/// (Marcello, 2026-09-06, on the lit underline button). A circle is concentric
+/// with the capsule it lives in: same centre, same curvature at the ends, one
+/// object.
+///
+/// The frame is EXACT rather than a minimum, because a circle behind a frame
+/// that grows to its label is an ellipse — the wide glyphs ("1.", "H1") were
+/// exactly the ones that would have stretched.
 private struct FormatControlStyle: ButtonStyle {
     let isActive: Bool
     @State private var hover = false
@@ -100,14 +115,14 @@ private struct FormatControlStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(isActive ? LabMetrics.accent : DSColor.textPrimary)
-            .frame(minWidth: 28, minHeight: 28)
+            .frame(width: 28, height: 28)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                Circle()
                     .fill(configuration.isPressed ? LabMetrics.accent.opacity(0.28)
                           : (isActive ? LabMetrics.accent.opacity(0.18)
                              : (hover ? DSColor.fieldBackground : Color.clear)))
             )
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(Circle())
             .onHover { hover = $0 }
             .animation(Motion.hoverFade, value: hover)
             .animation(Motion.hoverFade, value: isActive)

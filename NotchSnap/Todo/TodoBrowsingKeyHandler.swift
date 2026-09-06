@@ -164,6 +164,59 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 }
             }
 
+            // AN OPEN NOTE IS A TEXT EDITOR, AND NOTHING ELSE.
+            //
+            // This block comes FIRST and it ends in `return false`, so every
+            // key it does not itself claim reaches the NSTextView untouched.
+            // That order is the fix, not a tidy-up. Underneath it sit the
+            // stream's own bindings — ←/→ cycle space, ↑↓ walk the rows, ⏎
+            // opens the selected one — and all three used to fire while the
+            // caret was inside a note, because their guard was "is the
+            // composer empty", and inside a note the composer is always empty.
+            // So ⏎ re-opened the note you were already in instead of breaking
+            // the line, and ←/→ threw you out into another section in the
+            // middle of a word (Marcello, 2026-09-06). A note in front of you
+            // is not a state in which section-switching keys mean anything.
+            if notes.openNoteID != nil {
+                let editor = NoteEditorController.shared
+                if cmd, option, !shift {
+                    switch chars {
+                    case "1", "\u{00A1}": editor.setBlock(.h1);   return true
+                    case "2", "\u{2122}": editor.setBlock(.h2);   return true
+                    case "0", "\u{00BA}": editor.setBlock(.body); return true
+                    default: break
+                    }
+                }
+                if cmd, shift, !option {
+                    switch keyCode {
+                    case 28: editor.toggleBlock(.bullet);        return true   // ⌘⇧8
+                    case 26: editor.toggleBlock(.numbered);      return true   // ⌘⇧7
+                    case 25: editor.toggleBlock(.checklistOpen); return true   // ⌘⇧9
+                    default: break
+                    }
+                }
+                if cmd, !shift, !option {
+                    switch lower {
+                    case "b": editor.toggleBold();      return true
+                    case "i": editor.toggleItalic();    return true
+                    case "u": editor.toggleUnderline(); return true
+                    default: break
+                    }
+                }
+                // ⇥ / ⇧⇥ nest and un-nest the list row, the way they do in
+                // Notes and in every outliner. Claimed here rather than left
+                // to the text view because a bare Tab in an NSTextView inserts
+                // a tab character, and a tab character is not a sub-level.
+                //
+                // Outside a list it is not ours: it falls through and the text
+                // view does whatever it normally does with it.
+                if keyCode == 48, !cmd, !option, !control {
+                    if editor.shiftIndent(by: shift ? -1 : 1) { return true }
+                    return false
+                }
+                return false
+            }
+
             // ⇥ and ←/→ leave the space, whether or not the composer holds
             // the caret.
             //
@@ -192,37 +245,6 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             // instead — with a draft in the field those keys belong to the
             // text being written, and with nothing in it they belong to the
             // stream, which is the state you are in the moment after ⌘S.
-            // Formatting, while a note is open. All of it works whether or
-            // not the bar is drawn — which is the whole reason the notch
-            // container can ship without one.
-            if notes.openNoteID != nil {
-                let editor = NoteEditorController.shared
-                if cmd, option, !shift {
-                    switch chars {
-                    case "1", "\u{00A1}": editor.setBlock(.h1);   return true
-                    case "2", "\u{2122}": editor.setBlock(.h2);   return true
-                    case "0", "\u{00BA}": editor.setBlock(.body); return true
-                    default: break
-                    }
-                }
-                if cmd, shift, !option {
-                    switch keyCode {
-                    case 28: editor.toggleBlock(.bullet);        return true   // ⌘⇧8
-                    case 26: editor.toggleBlock(.numbered);      return true   // ⌘⇧7
-                    case 25: editor.toggleBlock(.checklistOpen); return true   // ⌘⇧9
-                    default: break
-                    }
-                }
-                if cmd, !shift, !option {
-                    switch lower {
-                    case "b": editor.toggleBold();      return true
-                    case "i": editor.toggleItalic();    return true
-                    case "u": editor.toggleUnderline(); return true
-                    default: break
-                    }
-                }
-            }
-
             let composerEmpty = notes.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
             // ⏎ closes the entry — the confirm key, the same one that files a

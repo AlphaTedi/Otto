@@ -29,8 +29,12 @@ enum NoteBlock: String, Equatable {
 
     var isChecklist: Bool { self == .checklistOpen || self == .checklistDone }
 
-    /// What the line starts with in the file.
-    func marker(index: Int) -> String {
+    /// What the line starts with in the file, nesting included.
+    func marker(index: Int, indent: Int = 0) -> String {
+        String(repeating: NoteIndent.unit, count: isList ? max(indent, 0) : 0) + bareMarker(index: index)
+    }
+
+    private func bareMarker(index: Int) -> String {
         switch self {
         case .h1:            return "# "
         case .h2:            return "## "
@@ -47,6 +51,26 @@ extension NSAttributedString.Key {
     /// The paragraph's block type, carried on its characters so a selection
     /// anywhere in the line can be asked what it is.
     static let noteBlock = NSAttributedString.Key("ottoNoteBlock")
+    /// How deeply the paragraph is nested, 0 for the outer level. Carried the
+    /// same way and for the same reason as `noteBlock`.
+    ///
+    /// It is markdown's own nesting and nothing new: two spaces per level in
+    /// front of the marker, which is what every reader already understands.
+    /// Only LIST rows carry it — a heading has no sub-heading in this format,
+    /// and inventing one would be a tenth format with no markdown to write it
+    /// into, which is the line this file does not cross.
+    static let noteIndent = NSAttributedString.Key("ottoNoteIndent")
+}
+
+/// The nesting the editor allows. Four is Apple Notes' own limit and it is
+/// well past the point where a note is still a note.
+enum NoteIndent {
+    static let max = 4
+    /// One level in the file. Two spaces, the CommonMark convention for
+    /// nesting under a `- ` marker.
+    static let unit = "  "
+    /// One level on screen.
+    static let step: CGFloat = 22
 }
 
 // MARK: - Type scale
@@ -76,7 +100,7 @@ enum NoteType {
         return manager.convert(base, toHaveTrait: traits)
     }
 
-    static func paragraphStyle(for block: NoteBlock) -> NSParagraphStyle {
+    static func paragraphStyle(for block: NoteBlock, indent: Int = 0) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         switch block {
         case .h1:
@@ -94,9 +118,13 @@ enum NoteType {
             style.lineHeightMultiple = 1.3
             style.paragraphSpacing = 3
             // The marker is drawn by the text itself, so the wrap has to be
-            // indented or a second line starts under the bullet.
-            style.headIndent = 20
-            style.firstLineHeadIndent = 0
+            // indented or a second line starts under the bullet. A nested row
+            // moves BOTH edges by the same step, so its marker lines up under
+            // the text of its parent — the shape that makes a sub-level read
+            // as one.
+            let offset = CGFloat(max(indent, 0)) * NoteIndent.step
+            style.headIndent = 20 + offset
+            style.firstLineHeadIndent = offset
         }
         return style
     }
@@ -127,17 +155,18 @@ enum NoteMarkdown {
         // survive, or the caret cannot sit on the empty last line the user
         // just made.
         let lines = markdown.isEmpty ? [""] : markdown.components(separatedBy: "\n")
-        var numberedIndex = 0
+        var counters = NumberCounters()
 
         for (i, raw) in lines.enumerated() {
-            let (block, content) = split(raw)
-            if block == .numbered { numberedIndex += 1 } else { numberedIndex = 0 }
+            let (block, indent, content) = split(raw)
+            let numberedIndex = counters.advance(block: block, indent: indent)
 
             let paragraph = NSMutableAttributedString(string: content, attributes: [
                 .font: NoteType.font(for: block),
                 .foregroundColor: block == .checklistDone ? mutedColor : textColor,
-                .paragraphStyle: NoteType.paragraphStyle(for: block),
+                .paragraphStyle: NoteType.paragraphStyle(for: block, indent: indent),
                 .noteBlock: block.rawValue,
+                .noteIndent: indent,
             ])
             if block == .checklistDone {
                 paragraph.addAttribute(.strikethroughStyle,
@@ -153,8 +182,9 @@ enum NoteMarkdown {
                 let marker = NSAttributedString(string: listGlyph(block, index: numberedIndex), attributes: [
                     .font: NoteType.font(for: .body),
                     .foregroundColor: accent,
-                    .paragraphStyle: NoteType.paragraphStyle(for: block),
+                    .paragraphStyle: NoteType.paragraphStyle(for: block, indent: indent),
                     .noteBlock: block.rawValue,
+                    .noteIndent: indent,
                 ])
                 paragraph.insert(marker, at: 0)
             }
@@ -163,8 +193,9 @@ enum NoteMarkdown {
             if i < lines.count - 1 {
                 out.append(NSAttributedString(string: "\n", attributes: [
                     .font: NoteType.font(for: block),
-                    .paragraphStyle: NoteType.paragraphStyle(for: block),
+                    .paragraphStyle: NoteType.paragraphStyle(for: block, indent: indent),
                     .noteBlock: block.rawValue,
+                    .noteIndent: indent,
                 ]))
             }
         }
@@ -182,19 +213,60 @@ enum NoteMarkdown {
         }
     }
 
-    /// Split a raw markdown line into its block type and the text after the
-    /// marker.
-    static func split(_ line: String) -> (NoteBlock, String) {
-        if line.hasPrefix("## ")      { return (.h2, String(line.dropFirst(3))) }
-        if line.hasPrefix("# ")       { return (.h1, String(line.dropFirst(2))) }
-        if line.hasPrefix("- [x] ")   { return (.checklistDone, String(line.dropFirst(6))) }
-        if line.hasPrefix("- [X] ")   { return (.checklistDone, String(line.dropFirst(6))) }
-        if line.hasPrefix("- [ ] ")   { return (.checklistOpen, String(line.dropFirst(6))) }
-        if line.hasPrefix("- ")       { return (.bullet, String(line.dropFirst(2))) }
-        if let match = line.range(of: "^\\d+\\. ", options: .regularExpression) {
-            return (.numbered, String(line[match.upperBound...]))
+    /// Split a raw markdown line into its block type, its nesting level and
+    /// the text after the marker.
+    ///
+    /// Leading spaces are read as nesting ONLY in front of a list marker. In
+    /// front of anything else they are the user's own indentation and are left
+    /// in the text, because a paragraph that begins with a space is a
+    /// paragraph that begins with a space — reinterpreting it would silently
+    /// edit a file the user may also be writing by hand.
+    static func split(_ line: String) -> (NoteBlock, Int, String) {
+        let spaces = line.prefix { $0 == " " }.count
+        let body = String(line.dropFirst(spaces))
+        // Two spaces to the level, and an odd space is rounded down rather
+        // than rejected: a hand-written file using four is read as two levels,
+        // and one using three still lands somewhere sensible.
+        let indent = min(spaces / NoteIndent.unit.count, NoteIndent.max)
+
+        if body.hasPrefix("- [x] ")   { return (.checklistDone, indent, String(body.dropFirst(6))) }
+        if body.hasPrefix("- [X] ")   { return (.checklistDone, indent, String(body.dropFirst(6))) }
+        if body.hasPrefix("- [ ] ")   { return (.checklistOpen, indent, String(body.dropFirst(6))) }
+        if body.hasPrefix("- ")       { return (.bullet, indent, String(body.dropFirst(2))) }
+        if let match = body.range(of: "^\\d+\\. ", options: .regularExpression) {
+            return (.numbered, indent, String(body[match.upperBound...]))
         }
-        return (.body, line)
+        // Not a list: the spaces were never nesting, so the line is handed
+        // back whole.
+        if line.hasPrefix("## ")      { return (.h2, 0, String(line.dropFirst(3))) }
+        if line.hasPrefix("# ")       { return (.h1, 0, String(line.dropFirst(2))) }
+        return (.body, 0, line)
+    }
+
+    /// Numbered lists count PER LEVEL, and a level restarts whenever something
+    /// else interrupts it.
+    ///
+    /// Without this a nested list carried on from its parent's count — 1, 2,
+    /// then 3 indented under 2 — which is not what any markdown reader will
+    /// render it as, so the file and the screen would disagree the moment the
+    /// note left the app.
+    struct NumberCounters {
+        private var counts = [Int](repeating: 0, count: NoteIndent.max + 1)
+
+        /// Advance to the given line and return the number it should wear.
+        mutating func advance(block: NoteBlock, indent: Int) -> Int {
+            let level = min(max(indent, 0), NoteIndent.max)
+            if block == .numbered {
+                counts[level] += 1
+                // Anything nested UNDER this row starts again from one.
+                // Half-open, not `...`: at the deepest level `(max + 1)...max`
+                // is not an empty range, it is a crash.
+                for deeper in (level + 1)..<counts.count { counts[deeper] = 0 }
+                return counts[level]
+            }
+            for cleared in level...NoteIndent.max { counts[cleared] = 0 }
+            return 0
+        }
     }
 
     private static func applyInline(to paragraph: NSMutableAttributedString,
@@ -239,7 +311,7 @@ enum NoteMarkdown {
     static func markdown(from attributed: NSAttributedString) -> String {
         let string = attributed.string as NSString
         var lines: [String] = []
-        var numberedIndex = 0
+        var counters = NumberCounters()
         var start = 0
 
         while start <= string.length {
@@ -255,11 +327,20 @@ enum NoteMarkdown {
                 ? (attributed.attribute(.noteBlock, at: contentRange.location, effectiveRange: nil)
                     as? String).flatMap(NoteBlock.init(rawValue:)) ?? .body
                 : .body
+            let indent: Int = contentRange.length > 0
+                ? (attributed.attribute(.noteIndent, at: contentRange.location, effectiveRange: nil)
+                    as? Int) ?? 0
+                : 0
+
+            // The number this row wears is worked out the SAME way the parser
+            // works it out, from the same counters — so what is written into
+            // the file is what reading the file back would produce.
+            let numberedIndex = counters.advance(block: block, indent: indent)
 
             // Strip the drawn marker back off.
             var textRange = contentRange
             if block.isList {
-                let glyph = listGlyph(block, index: numberedIndex + 1)
+                let glyph = listGlyph(block, index: numberedIndex)
                 let prefix = string.substring(with: NSRange(
                     location: contentRange.location,
                     length: min(glyph.count, contentRange.length)))
@@ -272,12 +353,24 @@ enum NoteMarkdown {
                 }
             }
 
-            if block == .numbered { numberedIndex += 1 } else { numberedIndex = 0 }
-            lines.append(block.marker(index: numberedIndex)
+            lines.append(block.marker(index: numberedIndex, indent: indent)
                          + inlineMarkdown(attributed, in: textRange, block: block))
 
             if NSMaxRange(lineRange) >= string.length { break }
             start = NSMaxRange(lineRange)
+        }
+        // The EMPTY LAST LINE, which the loop above cannot see.
+        //
+        // `lineRange` hands back the final newline as part of the line before
+        // it, so a document ending in "\n" breaks out of the loop having
+        // emitted one line fewer than it has. The parser deliberately keeps
+        // that line — the caret has to be able to sit on the blank line you
+        // just made — so dropping it here meant the two halves disagreed and
+        // a note ending in a blank line did not survive its own save. Press ⏎
+        // to step out of a list, save, reopen: the line you made was gone.
+        if string.length > 0,
+           string.substring(with: NSRange(location: string.length - 1, length: 1)) == "\n" {
+            lines.append("")
         }
         return lines.joined(separator: "\n")
     }
@@ -323,7 +416,7 @@ enum NoteMarkdown {
     /// Plain text, for the stream's preview line and the word count — the
     /// markers are not words.
     static func plainText(_ markdown: String) -> String {
-        markdown.components(separatedBy: "\n").map { split($0).1 }
+        markdown.components(separatedBy: "\n").map { split($0).2 }
             .joined(separator: "\n")
             .replacingOccurrences(of: "**", with: "")
             .replacingOccurrences(of: "<u>", with: "")

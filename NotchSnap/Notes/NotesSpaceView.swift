@@ -272,6 +272,25 @@ private struct StreamView: View {
                 })
                 .onPreferenceChange(ComposerHeightKey.self) { composerHeight = $0 }
 
+            // THE FIELD FIRST, THE SECTIONS UNDER IT — the same order every
+            // list has, and the reason this row is drawn here rather than at
+            // the panel level with the others.
+            //
+            // In a list the container draws its draft row and then the
+            // sections, as siblings. Notes brings its own field, so drawing
+            // the row up there put the sections above the composer and made
+            // this the one space whose furniture was in the other order
+            // (Marcello, 2026-09-06). Here it sits between the composer and
+            // the stream, which is exactly where a list's is.
+            //
+            // Stream level only: `showsSpaceBar` is already false while a note
+            // is open, and this view is not on screen then either.
+            if isContainer, TodoStore.shared.showsSpaceBar {
+                TodoTabRow(rulePosition: .below)
+                    .notchEntry(index: 1)
+                    .measureHeight(TabRowHeightKey.self)
+            }
+
             streamBody
                 // Dimmed while something is BEING WRITTEN, not merely while
                 // the field has focus.
@@ -684,8 +703,29 @@ private struct NoteDetailView: View {
 
     @ObservedObject private var store = NotesStore.shared
     @FocusState private var titleFocused: Bool
-    @State private var titleDraft = ""
-    @State private var body_ = ""
+    @State private var titleDraft: String
+    @State private var body_: String
+
+    /// Seeded HERE and not in `onAppear`, and that ordering is the whole of
+    /// the "I open a note and it is blank" bug.
+    ///
+    /// `onAppear` runs AFTER the NSTextView has been made, so the view was
+    /// built from an empty string and then told the real text — and the
+    /// coordinator refuses to reload a note it has already loaded, because
+    /// reloading on every change is what drops the caret to the top of the
+    /// document on every keystroke. The two rules met and the note stayed
+    /// empty on screen while its text sat safely in the store
+    /// (Marcello, 2026-09-06). Worse than blank: the first character typed
+    /// into that empty view serialized back over the real content.
+    ///
+    /// A `State` initial value is available before the body is ever evaluated,
+    /// so the text view is built from the note's own text the first time.
+    init(note: QuickNote, isContainer: Bool) {
+        self.note = note
+        self.isContainer = isContainer
+        _titleDraft = State(initialValue: note.title)
+        _body_ = State(initialValue: note.content)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -714,43 +754,27 @@ private struct NoteDetailView: View {
 
             bottomBar
         }
-        .onAppear {
-            body_ = note.content
-            titleDraft = note.title
-        }
-        // Opening a note puts the caret in the CONTENT.
+        // Opening a note puts the caret in the CONTENT — driven from HERE,
+        // not from the signal the store sends.
         //
-        // It used to land in the title with the title SELECTED, so the first
-        // key you pressed after opening a note replaced its name — a rename
-        // offered to someone who asked to read (Marcello, 2026-09-06). The
-        // caret goes to the end of the body instead, and the title is reached
-        // by clicking it or by Rename.
+        // `open()` bumps `bodyFocusRequest` and then this view is created;
+        // `.onReceive` only ever delivers values published after it
+        // subscribes, so that first request arrived before anything was
+        // listening and was simply lost. With no one claiming the keyboard,
+        // AppKit fell back to its own choice of first responder — the title
+        // field — and an NSTextField selects all of its text when it becomes
+        // one. Hence a note that opened with its NAME highlighted, one
+        // keystroke away from being renamed by someone who asked to read it
+        // (Marcello, 2026-09-06).
+        //
+        // Titles here are proposed by the app, never typed, so the title is
+        // never the place to land. It is reached by clicking it, or by Rename.
+        .onAppear { focusBody() }
+        // Still subscribed, for every LATER request: ⏎ out of the title,
+        // and the rename flow handing the caret back.
         .onReceive(store.$bodyFocusRequest) { _ in
             guard store.openNoteID == note.id else { return }
-            // The body is an NSTextView now, so SwiftUI's @FocusState has
-            // nothing to aim at: focus is given to the view itself, and the
-            // caret goes to the end of what is already written.
-            DispatchQueue.main.async {
-                guard let view = NoteEditorController.shared.textView else { return }
-                // The caret position is set unconditionally; first responder
-                // is taken ONLY if the panel already holds the keyboard.
-                //
-                // Forcing it otherwise reaches outside this view: the notch is
-                // a nonactivating panel whose `canBecomeKey` is normally
-                // false, and making a responder in it while it cannot be key
-                // knocked the panel into a collapse — which reset the mode and
-                // dropped the user out of the Notes space entirely, on the one
-                // action that was supposed to take them further in. Every real
-                // route here (⏎ from the stream, a click on a row) already has
-                // the panel key, so nothing is lost by asking rather than
-                // insisting.
-                view.setSelectedRange(NSRange(location: view.string.count, length: 0))
-                if view.window?.isKeyWindow == true {
-                    view.window?.makeFirstResponder(view)
-                    NoteEditorController.shared.bodyFocused = true
-                }
-                NoteEditorController.shared.refreshState()
-            }
+            focusBody()
         }
         .onReceive(store.$renameRequest) { _ in
             guard store.openNoteID == note.id else { return }
@@ -812,10 +836,11 @@ private struct NoteDetailView: View {
 
     private var bottomBar: some View {
         HStack(spacing: 6) {
-            // Not in the notch container: there is no 52pt row there to put
-            // it in, and the answer is shortcuts plus markdown-as-you-type,
-            // not a taller silhouette.
-            if !isContainer { NoteFormatBar() }
+            // In BOTH layouts. This row exists in the container too — it is
+            // where the word count and the download already live — so the
+            // toolbar costs no extra height there, and a note offering
+            // different tools depending on the build was the actual complaint.
+            NoteFormatBar()
 
             Spacer(minLength: 8)
 
@@ -845,6 +870,35 @@ private struct NoteDetailView: View {
         .frame(height: NotesMetrics.bottomBarHeight)
         .overlay(alignment: .top) {
             Rectangle().fill(DSColor.hairlineOnPanel).frame(height: 1)
+        }
+    }
+
+    /// Hand the keyboard to the note's text and put the caret at the end of
+    /// what is already written.
+    private func focusBody() {
+        guard store.openNoteID == note.id else { return }
+        // Async: on the appear pass the NSTextView may not be in a window yet,
+        // and `makeFirstResponder` on a view with no window does nothing at
+        // all — silently, which is the worst kind.
+        DispatchQueue.main.async {
+            guard let view = NoteEditorController.shared.textView else { return }
+            // The caret position is set unconditionally; first responder is
+            // taken ONLY if the panel already holds the keyboard.
+            //
+            // Forcing it otherwise reaches outside this view: the notch is a
+            // nonactivating panel whose `canBecomeKey` is normally false, and
+            // making a responder in it while it cannot be key knocked the
+            // panel into a collapse — which reset the mode and dropped the
+            // user out of the Notes space entirely, on the one action that was
+            // supposed to take them further in. Every real route here (⏎ from
+            // the stream, a click on a row) already has the panel key, so
+            // nothing is lost by asking rather than insisting.
+            view.setSelectedRange(NSRange(location: view.string.count, length: 0))
+            if view.window?.isKeyWindow == true {
+                view.window?.makeFirstResponder(view)
+                NoteEditorController.shared.bodyFocused = true
+            }
+            NoteEditorController.shared.refreshState()
         }
     }
 

@@ -19,9 +19,13 @@ the pattern of a sibling file; Todo-group files use `path = ../Todo/...`).
 
 Launch detached (a `&` background job dies with the Bash tool's shell):
 
+The product is **Otto.app**, not NotchSnap.app — the project, scheme and target
+are still called NotchSnap, only the built bundle was renamed. So the process to
+kill is `Otto` too.
+
 ```bash
-pkill -x NotchSnap   # needs dangerouslyDisableSandbox; sandboxed kill is silently dropped
-open "$(xcodebuild -project NotchSnap.xcodeproj -scheme NotchSnap -configuration Debug -showBuildSettings 2>/dev/null | awk '/ BUILT_PRODUCTS_DIR/{print $3; exit}')/NotchSnap.app"
+pkill -x Otto   # needs dangerouslyDisableSandbox; sandboxed kill is silently dropped
+open "$(xcodebuild -project NotchSnap.xcodeproj -scheme NotchSnap -configuration Debug -showBuildSettings 2>/dev/null | awk '/ BUILT_PRODUCTS_DIR/{print $3; exit}')/Otto.app"
 ```
 
 If pkill leaves survivors in `SX` state, they're held by Xcode's debugserver —
@@ -59,6 +63,11 @@ Commands: `expand`, `collapse`, `add <title>`, `complete-first`,
 `create-mode`, `create-submit` (Return path incl. NL date stripping),
 `browse-mode`, `find <query>`, `jump` (Return path in find mode),
 `draft <title>`, `parse <text>` (NL date parser probe),
+`notes-enter` / `notes-draft <text>` / `notes-commit` / `notes-open-first` /
+`notes-select <n>` / `notes-open-selected` / `notes-close` / `notes-status`,
+`notes-body` (what the note's NSTextView is actually holding vs what the store
+has — the only headless way to catch a note that opens blank),
+`notes-roundtrip` (markdown → attributed → markdown over 21 documents),
 `expand-focused` / `collapse-row` (NC details), `note <text>` / `step <text>`
 (first open item in active collection).
 `dump` appends state (notch state, panel mode, active collection,
