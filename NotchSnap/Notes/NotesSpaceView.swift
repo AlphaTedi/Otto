@@ -260,8 +260,7 @@ private struct StreamView: View {
         return max(120, LabMetrics.todoBlockMaxHeight
                    - LabMetrics.panelTopPadding
                    - composerHeight
-                   - chrome.tabRow
-                   - (store.searchActive ? 46 : 0))
+                   - chrome.tabRow)
     }
 
     var body: some View {
@@ -272,13 +271,6 @@ private struct StreamView: View {
                     Color.clear.preference(key: ComposerHeightKey.self, value: geo.size.height)
                 })
                 .onPreferenceChange(ComposerHeightKey.self) { composerHeight = $0 }
-
-            if store.searchActive {
-                SearchRow()
-                    .padding(.horizontal, LabMetrics.barOuterInset)
-                    .padding(.top, 10)
-                    .transition(.opacity)
-            }
 
             streamBody
                 // Dimmed while something is BEING WRITTEN, not merely while
@@ -307,7 +299,7 @@ private struct StreamView: View {
     private var streamBody: some View {
         let entries = store.stream
         if entries.isEmpty {
-            EmptyStreamState(searching: store.searchActive && !store.searchQuery.isEmpty)
+            EmptyStreamState()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.top, 28)
         } else {
@@ -551,16 +543,12 @@ private struct NoteEntryRow: View {
     }
 
     private var rowContent: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
                 // The to-do list's own title type — 14/medium — not a 15pt
                 // semibold of its own. Notes was styled as a separate surface
                 // and read as a separate product beside it.
-                Text(note.title)
-                    .font(DSFont.todoTitle)
-                    .foregroundStyle(DSColor.textPrimaryBright)
-                    .lineLimit(1)
-
+                //
                 // No "generated title" badge (Marcello, 2026-09-06). The
                 // stored `titleSource` stays and still does its work — ⌘⇧R
                 // regenerates a proposed title, and a hand-typed one locks the
@@ -568,28 +556,47 @@ private struct NoteEntryRow: View {
                 // announced on the row any more: every title here is drawn
                 // from the note's own words by an on-device pass, so the badge
                 // was labelling the user's own sentence as machine output.
+                Text(note.title)
+                    .font(DSFont.todoTitle)
+                    .foregroundStyle(DSColor.textPrimaryBright)
+                    .lineLimit(1)
 
-                // A COLUMN, not a tail on the title. Sitting immediately after
-                // the title put every timestamp at a different x depending on
-                // how long the name happened to be, so a list of times could
-                // not be read as a list of times.
-                Spacer(minLength: 12)
+                Text(note.previewLine)
+                    .font(DSFont.checklistItem)
+                    .lineSpacing(2)
+                    .foregroundStyle(DSColor.textSecondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 12)
+
+            // ONE slot at the right edge, holding the time or the
+            // affordances — never both, never in different places.
+            //
+            // The stamp used to trail the title, so it landed at a different x
+            // on every row and a column of times could not be read as a
+            // column; the affordances lived in a separate reserved gutter
+            // further right, which meant the row carried two right-hand
+            // margins. They are the same margin now: at rest it tells you
+            // when, and under the pointer it tells you what you can do
+            // (Marcello, 2026-09-06).
+            ZStack(alignment: .trailing) {
                 Text(Self.stamp(note.updatedAt))
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(DSColor.textHint)
                     .fixedSize()
-            }
+                    .opacity(showsActions ? 0 : 1)
 
-            HighlightedPreview(text: note.previewLine,
-                               query: store.searchActive ? store.searchQuery : "")
-        }
-        // The trailing gutter is RESERVED whether anything is drawn in it or
-        // not, exactly as the to-do rows reserve theirs — so revealing the
-        // affordances cannot reflow the text beside them.
-        .padding(.trailing, LabMetrics.rowActionsWidth)
-        .overlay(alignment: .trailing) {
-            RowActions(showEnter: isSelected, showGrip: hover && !isSelected)
-                .opacity(hover || isSelected ? 1 : 0)
+                RowActions(showEnter: isSelected, showGrip: hover)
+                    .opacity(showsActions ? 1 : 0)
+            }
+            // A floor, not a fixed width: the affordances are 52 and a long
+            // stamp ("yesterday 18:04") is wider, so pinning it would clip the
+            // one and pinning it to the wider would push the title in for
+            // nothing.
+            .frame(minWidth: LabMetrics.rowActionsWidth, alignment: .trailing)
+            // On the title's line, not the block's middle.
+            .padding(.top, 2)
         }
         // Padding that does NOT change with state.
         //
@@ -630,8 +637,11 @@ private struct NoteEntryRow: View {
             Button(L10n.t("action.delete"), role: .destructive) { store.delete(note.id) }
         }
         .animation(Motion.hoverFade, value: hover)
+        .animation(Motion.hoverFade, value: isSelected)
         .animation(Motion.contentHug, value: isLanding)
     }
+
+    private var showsActions: Bool { hover || isSelected }
 
     /// Relative while it still means something, absolute once it does not.
     private static func stamp(_ date: Date) -> String {
@@ -647,79 +657,22 @@ private struct NoteEntryRow: View {
     }
 }
 
-/// The preview line, with search matches picked out in it.
-private struct HighlightedPreview: View {
-    let text: String
-    let query: String
-
-    var body: some View {
-        Text(attributed)
-            .font(DSFont.checklistItem)
-            .lineSpacing(2)
-            .foregroundStyle(DSColor.textSecondary)
-            .lineLimit(2)
-    }
-
-    /// AttributedString rather than a row of Texts: the preview has to wrap as
-    /// ONE paragraph, and separate views would break it into fragments that
-    /// each wrap on their own.
-    private var attributed: AttributedString {
-        var result = AttributedString(text)
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return result }
-        var search = result.startIndex
-        while let range = result[search...].range(of: trimmed, options: .caseInsensitive) {
-            result[range].backgroundColor = NotesMetrics.pillFill
-            result[range].foregroundColor = NotesMetrics.pillLabel
-            search = range.upperBound
-        }
-        return result
-    }
-}
-
 // MARK: Empty state
 
 private struct EmptyStreamState: View {
-    let searching: Bool
-
     var body: some View {
         VStack(spacing: 12) {
-            Text(searching ? L10n.t("notes.noMatches") : L10n.t("notes.emptyTitle"))
+            Text(L10n.t("notes.emptyTitle"))
                 .font(.system(size: 16))
                 .foregroundStyle(DSColor.textSecondary)
             // No illustration, no icon, no button: the composer above IS the
             // call to action, and anything here would compete with it.
-            Text(searching ? L10n.t("notes.noMatchesBody") : L10n.t("notes.emptyBody"))
+            Text(L10n.t("notes.emptyBody"))
                 .font(.system(size: 13.5))
                 .foregroundStyle(DSColor.textHint)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 380)
         }
-    }
-}
-
-// MARK: Search
-
-private struct SearchRow: View {
-    @ObservedObject private var store = NotesStore.shared
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(DSColor.textHint)
-            TextField(L10n.t("notes.searchPlaceholder"), text: $store.searchQuery)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .foregroundStyle(DSColor.textPrimaryBright)
-                .focused($focused)
-            Keycap(text: "\u{238B}", tone: .onDark, size: 9)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(Capsule().fill(DSColor.fieldBackground))
-        .onAppear { DispatchQueue.main.async { focused = true } }
     }
 }
 

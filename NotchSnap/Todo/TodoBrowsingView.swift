@@ -2555,7 +2555,6 @@ private struct ShortcutsOverlay: View {
         ("\u{2318}1\u{2013}9 / \u{2318}", "todo.sc.switchCollection"),
         ("\u{2325}\u{2191}\u{2193}", "todo.sc.reorder"),
         ("\u{21E7}\u{2318}M", "todo.sc.moveItem"),
-        ("a\u{2026}z", "todo.sc.quickFind"),
         ("\u{2325}\u{2318}N", "todo.sc.quickEntry"),
         ("\u{2303}\u{21E7}E", "todo.sc.notes"),
     ]

@@ -141,8 +141,6 @@ final class NotesStore: ObservableObject {
     /// Two words, and only two: `Saved`, or `Saving…` while a write is in
     /// flight. No timestamps, no "all changes saved".
     @Published private(set) var isWriting = false
-    @Published var searchActive = false
-    @Published var searchQuery = ""
     /// The row is gone from the stream immediately; the file follows only when
     /// this expires. No confirmation dialog anywhere in this surface.
     @Published private(set) var pendingDelete: PendingNoteDelete?
@@ -183,15 +181,7 @@ final class NotesStore: ObservableObject {
     /// silently, because the row would spring back only when something else
     /// touched it. The array IS the order now — new notes go in at the top,
     /// which is the same default the sort produced — and a drag rewrites it.
-    var stream: [QuickNote] {
-        let ordered = notes
-        let query = searchQuery.trimmingCharacters(in: .whitespaces)
-        guard searchActive, !query.isEmpty else { return ordered }
-        return ordered.filter {
-            $0.title.localizedCaseInsensitiveContains(query)
-                || $0.content.localizedCaseInsensitiveContains(query)
-        }
-    }
+    var stream: [QuickNote] { notes }
 
     func note(id: UUID) -> QuickNote? { notes.first { $0.id == id } }
 
@@ -357,8 +347,6 @@ final class NotesStore: ObservableObject {
 
     private func closeNoteState() {
         openNoteID = nil
-        searchActive = false
-        searchQuery = ""
     }
 
     /// Move the keyboard selection through the stream. Not animated: this is a
@@ -374,13 +362,6 @@ final class NotesStore: ObservableObject {
         }
         let next = min(max(index + offset, 0), entries.count - 1)
         selectedNoteID = entries[next].id
-    }
-
-    func toggleSearch() {
-        withAnimation(Motion.contentHug) {
-            searchActive.toggle()
-            if !searchActive { searchQuery = "" }
-        }
     }
 
     // MARK: - Export

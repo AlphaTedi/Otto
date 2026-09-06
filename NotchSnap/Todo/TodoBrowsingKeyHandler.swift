@@ -116,7 +116,6 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             // Esc backs out ONE level, the same rule as everywhere else:
             // search → note → stream → the list you came from.
             if keyCode == 53, !cmd, !option, !control {
-                if notes.searchActive { notes.toggleSearch(); return true }
                 if notes.openNoteID != nil { notes.closeNote(); return true }
                 notes.leaveSpace()
                 return true
@@ -129,9 +128,6 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                     // there is either already an entry or was already empty.
                     notes.commitDraft()
                     notes.focusComposer()
-                    return true
-                case "f":
-                    notes.toggleSearch()
                     return true
                 case "z":
                     if notes.pendingDelete != nil { notes.undoDelete(); return true }
@@ -603,15 +599,18 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 store.requestTitleEdit(focused)
                 return true
             default:
-                // QF-2: any printable character starts Quick Find, seeded
-                // with the character itself — no shortcut needed.
-                guard !cmd && !option && !control,
-                      chars.count == 1,
-                      let ch = chars.first,
-                      ch.isLetter || ch.isNumber else { return false }
-                store.setMode(.find)
-                store.findQuery = chars
-                return true
+                // QF-2 is GONE: a printable character used to drop you into
+                // Quick Find, seeded with that character. It is the reason
+                // search kept opening out of nowhere — a stray key over the
+                // panel and you were in a search surface you never asked for,
+                // which is a mode entered by accident (Marcello, 2026-09-06:
+                // "ogni tanto mi ritrovo a fare search dal nulla").
+                //
+                // Nothing routes into `.find` any more. QuickFindView and the
+                // mode are still compiled and still correct; restoring search
+                // is putting a door back, not rebuilding a room. When it comes
+                // back it should be a deliberate keystroke, not the alphabet.
+                return false
             }
         }
 
