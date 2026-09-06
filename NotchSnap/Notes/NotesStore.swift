@@ -44,8 +44,11 @@ struct QuickNote: Identifiable, Codable, Equatable {
         return (body?.isEmpty == false ? body! : firstLine)
     }
 
+    /// Words, not markers: `# `, `- ` and `**` are formatting, and counting
+    /// them would make the number climb every time the note was styled.
     var wordCount: Int {
-        content.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+        NoteMarkdown.plainText(content)
+            .split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
     }
 
     init(id: UUID = UUID(), content: String, createdAt: Date = Date(),

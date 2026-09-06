@@ -2557,6 +2557,7 @@ private struct ShortcutsOverlay: View {
         ("\u{21E7}\u{2318}M", "todo.sc.moveItem"),
         ("\u{2325}\u{2318}N", "todo.sc.quickEntry"),
         ("\u{2303}\u{21E7}E", "todo.sc.notes"),
+        ("\u{2318}B / I / U", "todo.sc.format"),
     ]
 
     var body: some View {

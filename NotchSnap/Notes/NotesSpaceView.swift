@@ -561,7 +561,7 @@ private struct NoteEntryRow: View {
                     .foregroundStyle(DSColor.textPrimaryBright)
                     .lineLimit(1)
 
-                Text(note.previewLine)
+                Text(NoteMarkdown.plainText(note.previewLine))
                     .font(DSFont.checklistItem)
                     .lineSpacing(2)
                     .foregroundStyle(DSColor.textSecondary)
@@ -684,7 +684,6 @@ private struct NoteDetailView: View {
 
     @ObservedObject private var store = NotesStore.shared
     @FocusState private var titleFocused: Bool
-    @FocusState private var bodyFocused: Bool
     @State private var titleDraft = ""
     @State private var body_ = ""
 
@@ -694,30 +693,24 @@ private struct NoteDetailView: View {
                 .padding(.horizontal, LabMetrics.barOuterInset)
 
             // Editable in place — no separate edit mode, no Save button. The
-            // note is the editor.
-            ScrollView(.vertical, showsIndicators: true) {
-                TextField("", text: $body_, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(DSFont.todoTitle)
-                    .lineSpacing(5)
-                    .foregroundStyle(DSColor.textPrimaryBright)
-                    .focused($bodyFocused)
-                    .onChange(of: body_) { store.setBody($0, for: note.id) }
-                    // Lined up with the text inside the field above it, so
-                    // the note reads as one column rather than as a header
-                    // and a separate document.
-                    .padding(.horizontal, LabMetrics.barPaddingH + LabMetrics.rowInnerGap + 30)
-                    .padding(.top, 20)
-                    .padding(.bottom, 8)
-            }
-            .frame(height: isContainer
-                   ? NotesMetrics.notchStreamMaxHeight
-                   : max(120, LabMetrics.todoBlockMaxHeight
-                         - LabMetrics.panelTopPadding
-                         - NotesMetrics.composerMinHeight
-                         - NotesMetrics.bottomBarHeight),
-                   alignment: .top)
-            .clipped()
+            // note is the editor, and now a rich one: NoteBodyView is an
+            // NSTextView over the same markdown string that was there before.
+            NoteBodyView(noteID: note.id, markdown: $body_)
+                .onChange(of: body_) { store.setBody($0, for: note.id) }
+                // Lined up with the text inside the field above it, so the
+                // note reads as one column rather than as a header and a
+                // separate document.
+                .padding(.horizontal, LabMetrics.barPaddingH + LabMetrics.rowInnerGap + 30)
+                .padding(.top, 20)
+                .padding(.bottom, 8)
+                .frame(height: isContainer
+                       ? NotesMetrics.notchStreamMaxHeight
+                       : max(120, LabMetrics.todoBlockMaxHeight
+                             - LabMetrics.panelTopPadding
+                             - LabMetrics.barHeight
+                             - NotesMetrics.bottomBarHeight),
+                       alignment: .top)
+                .clipped()
 
             bottomBar
         }
@@ -734,8 +727,30 @@ private struct NoteDetailView: View {
         // by clicking it or by Rename.
         .onReceive(store.$bodyFocusRequest) { _ in
             guard store.openNoteID == note.id else { return }
-            DispatchQueue.main.async { bodyFocused = true }
-            FieldCaret.collapseToEnd()
+            // The body is an NSTextView now, so SwiftUI's @FocusState has
+            // nothing to aim at: focus is given to the view itself, and the
+            // caret goes to the end of what is already written.
+            DispatchQueue.main.async {
+                guard let view = NoteEditorController.shared.textView else { return }
+                // The caret position is set unconditionally; first responder
+                // is taken ONLY if the panel already holds the keyboard.
+                //
+                // Forcing it otherwise reaches outside this view: the notch is
+                // a nonactivating panel whose `canBecomeKey` is normally
+                // false, and making a responder in it while it cannot be key
+                // knocked the panel into a collapse — which reset the mode and
+                // dropped the user out of the Notes space entirely, on the one
+                // action that was supposed to take them further in. Every real
+                // route here (⏎ from the stream, a click on a row) already has
+                // the panel key, so nothing is lost by asking rather than
+                // insisting.
+                view.setSelectedRange(NSRange(location: view.string.count, length: 0))
+                if view.window?.isKeyWindow == true {
+                    view.window?.makeFirstResponder(view)
+                    NoteEditorController.shared.bodyFocused = true
+                }
+                NoteEditorController.shared.refreshState()
+            }
         }
         .onReceive(store.$renameRequest) { _ in
             guard store.openNoteID == note.id else { return }
@@ -796,36 +811,37 @@ private struct NoteDetailView: View {
     }
 
     private var bottomBar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 6) {
+            // Not in the notch container: there is no 52pt row there to put
+            // it in, and the answer is shortcuts plus markdown-as-you-type,
+            // not a taller silhouette.
+            if !isContainer { NoteFormatBar() }
+
+            Spacer(minLength: 8)
+
             Text("\(note.wordCount) " + L10n.t("notes.wordsSuffix"))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(DSColor.textHint)
-            Spacer(minLength: 8)
+                .fixedSize()
 
+            // No printed shortcut. ⌘⇧S still fires it — the glyphs were
+            // simply costing ~70pt in a row that now holds nine more controls.
             Button { store.exportOpenNote() } label: {
-                HStack(spacing: 7) {
-                    Text(L10n.t("notes.download"))
-                        .font(.system(size: 13))
-                        .foregroundStyle(DSColor.textPrimaryBright)
-                    Keycap(text: "\u{2318}\u{21E7}S", tone: .onDark, size: 9)
-                }
-                .padding(.horizontal, 15)
-                .padding(.vertical, 7)
-                .background(Capsule().fill(DSColor.fieldBackground))
-                .overlay(Capsule().strokeBorder(DSColor.panelBorder, lineWidth: 0.5))
-                .contentShape(Capsule())
+                Text(L10n.t("notes.download"))
+                    .font(.system(size: 12))
+                    .foregroundStyle(DSColor.textPrimaryBright)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(DSColor.fieldBackground))
+                    .overlay(Capsule().strokeBorder(DSColor.panelBorder, lineWidth: 0.5))
+                    .contentShape(Capsule())
             }
             .buttonStyle(.plain)
-
-            Button { titleFocused = true } label: {
-                Text(L10n.t("notes.rename"))
-                    .font(.system(size: 13))
-                    .foregroundStyle(DSColor.textSecondary)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+            // Rename is gone from this row — the bar needs the width. It is
+            // still the title in the header, and Rename in the stream's own
+            // context menu.
         }
-        .padding(.horizontal, LabMetrics.barOuterInset + 10)
+        .padding(.horizontal, 8)
         .frame(height: NotesMetrics.bottomBarHeight)
         .overlay(alignment: .top) {
             Rectangle().fill(DSColor.hairlineOnPanel).frame(height: 1)

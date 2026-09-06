@@ -239,6 +239,36 @@ enum DebugDriver {
                    from < n.stream.count, to < n.stream.count {
                     n.reorder(n.stream[from].id, before: n.stream[to].id)
                 }
+            } else if command == "notes-roundtrip" {
+                // markdown -> attributed -> markdown. Anything that does not
+                // come back identical is a format the editor would silently
+                // eat the moment the user saved.
+                let cases: [String] = [
+                    "plain line",
+                    "# Scadenze",
+                    "## Da chiarire prima di firmare",
+                    "- chi paga la caldaia il primo anno",
+                    "- [ ] aperta",
+                    "- [x] fatta",
+                    "1. primo\n2. secondo\n3. terzo",
+                    "il preavviso e di **tre mesi**, spedita entro il *31 luglio*",
+                    "una riga con <u>sottolineato</u> dentro",
+                    "# Titolo\n\nparagrafo con **bold** e *corsivo*\n\n## Sotto\n- uno\n- due\n\n1. a\n2. b\n\n- [ ] da fare\n- [x] fatto",
+                    "",
+                    "riga\n\nriga dopo una vuota",
+                ]
+                var failures = 0
+                for source in cases {
+                    let attributed = NoteMarkdown.attributed(
+                        from: source, textColor: .labelColor,
+                        accent: .controlAccentColor, mutedColor: .tertiaryLabelColor)
+                    let back = NoteMarkdown.markdown(from: attributed)
+                    if back != source {
+                        failures += 1
+                        appendState("ROUNDTRIP FAIL\n  in:  \(source.debugDescription)\n  out: \(back.debugDescription)")
+                    }
+                }
+                appendState("roundtrip: \(cases.count - failures)/\(cases.count) identical")
             } else if command == "notes-status" {
                 let n = NotesStore.shared
                 appendState("notes count=\(n.notes.count) mode=\(TodoStore.shared.panelMode) "
