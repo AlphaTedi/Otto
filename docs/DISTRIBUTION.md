@@ -223,6 +223,15 @@ Italian `update.*` strings pasted into the English block. **Swift traps at runti
 compile time.** Nothing in the build output hinted at it. Verify both dictionaries
 construct before shipping a localization change.
 
+### 7.9 A stale app copy poisons the diagnosis
+
+`~/Downloads/NotchSnap.app` — bundle id `NotchSnap`, v1.0, unsigned — created a Privacy
+entry named "NotchSnap" that had nothing to do with the running app. Hours went into
+toggling a switch that governed a different binary. `Scripts/diagnose-calendar.sh` now
+reports the **real** bundle id from the signature.
+
+---
+
 ### 7.10 A drifting system clock stops the signature, not the build
 
 ```
@@ -250,15 +259,6 @@ commit had already been pushed, which is harmless — no GitHub release and no
 appcast entry existed yet, so installed copies carried on seeing the previous
 version. Re-running `Scripts/release.sh` after fixing the clock picks the same
 tag back up.
-
-### 7.9 A stale app copy poisons the diagnosis
-
-`~/Downloads/NotchSnap.app` — bundle id `NotchSnap`, v1.0, unsigned — created a Privacy
-entry named "NotchSnap" that had nothing to do with the running app. Hours went into
-toggling a switch that governed a different binary. `Scripts/diagnose-calendar.sh` now
-reports the **real** bundle id from the signature.
-
----
 
 ## 8. Release checklist
 
