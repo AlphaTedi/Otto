@@ -41,6 +41,7 @@ class HotkeyManager {
         case openTray = 7         // ⌃⇧F — expand notch on the file Tray
         case quickEntry = 8       // ⌥Space — global to-do quick entry (KB-1)
         case openTodos = 9        // ⌃⇧T — expand notch on the To-do tab
+        case openNotesSpace = 10  // ⌃⇧E — expand notch on the Notes space
     }
 
     func start() {
@@ -80,6 +81,10 @@ class HotkeyManager {
         // default, so it silently never reached us on machines running one.
         registerHotKey(id: .quickEntry, keyCode: UInt32(kVK_ANSI_N), modifiers: UInt32(optionKey | cmdKey))
         registerHotKey(id: .openTodos, keyCode: UInt32(kVK_ANSI_T), modifiers: ctrlShift)
+        // E, not N. ⌃⇧N is registered above and reassigned to quick capture,
+        // and it is the one onboarding teaches — taking it back for Notes
+        // would break the only shortcut every user has been shown.
+        registerHotKey(id: .openNotesSpace, keyCode: UInt32(kVK_ANSI_E), modifiers: ctrlShift)
 
         print("[HotkeyManager] Carbon hot keys registered. No Accessibility permission needed.")
     }
@@ -162,6 +167,18 @@ class HotkeyManager {
                     NotchController.shared.openCreateFresh()
                     NotificationCenter.default.post(name: .quickEntryFired, object: nil)
                 }
+            }
+
+        case .openNotesSpace:
+            print("[HotkeyManager] \u{2303}\u{21E7}E \u{2192} Notes space")
+            Task { @MainActor in
+                AppState.shared.pendingNotchFilter = .todos
+                NotchController.shared.triggerExpand()
+                NotesStore.shared.enterSpace()
+                // The space opens ready to write, and typing needs real
+                // keyboard focus — the panel is a non-activating window in an
+                // accessory app, so being "key within Otto" is not enough.
+                NotchController.shared.makeKeyForTyping()
             }
 
         case .openTray:

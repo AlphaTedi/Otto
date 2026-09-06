@@ -90,9 +90,101 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             case .newCategory:
                 if keyCode == 53 { store.setMode(.browsing); return true }
                 return false
+            case .notes:
+                return handleNotes(cmd: cmd, shift: shift, option: option,
+                                   control: control, chars: chars, keyCode: keyCode, lower: lower)
             case .browsing:
                 return handleBrowsing(store, cmd: cmd, shift: shift, option: option,
                                       control: control, chars: chars, keyCode: keyCode, lower: lower)
+            }
+        }
+
+        // MARK: Notes space
+        //
+        // The composer holds the caret almost all the time here, so this
+        // branch is deliberately narrow: it claims the modified keys and the
+        // navigation keys and lets every printable character through to the
+        // field. Anything cleverer would be a key router competing with a text
+        // field for the alphabet, which is how you lose someone's typing.
+
+        @MainActor
+        private static func handleNotes(cmd: Bool, shift: Bool, option: Bool,
+                                        control: Bool, chars: String,
+                                        keyCode: UInt16, lower: String) -> Bool {
+            let notes = NotesStore.shared
+
+            // Esc backs out ONE level, the same rule as everywhere else:
+            // search → note → stream → the list you came from.
+            if keyCode == 53, !cmd, !option, !control {
+                if notes.searchActive { notes.toggleSearch(); return true }
+                if notes.openNoteID != nil { notes.closeNote(); return true }
+                notes.leaveSpace()
+                return true
+            }
+
+            if cmd, !shift, !option {
+                switch lower {
+                case "s":
+                    // NOT "persist" — the draft has been on disk since the
+                    // first keystroke. It closes the entry.
+                    if notes.openNoteID != nil { notes.closeNote() }
+                    else { notes.commitDraft(); notes.focusComposer() }
+                    return true
+                case "n":
+                    // A new empty composer. Nothing is discarded: whatever was
+                    // there is either already an entry or was already empty.
+                    notes.commitDraft()
+                    notes.focusComposer()
+                    return true
+                case "f":
+                    notes.toggleSearch()
+                    return true
+                case "z":
+                    if notes.pendingDelete != nil { notes.undoDelete(); return true }
+                    return false
+                case "[":
+                    if notes.openNoteID != nil { notes.closeNote(); return true }
+                    return false
+                default:
+                    break
+                }
+                // ⌘⌫ — the row goes now, the file goes in five seconds.
+                if keyCode == 51 {
+                    let target = notes.openNoteID ?? notes.selectedNoteID
+                    if let target { notes.delete(target); return true }
+                    return false
+                }
+            }
+
+            if cmd, shift, !option {
+                switch lower {
+                case "r":
+                    // Only ever on a title the model proposed. A hand-typed one
+                    // is final and the store refuses.
+                    if let target = notes.openNoteID ?? notes.selectedNoteID {
+                        notes.requestTitle(for: target)
+                        return true
+                    }
+                    return false
+                case "s":
+                    if notes.openNoteID != nil { notes.exportOpenNote(); return true }
+                    return false
+                default:
+                    return false
+                }
+            }
+
+            // ↑↓ walk the stream, ⏎ opens — but only while the caret is NOT in
+            // a text field, where those keys belong to the text.
+            guard !isEditingText() else { return false }
+            switch keyCode {
+            case 126: notes.moveSelection(-1); return true
+            case 125: notes.moveSelection(1);  return true
+            case 36:
+                if let selected = notes.selectedNoteID { notes.open(selected); return true }
+                return false
+            default:
+                return false
             }
         }
 

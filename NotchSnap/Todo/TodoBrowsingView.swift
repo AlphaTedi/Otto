@@ -450,7 +450,7 @@ struct TodoTabView: View {
                 // Anchoring them under the field fixes their position for good:
                 // the field is always the same height, so everything above the
                 // list stops moving.
-                if isContainerLayout, store.panelMode == .browsing || store.panelMode == .voice {
+                if isContainerLayout, store.showsSpaceBar {
                     // No extra gap under it. The row already carries its own
                     // breathing room plus the rule's — measured, the added
                     // sectionGap made the panel 16pt taller than the same
@@ -480,6 +480,14 @@ struct TodoTabView: View {
                     case .voice:
                         VoiceCaptureView()
                             .transition(modeTransition)
+                    case .notes:
+                        // The Notes space brings its own field — the composer
+                        // stands exactly where the capture bar stands in a
+                        // list, same position, same radius. That is why the
+                        // draft row above is suppressed in this mode rather
+                        // than the composer being tucked under it.
+                        NotesSpaceView()
+                            .transition(modeTransition)
                     }
                 }
 
@@ -503,7 +511,7 @@ struct TodoTabView: View {
                     Spacer(minLength: 0)
                 }
 
-                if !isContainerLayout, store.panelMode == .browsing || store.panelMode == .voice {
+                if !isContainerLayout, store.showsSpaceBar {
                     TodoTabRow(rulePosition: .above)
                         .notchEntry(index: 1)
                         .measureHeight(TabRowHeightKey.self)
@@ -586,6 +594,14 @@ private struct TodoTabRow: View {
 
     var body: some View {
         HStack(spacing: LabMetrics.tabsGap) {
+            // FIRST, and outside the scroller.
+            //
+            // A user can have ten or fifteen lists; there is exactly one Notes
+            // space. Inside the scrolling strip it would leave the screen the
+            // moment the lists overflowed — the same way the "+" once did —
+            // and the one space that is always there must always be reachable.
+            NotesPill()
+
             tabScroller
 
             // OUTSIDE the scroller, like the account button beside it.
@@ -2523,6 +2539,7 @@ private struct ShortcutsOverlay: View {
         ("\u{21E7}\u{2318}M", "todo.sc.moveItem"),
         ("a\u{2026}z", "todo.sc.quickFind"),
         ("\u{2325}\u{2318}N", "todo.sc.quickEntry"),
+        ("\u{2303}\u{21E7}E", "todo.sc.notes"),
     ]
 
     var body: some View {

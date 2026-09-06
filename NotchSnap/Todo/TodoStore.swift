@@ -38,6 +38,10 @@ enum TodoPanelMode: Equatable {
     /// Voice brain-dump: listening → parsing → review (see
     /// VoiceCaptureController). Owned by that controller, not this store.
     case voice
+    /// The Notes space. A SPACE, not a mode of the list: there are many lists
+    /// and exactly one Notes, which is why it takes the head of the bar and
+    /// never scrolls with them. State lives in NotesStore.
+    case notes
 }
 
 @MainActor
@@ -332,6 +336,17 @@ final class TodoStore: ObservableObject {
         // the list re-rendering underneath must not be able to take it.
         draftWantsFocus = true
         return true
+    }
+
+    /// Whether the space bar is drawn.
+    ///
+    /// It is up in the Notes space as well as in a list — the Notes pill LIVES
+    /// in that bar, and it is the only way back to the lists. Hiding it there
+    /// would have made the one space you cannot scroll away from into the one
+    /// space you cannot leave. The surfaces that replace the whole panel
+    /// (creation, Quick Find) still take the bar with them.
+    var showsSpaceBar: Bool {
+        panelMode == .browsing || panelMode == .voice || panelMode == .notes
     }
 
     /// While any non-browsing surface is up, the notch must not auto-collapse

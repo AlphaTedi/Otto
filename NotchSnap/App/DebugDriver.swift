@@ -164,6 +164,35 @@ enum DebugDriver {
                 for line in CalendarStore.shared.probeWideWindow() { appendState(line) }
             } else if command == "cal-refresh" {
                 Task { @MainActor in await CalendarStore.shared.refresh() }
+            } else if command == "notes-enter" {
+                NotesStore.shared.enterSpace()
+            } else if command == "notes-leave" {
+                NotesStore.shared.leaveSpace()
+            } else if command.hasPrefix("notes-draft ") {
+                NotesStore.shared.draft = String(command.dropFirst(12))
+                NotesStore.shared.draftChanged()
+            } else if command == "notes-commit" {
+                NotesStore.shared.commitDraft()
+            } else if command == "notes-open-first" {
+                if let first = NotesStore.shared.stream.first { NotesStore.shared.open(first.id) }
+            } else if command == "notes-close" {
+                NotesStore.shared.closeNote()
+            } else if command == "notes-delete-first" {
+                if let first = NotesStore.shared.stream.first { NotesStore.shared.delete(first.id) }
+            } else if command == "notes-undo" {
+                NotesStore.shared.undoDelete()
+            } else if command.hasPrefix("notes-rename ") {
+                if let open = NotesStore.shared.openNoteID {
+                    NotesStore.shared.rename(open, to: String(command.dropFirst(13)))
+                }
+            } else if command == "notes-status" {
+                let n = NotesStore.shared
+                appendState("notes count=\(n.notes.count) mode=\(TodoStore.shared.panelMode) "
+                            + "open=\(n.openNote?.title ?? "nil") "
+                            + "draft='\(n.draft)' pendingDelete=\(n.pendingDelete?.title ?? "nil") "
+                            + "top=[" + n.stream.prefix(3).map {
+                                "'\($0.title)'/\($0.titleSource.rawValue)"
+                            }.joined(separator: " ") + "]")
             } else if command == "cal-release" {
                 CalendarStore.shared.debugReleaseInjectedMeetings()
             } else if command == "cal-snooze" {

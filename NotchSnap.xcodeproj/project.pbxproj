@@ -24,6 +24,8 @@
 		EE61AA62BB63CC64DD65FF66 /* NotesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF66EE61AA62BB63CC64DD65 /* NotesStore.swift */; };
 		EE71AA72BB73CC74DD75FF76 /* ReminderStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF76EE71AA72BB73CC74DD75 /* ReminderStore.swift */; };
 		EE81AA82BB83CC84DD85FF86 /* NotesTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF86EE81AA82BB83CC84DD85 /* NotesTabView.swift */; };
+		AA11BB12CC13DD14EE15FF16 /* NoteTitler.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF16AA11BB12CC13DD14EE15 /* NoteTitler.swift */; };
+		AA01BB02CC03DD04EE05FF06 /* NotesSpaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF06AA01BB02CC03DD04EE05 /* NotesSpaceView.swift */; };
 		AA01BB02CC03DD04EE05F001 /* TodoModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F001AA01BB02CC03DD04EE05 /* TodoModels.swift */; };
 		AA01BB02CC03DD04EE05F002 /* TodoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F002AA01BB02CC03DD04EE05 /* TodoStore.swift */; };
 		AA01BB02CC03DD04EE05F010 /* MarkdownVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = F010AA01BB02CC03DD04EE05 /* MarkdownVault.swift */; };
@@ -154,6 +156,8 @@
 		FF66EE61AA62BB63CC64DD65 /* NotesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NotesStore.swift; path = ../Notes/NotesStore.swift; sourceTree = "<group>"; };
 		FF76EE71AA72BB73CC74DD75 /* ReminderStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ReminderStore.swift; path = ../Notes/ReminderStore.swift; sourceTree = "<group>"; };
 		FF86EE81AA82BB83CC84DD85 /* NotesTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NotesTabView.swift; path = ../Notes/NotesTabView.swift; sourceTree = "<group>"; };
+		FF16AA11BB12CC13DD14EE15 /* NoteTitler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NoteTitler.swift; path = ../Notes/NoteTitler.swift; sourceTree = "<group>"; };
+		FF06AA01BB02CC03DD04EE05 /* NotesSpaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NotesSpaceView.swift; path = ../Notes/NotesSpaceView.swift; sourceTree = "<group>"; };
 		F001AA01BB02CC03DD04EE05 /* TodoModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TodoModels.swift; path = ../Todo/TodoModels.swift; sourceTree = "<group>"; };
 		F002AA01BB02CC03DD04EE05 /* TodoStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TodoStore.swift; path = ../Todo/TodoStore.swift; sourceTree = "<group>"; };
 		F010AA01BB02CC03DD04EE05 /* MarkdownVault.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MarkdownVault.swift; path = ../Todo/MarkdownVault.swift; sourceTree = "<group>"; };
@@ -384,6 +388,8 @@
 				FF66EE61AA62BB63CC64DD65 /* NotesStore.swift */,
 				FF76EE71AA72BB73CC74DD75 /* ReminderStore.swift */,
 				FF86EE81AA82BB83CC84DD85 /* NotesTabView.swift */,
+				FF16AA11BB12CC13DD14EE15 /* NoteTitler.swift */,
+				FF06AA01BB02CC03DD04EE05 /* NotesSpaceView.swift */,
 				F001AA01BB02CC03DD04EE05 /* TodoModels.swift */,
 				F002AA01BB02CC03DD04EE05 /* TodoStore.swift */,
 				F010AA01BB02CC03DD04EE05 /* MarkdownVault.swift */,
@@ -573,6 +579,8 @@
 				EE61AA62BB63CC64DD65FF66 /* NotesStore.swift in Sources */,
 				EE71AA72BB73CC74DD75FF76 /* ReminderStore.swift in Sources */,
 				EE81AA82BB83CC84DD85FF86 /* NotesTabView.swift in Sources */,
+				AA11BB12CC13DD14EE15FF16 /* NoteTitler.swift in Sources */,
+				AA01BB02CC03DD04EE05FF06 /* NotesSpaceView.swift in Sources */,
 				AA01BB02CC03DD04EE05F001 /* TodoModels.swift in Sources */,
 				AA01BB02CC03DD04EE05F002 /* TodoStore.swift in Sources */,
 				AA01BB02CC03DD04EE05F010 /* MarkdownVault.swift in Sources */,
