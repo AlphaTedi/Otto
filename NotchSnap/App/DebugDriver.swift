@@ -231,6 +231,14 @@ enum DebugDriver {
                 } else {
                     appendState("hittest: no notch panel")
                 }
+            } else if command.hasPrefix("notes-move ") {
+                // notes-move <fromIndex> <beforeIndex>
+                let parts = command.dropFirst(11).split(separator: " ")
+                let n = NotesStore.shared
+                if parts.count == 2, let from = Int(parts[0]), let to = Int(parts[1]),
+                   from < n.stream.count, to < n.stream.count {
+                    n.reorder(n.stream[from].id, before: n.stream[to].id)
+                }
             } else if command == "notes-status" {
                 let n = NotesStore.shared
                 appendState("notes count=\(n.notes.count) mode=\(TodoStore.shared.panelMode) "

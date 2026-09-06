@@ -10,7 +10,7 @@ import AppKit
 // its radius in all three, which is why an open note gets no header of its own.
 //
 // The governing idea: WRITING COMES BEFORE NAMING. The space opens with the
-// caret in the composer. The user types the note; on ⌘S it drops into the
+// caret in the composer. The user types the note; on ↩ it drops into the
 // stream and the model proposes a name afterwards. The title is a proposal,
 // never a gate — people offloading a thought do not want to file it first.
 
@@ -35,11 +35,23 @@ import AppKit
 private struct RowClickCatcher: NSViewRepresentable {
     let onClick: () -> Void
     let onHover: (Bool) -> Void
+    /// Screen-space pointer Y and the vertical distance dragged so far.
+    let onDrag: (CGFloat, CGFloat) -> Void
+    let onDragEnd: () -> Void
+    /// This row's rect in SCREEN coordinates, so the drag can work out which
+    /// gap the pointer is over.
+    let onFrame: (CGRect) -> Void
 
     final class CatcherView: NSView {
         var onClick: () -> Void = {}
         var onHover: (Bool) -> Void = { _ in }
+        var onDrag: (CGFloat, CGFloat) -> Void = { _, _ in }
+        var onDragEnd: () -> Void = {}
+        var onFrame: (CGRect) -> Void = { _ in }
+
         private var tracking: NSTrackingArea?
+        private var downAt: NSPoint?
+        private var dragging = false
 
         override func updateTrackingAreas() {
             super.updateTrackingAreas()
@@ -49,11 +61,49 @@ private struct RowClickCatcher: NSViewRepresentable {
                                       owner: self)
             addTrackingArea(area)
             tracking = area
+            reportFrame()
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            reportFrame()
+        }
+
+        private func reportFrame() {
+            guard let window else { return }
+            onFrame(window.convertToScreen(convert(bounds, to: nil)))
         }
 
         override func mouseEntered(with event: NSEvent) { onHover(true) }
         override func mouseExited(with event: NSEvent) { onHover(false) }
-        override func mouseDown(with event: NSEvent) { onClick() }
+
+        // Click and drag live in the SAME view, and they have to.
+        //
+        // The catcher takes mouseDown, so a SwiftUI DragGesture underneath it
+        // would never begin — putting the click back would have taken the
+        // reorder away. AppKit gives both here: a press that barely moves is a
+        // click, and one that travels is a drag.
+        override func mouseDown(with event: NSEvent) {
+            downAt = NSEvent.mouseLocation
+            dragging = false
+        }
+
+        override func mouseDragged(with event: NSEvent) {
+            guard let start = downAt else { return }
+            let now = NSEvent.mouseLocation
+            let travelled = now.y - start.y
+            // A few points of slop, so a hand that is not quite still while
+            // clicking still reads as a click.
+            if !dragging, abs(travelled) < 6 { return }
+            dragging = true
+            onDrag(now.y, travelled)
+        }
+
+        override func mouseUp(with event: NSEvent) {
+            defer { downAt = nil; dragging = false }
+            if dragging { onDragEnd() } else { onClick() }
+        }
+
         /// The panel is a nonactivating panel in an accessory app, so the
         /// first click into it would otherwise be spent activating rather than
         /// acting — the "why does it take two clicks" family of bug.
@@ -69,6 +119,9 @@ private struct RowClickCatcher: NSViewRepresentable {
     func updateNSView(_ view: CatcherView, context: Context) {
         view.onClick = onClick
         view.onHover = onHover
+        view.onDrag = onDrag
+        view.onDragEnd = onDragEnd
+        view.onFrame = onFrame
     }
 }
 
@@ -179,6 +232,15 @@ private struct StreamView: View {
     @ObservedObject private var chrome = PanelChrome.shared
     @FocusState private var composerFocused: Bool
     @State private var composerHeight: CGFloat = NotesMetrics.composerMinHeight
+    // Reordering, as a plain drag — the same recipe the to-do list uses, and
+    // for the same reason: `.onDrag` rides the system pasteboard, which was
+    // never really meant for a non-activating panel and never moved a row.
+    @State private var rowFrames: [UUID: CGRect] = [:]
+    @State private var draggedNoteID: UUID?
+    @State private var dropBeforeID: UUID?
+    @State private var dropAtEnd = false
+    @State private var dragOffset: CGFloat = 0
+
 
     /// What is left of the panel once the composer and the space bar have
     /// taken theirs.
@@ -253,12 +315,30 @@ private struct StreamView: View {
                 ScrollView(.vertical, showsIndicators: true) {
                     VStack(alignment: .leading, spacing: NotesMetrics.entryGap) {
                         ForEach(entries) { note in
-                            NoteEntryRow(note: note)
-                                .id(note.id)
+                            NoteEntryRow(
+                                note: note,
+                                isDragged: draggedNoteID == note.id,
+                                showsDropIndicator: dropBeforeID == note.id,
+                                dragOffset: draggedNoteID == note.id ? dragOffset : 0,
+                                onDrag: { pointerY, travelled in
+                                    if draggedNoteID != note.id {
+                                        draggedNoteID = note.id
+                                        HapticManager.shared.dragBegan()
+                                    }
+                                    // Screen y grows UPWARD; the row follows
+                                    // the pointer, so the offset is negated.
+                                    dragOffset = -travelled
+                                    updateDropTarget(pointerY: pointerY,
+                                                     dragged: note.id, rows: entries)
+                                },
+                                onDragEnd: { commitReorder(dragged: note.id) },
+                                onFrame: { rowFrames[note.id] = $0 }
+                            )
+                            .id(note.id)
                         }
                     }
                     .padding(.horizontal, LabMetrics.barOuterInset + 10)
-                    .padding(.top, 20)
+                    .padding(.top, 16)
                     .padding(.bottom, 8)
                 }
                 // The arrows moved a selection the list was not following, so
@@ -280,12 +360,56 @@ private struct StreamView: View {
         }
     }
 
+    /// Insert before the first row the pointer has dropped past the middle of.
+    ///
+    /// Screen coordinates, reported by the rows' own catchers: the drag is
+    /// handled in AppKit (see RowClickCatcher), and screen y grows UPWARD, so
+    /// "further down the list" means a SMALLER y — hence `>` where the to-do
+    /// list, working in flipped SwiftUI space, uses `<`.
+    private func updateDropTarget(pointerY: CGFloat, dragged: UUID, rows: [QuickNote]) {
+        let landing = rows.first { row in
+            guard let frame = rowFrames[row.id] else { return false }
+            return pointerY > frame.midY
+        }
+        guard let landing else {
+            let toEnd = rows.last?.id != dragged
+            if toEnd && !dropAtEnd { HapticManager.shared.reorderTick() }
+            dropBeforeID = nil
+            dropAtEnd = toEnd
+            return
+        }
+        let landingIndex = rows.firstIndex { $0.id == landing.id }
+        let draggedIndex = rows.firstIndex { $0.id == dragged }
+        // Landing on itself, or in the gap directly above itself, is where it
+        // already is — say nothing rather than promise a move that won't happen.
+        if landing.id == dragged || landingIndex.map({ $0 - 1 }) == draggedIndex {
+            dropBeforeID = nil
+            dropAtEnd = false
+            return
+        }
+        if dropBeforeID != landing.id { HapticManager.shared.reorderTick() }
+        dropBeforeID = landing.id
+        dropAtEnd = false
+    }
+
+    private func commitReorder(dragged: UUID) {
+        if let before = dropBeforeID, before != dragged {
+            store.reorder(dragged, before: before)
+        } else if dropAtEnd {
+            store.moveToEnd(dragged)
+        }
+        draggedNoteID = nil
+        dropBeforeID = nil
+        dropAtEnd = false
+        dragOffset = 0
+    }
+
     /// Roughly how tall the entries want to be, so a short stream hugs instead
     /// of reserving the whole budget — the panel's second principle. An
     /// estimate on purpose: measuring would cost a layout round-trip on every
     /// keystroke, and being a row out costs one row of scroll.
     private func naturalHeight(of entries: [QuickNote]) -> CGFloat {
-        28 + CGFloat(entries.count) * 59
+        24 + CGFloat(entries.count) * 62
     }
 }
 
@@ -378,7 +502,11 @@ private struct Composer: View {
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(DSColor.textFaint)
                 .fixedSize()
-            Text("\u{2318}S")
+            // ⏎, not ⌘S. Return is the confirm key everywhere else in the
+            // app — it files a to-do, it commits a step — and Notes was the
+            // one surface asking for a modifier to do the same thing.
+            // ⇧⏎ still puts in a line break.
+            Text("\u{21A9}")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(DSColor.textFaint)
                 .frame(width: 32, height: 19)
@@ -395,6 +523,13 @@ private struct Composer: View {
 
 private struct NoteEntryRow: View {
     let note: QuickNote
+    /// Where the drop indicator goes, and whether this row is the one moving.
+    let isDragged: Bool
+    let showsDropIndicator: Bool
+    let dragOffset: CGFloat
+    let onDrag: (CGFloat, CGFloat) -> Void
+    let onDragEnd: () -> Void
+    let onFrame: (CGRect) -> Void
 
     @ObservedObject private var store = NotesStore.shared
     @State private var hover = false
@@ -403,72 +538,93 @@ private struct NoteEntryRow: View {
     private var isSelected: Bool { store.selectedNoteID == note.id }
 
     var body: some View {
-        // A Button, not a bare `.onTapGesture`.
-        //
-        // The panel carries a full-width DeselectCatcher and the composer
-        // carries its own tap, so a plain tap gesture on a row is one of
-        // several peers over the same point — and SwiftUI resolves peers
-        // unpredictably. That is the same fault that made Snooze take the
-        // second or third click while Join, a Button beside it, always worked
-        // (2026-09-06). The to-do rows are not a counter-example: their clicks
-        // are handled by EntityTextView, a real NSView, not by SwiftUI
-        // gesture resolution at all.
         rowContent
             // On TOP, not behind: AppKit hit-tests the frontmost subview
             // first, and behind the content it would never be reached.
             .overlay(RowClickCatcher(
                 onClick: { store.open(note.id) },
-                onHover: { hover = $0 }
+                onHover: { hover = $0 },
+                onDrag: onDrag,
+                onDragEnd: onDragEnd,
+                onFrame: onFrame
             ))
     }
 
     private var rowContent: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                // The to-do list's own title type — 14/medium — not a 15pt
+                // semibold of its own. Notes was styled as a separate surface
+                // and read as a separate product beside it.
                 Text(note.title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(DSFont.todoTitle)
                     .foregroundStyle(DSColor.textPrimaryBright)
                     .lineLimit(1)
 
-                // Disclosure, not decoration: while the name is the model's,
-                // the row says so and ⌘⇧R is available. It disappears the
-                // moment the user types their own.
                 if note.titleSource == .generated {
                     Text(L10n.t("notes.generatedBadge"))
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(LabMetrics.accent.opacity(0.85))
-                        .padding(.horizontal, 9)
+                        .font(.system(size: 10))
+                        .foregroundStyle(NotesMetrics.pillStroke.opacity(0.85))
+                        .padding(.horizontal, 8)
                         .padding(.vertical, 2)
                         .background(Capsule().fill(DSColor.fieldBackground))
                         .overlay(Capsule().strokeBorder(DSColor.panelBorder, lineWidth: 0.5))
-                        // Late on purpose: a title that changes while the row
-                        // is still moving reads as a glitch.
                         .transition(.opacity)
                 }
 
+                // A COLUMN, not a tail on the title. Sitting immediately after
+                // the title put every timestamp at a different x depending on
+                // how long the name happened to be, so a list of times could
+                // not be read as a list of times.
+                Spacer(minLength: 12)
                 Text(Self.stamp(note.updatedAt))
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(DSColor.textHint)
-                Spacer(minLength: 0)
+                    .fixedSize()
             }
 
             HighlightedPreview(text: note.previewLine,
                                query: store.searchActive ? store.searchQuery : "")
         }
+        // The trailing gutter is RESERVED whether anything is drawn in it or
+        // not, exactly as the to-do rows reserve theirs — so revealing the
+        // affordances cannot reflow the text beside them.
+        .padding(.trailing, LabMetrics.rowActionsWidth)
+        .overlay(alignment: .trailing) {
+            RowActions(showEnter: isSelected, showGrip: hover && !isSelected)
+                .opacity(hover || isSelected ? 1 : 0)
+        }
+        // Padding that does NOT change with state.
+        //
+        // It used to be applied only while highlighted, so the hover
+        // background hugged the text on all sides and the row jumped by 24pt
+        // the moment the pointer arrived (Marcello, 2026-09-06). A hover state
+        // that resizes the thing being hovered is a hover state that fights
+        // the pointer.
         .padding(.horizontal, NotesMetrics.entryInset)
-        .padding(.vertical, isLanding || isSelected ? NotesMetrics.entryInset : 0)
+        .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: NotesMetrics.highlightRadius, style: .continuous)
-                .fill(isLanding ? LabMetrics.accent.opacity(0.10)
+                .fill(isLanding ? NotesMetrics.pillStroke.opacity(0.12)
                       : (isSelected ? DSColor.focusedRowBackground
                          : (hover ? DSColor.fieldBackground : Color.clear)))
         )
         .overlay(
             RoundedRectangle(cornerRadius: NotesMetrics.highlightRadius, style: .continuous)
-                .strokeBorder(isLanding ? LabMetrics.accent.opacity(0.24) : Color.clear,
+                .strokeBorder(isLanding ? NotesMetrics.pillStroke.opacity(0.3) : Color.clear,
                               lineWidth: 1)
         )
+        .overlay(alignment: .top) {
+            if showsDropIndicator {
+                Capsule()
+                    .fill(DSColor.textPrimaryBright)
+                    .frame(height: 2)
+                    .offset(y: -(NotesMetrics.entryGap / 2 + 1))
+            }
+        }
+        .offset(y: dragOffset)
+        .zIndex(isDragged ? 1 : 0)
         .contentShape(Rectangle())
         .contextMenu {
             Button(L10n.t("notes.rename")) { store.open(note.id); store.beginRename() }
@@ -501,8 +657,8 @@ private struct HighlightedPreview: View {
 
     var body: some View {
         Text(attributed)
-            .font(.system(size: 14))
-            .lineSpacing(3)
+            .font(DSFont.checklistItem)
+            .lineSpacing(2)
             .foregroundStyle(DSColor.textSecondary)
             .lineLimit(2)
     }
@@ -592,13 +748,16 @@ private struct NoteDetailView: View {
             ScrollView(.vertical, showsIndicators: true) {
                 TextField("", text: $body_, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 15.5))
-                    .lineSpacing(6)
+                    .font(DSFont.todoTitle)
+                    .lineSpacing(5)
                     .foregroundStyle(DSColor.textPrimaryBright)
                     .focused($bodyFocused)
                     .onChange(of: body_) { store.setBody($0, for: note.id) }
-                    .padding(.horizontal, NotesMetrics.fieldPaddingH)
-                    .padding(.top, 22)
+                    // Lined up with the text inside the field above it, so
+                    // the note reads as one column rather than as a header
+                    // and a separate document.
+                    .padding(.horizontal, LabMetrics.barPaddingH + LabMetrics.rowInnerGap + 30)
+                    .padding(.top, 20)
                     .padding(.bottom, 8)
             }
             .frame(height: isContainer
@@ -616,41 +775,74 @@ private struct NoteDetailView: View {
             body_ = note.content
             titleDraft = note.title
         }
+        // Opening a note puts the caret in the CONTENT.
+        //
+        // It used to land in the title with the title SELECTED, so the first
+        // key you pressed after opening a note replaced its name — a rename
+        // offered to someone who asked to read (Marcello, 2026-09-06). The
+        // caret goes to the end of the body instead, and the title is reached
+        // by clicking it or by Rename.
+        .onReceive(store.$bodyFocusRequest) { _ in
+            guard store.openNoteID == note.id else { return }
+            DispatchQueue.main.async { bodyFocused = true }
+            FieldCaret.collapseToEnd()
+        }
         .onReceive(store.$renameRequest) { _ in
             guard store.openNoteID == note.id else { return }
             DispatchQueue.main.async { titleFocused = true }
+            FieldCaret.collapseToEnd()
         }
     }
 
-    /// The same 76pt field at the same radius in the same place — which is
-    /// exactly why an open note needs no header bar of its own.
+    /// The SAME field as the composer — same box, same insets, same type.
+    ///
+    /// One bar in three roles was the handoff's own rule, and three roles
+    /// cannot mean three appearances: the composer was 14/medium in a 59pt
+    /// well, this was 17/semibold in a 76pt one, and the body below was a
+    /// third size again (Marcello, 2026-09-06). They are one input now,
+    /// wearing whatever the role needs inside it.
     private var header: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: LabMetrics.rowInnerGap) {
             BackButton { store.closeNote() }
 
             TextField("", text: $titleDraft)
                 .textFieldStyle(.plain)
-                .font(.system(size: 17, weight: .semibold))
+                .font(DSFont.todoTitle)
                 .foregroundStyle(DSColor.textPrimaryBright)
                 .focused($titleFocused)
-                .onSubmit { commitTitle() }
+                .onSubmit { commitTitle(); store.focusBody() }
                 .onChange(of: titleFocused) { if !$0 { commitTitle() } }
 
-            Text(store.isWriting ? L10n.t("notes.saving") : L10n.t("notes.saved"))
-                .font(.system(size: 12.5))
-                .foregroundStyle(DSColor.textHint)
-            Keycap(text: "\u{2318}[", tone: .onDark, size: 9)
+            HStack(spacing: 8) {
+                Text(store.isWriting ? L10n.t("notes.saving") : L10n.t("notes.saved"))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(DSColor.textFaint)
+                    .fixedSize()
+                Text("\u{2318}[")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(DSColor.textFaint)
+                    .frame(width: 32, height: 19)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(DSColor.textFaint, lineWidth: 1)
+                    )
+            }
         }
-        .padding(.horizontal, NotesMetrics.fieldPaddingH)
-        .frame(minHeight: NotesMetrics.composerMinHeight)
+        .padding(.horizontal, LabMetrics.barPaddingH)
+        .padding(.vertical, LabMetrics.barPaddingV)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minHeight: LabMetrics.barHeight)
         .background(
-            RoundedRectangle(cornerRadius: NotesMetrics.fieldRadius, style: .continuous)
-                .fill(DSColor.fieldWell)
+            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+                .fill(Color.black.opacity(titleFocused ? 0.14 : 0.22))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: NotesMetrics.fieldRadius, style: .continuous)
-                .strokeBorder(DSColor.panelBorder, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+                .strokeBorder(titleFocused ? NotesMetrics.pillStroke.opacity(0.7)
+                                           : Color.dynamicOverlay(light: 0.07, dark: 0.08),
+                              lineWidth: 1)
         )
+        .animation(Motion.hintFade, value: titleFocused)
     }
 
     private var bottomBar: some View {

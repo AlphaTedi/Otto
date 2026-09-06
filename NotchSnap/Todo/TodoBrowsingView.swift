@@ -2244,7 +2244,9 @@ private struct TodoItemRow: View {
 ///
 /// Geometry is the export's: a 23x18 badge with a 1pt border at radius 6, an
 /// 18pt hairline, and six 3pt dots 2pt apart inside a 16pt box.
-private struct RowActions: View {
+/// Shared with the Notes stream, which reuses the same affordances for
+/// the same reason the rows share their type: they are the same row.
+struct RowActions: View {
     let showEnter: Bool
     let showGrip: Bool
 
@@ -2281,7 +2283,7 @@ private struct RowActions: View {
 /// EntityTextView.hitTest, which makes the title transparent to the mouse), so
 /// this says "draggable" without claiming a target of its own and without
 /// reserving leading space on every row the way the old grip did.
-private struct DragGrip: View {
+struct DragGrip: View {
     var body: some View {
         VStack(spacing: LabMetrics.gripGap) {
             ForEach(0..<3, id: \.self) { _ in

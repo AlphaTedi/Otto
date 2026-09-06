@@ -124,12 +124,6 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
 
             if cmd, !shift, !option {
                 switch lower {
-                case "s":
-                    // NOT "persist" — the draft has been on disk since the
-                    // first keystroke. It closes the entry.
-                    if notes.openNoteID != nil { notes.closeNote() }
-                    else { notes.commitDraft(); notes.focusComposer() }
-                    return true
                 case "n":
                     // A new empty composer. Nothing is discarded: whatever was
                     // there is either already an entry or was already empty.
@@ -203,6 +197,18 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             // text being written, and with nothing in it they belong to the
             // stream, which is the state you are in the moment after ⌘S.
             let composerEmpty = notes.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+            // ⏎ closes the entry — the confirm key, the same one that files a
+            // to-do and commits a step. Notes was the only surface in the app
+            // asking for a modifier to do what Return does everywhere else.
+            // ⇧⏎ falls through to the field and puts in a line break.
+            if keyCode == 36, !cmd, !shift, !option, !control,
+               notes.openNoteID == nil, !composerEmpty {
+                notes.commitDraft()
+                notes.focusComposer()
+                return true
+            }
+
             guard composerEmpty || !isEditingText() else { return false }
             switch keyCode {
             case 126: notes.moveSelection(-1); return true

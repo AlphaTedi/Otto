@@ -116,7 +116,7 @@ struct PendingNoteDelete: Equatable {
 //
 // Notes persist indefinitely (a running log, no expiry — unlike the tray).
 // The composer auto-saves into a draft — on disk from the first keystroke —
-// and ⌘S closes that draft into the stream. ⌘S does NOT mean "persist":
+// and ↩ closes that draft into the stream. It does NOT mean "persist":
 // persistence already happened.
 
 @MainActor
@@ -176,9 +176,15 @@ final class NotesStore: ObservableObject {
 
     // MARK: - Reading
 
-    /// Newest first, filtered by the search query when one is active.
+    /// The stream, in the order the user has it.
+    ///
+    /// Was `sorted(by: updatedAt)`. A sort and a drag cannot both own the
+    /// order: every manual move would have been undone by the next edit, and
+    /// silently, because the row would spring back only when something else
+    /// touched it. The array IS the order now — new notes go in at the top,
+    /// which is the same default the sort produced — and a drag rewrites it.
     var stream: [QuickNote] {
-        let ordered = notes.sorted { $0.updatedAt > $1.updatedAt }
+        let ordered = notes
         let query = searchQuery.trimmingCharacters(in: .whitespaces)
         guard searchActive, !query.isEmpty else { return ordered }
         return ordered.filter {
@@ -335,6 +341,12 @@ final class NotesStore: ObservableObject {
             openNoteID = id
             selectedNoteID = id
         }
+        // The CONTENT, not the title. Opening a note is "let me get at what I
+        // wrote", and landing in the title with it selected offered a rename
+        // nobody asked for — one keystroke from replacing the name of the note
+        // you meant to read (Marcello, 2026-09-06). Renaming is still a click
+        // into the title, or Rename in the row menu.
+        focusBody()
     }
 
     /// ⌘[, the chevron, or Esc. One level, not all the way out.
@@ -400,6 +412,35 @@ final class NotesStore: ObservableObject {
         if base.isEmpty { base = "Note" }
         return base + ".md"
     }
+
+    /// Move a note in front of another. Reordering the array, not a field:
+    /// there is nothing to sort by any more.
+    func reorder(_ id: UUID, before targetID: UUID) {
+        guard id != targetID,
+              let from = notes.firstIndex(where: { $0.id == id }),
+              let target = notes.firstIndex(where: { $0.id == targetID }) else { return }
+        withAnimation(Motion.contentHug) {
+            let note = notes.remove(at: from)
+            let insertAt = notes.firstIndex(where: { $0.id == targetID }) ?? target
+            notes.insert(note, at: insertAt)
+        }
+        HapticManager.shared.reorderCommitted()
+        scheduleSave()
+    }
+
+    func moveToEnd(_ id: UUID) {
+        guard let from = notes.firstIndex(where: { $0.id == id }), from != notes.count - 1 else { return }
+        withAnimation(Motion.contentHug) {
+            let note = notes.remove(at: from)
+            notes.append(note)
+        }
+        HapticManager.shared.reorderCommitted()
+        scheduleSave()
+    }
+
+    /// One-shot: put the caret in the OPEN note's body.
+    @Published private(set) var bodyFocusRequest: UInt = 0
+    func focusBody() { bodyFocusRequest &+= 1 }
 
     // MARK: - Titles
 
