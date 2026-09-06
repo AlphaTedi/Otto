@@ -223,6 +223,34 @@ Italian `update.*` strings pasted into the English block. **Swift traps at runti
 compile time.** Nothing in the build output hinted at it. Verify both dictionaries
 construct before shipping a localization change.
 
+### 7.10 A drifting system clock stops the signature, not the build
+
+```
+Otto.app: timestamps differ by 7524 seconds - check your system clock
+Command CodeSign failed with a nonzero exit code
+```
+
+`codesign --timestamp` asks Apple's timestamp authority to countersign, and the
+authority refuses when the Mac's clock is more than a few minutes from real
+time. Nothing is wrong with the code, the identity, or the profile — and the
+error names the signing step, so it reads like a certificate problem.
+
+Check it against a network source rather than trusting the menu bar:
+
+```bash
+echo "local:  $(date -u '+%Y-%m-%d %H:%M:%S UTC')"; curl -sI https://www.apple.com | grep -i '^date:'
+```
+
+Fix: System Settings → General → Date & Time → *Set time and date
+automatically*, or `sudo sntp -sS time.apple.com`. Both need the Mac's
+password, so an agent cannot do it — it can only report the offset.
+
+Seen 2026-09-06, releasing v1.30.0: the clock was 2h05m behind. The tag and the
+commit had already been pushed, which is harmless — no GitHub release and no
+appcast entry existed yet, so installed copies carried on seeing the previous
+version. Re-running `Scripts/release.sh` after fixing the clock picks the same
+tag back up.
+
 ### 7.9 A stale app copy poisons the diagnosis
 
 `~/Downloads/NotchSnap.app` — bundle id `NotchSnap`, v1.0, unsigned — created a Privacy
