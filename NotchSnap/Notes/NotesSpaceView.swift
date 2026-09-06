@@ -561,16 +561,13 @@ private struct NoteEntryRow: View {
                     .foregroundStyle(DSColor.textPrimaryBright)
                     .lineLimit(1)
 
-                if note.titleSource == .generated {
-                    Text(L10n.t("notes.generatedBadge"))
-                        .font(.system(size: 10))
-                        .foregroundStyle(NotesMetrics.pillStroke.opacity(0.85))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(DSColor.fieldBackground))
-                        .overlay(Capsule().strokeBorder(DSColor.panelBorder, lineWidth: 0.5))
-                        .transition(.opacity)
-                }
+                // No "generated title" badge (Marcello, 2026-09-06). The
+                // stored `titleSource` stays and still does its work — ⌘⇧R
+                // regenerates a proposed title, and a hand-typed one locks the
+                // model out of that note permanently. It is simply not
+                // announced on the row any more: every title here is drawn
+                // from the note's own words by an on-device pass, so the badge
+                // was labelling the user's own sentence as machine output.
 
                 // A COLUMN, not a tail on the title. Sitting immediately after
                 // the title put every timestamp at a different x depending on
