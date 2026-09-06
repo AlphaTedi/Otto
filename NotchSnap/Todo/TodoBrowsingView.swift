@@ -321,6 +321,10 @@ private extension View {
 struct TodoTabView: View {
     @ObservedObject private var store = TodoStore.shared
     @ObservedObject private var calendar = CalendarStore.shared
+    /// Observed so the space bar disappears the moment a note opens —
+    /// `showsSpaceBar` reads NotesStore, and a value this view does not watch
+    /// is a value this view will not redraw for.
+    @ObservedObject private var notes = NotesStore.shared
     @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
 
     /// The notch silhouette hugs its content, so its height moves with the
@@ -404,7 +408,10 @@ struct TodoTabView: View {
         // click where no real control was hit, so rows, buttons, the tab
         // strip and drag-to-reorder all still get theirs first. It is a
         // fallback, not an interceptor.
-        .background(DeselectCatcher())
+        // Not in the Notes space. "Click the empty panel to deselect a to-do"
+        // has no meaning there, and a full-width tap gesture under the stream
+        // is one more peer competing with every row for the same click.
+        .background(store.panelMode == .notes ? nil : DeselectCatcher())
         .background(TodoBrowsingKeyHandler())
     }
 

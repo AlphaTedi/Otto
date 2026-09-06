@@ -375,7 +375,17 @@ final class TodoStore: ObservableObject {
     /// space you cannot leave. The surfaces that replace the whole panel
     /// (creation, Quick Find) still take the bar with them.
     var showsSpaceBar: Bool {
-        panelMode == .browsing || panelMode == .voice || panelMode == .notes
+        // Hidden while a note is OPEN. The note is one level below the
+        // stream and the bar belongs to the stream level (design handoff,
+        // view 4) — and it is not only tidiness: the note's own budget is
+        // 556 less the header and the bottom bar, so leaving the bar in as
+        // well puts the panel 67pt over its block. That is the exact
+        // overflow that has already been fixed twice on this surface.
+        //
+        // The way out is the chevron, which now answers the pointer, plus
+        // Esc and ⌘[ through the key router.
+        if panelMode == .notes, NotesStore.shared.openNoteID != nil { return false }
+        return panelMode == .browsing || panelMode == .voice || panelMode == .notes
     }
 
     /// While any non-browsing surface is up, the notch must not auto-collapse

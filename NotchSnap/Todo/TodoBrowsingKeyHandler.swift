@@ -187,7 +187,8 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 TodoStore.shared.cycleSpace(by: shift ? -1 : 1)
                 return true
             }
-            if keyCode == 123 || keyCode == 124, !cmd, !option, !control {
+            if keyCode == 123 || keyCode == 124, !cmd, !option, !control,
+               notes.draft.isEmpty {
                 TodoStore.shared.cycleSpace(by: keyCode == 124 ? 1 : -1)
                 return true
             }
@@ -392,6 +393,27 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 return true
             }
 
+            // ←/→ walk the space bar, INCLUDING while the caret sits in the
+            // creation field — which is where it is the moment the notch
+            // opens, and therefore the only state that matters for this key
+            // (Marcello, 2026-09-06: "doesn't matter se l'input field è
+            // selezionato oppure no").
+            //
+            // The one thing that stops them is text already typed. With
+            // characters in the field ←/→ have to be the caret, or a to-do
+            // cannot be corrected while it is being written — you would be
+            // able to reach every section and not the letter you mistyped.
+            // Empty field, no text to move through: the arrows belong to the
+            // bar. That is the same test the Notes composer uses for ↑↓, and
+            // it covers his case exactly, since the field is empty every time
+            // the panel opens.
+            if keyCode == 123 || keyCode == 124, !cmd, !option, !control, !shift,
+               store.draftTitle.isEmpty,
+               draftHasCaret() || !isEditingText() {
+                store.cycleSpace(by: keyCode == 124 ? 1 : -1)
+                return true
+            }
+
             // The draft row owns ⏎ / Esc whenever it holds the caret.
             if handleDraft(store, keyCode: keyCode) { return true }
 
@@ -539,7 +561,8 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 // With a row focused these still open and close its details:
                 // that is the nearer meaning when the keyboard is ON something.
                 // With nothing focused there is nothing to expand, and the
-                // arrow does the same thing ⇥ does — walks the space bar.
+                // arrow walks the space bar (handled above for the common
+                // case, here for a list with no caret anywhere).
                 guard let focused = store.focusedItemID else {
                     store.cycleSpace(by: 1)
                     return true

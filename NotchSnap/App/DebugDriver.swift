@@ -191,6 +191,26 @@ enum DebugDriver {
                 NotesStore.shared.moveSelection(Int(command.dropFirst(13)) ?? 1)
             } else if command == "notes-open-selected" {
                 if let s = NotesStore.shared.selectedNoteID { NotesStore.shared.open(s) }
+            } else if command.hasPrefix("hittest ") {
+                // Ask the panel what it would hand a click at this SCREEN
+                // point. No synthetic input needed, and it tests the exact
+                // path a real click takes: NotchHostingView.hitTest first,
+                // then AppKit's own walk down the view tree.
+                let parts = command.dropFirst(8).split(separator: " ")
+                let x = Double(parts.first ?? "0") ?? 0
+                let y = Double(parts.count > 1 ? parts[1] : "0") ?? 0
+                let screenPoint = NSPoint(x: x, y: y)
+                let shape = NotchController.shared.visibleShapeScreenRect()
+                if let window = NSApp.windows.first(where: { $0 is NotchPanel }) {
+                    let inWindow = window.convertPoint(fromScreen: screenPoint)
+                    let hit = window.contentView?.hitTest(inWindow)
+                    appendState("hittest screen=(\(Int(x)),\(Int(y))) "
+                                + "window=(\(Int(inWindow.x)),\(Int(inWindow.y))) "
+                                + "shapeRect=\(shape) insideShape=\(shape.contains(screenPoint)) "
+                                + "hit=\(hit.map { String(describing: type(of: $0)) } ?? "nil")")
+                } else {
+                    appendState("hittest: no notch panel")
+                }
             } else if command == "notes-status" {
                 let n = NotesStore.shared
                 appendState("notes count=\(n.notes.count) mode=\(TodoStore.shared.panelMode) "

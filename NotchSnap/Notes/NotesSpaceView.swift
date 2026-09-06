@@ -62,9 +62,16 @@ enum NotesMetrics {
     /// the silhouette down.
     static let notchComposerMaxHeight: CGFloat = 62
     static let notchStreamMaxHeight: CGFloat = 190
-    /// The Notes pill's own fill. A literal, and deliberately so: every other
-    /// active pill wears its category's colour, so the one permanent pill in
-    /// the bar needs a colour that belongs to no category.
+    /// The Notes pill's own colour. A literal, and deliberately so: every
+    /// other active pill wears its category's colour, so the one permanent
+    /// pill in the bar needs a colour that belongs to no category.
+    ///
+    /// Outlined rather than filled, and dashed (Marcello, 2026-09-06): a
+    /// filled pill says "this list is selected", which is what the lists to
+    /// its right say. Notes is a different kind of thing and the broken
+    /// outline is what says so without a second shape or an icon.
+    static let pillStroke = Color(hex: "#E8C15A")
+    /// Kept for the search highlight, which needs a solid ground to sit on.
     static let pillFill = Color(hex: "#A9D8E9")
     static let pillLabel = Color(hex: "#16283A")
 }
@@ -81,6 +88,11 @@ struct NotesSpaceView: View {
         VStack(alignment: .leading, spacing: 0) {
             if let open = store.openNote {
                 NoteDetailView(note: open, isContainer: isContainer)
+                    // Per NOTE, not per surface. Without it SwiftUI reuses the
+                    // same view for the next note opened, `onAppear` does not
+                    // run again, and the body field still holds the previous
+                    // note's text — you open one note and read another.
+                    .id(open.id)
                     .transition(.opacity)
             } else {
                 StreamView(isContainer: isContainer)
@@ -287,6 +299,21 @@ private struct NoteEntryRow: View {
     private var isSelected: Bool { store.selectedNoteID == note.id }
 
     var body: some View {
+        // A Button, not a bare `.onTapGesture`.
+        //
+        // The panel carries a full-width DeselectCatcher and the composer
+        // carries its own tap, so a plain tap gesture on a row is one of
+        // several peers over the same point — and SwiftUI resolves peers
+        // unpredictably. That is the same fault that made Snooze take the
+        // second or third click while Join, a Button beside it, always worked
+        // (2026-09-06). The to-do rows are not a counter-example: their clicks
+        // are handled by EntityTextView, a real NSView, not by SwiftUI
+        // gesture resolution at all.
+        Button(action: { store.open(note.id) }) { rowContent }
+            .buttonStyle(.plain)
+    }
+
+    private var rowContent: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text(note.title)
@@ -334,7 +361,6 @@ private struct NoteEntryRow: View {
         )
         .contentShape(Rectangle())
         .onHover { hover = $0 }
-        .onTapGesture { store.open(note.id) }
         .contextMenu {
             Button(L10n.t("notes.rename")) { store.open(note.id); store.beginRename() }
             Button(L10n.t("notes.duplicate")) { store.duplicate(note.id) }
@@ -491,13 +517,7 @@ private struct NoteDetailView: View {
     /// exactly why an open note needs no header bar of its own.
     private var header: some View {
         HStack(spacing: 16) {
-            Button { store.closeNote() } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(LabMetrics.accent)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+            BackButton { store.closeNote() }
 
             TextField("", text: $titleDraft)
                 .textFieldStyle(.plain)
@@ -571,6 +591,34 @@ private struct NoteDetailView: View {
     }
 }
 
+/// The way back to the stream.
+///
+/// It carries a hover state because it is the only way out of an open note
+/// that is visible on screen — the space bar belongs to the stream level and
+/// is not drawn here — and a control you must find without being told about
+/// has to answer the pointer when it arrives.
+private struct BackButton: View {
+    let action: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(hover ? DSColor.textPrimaryBright : LabMetrics.accent)
+                .frame(width: 30, height: 30)
+                .background(
+                    Circle().fill(hover ? DSColor.fieldBackground : Color.clear)
+                )
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .animation(Motion.hoverFade, value: hover)
+        .help(L10n.t("notes.back"))
+    }
+}
+
 // MARK: - Undo
 
 private struct UndoBar: View {
@@ -622,24 +670,35 @@ struct NotesPill: View {
         HStack(spacing: 5) {
             Text(L10n.t("filter.notes"))
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(isActive ? NotesMetrics.pillLabel : DSColor.textPrimary)
+                .foregroundColor(isActive ? NotesMetrics.pillStroke : DSColor.textPrimary)
             Text("\(notes.notes.count)")
                 .font(.system(size: 12, weight: .medium))
                 .monospacedDigit()
-                .foregroundColor(isActive ? NotesMetrics.pillLabel.opacity(0.55)
+                .foregroundColor(isActive ? NotesMetrics.pillStroke.opacity(0.65)
                                           : DSColor.textSecondary)
                 .contentTransition(.numericText())
         }
         .padding(.horizontal, LabMetrics.tabPaddingH)
         .padding(.vertical, LabMetrics.tabPaddingV)
-        .background(
-            RoundedRectangle(cornerRadius: isActive ? LabMetrics.tabActiveRadius
-                                                    : LabMetrics.tabInactiveRadius,
-                             style: .continuous)
-                .fill(isActive ? NotesMetrics.pillFill
-                      : (hover ? DSColor.fieldBackground : Color.clear))
+        // ONE shape in every state.
+        //
+        // The fill used to interpolate its radius between 48 active and 8
+        // resting, so hovering an inactive pill drew a rounded RECTANGLE and
+        // clicking it snapped to a capsule — two different objects for one
+        // control (Marcello, 2026-09-06: "sembra weird"). The state is the
+        // fill and the stroke; the shape does not move.
+        .background(Capsule(style: .continuous).fill(
+            isActive ? NotesMetrics.pillStroke.opacity(0.16)
+                     : (hover ? NotesMetrics.pillStroke.opacity(0.08) : Color.clear)
+        ))
+        .overlay(
+            Capsule(style: .continuous)
+                .strokeBorder(
+                    NotesMetrics.pillStroke.opacity(isActive ? 1 : (hover ? 0.7 : 0.45)),
+                    style: StrokeStyle(lineWidth: isActive ? 1.5 : 1, dash: [4, 3])
+                )
         )
-        .contentShape(RoundedRectangle(cornerRadius: LabMetrics.tabActiveRadius, style: .continuous))
+        .contentShape(Capsule(style: .continuous))
         .onTapGesture { NotesStore.shared.enterSpace() }
         .onHover { hover = $0 }
         .animation(Motion.swap, value: isActive)
@@ -648,6 +707,8 @@ struct NotesPill: View {
         .accessibilityLabel(L10n.t("filter.notes"))
     }
 }
+
+
 
 
 

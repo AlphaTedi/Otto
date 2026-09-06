@@ -348,12 +348,11 @@ struct CategoryTabChip: View {
     /// in notchsnap_design_reference_prd.md §10.
     let remaining: Int?
 
-    /// Interpolated, not swapped: a `cornerRadius` handed a different number
-    /// animates to it, where a conditional `clipShape` simply becomes a
-    /// different shape on the next frame.
-    private var activeRadius: CGFloat {
-        isActive ? LabMetrics.tabActiveRadius : LabMetrics.tabInactiveRadius
-    }
+    /// Whether the pointer is on this chip. The lists had NO hover state at
+    /// all, so the only chip in the bar that answered the pointer was the one
+    /// already selected — a row of controls that looked inert until clicked
+    /// (Marcello, 2026-09-06).
+    @State private var hover = false
 
     var body: some View {
         HStack(spacing: 5) {
@@ -382,29 +381,32 @@ struct CategoryTabChip: View {
         }
         .padding(.horizontal, LabMetrics.tabPaddingH)
         .padding(.vertical, LabMetrics.tabPaddingV)
-        // The fill belongs to the chip, and its RADIUS interpolates.
+        // ONE shape, in every state. The fill is what changes.
         //
-        // A `matchedGeometryEffect` pill travelling between chips was the
-        // better-looking idea and it caused a real bug: matched geometry
-        // resolves its frame in the NAMESPACE's coordinate space — the whole
-        // tab row — while the chips live inside a horizontal ScrollView that
-        // clips at its own bounds. The first chip sits on that boundary, so
-        // its pill was drawn partly outside the scroller and cut
+        // The radius used to interpolate between 48 active and 8 resting, so a
+        // hovered chip would have drawn as a rounded RECTANGLE and the same
+        // chip clicked snapped to a capsule — two different objects for one
+        // control (Marcello, 2026-09-06, on the Notes pill; the lists share
+        // the component and had the same latent split). A capsule throughout
+        // removes the question: selection is a fill, not a silhouette.
+        //
+        // Still not `matchedGeometryEffect`. A pill travelling between chips
+        // was the better-looking idea and it caused a real bug: matched
+        // geometry resolves its frame in the NAMESPACE's coordinate space —
+        // the whole tab row — while the chips live inside a horizontal
+        // ScrollView that clips at its own bounds. The first chip sits on that
+        // boundary, so its pill was drawn partly outside the scroller and cut
         // (Marcello, 2026-09-05: "la prima section rimane sempre tagliata").
-        // Both layouts, because the chip is shared.
-        //
-        // The original complaint that pushed me there was real too: the radius
-        // used to jump between the pill and the 8pt resting shape in one frame
-        // because a `clipShape` radius is a discrete swap. Interpolating the
-        // radius on the fill itself fixes that without crossing the clip
-        // boundary — the shape grows into a pill rather than snapping to one.
         .background(
-            RoundedRectangle(cornerRadius: activeRadius, style: .continuous)
-                .fill(categoryColor)
-                .opacity(isActive ? 1 : 0)
+            Capsule(style: .continuous)
+                .fill(isActive ? categoryColor
+                      : (hover ? DSColor.fieldBackground : Color.clear))
         )
-        .clipShape(RoundedRectangle(cornerRadius: activeRadius, style: .continuous))
+        .clipShape(Capsule(style: .continuous))
+        .contentShape(Capsule(style: .continuous))
+        .onHover { hover = $0 }
         .animation(Motion.swap, value: isActive)
+        .animation(Motion.hoverFade, value: hover)
         // No ⌘-held index badge (Marcello, 2026-08-05). ⌘1-9 still jumps
         // between categories; it is documented in the "?" shortcuts overlay
         // like every other shortcut, rather than printed over the tabs.
