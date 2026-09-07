@@ -1184,7 +1184,16 @@ struct TodoBrowsingView: View {
     private func browsingBody(for collection: TodoCollection) -> some View {
         let open = store.openItems(in: collection)
         let openCount = open.count
+        // The rows Completed would put on screen — live AND archived.
+        //
+        // Counting only the live ones is what pushed the section row out
+        // through the bottom of the panel the moment history arrived: the
+        // section was DRAWN because the archive had entries, and MEASURED as
+        // though it were not there at all, so the list kept a budget that
+        // already belonged to something else (Marcello, 2026-09-07).
         let completedCount = store.completedItems(in: collection).count
+            + archive.historyCount(section: collection.isSystemToday ? nil : collection.name,
+                                   excluding: liveCompletedIDs(in: collection))
         // Steps are real rows on screen now, so they have to count toward the
         // budget. Three to-dos with five steps each is eighteen rows, not
         // three — and a region that only counted parents would lay them out
@@ -1222,9 +1231,14 @@ struct TodoBrowsingView: View {
             // single unit and the panel height stops at the budget.
             // draftInset 0: the typing bar lives above the sections now, in
             // TodoTabView, not inside this scrolling column.
-            let completedInset = store.completedItems(in: collection).isEmpty
-                ? 0
-                : min(completedInsetHeight, LabMetrics.completedExpandedMaxHeight)
+            // The SAME question the safeAreaInset asks before drawing it.
+            // Two predicates for one section is how the panel ends up
+            // budgeting for a section it is not showing, or showing one it has
+            // not budgeted for — and the second is the one you can see,
+            // because the tab row goes out through the bottom edge.
+            let completedInset = hasAnyCompleted(in: collection)
+                ? min(completedInsetHeight, LabMetrics.completedExpandedMaxHeight)
+                : 0
             let budget = Self.maxRegion(chrome: chrome, completedInset: completedInset)
             // min(natural, budget): the region hugs its content again.
             //
@@ -1527,7 +1541,14 @@ struct TodoBrowsingView: View {
 
     // MARK: Completed (TD-3, per-category)
 
-    @ViewBuilder
+    /// The live completions, keyed the way the archive keys them — so history
+    /// can drop the entries the store is still showing.
+    private func liveCompletedIDs(in collection: TodoCollection) -> Set<String> {
+        Set(store.completedItems(in: collection).map {
+            CompletedArchive.identity(title: $0.title, at: $0.completedAt ?? .distantPast)
+        })
+    }
+
     /// Whether there is anything to show at all — live rows OR history.
     private func hasAnyCompleted(in collection: TodoCollection) -> Bool {
         if !store.completedItems(in: collection).isEmpty { return true }
@@ -1541,9 +1562,7 @@ struct TodoBrowsingView: View {
     @ViewBuilder
     private func completedSection(for collection: TodoCollection) -> some View {
         let completed = store.completedItems(in: collection)
-        let liveIDs = Set(completed.map {
-            CompletedArchive.identity(title: $0.title, at: $0.completedAt ?? .distantPast)
-        })
+        let liveIDs = liveCompletedIDs(in: collection)
         let section = collection.isSystemToday ? nil : collection.name
         // COUNTED while closed, GROUPED only once open. The header needs a
         // number on every redraw; the day groups are needed only when someone
