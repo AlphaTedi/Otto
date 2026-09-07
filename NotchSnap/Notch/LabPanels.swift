@@ -34,6 +34,16 @@ enum LabMetrics {
     static let panelTopPadding: CGFloat = 16
     /// Between the creation-bar block and the list block.
     static let sectionGap: CGFloat = 16
+    /// From the bottom of the capture field to the top of the section row —
+    /// in EVERY space, which is the whole reason it is a named constant.
+    ///
+    /// It used to be two numbers in two places: 10pt inside InlineDraftRow
+    /// plus `sectionGap` where that row is placed. The Notes composer is a
+    /// different view in a different file and had neither, so switching from a
+    /// list to Notes moved the pills 26pt up the panel and the whole row
+    /// jumped (Marcello, 2026-09-07). Two spaces drawing the same furniture
+    /// have to measure it with the same ruler.
+    static let fieldToTabsGap: CGFloat = 26
 
     // Creation bar
     static let barOuterInset: CGFloat = 16     // the wrapper's 0 16px

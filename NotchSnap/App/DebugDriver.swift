@@ -464,7 +464,9 @@ enum DebugDriver {
         layout=\(app.notchLayout) \
         todoContentHeight=\(app.todoContentHeight) \
         labColumnHeight=\(app.labColumnHeight) \
-        notchExtraHeight=\(app.notchExtraHeight)
+        notchExtraHeight=\(app.notchExtraHeight) \
+        chromeDraftBlock=\(PanelChrome.shared.draftBlock) \
+        chromeTabRow=\(PanelChrome.shared.tabRow)
         """)
     }
 

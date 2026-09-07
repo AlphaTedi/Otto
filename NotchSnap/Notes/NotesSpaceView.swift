@@ -267,6 +267,13 @@ private struct StreamView: View {
         VStack(alignment: .leading, spacing: 0) {
             Composer(focused: $composerFocused, isContainer: isContainer)
                 .padding(.horizontal, LabMetrics.barOuterInset)
+                // Index 0 and the same gap as a list's capture field, so this
+                // field and that one are the SAME piece of furniture: same
+                // place, same size, same settle as the panel opens. They are
+                // one bar in three roles by the handoff's own rule, and a role
+                // that sits 26pt higher than the others is a fourth one.
+                .notchEntry(index: 0)
+                .padding(.bottom, LabMetrics.fieldToTabsGap)
                 .background(GeometryReader { geo in
                     Color.clear.preference(key: ComposerHeightKey.self, value: geo.size.height)
                 })

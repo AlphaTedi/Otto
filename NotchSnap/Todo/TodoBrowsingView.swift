@@ -435,7 +435,7 @@ struct TodoTabView: View {
                     InlineDraftRow(accent: store.draftDestination?.color ?? LabMetrics.accent)
                         .padding(.horizontal, LabMetrics.barOuterInset)
                         .notchEntry(index: 0)
-                        .padding(.bottom, LabMetrics.sectionGap)
+                        .padding(.bottom, LabMetrics.fieldToTabsGap)
                         // Reported, not assumed — see PanelChrome. The bar
                         // grew 10pt when it became a recessed well and the
                         // list's budget went on subtracting the old number,
@@ -1919,8 +1919,9 @@ private struct InlineDraftRow: View {
         }
         // Detachment is whitespace, not a rule: the fill already says "this is
         // not one of the list items", so a divider would be two devices doing
-        // one job.
-        .padding(.bottom, 10)
+        // one job. The whitespace itself now lives at the placement site, as
+        // `LabMetrics.fieldToTabsGap` — a row that carries half of its own
+        // separation is a row no other space can line up with.
         .animation(NotchAnimation.hintFade, value: focused)
         .animation(NotchAnimation.hintFade, value: parsed?.display)
         .animation(NotchAnimation.contentHug, value: accent)
