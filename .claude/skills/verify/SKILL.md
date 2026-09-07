@@ -68,6 +68,9 @@ Commands: `expand`, `collapse`, `add <title>`, `complete-first`,
 `notes-body` (what the note's NSTextView is actually holding vs what the store
 has — the only headless way to catch a note that opens blank),
 `notes-roundtrip` (markdown → attributed → markdown over 21 documents),
+`archive-status` (the completion archive as the Completed section sees it:
+total entries, live rows, the scoped/deduped history), `delete-first` (take a
+test to-do back out of the real store).
 `expand-focused` / `collapse-row` (NC details), `note <text>` / `step <text>`
 (first open item in active collection).
 `dump` appends state (notch state, panel mode, active collection,

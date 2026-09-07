@@ -1045,6 +1045,7 @@ private struct AccountButton: View {
 
 struct TodoBrowsingView: View {
     @ObservedObject private var store = TodoStore.shared
+    @ObservedObject private var archive = CompletedArchive.shared
 
     /// FB3+4: ONE scroll region for the whole browsing body (open list +
     /// Completed together), capped to the panel's budget. Two independent
@@ -1168,6 +1169,15 @@ struct TodoBrowsingView: View {
                 }
             }
         }
+        // Read the archive HERE, not while drawing.
+        //
+        // Whether the Completed section exists at all now depends on what is
+        // on disk, and that question is asked during body evaluation — so the
+        // answer has to be in memory before the body runs. Reading from inside
+        // the body would be a file system call in the middle of layout, on
+        // every redraw.
+        .onAppear { archive.reloadIfNeeded() }
+        .onReceive(store.$archiveRevision) { _ in archive.reload() }
     }
 
     @ViewBuilder
@@ -1306,7 +1316,13 @@ struct TodoBrowsingView: View {
                     // empty section visited while Completed happened to be
                     // open was handing 160pt of its list budget to a section
                     // with no rows in it.
-                    if !store.completedItems(in: collection).isEmpty {
+                    // The archive counts as content. Gating on the live store
+                    // alone is what made the whole section disappear a day
+                    // after finishing anything — "i completed sono spariti"
+                    // (Marcello, 2026-09-07) — because completions leave the
+                    // store for Archive/<day>.md and the section then had
+                    // nothing to draw.
+                    if hasAnyCompleted(in: collection) {
                         ScrollView(.vertical, showsIndicators: false) {
                             completedSection(for: collection)
                                 .padding(.horizontal, LabMetrics.listInset)
@@ -1512,9 +1528,28 @@ struct TodoBrowsingView: View {
     // MARK: Completed (TD-3, per-category)
 
     @ViewBuilder
+    /// Whether there is anything to show at all — live rows OR history.
+    private func hasAnyCompleted(in collection: TodoCollection) -> Bool {
+        if !store.completedItems(in: collection).isEmpty { return true }
+        return archive.historyCount(section: collection.isSystemToday ? nil : collection.name,
+                                    excluding: []) > 0
+    }
+
+    /// Today's live completions and the archived history behind them, as one
+    /// list. The live rows are real to-dos and can be un-ticked; the history is
+    /// a record and is read-only, because those items have left the store.
+    @ViewBuilder
     private func completedSection(for collection: TodoCollection) -> some View {
         let completed = store.completedItems(in: collection)
-        if !completed.isEmpty {
+        let liveIDs = Set(completed.map {
+            CompletedArchive.identity(title: $0.title, at: $0.completedAt ?? .distantPast)
+        })
+        let section = collection.isSystemToday ? nil : collection.name
+        // COUNTED while closed, GROUPED only once open. The header needs a
+        // number on every redraw; the day groups are needed only when someone
+        // is actually looking at them.
+        let historyCount = archive.historyCount(section: section, excluding: liveIDs)
+        if !completed.isEmpty || historyCount > 0 {
             // No rule above Completed (Marcello, 2026-07-26) — the gap and the
             // dimmer label already separate it from the open list.
             VStack(alignment: .leading, spacing: 2) {
@@ -1529,7 +1564,11 @@ struct TodoBrowsingView: View {
                         Text(L10n.t("todo.completed"))
                             .font(DSFont.checklistItem)
                             .foregroundStyle(DSColor.textMuted)
-                        Text("\(completed.count)")
+                        // Everything the section holds, history included —
+                        // the count in a closed header is the answer to "what
+                        // did I finish", and one that stopped at yesterday
+                        // would be the same lie the empty section told.
+                        Text("\(completed.count + historyCount)")
                             .font(.system(size: 10))
                             .foregroundStyle(DSColor.textHint)
                             .contentTransition(.numericText())
@@ -1557,6 +1596,8 @@ struct TodoBrowsingView: View {
                     // Completed opens fully instead of into a cramped window.
                     completedRows(completed)
                         .transition(.opacity)
+                    ArchivedHistory(days: archive.history(section: section, excluding: liveIDs))
+                        .transition(.opacity)
                 }
             }
             .transition(.opacity)
@@ -1576,6 +1617,86 @@ struct TodoBrowsingView: View {
             }
         }
         .padding(.top, 8)
+    }
+}
+
+// MARK: - ArchivedHistory — what was finished before today
+//
+// Deliberately NOT a TodoItemRow. These entries have left the store: there is
+// no checkbox to un-tick, no steps to open, no row to drag. Drawing them as
+// live rows would have offered every one of those and answered none of them.
+// A record looks like a record — quieter type, the day it belongs to, and the
+// section it was finished in.
+//
+// Read-only is the whole feature for now. Putting an archived to-do BACK is a
+// different verb with its own questions (which section, if the old one is
+// gone; what happens to the archive line), and it is not what "keep track of
+// what I completed" asked for.
+
+private struct ArchivedHistory: View {
+    let days: [(day: Date, entries: [ArchivedCompletion])]
+
+    var body: some View {
+        if !days.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(days, id: \.day) { group in
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(Self.dayLabel(group.day))
+                            .font(DSFont.sectionLabel)
+                            .tracking(0.4)
+                            .foregroundStyle(DSColor.textFaint)
+                        ForEach(group.entries) { entry in
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                // A tick, not a checkbox: it says "this
+                                // happened" rather than "press me".
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(DSColor.textFaint)
+                                    .frame(width: 14, alignment: .leading)
+                                Text(entry.title)
+                                    .font(DSFont.checklistItem)
+                                    .foregroundStyle(DSColor.textMuted)
+                                    .strikethrough(true, color: DSColor.textFaint)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                Spacer(minLength: 8)
+                                if let section = entry.sectionName {
+                                    Text(section)
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(DSColor.textFaint)
+                                        .fixedSize()
+                                }
+                                Text(Self.timeLabel(entry.completedAt))
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundStyle(DSColor.textFaint)
+                                    .fixedSize()
+                            }
+                            .help(L10n.t("todo.archivedHint"))
+                        }
+                    }
+                }
+            }
+            .padding(.top, 10)
+        }
+    }
+
+    /// "Today" and "Yesterday" carry their own meaning; anything older is
+    /// given its date, which is the thing you actually search your memory by.
+    private static func dayLabel(_ day: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(day)     { return L10n.t("todo.todayLabel").uppercased() }
+        if calendar.isDateInYesterday(day) { return L10n.t("todo.yesterdayLabel").uppercased() }
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.setLocalizedDateFormatFromTemplate("EEEEdMMM")
+        return formatter.string(from: day).uppercased()
+    }
+
+    private static func timeLabel(_ at: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.setLocalizedDateFormatFromTemplate("Hmm")
+        return formatter.string(from: at)
     }
 }
 
@@ -2589,6 +2710,7 @@ private struct ShortcutsOverlay: View {
         ("\u{2325}\u{2318}N", "todo.sc.quickEntry"),
         ("\u{2303}\u{21E7}E", "todo.sc.notes"),
         ("\u{2318}B / I / U", "todo.sc.format"),
+        ("\u{21E7}\u{2318}C", "todo.sc.toggleCompleted"),
         ("\u{21E5} / \u{21E7}\u{21E5}", "todo.sc.nestList"),
     ]
 

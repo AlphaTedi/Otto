@@ -581,6 +581,16 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 return true
             }
 
+            // ⇧⌘C opens and closes Completed — now that the section holds a
+            // history rather than a day's leftovers, it is somewhere you go to
+            // look something up, and looking something up had no key at all:
+            // the header chevron was the only way in.
+            if cmd, shift, lower == "c" {
+                withAnimation(NotchAnimation.contentHug) { store.completedExpanded.toggle() }
+                if store.completedExpanded { CompletedArchive.shared.reload() }
+                return true
+            }
+
             // §7.3: ? toggles the reference (⌘/ kept as an alias).
             if chars == "?" || (cmd && lower == "/") {
                 withAnimation(NotchAnimation.hintFade) { store.showShortcuts = true }

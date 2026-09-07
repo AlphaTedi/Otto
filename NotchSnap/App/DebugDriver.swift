@@ -14,7 +14,7 @@ import SwiftUI
 //                           deliverImmediately: true)'
 //
 // Commands: expand | collapse | add <title> | complete-first |
-//           uncomplete-first | switch <index> | dump
+//           uncomplete-first | delete-first | switch <index> | dump
 // `dump` appends the hugging-height state to /tmp/notchsnap-debug-state.txt.
 // Never compiled into Release.
 
@@ -43,6 +43,14 @@ enum DebugDriver {
             if let collection = store.activeCollection,
                let first = store.openItems(in: collection).first {
                 store.toggleComplete(first.id)
+            }
+        // Test items land in the REAL store, so verification needs a way to
+        // take them back out again — otherwise every run leaves a row behind
+        // in someone's actual list.
+        case "delete-first":
+            if let collection = store.activeCollection,
+               let first = store.openItems(in: collection).first {
+                store.delete(first.id)
             }
         case "uncomplete-first":
             if let collection = store.activeCollection,
@@ -280,6 +288,26 @@ enum DebugDriver {
                     }
                 }
                 appendState("roundtrip: \(cases.count - failures)/\(cases.count) identical")
+            } else if command == "archive-status" {
+                let a = CompletedArchive.shared
+                a.reload()
+                let collection = TodoStore.shared.activeCollection
+                let live = TodoStore.shared.completedItems(in: collection ?? TodoStore.shared.collections[0])
+                let liveIDs = Set(live.map {
+                    CompletedArchive.identity(title: $0.title, at: $0.completedAt ?? .distantPast)
+                })
+                let scoped = (collection?.isSystemToday ?? false) ? nil : collection?.name
+                let days = a.history(section: scoped, excluding: liveIDs)
+                let shown: Int = days.reduce(0) { $0 + $1.entries.count }
+                let sample: [String] = (days.first?.entries.prefix(3) ?? []).map { entry in
+                    let section: String = entry.sectionName ?? "-"
+                    return "'" + entry.title + "'@" + section
+                }
+                var report = "archive entries=\(a.entries.count) live=\(live.count)"
+                report += " section=" + (scoped ?? "ALL")
+                report += " days=\(days.count) shown=\(shown)"
+                report += " first=[" + sample.joined(separator: " ") + "]"
+                appendState(report)
             } else if command == "notes-body" {
                 // What the EDITOR is holding, not what the store thinks. The
                 // two came apart once — the text view was built from an empty

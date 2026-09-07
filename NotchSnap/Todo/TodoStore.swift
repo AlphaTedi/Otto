@@ -58,6 +58,13 @@ final class TodoStore: ObservableObject {
     @Published var lastUsedCollectionID: UUID?
     /// TD-3: Completed is collapsed by default.
     @Published var completedExpanded = false
+    /// Bumped whenever the completion RECORD on disk changes, so whatever is
+    /// showing the archive knows to read it again. A counter and not a direct
+    /// call into the reader: the store writes the record, it does not own who
+    /// is looking at it.
+    @Published private(set) var archiveRevision: UInt = 0
+
+    func noteArchiveChanged() { archiveRevision &+= 1 }
     /// KB-6: keyboard focus within the browsing list.
     @Published var focusedItemID: UUID?
     /// §8.3 completion sequencing: items already marked complete whose row is
@@ -864,6 +871,7 @@ final class TodoStore: ObservableObject {
             // written at tick-off back out again.
             if let wasCompletedAt {
                 MarkdownVault.shared.removeCompletion(items[idx], completedAt: wasCompletedAt, from: self)
+                noteArchiveChanged()
             }
             // Putting one back is not the same event as finishing it.
             HapticManager.shared.todoUncompleted()
@@ -879,6 +887,7 @@ final class TodoStore: ObservableObject {
             // Archive/<today>.md now, not a day later when the row leaves
             // the panel (Thomas, 2026-09-01).
             MarkdownVault.shared.recordCompletion(items[idx], from: self)
+            noteArchiveChanged()
             settleTasks[id] = Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: 350_000_000)
                 guard !Task.isCancelled, let self else { return }
@@ -1131,6 +1140,7 @@ final class TodoStore: ObservableObject {
         let archived = MarkdownVault.shared.archive(old, from: self)
         guard !archived.isEmpty else { return }
         items.removeAll { archived.contains($0.id) }
+        noteArchiveChanged()
         scheduleSave()
     }
 }
