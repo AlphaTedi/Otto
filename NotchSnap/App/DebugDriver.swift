@@ -524,7 +524,6 @@ enum DebugDriver {
         }
     }
 }
-#endif
 
 /// Day labels for the debug probe. The view's own formatter is private to it,
 /// and a probe that formats dates its own way would report something the panel
@@ -541,3 +540,4 @@ enum CompletedDayRowLabelProbe {
         return f.string(from: day)
     }
 }
+#endif

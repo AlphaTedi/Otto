@@ -13,6 +13,15 @@ description: Build, launch, and headlessly drive NotchSnap to verify changes at 
 xcodebuild -project NotchSnap.xcodeproj -scheme NotchSnap -configuration Debug build
 ```
 
+**Build Release too before running `release.sh`.** Debug and Release do not
+compile the same source: `DebugDriver.swift` is one big `#if DEBUG`, so anything
+added at the END of that file lands outside it and loses the file's own imports
+— which fails only in Release, after the tag is already pushed.
+
+```bash
+xcodebuild -project NotchSnap.xcodeproj -scheme NotchSnap -configuration Release -derivedDataPath /tmp/rd build
+```
+
 New source files must be added to `NotchSnap.xcodeproj/project.pbxproj` by hand
 (4 entries: PBXBuildFile, PBXFileReference, group child, Sources phase — copy
 the pattern of a sibling file; Todo-group files use `path = ../Todo/...`).

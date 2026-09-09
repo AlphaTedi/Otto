@@ -68,16 +68,6 @@ struct InsightsView: View {
                     .padding(.horizontal, -LabMetrics.barOuterInset)
             }
 
-            let week = weekCompletions
-            let behind = CompletionStats.leftBehind(store: store)
-            let weeks = CompletionStats.weeksOfHistory(store: store, archive: archive)
-            let showsWeek = !week.isEmpty
-            let showsBehind = !behind.isEmpty
-            // Eight weeks before a year grid earns its place. Below that it is
-            // a mostly-empty texture that says "you have not used this yet",
-            // which is not an insight.
-            let showsGrid = weeks >= 8
-
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 12) {
                     body_
