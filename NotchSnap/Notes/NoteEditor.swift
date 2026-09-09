@@ -114,7 +114,26 @@ final class NoteEditorController: ObservableObject {
         // The caret does not move. Applying a format must never take focus or
         // the selection away from where the user left it.
         view.setSelectedRange(NSRange(location: min(selection.location, storage.length), length: 0))
+        // What is typed NEXT belongs to the paragraph, never to the marker.
+        //
+        // The caret ends up immediately after a drawn marker, and an NSTextView
+        // inherits its typing attributes from the character behind it — so
+        // everything written after "- " came out wearing the marker's own
+        // colour. Setting them explicitly is what makes the marker punctuation
+        // rather than a mode you have entered.
+        resetTypingAttributes(view, to: block)
         refreshState()
+    }
+
+    /// The attributes a freshly typed character should have in this block.
+    private func resetTypingAttributes(_ view: NSTextView, to block: NoteBlock, indent: Int = 0) {
+        view.typingAttributes = [
+            .font: NoteType.font(for: block),
+            .foregroundColor: block == .checklistDone ? NSColor.tertiaryLabelColor : NSColor.labelColor,
+            .paragraphStyle: NoteType.paragraphStyle(for: block, indent: indent),
+            .noteBlock: block.rawValue,
+            .noteIndent: indent,
+        ]
     }
 
     /// Toggle: pressing the list you are already in returns to body.
@@ -215,15 +234,8 @@ final class NoteEditorController: ObservableObject {
         let caret = min(selection.location + insertion.length, storage.length)
         view.setSelectedRange(NSRange(location: caret, length: 0))
         renumber(storage)
-        // What is typed NEXT belongs to the new row, not to the marker's own
-        // accent colour.
-        view.typingAttributes = [
-            .font: NoteType.font(for: .body),
-            .foregroundColor: NSColor.labelColor,
-            .paragraphStyle: NoteType.paragraphStyle(for: continuing, indent: level),
-            .noteBlock: continuing.rawValue,
-            .noteIndent: level,
-        ]
+        // What is typed NEXT belongs to the new row, not to the marker.
+        resetTypingAttributes(view, to: continuing, indent: level)
         refreshState()
         return true
     }
@@ -314,7 +326,7 @@ final class NoteEditorController: ObservableObject {
     private static func marker(_ block: NoteBlock, index: Int, indent: Int) -> NSAttributedString {
         NSAttributedString(string: NoteMarkdown.listGlyph(block, index: index), attributes: [
             .font: NoteType.font(for: .body),
-            .foregroundColor: NSColor.controlAccentColor,
+            .foregroundColor: NSColor.labelColor,
             .paragraphStyle: NoteType.paragraphStyle(for: block, indent: indent),
             .noteBlock: block.rawValue,
             .noteIndent: indent,

@@ -91,13 +91,21 @@ struct InsightsView: View {
     private var body_: some View {
         let week = weekCompletions
         let behind = CompletionStats.leftBehind(store: store)
-        let weeks = CompletionStats.weeksOfHistory(store: store, archive: archive)
         let showsWeek = !week.isEmpty
         let showsBehind = !behind.isEmpty
-        // Eight weeks before a year grid earns its place. Below that it is a
-        // mostly-empty texture that says "you have not used this yet", which is
-        // not an insight.
-        let showsGrid = weeks >= 8
+        // ANY history at all, not eight weeks of it.
+        //
+        // The gate used to be `weeksOfHistory >= 8`, which is the handoff's
+        // rule and looked reasonable written down. In use it hid the whole
+        // panel from someone with two months of completions — the page read as
+        // half-finished (Marcello, 2026-09-09) — and it is fragile besides:
+        // the number is derived from the oldest completion, so an archive that
+        // has not finished loading takes the grid off the page with it.
+        //
+        // "Never an empty chart" is still honoured: with one completion the
+        // grid shows one lit square, which is small and true rather than empty.
+        let showsGrid = !CompletionStats.all(section: nil, store: store,
+                                             archive: archive).isEmpty
 
         Group {
             if let line = state.surfacedWeek {
@@ -311,8 +319,19 @@ private struct YearGrid: View {
                             VStack(spacing: gap) {
                                 ForEach(0..<Self.rows, id: \.self) { row in
                                     let index = column * Self.rows + row
+                                    let isToday = index == shown.count - 1
                                     RoundedRectangle(cornerRadius: 2, style: .continuous)
-                                        .fill(Self.fill(index < shown.count ? shown[index] : 0))
+                                        .fill(isToday ? LabMetrics.accent
+                                              : Self.fill(index < shown.count ? shown[index] : 0))
+                                        .overlay(
+                                            // Today is the anchor: without it
+                                            // the texture has no "you are here"
+                                            // and stops being a calendar.
+                                            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                                .strokeBorder(isToday
+                                                              ? LabMetrics.accent.opacity(0.55)
+                                                              : Color.clear, lineWidth: 1.5)
+                                        )
                                         .frame(width: cell, height: cell)
                                 }
                             }
@@ -320,8 +339,33 @@ private struct YearGrid: View {
                     }
                 }
                 .frame(height: 7 * 11 + 6 * 3)
+
+                // The axis, so a column has a date rather than being the
+                // n-th square from the left.
+                HStack(spacing: 0) {
+                    ForEach(Self.monthMarkers(), id: \.self) { marker in
+                        Text(marker)
+                            .font(.system(size: 10))
+                            .foregroundStyle(marker == L10n.t("insights.today")
+                                             ? LabMetrics.accent : DSColor.textFaint)
+                        Spacer(minLength: 0)
+                    }
+                }
             }
         }
+    }
+
+    /// Four evenly spread month labels and then "today", which is where the
+    /// grid ends.
+    private static func monthMarkers() -> [String] {
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.setLocalizedDateFormatFromTemplate("MMM")
+        let months = [11, 8, 5, 2].compactMap {
+            calendar.date(byAdding: .month, value: -$0, to: Date()).map(formatter.string(from:))
+        }
+        return months + [L10n.t("insights.today")]
     }
 
     /// Four steps, by that day's count. Intensity IS the measure here, which is

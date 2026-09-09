@@ -148,8 +148,16 @@ enum NoteMarkdown {
         ]
     }()
 
+    /// `markerColor` draws the bullets and numbers a list puts in front of its
+    /// rows. It is the TEXT colour, not the system accent.
+    ///
+    /// It used to be `controlAccentColor`, which made every bullet blue — and
+    /// worse, the colour leaked into what you typed: the caret lands directly
+    /// after the marker and inherits its attributes, so a line begun with "- "
+    /// came out blue from the first character (Marcello, 2026-09-09). A marker
+    /// is punctuation. Punctuation is the same ink as the sentence.
     static func attributed(from markdown: String, textColor: NSColor,
-                           accent: NSColor, mutedColor: NSColor) -> NSAttributedString {
+                           accent markerColor: NSColor, mutedColor: NSColor) -> NSAttributedString {
         let out = NSMutableAttributedString()
         // `components` and not `enumerateLines`: a trailing newline has to
         // survive, or the caret cannot sit on the empty last line the user
@@ -181,7 +189,7 @@ enum NoteMarkdown {
             if block.isList {
                 let marker = NSAttributedString(string: listGlyph(block, index: numberedIndex), attributes: [
                     .font: NoteType.font(for: .body),
-                    .foregroundColor: accent,
+                    .foregroundColor: markerColor,
                     .paragraphStyle: NoteType.paragraphStyle(for: block, indent: indent),
                     .noteBlock: block.rawValue,
                     .noteIndent: indent,

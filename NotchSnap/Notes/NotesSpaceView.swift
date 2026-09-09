@@ -256,7 +256,15 @@ private struct StreamView: View {
     /// (Marcello, 2026-09-06). Under the notch the same overflow is what ran
     /// them out of the silhouette.
     private var streamBudget: CGFloat {
-        if isContainer { return NotesMetrics.notchStreamMaxHeight }
+        // ONE budget for both layouts, and the same one a list uses: the
+        // block, less the furniture standing in it.
+        //
+        // The container used to take a flat 190 here. A list in the same panel
+        // computes its budget and gets roughly twice that, so switching from
+        // Work to Notes visibly collapsed the panel to half its height — two
+        // spaces in one container drawn to two different rulers (Marcello,
+        // 2026-09-09). `min(natural, budget)` still applies at the call site,
+        // so a stream of three notes hugs exactly as before.
         return max(120, LabMetrics.todoBlockMaxHeight
                    - LabMetrics.panelTopPadding
                    - composerHeight
@@ -750,12 +758,17 @@ private struct NoteDetailView: View {
                 .padding(.horizontal, LabMetrics.barPaddingH + LabMetrics.rowInnerGap + 30)
                 .padding(.top, 20)
                 .padding(.bottom, 8)
-                .frame(height: isContainer
-                       ? NotesMetrics.notchStreamMaxHeight
-                       : max(120, LabMetrics.todoBlockMaxHeight
-                             - LabMetrics.panelTopPadding
-                             - LabMetrics.barHeight
-                             - NotesMetrics.bottomBarHeight),
+                // The note is as tall as the panel allows, in BOTH layouts.
+                //
+                // Under the notch it was a flat 190 — a quarter of the block —
+                // so a note of any length was read through a slot and scrolled
+                // even when there was room for all of it. It is the same
+                // subtraction the stream does: the block, less this view's own
+                // header and bottom row.
+                .frame(height: max(160, LabMetrics.todoBlockMaxHeight
+                                   - LabMetrics.panelTopPadding
+                                   - LabMetrics.barHeight
+                                   - NotesMetrics.bottomBarHeight),
                        alignment: .top)
                 .clipped()
 

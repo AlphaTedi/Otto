@@ -88,7 +88,7 @@ struct NoteBodyView: NSViewRepresentable {
             let attributed = NoteMarkdown.attributed(
                 from: markdown,
                 textColor: .labelColor,
-                accent: .controlAccentColor,
+                accent: .labelColor,
                 mutedColor: .tertiaryLabelColor
             )
             view.textStorage?.setAttributedString(attributed)

@@ -43,7 +43,12 @@ enum LabMetrics {
     /// list to Notes moved the pills 26pt up the panel and the whole row
     /// jumped (Marcello, 2026-09-07). Two spaces drawing the same furniture
     /// have to measure it with the same ruler.
-    static let fieldToTabsGap: CGFloat = 26
+    ///
+    /// 26 originally, which is what the to-do row happened to carry — 10 of its
+    /// own plus a 16pt section gap. Inherited rather than chosen, and once both
+    /// spaces used it the size of it became obvious: it pushed the sections a
+    /// long way from the field they belong to (Marcello, 2026-09-09).
+    static let fieldToTabsGap: CGFloat = 14
 
     // Creation bar
     static let barOuterInset: CGFloat = 16     // the wrapper's 0 16px
