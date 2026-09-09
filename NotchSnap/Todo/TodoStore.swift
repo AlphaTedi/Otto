@@ -42,6 +42,11 @@ enum TodoPanelMode: Equatable {
     /// and exactly one Notes, which is why it takes the head of the bar and
     /// never scrolls with them. State lives in NotesStore.
     case notes
+    /// The Insights page. Like Notes it is a SPACE rather than a mode — it
+    /// takes a fixed pill at the head of the bar — but unlike Notes it is a
+    /// place you visit weekly, which is why its pill is never filled with
+    /// accent unless you are standing in it.
+    case insights
 }
 
 @MainActor
@@ -58,6 +63,58 @@ final class TodoStore: ObservableObject {
     @Published var lastUsedCollectionID: UUID?
     /// TD-3: Completed is collapsed by default.
     @Published var completedExpanded = false
+    /// Which day rows inside Completed are open. Per SESSION, not persisted —
+    /// the handoff is explicit, and it is right: which day you were reading
+    /// last Tuesday is not a preference.
+    ///
+    /// Seeded with today on first use, so the section opens answering "what
+    /// did I finish today" rather than making you ask.
+    @Published var expandedCompletedDays: Set<Date> = [Calendar.current.startOfDay(for: Date())]
+    /// Completed shows seven days and then offers the rest.
+    @Published var completedShowsAllDays = false
+
+    /// The row the keyboard is on inside the Insights "left behind" list.
+    /// Independent of the browsing list's own focus: they are never on screen
+    /// at the same time.
+    @Published var insightsFocusedItemID: UUID?
+
+    /// Enter and leave the Insights page.
+    ///
+    /// Leaving returns to the LISTS rather than to wherever you came from, and
+    /// the week resets to the current one: Insights is a destination you visit,
+    /// not a place the panel remembers you standing in.
+    func enterInsights() {
+        insightsFocusedItemID = nil
+        InsightsState.shared.reset()
+        CompletedArchive.shared.reload()
+        setMode(.insights)
+    }
+
+    func leaveInsights() {
+        insightsFocusedItemID = nil
+        setMode(.browsing)
+    }
+
+    /// Walk the "left behind" list. From nothing, the key itself is the
+    /// selection and enters from the side it was pressed from — the same rule
+    /// the Notes stream uses.
+    func moveInsightsFocus(_ offset: Int, in ids: [UUID]) {
+        guard !ids.isEmpty else { insightsFocusedItemID = nil; return }
+        guard let current = insightsFocusedItemID,
+              let index = ids.firstIndex(of: current) else {
+            insightsFocusedItemID = offset < 0 ? ids.last : ids.first
+            return
+        }
+        insightsFocusedItemID = ids[min(max(index + offset, 0), ids.count - 1)]
+    }
+
+    func toggleCompletedDay(_ day: Date) {
+        if expandedCompletedDays.contains(day) {
+            expandedCompletedDays.remove(day)
+        } else {
+            expandedCompletedDays.insert(day)
+        }
+    }
     /// Bumped whenever the completion RECORD on disk changes, so whatever is
     /// showing the archive knows to read it again. A counter and not a direct
     /// call into the reader: the store writes the record, it does not own who
@@ -393,6 +450,7 @@ final class TodoStore: ObservableObject {
         // Esc and ⌘[ through the key router.
         if panelMode == .notes, NotesStore.shared.openNoteID != nil { return false }
         return panelMode == .browsing || panelMode == .voice || panelMode == .notes
+            || panelMode == .insights
     }
 
     /// While any non-browsing surface is up, the notch must not auto-collapse

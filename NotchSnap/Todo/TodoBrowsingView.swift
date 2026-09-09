@@ -468,7 +468,8 @@ struct TodoTabView: View {
                 // furniture in the other order (Marcello, 2026-09-06). It is
                 // handed to StreamView instead, which owns the composer and
                 // can put it on the right side of it.
-                if isContainerLayout, store.showsSpaceBar, store.panelMode != .notes {
+                if isContainerLayout, store.showsSpaceBar,
+                   store.panelMode != .notes, store.panelMode != .insights {
                     // No extra gap under it. The row already carries its own
                     // breathing room plus the rule's — measured, the added
                     // sectionGap made the panel 16pt taller than the same
@@ -505,6 +506,12 @@ struct TodoTabView: View {
                         // draft row above is suppressed in this mode rather
                         // than the composer being tucked under it.
                         NotesSpaceView()
+                            .transition(modeTransition)
+                    case .insights:
+                        // Like Notes, a SPACE: it brings its own header and
+                        // suppresses the draft row, because there is nothing
+                        // to capture on a page you only read.
+                        InsightsView()
                             .transition(modeTransition)
                     }
                 }
@@ -571,6 +578,46 @@ struct TodoTabView: View {
 // it held (set default, reorder, delete) is already on each tab's own
 // context menu, so it was a second door to one room.
 
+/// The fixed pill that leads to Insights. Outline like Notes, filled only
+/// while its own page is open — the app's one rule for accent: full fill means
+/// ACTIVE, never hovered and never merely available.
+struct InsightsPill: View {
+    @ObservedObject private var store = TodoStore.shared
+    @State private var hover = false
+
+    private var isActive: Bool { store.panelMode == .insights }
+
+    var body: some View {
+        Button {
+            if isActive { store.leaveInsights() } else { store.enterInsights() }
+            NotchController.shared.focusPanel()
+        } label: {
+            Text(L10n.t("insights.title"))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(isActive ? DSColor.onAccentFill : DSColor.textPrimary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(isActive ? NotesMetrics.pillStroke
+                              : (hover ? DSColor.fieldBackground : Color.clear))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(isActive ? Color.clear
+                                      : NotesMetrics.pillStroke.opacity(0.55),
+                                      style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                )
+                .contentShape(Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .animation(Motion.swap, value: isActive)
+        .animation(Motion.hoverFade, value: hover)
+        .help(L10n.t("insights.title"))
+    }
+}
+
 struct TodoTabRow: View {
     /// Which side of the row the separating rule is drawn on.
     ///
@@ -612,6 +659,16 @@ struct TodoTabRow: View {
 
     var body: some View {
         HStack(spacing: LabMetrics.tabsGap) {
+            // Insights FIRST, then Notes, then the rule, then the lists.
+            //
+            // Both fixed pills wear the OUTLINE treatment, but they are not the
+            // same rank and the difference is deliberate: Notes is where you
+            // work daily, Insights is somewhere you go once a week. So its pill
+            // is never filled with accent unless you are standing on its page,
+            // and it carries NO COUNT — a number there would compete with the
+            // counts that mean "things still to do".
+            InsightsPill()
+
             // FIRST, and outside the scroller.
             //
             // A user can have ten or fifteen lists; there is exactly one Notes
@@ -1592,6 +1649,14 @@ struct TodoBrowsingView: View {
                             .foregroundStyle(DSColor.textHint)
                             .contentTransition(.numericText())
                         Spacer()
+                        // Seven days of volume, in the header itself. It
+                        // answers "am I still moving" while the section is
+                        // CLOSED, which is the state it is in almost always —
+                        // a count says how much, never when.
+                        CompletionSparkline(
+                            counts: CompletionStats.dailyCounts(
+                                section: section, days: 7, store: store, archive: archive))
+                            .padding(.trailing, store.completedExpanded ? 4 : 0)
                         // Sweep: clear the completed pile in one go. Only
                         // offered while the section is open — clearing a list
                         // you cannot see is not something to make easy.
@@ -1613,9 +1678,8 @@ struct TodoBrowsingView: View {
                     // Inline at natural height — the outer browsingBody region
                     // provides scrolling when the combined content is tall, so
                     // Completed opens fully instead of into a cramped window.
-                    completedRows(completed)
-                        .transition(.opacity)
-                    ArchivedHistory(days: archive.history(section: section, excluding: liveIDs))
+                    CompletedDayList(
+                        days: CompletionStats.days(section: section, store: store, archive: archive))
                         .transition(.opacity)
                 }
             }
@@ -1623,99 +1687,238 @@ struct TodoBrowsingView: View {
         }
     }
 
-    private func completedRows(_ completed: [TodoItem]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(completed) { item in
-                TodoItemRow(
-                    item: item,
-                    accent: store.collection(id: item.collectionID)?.color ?? .gray,
-                    isFocused: false,
-                    isExpanded: false
-                )
-                .transition(rowTransition)
+}
+
+// MARK: - Completed, grouped by day (handoff direction 7b)
+//
+// `Completed 36` said how much, never when. One collapsible row per day answers
+// both while CLOSED — seven rows, seven counts, and the first words of each
+// day's work — where the flat list answered neither without scrolling through
+// all thirty-six of them.
+//
+// Live completions and archived ones sit in the same rows, because to the
+// person reading them they are the same event; only the checkbox differs. A
+// live one can be un-ticked. An archived one has left the store and says so by
+// not offering.
+
+private struct CompletedDayList: View {
+    let days: [CompletedDay]
+    @ObservedObject private var store = TodoStore.shared
+
+    /// Seven, then the rest on request. A week is the span the sparkline above
+    /// covers and about as far back as "what did I finish" is ever asked.
+    private static let initialDays = 7
+
+    var body: some View {
+        let shown = store.completedShowsAllDays ? days : Array(days.prefix(Self.initialDays))
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(shown) { day in
+                CompletedDayRow(day: day)
+            }
+            if days.count > Self.initialDays {
+                Button {
+                    withAnimation(NotchAnimation.contentHug) {
+                        store.completedShowsAllDays.toggle()
+                    }
+                } label: {
+                    Text(store.completedShowsAllDays
+                         ? L10n.t("todo.showFewer")
+                         : L10n.t("todo.showAll"))
+                        .font(.system(size: 12))
+                        .foregroundStyle(DSColor.textMuted)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(.top, 8)
     }
 }
 
-// MARK: - ArchivedHistory — what was finished before today
-//
-// Deliberately NOT a TodoItemRow. These entries have left the store: there is
-// no checkbox to un-tick, no steps to open, no row to drag. Drawing them as
-// live rows would have offered every one of those and answered none of them.
-// A record looks like a record — quieter type, the day it belongs to, and the
-// section it was finished in.
-//
-// Read-only is the whole feature for now. Putting an archived to-do BACK is a
-// different verb with its own questions (which section, if the old one is
-// gone; what happens to the archive line), and it is not what "keep track of
-// what I completed" asked for.
+private struct CompletedDayRow: View {
+    let day: CompletedDay
+    @ObservedObject private var store = TodoStore.shared
+    @State private var hover = false
 
-private struct ArchivedHistory: View {
-    let days: [(day: Date, entries: [ArchivedCompletion])]
+    private var isToday: Bool { Calendar.current.isDateInToday(day.day) }
+    private var isOpen: Bool { store.expandedCompletedDays.contains(day.day) }
 
     var body: some View {
-        if !days.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(days, id: \.day) { group in
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(Self.dayLabel(group.day))
-                            .font(DSFont.sectionLabel)
-                            .tracking(0.4)
-                            .foregroundStyle(DSColor.textFaint)
-                        ForEach(group.entries) { entry in
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                // A tick, not a checkbox: it says "this
-                                // happened" rather than "press me".
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 8, weight: .bold))
-                                    .foregroundStyle(DSColor.textFaint)
-                                    .frame(width: 14, alignment: .leading)
-                                Text(entry.title)
-                                    .font(DSFont.checklistItem)
-                                    .foregroundStyle(DSColor.textMuted)
-                                    .strikethrough(true, color: DSColor.textFaint)
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                                Spacer(minLength: 8)
-                                if let section = entry.sectionName {
-                                    Text(section)
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(DSColor.textFaint)
-                                        .fixedSize()
-                                }
-                                Text(Self.timeLabel(entry.completedAt))
-                                    .font(.system(size: 10, design: .monospaced))
-                                    .foregroundStyle(DSColor.textFaint)
-                                    .fixedSize()
-                            }
-                            .help(L10n.t("todo.archivedHint"))
-                        }
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(NotchAnimation.contentHug) { store.toggleCompletedDay(day.day) }
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(DSColor.textFaint)
+                        .rotationEffect(.degrees(isOpen ? 90 : 0))
+                        .frame(width: 10, alignment: .leading)
+
+                    Text(CompletedDayRow.label(for: day.day))
+                        .font(.system(size: 13, weight: isToday ? .semibold : .medium))
+                        .foregroundStyle(isToday ? DSColor.textPrimaryBright : DSColor.textSecondary)
+                        .fixedSize()
+                        .frame(minWidth: 96, alignment: .leading)
+
+                    // Single line, ellipsis, never wrapping: a row whose
+                    // height depends on its content is what puts the counts on
+                    // a ragged right edge.
+                    Text(day.preview)
+                        .font(.system(size: 12))
+                        .foregroundStyle(DSColor.textHint)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text("\(day.count)")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(isToday ? LabMetrics.accent : DSColor.textMuted)
+                        .fixedSize()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                // Hover is a WASH and nothing else (handoff part 3): one
+                // channel per state, so it can never be mistaken for the
+                // keyboard selection, which owns border and inset bar.
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(hover ? Color.white.opacity(0.05) : Color.clear)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering in
+                withAnimation(NotchAnimation.hoverFade) { hover = hovering }
+            }
+
+            if isOpen {
+                VStack(alignment: .leading, spacing: 9) {
+                    ForEach(day.completions) { completion in
+                        CompletedEntryRow(completion: completion)
                     }
                 }
+                .padding(.leading, 34)
+                .padding(.top, 6)
+                .padding(.bottom, 4)
+                .transition(.opacity)
             }
-            .padding(.top, 10)
         }
     }
 
-    /// "Today" and "Yesterday" carry their own meaning; anything older is
-    /// given its date, which is the thing you actually search your memory by.
-    private static func dayLabel(_ day: Date) -> String {
+    /// Today and Yesterday carry their own meaning; anything older is given the
+    /// weekday and the date, which is what memory actually searches by.
+    static func label(for day: Date) -> String {
         let calendar = Calendar.current
-        if calendar.isDateInToday(day)     { return L10n.t("todo.todayLabel").uppercased() }
-        if calendar.isDateInYesterday(day) { return L10n.t("todo.yesterdayLabel").uppercased() }
+        if calendar.isDateInToday(day)     { return L10n.t("todo.todayLabel") }
+        if calendar.isDateInYesterday(day) { return L10n.t("todo.yesterdayLabel") }
         let formatter = DateFormatter()
         formatter.locale = Locale.current
-        formatter.setLocalizedDateFormatFromTemplate("EEEEdMMM")
-        return formatter.string(from: day).uppercased()
+        formatter.setLocalizedDateFormatFromTemplate("EEEEd")
+        return formatter.string(from: day)
+    }
+}
+
+/// One finished thing inside an open day.
+///
+/// The checkbox is the whole difference between the two sources: a LIVE
+/// completion can be un-ticked and goes back to the list, an ARCHIVED one has
+/// left the store and is drawn as a record — same tick, no press, no hover.
+private struct CompletedEntryRow: View {
+    let completion: Completion
+    @ObservedObject private var store = TodoStore.shared
+    @State private var hover = false
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            box
+            Text(completion.title)
+                .font(.system(size: 13))
+                .foregroundStyle(DSColor.textHint)
+                .strikethrough(true, color: DSColor.textFaint)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 8)
+            Text(CompletedEntryRow.time(completion.completedAt))
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(DSColor.textFaint)
+                .fixedSize()
+        }
+        .opacity(hover && completion.isLive ? 1 : 0.92)
+        .onHover { hovering in
+            guard completion.isLive else { return }
+            withAnimation(NotchAnimation.hoverFade) { hover = hovering }
+        }
+        .help(completion.isLive ? L10n.t("todo.untickHint") : L10n.t("todo.archivedHint"))
     }
 
-    private static func timeLabel(_ at: Date) -> String {
+    @ViewBuilder
+    private var box: some View {
+        if let id = completion.liveID {
+            Button {
+                withAnimation(NotchAnimation.contentHug) { store.toggleComplete(id) }
+            } label: { tick(filled: true) }
+                .buttonStyle(.plain)
+        } else {
+            // No button: there is nothing behind it to act on, and a control
+            // that cannot do anything is worse than no control.
+            tick(filled: false)
+        }
+    }
+
+    private func tick(filled: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 5, style: .continuous)
+            .fill(filled ? LabMetrics.accent.opacity(0.9) : Color.clear)
+            .overlay(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .strokeBorder(filled ? Color.clear : DSColor.textFaint, lineWidth: 1.2)
+            )
+            .overlay(
+                Image(systemName: "checkmark")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(filled ? DSColor.onAccentFill : DSColor.textFaint)
+            )
+            .frame(width: 16, height: 16)
+    }
+
+    private static func time(_ at: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale.current
         formatter.setLocalizedDateFormatFromTemplate("Hmm")
         return formatter.string(from: at)
+    }
+}
+
+// MARK: - CompletionSparkline — seven days of volume, in the header
+//
+// Every mark is a shape; no chart library, no image. Today is full accent, the
+// rest scale with volume, and a day with nothing gets a floor bar rather than
+// vanishing — the gaps are the information.
+
+struct CompletionSparkline: View {
+    let counts: [Int]
+
+    var body: some View {
+        let peak = max(counts.max() ?? 0, 1)
+        HStack(alignment: .bottom, spacing: 3) {
+            ForEach(Array(counts.enumerated()), id: \.offset) { index, count in
+                let isToday = index == counts.count - 1
+                let ratio = Double(count) / Double(peak)
+                Capsule(style: .continuous)
+                    .fill(fill(count: count, isToday: isToday, ratio: ratio))
+                    .frame(width: 4, height: count == 0 ? 4 : max(5, 16 * ratio))
+            }
+        }
+        .frame(height: 16, alignment: .bottom)
+        .accessibilityLabel(L10n.t("todo.completed"))
+    }
+
+    private func fill(count: Int, isToday: Bool, ratio: Double) -> Color {
+        if count == 0 { return Color.white.opacity(0.08) }
+        if isToday    { return LabMetrics.accent }
+        return LabMetrics.accent.opacity(0.30 + 0.30 * ratio)
     }
 }
 
@@ -2732,6 +2935,8 @@ private struct ShortcutsOverlay: View {
         ("\u{2318}B / I / U", "todo.sc.format"),
         ("\u{21E7}\u{2318}C", "todo.sc.toggleCompleted"),
         ("\u{21E5} / \u{21E7}\u{21E5}", "todo.sc.nestList"),
+        ("\u{2318}I", "todo.sc.insights"),
+        ("\u{21E7}\u{2318}A", "todo.sc.toggleAllDays"),
     ]
 
     var body: some View {

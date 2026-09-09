@@ -288,6 +288,48 @@ enum DebugDriver {
                     }
                 }
                 appendState("roundtrip: \(cases.count - failures)/\(cases.count) identical")
+            } else if command == "insights-status" {
+                let store = TodoStore.shared
+                let archive = CompletedArchive.shared
+                archive.reload()
+                let week = CompletionStats.week(containing: InsightsState.shared.anchor,
+                                                store: store, archive: archive)
+                let behind = CompletionStats.leftBehind(store: store)
+                let weeks = CompletionStats.weeksOfHistory(store: store, archive: archive)
+                let split = CompletionStats.splitBySpace(in: week, store: store)
+                let spark = CompletionStats.dailyCounts(section: nil, days: 7,
+                                                        store: store, archive: archive)
+                var report = "insights mode=\(store.panelMode) label=\(InsightsState.shared.weekLabel)"
+                report += " week=\(week.count) behind=\(behind.count) weeksOfHistory=\(weeks)"
+                report += " grid=\(weeks >= 8) spark=\(spark)"
+                report += " split=[" + split.prefix(4).map { "\($0.name):\($0.count)" }
+                    .joined(separator: " ") + "]"
+                report += " focus=\(store.insightsFocusedItemID != nil)"
+                appendState(report)
+            } else if command == "insights-enter" {
+                TodoStore.shared.enterInsights()
+            } else if command == "insights-leave" {
+                TodoStore.shared.leaveInsights()
+            } else if command.hasPrefix("insights-week ") {
+                InsightsState.shared.step(Int(command.dropFirst(14)) ?? -1)
+            } else if command.hasPrefix("insights-focus ") {
+                let store = TodoStore.shared
+                let ids = CompletionStats.leftBehind(store: store).map(\.id)
+                store.moveInsightsFocus(Int(command.dropFirst(15)) ?? 1, in: ids)
+            } else if command == "completed-days" {
+                let store = TodoStore.shared
+                let archive = CompletedArchive.shared
+                archive.reload()
+                let scoped = store.activeCollection?.isSystemToday == true
+                    ? nil : store.activeCollection?.name
+                let days = CompletionStats.days(section: scoped, store: store, archive: archive)
+                var report = "completed-days section=" + (scoped ?? "ALL")
+                report += " days=\(days.count) total=\(days.reduce(0) { $0 + $1.count })"
+                report += " open=\(store.expandedCompletedDays.count)"
+                report += " rows=[" + days.prefix(4).map { day in
+                    "\(CompletedDayRowLabelProbe.label(for: day.day)):\(day.count)"
+                }.joined(separator: " ") + "]"
+                appendState(report)
             } else if command == "archive-status" {
                 let a = CompletedArchive.shared
                 a.reload()
@@ -483,3 +525,19 @@ enum DebugDriver {
     }
 }
 #endif
+
+/// Day labels for the debug probe. The view's own formatter is private to it,
+/// and a probe that formats dates its own way would report something the panel
+/// never shows.
+@MainActor
+enum CompletedDayRowLabelProbe {
+    static func label(for day: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(day)     { return "today" }
+        if calendar.isDateInYesterday(day) { return "yesterday" }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "MM-dd"
+        return f.string(from: day)
+    }
+}

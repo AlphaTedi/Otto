@@ -93,10 +93,65 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             case .notes:
                 return handleNotes(cmd: cmd, shift: shift, option: option,
                                    control: control, chars: chars, keyCode: keyCode, lower: lower)
+            case .insights:
+                return handleInsights(cmd: cmd, shift: shift, option: option,
+                                      control: control, keyCode: keyCode, lower: lower)
             case .browsing:
                 return handleBrowsing(store, cmd: cmd, shift: shift, option: option,
                                       control: control, chars: chars, keyCode: keyCode, lower: lower)
             }
+        }
+
+        // MARK: Insights
+        //
+        // A read-mostly page, so the keyboard has little to do — and every one
+        // of those little things has to work, because there is no draft row
+        // here to fall back on. ←/→ walk the weeks, ↑/↓ walk the one list that
+        // has rows, Space ticks the row you are on, Esc goes back.
+
+        @MainActor
+        private static func handleInsights(cmd: Bool, shift: Bool, option: Bool,
+                                           control: Bool, keyCode: UInt16, lower: String) -> Bool {
+            let store = TodoStore.shared
+            let state = InsightsState.shared
+
+            if keyCode == 53, !cmd, !option, !control {      // Esc — back to the lists
+                store.leaveInsights()
+                return true
+            }
+            // ⌘I toggles: the key that brought you here takes you back, which
+            // is what every other toggle in this panel does.
+            if cmd, !shift, !option, lower == "i" {
+                store.leaveInsights()
+                return true
+            }
+            // ⇥ belongs to the LISTS, here as everywhere. It leaves Insights
+            // rather than doing nothing, because a key that is inert on one
+            // page and not on another is a key you stop trusting.
+            if keyCode == 48, !cmd, !option, !control {
+                store.leaveInsights()
+                store.cycleSpace(by: shift ? -1 : 1)
+                return true
+            }
+            if keyCode == 123 || keyCode == 124, !cmd, !option, !control {
+                state.step(keyCode == 124 ? 1 : -1)
+                return true
+            }
+            let behind = CompletionStats.leftBehind(store: store)
+            if keyCode == 126 || keyCode == 125, !cmd, !option, !control {
+                store.moveInsightsFocus(keyCode == 125 ? 1 : -1, in: behind.map(\.id))
+                return true
+            }
+            // Space and ⏎ both tick it. Space is what completes a to-do in the
+            // list; ⏎ is the confirm key everywhere else, and the row's only
+            // action is the same either way.
+            if keyCode == 49 || keyCode == 36, !cmd, !shift, !option, !control {
+                guard let focused = store.insightsFocusedItemID else { return false }
+                store.moveInsightsFocus(1, in: behind.map(\.id))
+                withAnimation(NotchAnimation.contentHug) { store.toggleComplete(focused) }
+                return true
+            }
+            return false
         }
 
         // MARK: Notes space
@@ -123,6 +178,11 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
 
             if cmd, !shift, !option {
                 switch lower {
+                case "i":
+                    // Only from the STREAM. Inside an open note ⌘I is italic
+                    // and stays italic — that branch runs before this one.
+                    TodoStore.shared.enterInsights()
+                    return true
                 case "n":
                     // A new empty composer. Nothing is discarded: whatever was
                     // there is either already an entry or was already empty.
@@ -578,6 +638,33 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             // KB-5: ⇧⌘M moves the focused to-do.
             if cmd, shift, lower == "m" {
                 TodoMovePicker.shared.showForFocusedItem()
+                return true
+            }
+
+            // ⌘I opens Insights. Free everywhere except inside an open note,
+            // where it has always been italic and stays italic — the handoff
+            // asks for "anywhere in the panel", and anywhere minus the one
+            // place the key already means something is the honest reading.
+            if cmd, !shift, !option, lower == "i" {
+                store.enterInsights()
+                return true
+            }
+
+            // ⇧⌘A opens and closes every day inside Completed at once.
+            //
+            // The section is a review surface reached by ⇧⌘C; without this the
+            // days behind it could only be opened with the mouse, one at a
+            // time. Deliberately not an arrow key: ↑↓ belong to the list, and a
+            // second consumer of them is how the list's own navigation breaks.
+            if cmd, shift, lower == "a" {
+                withAnimation(NotchAnimation.contentHug) {
+                    let scoped = store.activeCollection?.isSystemToday == true
+                        ? nil : store.activeCollection?.name
+                    let days = CompletionStats.days(section: scoped, store: store,
+                                                    archive: CompletedArchive.shared)
+                    store.expandedCompletedDays = store.expandedCompletedDays.isEmpty
+                        ? Set(days.map(\.day)) : []
+                }
                 return true
             }
 

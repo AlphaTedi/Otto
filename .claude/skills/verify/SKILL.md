@@ -70,7 +70,16 @@ has — the only headless way to catch a note that opens blank),
 `notes-roundtrip` (markdown → attributed → markdown over 21 documents),
 `archive-status` (the completion archive as the Completed section sees it:
 total entries, live rows, the scoped/deduped history), `delete-first` (take a
-test to-do back out of the real store).
+test to-do back out of the real store),
+`completed-days` (the day grouping behind Completed: day count, totals, which
+are open), `insights-status` / `insights-enter` / `insights-leave` /
+`insights-week <n>` / `insights-focus <n>` (the Insights page — week label,
+counts, progressive-disclosure flags, keyboard focus).
+
+**Check `todoContentHeight` against 556 whenever a surface is added.** It is the
+block's ceiling, and three separate bugs have been a new section drawn without
+being subtracted from the budget — the symptom is the space bar sliding out
+through the bottom edge, which no probe reports directly.
 `expand-focused` / `collapse-row` (NC details), `note <text>` / `step <text>`
 (first open item in active collection).
 `dump` appends state (notch state, panel mode, active collection,
