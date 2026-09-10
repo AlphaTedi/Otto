@@ -136,6 +136,36 @@ final class TodoStore: ObservableObject {
     @Published var panelMode: TodoPanelMode = .browsing
     /// §2.3: the `?` reference lives INSIDE the panel as an overlay.
     @Published var showShortcuts = false
+    /// The avatar menu. Modal in the same sense the ? overlay is: while it is
+    /// up the panel's other keys are inert, and it is handled at the top of the
+    /// key router rather than inside a mode.
+    @Published var showsAvatarMenu = false
+    /// Which row the keyboard is on, -1 for none. Reset every time the menu
+    /// opens: a highlight remembered from last time is a highlight on a row you
+    /// did not choose.
+    @Published var avatarMenuHighlight = -1
+
+    func openAvatarMenu() {
+        avatarMenuHighlight = -1
+        withAnimation(NotchAnimation.hintFade) { showsAvatarMenu = true }
+    }
+
+    /// Closing must NOT change the active space or take the caret away from the
+    /// capture field — the menu is a thing you look at, and looking at it is not
+    /// a reason to lose what you were typing.
+    func closeAvatarMenu() {
+        avatarMenuHighlight = -1
+        withAnimation(NotchAnimation.hintFade) { showsAvatarMenu = false }
+    }
+
+    func moveAvatarMenuHighlight(_ offset: Int, count: Int) {
+        guard count > 0 else { return }
+        if avatarMenuHighlight < 0 {
+            avatarMenuHighlight = offset < 0 ? count - 1 : 0
+            return
+        }
+        avatarMenuHighlight = (avatarMenuHighlight + offset + count) % count
+    }
     /// NC-1/NC-2: at most one row shows its note + checklist at a time.
     @Published var expandedItemID: UUID?
     /// One-shot request to put the caret in a row's TITLE — the keyboard

@@ -109,6 +109,10 @@ enum DSColor {
     /// top of them is always dark. Making these semantic would turn the
     /// checkmark white on a pale blue box in Dark mode.
     static let onAccentFill = Color.black
+    /// The avatar menu's own ground. Nearly opaque on purpose: it floats over
+    /// the panel's own material, and a translucent menu over a translucent
+    /// panel is two blurs stacked and text you cannot read through either.
+    static let menuBackground = Color(nsColor: NSColor(calibratedWhite: 0.10, alpha: 0.985))
     static let onAccentFillMuted = Color.black.opacity(0.5)
 
     /// The ring that marks a chosen swatch. It has to beat both the swatch's

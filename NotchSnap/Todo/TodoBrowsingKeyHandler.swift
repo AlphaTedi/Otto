@@ -72,6 +72,47 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             let store = TodoStore.shared
             let lower = chars.lowercased()
 
+            // The avatar menu is modal in the same sense: while it is up the
+            // panel underneath it is inert, and it owns ↑↓↩ and Esc.
+            if store.showsAvatarMenu {
+                let rows = AvatarMenu.rows(store: store)
+                if keyCode == 53 { store.closeAvatarMenu(); return true }
+                if keyCode == 126 || keyCode == 125, !cmd, !option, !control {
+                    store.moveAvatarMenuHighlight(keyCode == 125 ? 1 : -1, count: rows.count)
+                    return true
+                }
+                if keyCode == 36 {
+                    let index = store.avatarMenuHighlight
+                    guard index >= 0, index < rows.count else {
+                        store.closeAvatarMenu()
+                        return true
+                    }
+                    AvatarMenu.perform(rows[index].id)
+                    return true
+                }
+                // ⌘I and ⌘, still work while it is open — they are the same
+                // verbs the rows are, and a menu that blocks its own shortcuts
+                // is a menu that argues with itself.
+                if cmd, !shift, !option, lower == "i" {
+                    AvatarMenu.perform(.insights); return true
+                }
+                if cmd, !shift, !option, chars == "," {
+                    AvatarMenu.perform(.preferences); return true
+                }
+                return true
+            }
+
+            // ⌘, and ⌘Q, from anywhere in the panel.
+            //
+            // Otto is an accessory app: no menu bar, so neither of these is
+            // routed by AppKit and both did nothing at all. The avatar menu
+            // prints them beside their rows, and a shortcut printed next to a
+            // row it does not drive is worse than no shortcut.
+            if cmd, !shift, !option, !control {
+                if chars == "," { SettingsWindowController.show(); return true }
+                if lower == "q" { NSApp.terminate(nil); return true }
+            }
+
             // §2.3: the overlay is a temporary sheet — ? / Esc dismiss it,
             // everything else is inert while it's up.
             if store.showShortcuts {

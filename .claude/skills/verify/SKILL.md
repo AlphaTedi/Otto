@@ -83,7 +83,10 @@ test to-do back out of the real store),
 `completed-days` (the day grouping behind Completed: day count, totals, which
 are open), `insights-status` / `insights-enter` / `insights-leave` /
 `insights-week <n>` / `insights-focus <n>` (the Insights page — week label,
-counts, progressive-disclosure flags, keyboard focus).
+counts, progressive-disclosure flags, keyboard focus),
+`menu-open` / `menu-close` / `menu-move <n>` / `menu-status` (the avatar menu —
+open state, keyboard highlight, the row labels and whether the sparkline has
+data to draw).
 
 **Check `todoContentHeight` against 556 whenever a surface is added.** It is the
 block's ceiling, and three separate bugs have been a new section drawn without

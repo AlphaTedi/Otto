@@ -288,6 +288,25 @@ enum DebugDriver {
                     }
                 }
                 appendState("roundtrip: \(cases.count - failures)/\(cases.count) identical")
+            } else if command == "menu-open" {
+                TodoStore.shared.openAvatarMenu()
+            } else if command == "menu-close" {
+                TodoStore.shared.closeAvatarMenu()
+            } else if command.hasPrefix("menu-move ") {
+                let store = TodoStore.shared
+                let rows = AvatarMenu.rows(store: store)
+                store.moveAvatarMenuHighlight(Int(command.dropFirst(10)) ?? 1, count: rows.count)
+            } else if command == "menu-status" {
+                let store = TodoStore.shared
+                let rows = AvatarMenu.rows(store: store)
+                let spark = CompletionStats.dailyCounts(section: nil, days: 7, store: store,
+                                                        archive: CompletedArchive.shared)
+                var report = "menu open=\(store.showsAvatarMenu)"
+                report += " highlight=\(store.avatarMenuHighlight)"
+                report += " rows=[" + rows.map { $0.label }.joined(separator: "|") + "]"
+                report += " folder=" + (rows.first { $0.id == .notesFolder }?.detail ?? "-")
+                report += " spark=\(spark) sparkShown=\(spark.contains { $0 > 0 })"
+                appendState(report)
             } else if command == "insights-status" {
                 let store = TodoStore.shared
                 let archive = CompletedArchive.shared

@@ -36,6 +36,7 @@
 		AA01BB02CC03DD04EE05F0C1 /* CompletedArchive.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C1AA01BB02CC03DD04EE05 /* CompletedArchive.swift */; };
 		AA01BB02CC03DD04EE05F0C2 /* CompletionStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C2AA01BB02CC03DD04EE05 /* CompletionStats.swift */; };
 		AA01BB02CC03DD04EE05F0C3 /* InsightsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C3AA01BB02CC03DD04EE05 /* InsightsView.swift */; };
+		AA01BB02CC03DD04EE05F0C4 /* AvatarMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C4AA01BB02CC03DD04EE05 /* AvatarMenu.swift */; };
 		AA01BB02CC03DD04EE05F011 /* TodoIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F011AA01BB02CC03DD04EE05 /* TodoIntents.swift */; };
 		AA01BB02CC03DD04EE05FB07 /* AttendeePhotoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB07AA01BB02CC03DD04EE05 /* AttendeePhotoStore.swift */; };
 		AA01BB02CC03DD04EE05FB06 /* CalendarSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB06AA01BB02CC03DD04EE05 /* CalendarSettingsView.swift */; };
@@ -175,6 +176,7 @@
 		F0C1AA01BB02CC03DD04EE05 /* CompletedArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CompletedArchive.swift; path = ../Todo/CompletedArchive.swift; sourceTree = "<group>"; };
 		F0C2AA01BB02CC03DD04EE05 /* CompletionStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CompletionStats.swift; path = ../Todo/CompletionStats.swift; sourceTree = "<group>"; };
 		F0C3AA01BB02CC03DD04EE05 /* InsightsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = InsightsView.swift; path = ../Todo/InsightsView.swift; sourceTree = "<group>"; };
+		F0C4AA01BB02CC03DD04EE05 /* AvatarMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AvatarMenu.swift; path = ../Todo/AvatarMenu.swift; sourceTree = "<group>"; };
 		F011AA01BB02CC03DD04EE05 /* TodoIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TodoIntents.swift; path = ../Intents/TodoIntents.swift; sourceTree = "<group>"; };
 		FB07AA01BB02CC03DD04EE05 /* AttendeePhotoStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AttendeePhotoStore.swift; path = ../Calendar/AttendeePhotoStore.swift; sourceTree = "<group>"; };
 		FB06AA01BB02CC03DD04EE05 /* CalendarSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CalendarSettingsView.swift; path = ../Calendar/CalendarSettingsView.swift; sourceTree = "<group>"; };
@@ -414,6 +416,7 @@
 				F0C1AA01BB02CC03DD04EE05 /* CompletedArchive.swift */,
 				F0C2AA01BB02CC03DD04EE05 /* CompletionStats.swift */,
 				F0C3AA01BB02CC03DD04EE05 /* InsightsView.swift */,
+				F0C4AA01BB02CC03DD04EE05 /* AvatarMenu.swift */,
 				F011AA01BB02CC03DD04EE05 /* TodoIntents.swift */,
 				FB07AA01BB02CC03DD04EE05 /* AttendeePhotoStore.swift */,
 				FB06AA01BB02CC03DD04EE05 /* CalendarSettingsView.swift */,
@@ -612,6 +615,7 @@
 				AA01BB02CC03DD04EE05F0C1 /* CompletedArchive.swift in Sources */,
 				AA01BB02CC03DD04EE05F0C2 /* CompletionStats.swift in Sources */,
 				AA01BB02CC03DD04EE05F0C3 /* InsightsView.swift in Sources */,
+				AA01BB02CC03DD04EE05F0C4 /* AvatarMenu.swift in Sources */,
 				AA01BB02CC03DD04EE05F011 /* TodoIntents.swift in Sources */,
 				AA01BB02CC03DD04EE05FB07 /* AttendeePhotoStore.swift in Sources */,
 				AA01BB02CC03DD04EE05FB06 /* CalendarSettingsView.swift in Sources */,

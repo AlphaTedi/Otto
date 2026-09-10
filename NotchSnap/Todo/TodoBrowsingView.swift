@@ -413,6 +413,30 @@ struct TodoTabView: View {
         // is one more peer competing with every row for the same click.
         .background(store.panelMode == .notes ? nil : DeselectCatcher())
         .background(TodoBrowsingKeyHandler())
+        // The catcher goes UNDER the menu, which is the whole reason it is a
+        // separate overlay: a click-anywhere-else dismisser stacked on top
+        // would eat the menu's own clicks and nothing in it would ever fire.
+        .overlay {
+            if store.showsAvatarMenu {
+                MenuDismissCatcher { store.closeAvatarMenu() }
+            }
+        }
+        // The avatar menu, over everything and inside the panel.
+        //
+        // Aligned to the avatar's own corner, and on the side the space bar is
+        // NOT: in the container the bar is at the top so the menu drops below
+        // it, in the floating panels it is at the foot so the menu rises. A
+        // menu that opens off the edge of its own panel is a menu you cannot
+        // read.
+        .overlay(alignment: isContainerLayout ? .topTrailing : .bottomTrailing) {
+            if store.showsAvatarMenu {
+                AvatarMenu()
+                    .padding(.horizontal, LabMetrics.tabsInset)
+                    .padding(isContainerLayout ? .top : .bottom, PanelChrome.shared.tabRow + 4)
+                    .transition(.opacity.combined(
+                        with: .offset(y: isContainerLayout ? -4 : 4)))
+            }
+        }
     }
 
     /// The normal to-do panel: tab row + the active mode's surface, with the
@@ -578,46 +602,6 @@ struct TodoTabView: View {
 // it held (set default, reorder, delete) is already on each tab's own
 // context menu, so it was a second door to one room.
 
-/// The fixed pill that leads to Insights. Outline like Notes, filled only
-/// while its own page is open — the app's one rule for accent: full fill means
-/// ACTIVE, never hovered and never merely available.
-struct InsightsPill: View {
-    @ObservedObject private var store = TodoStore.shared
-    @State private var hover = false
-
-    private var isActive: Bool { store.panelMode == .insights }
-
-    var body: some View {
-        Button {
-            if isActive { store.leaveInsights() } else { store.enterInsights() }
-            NotchController.shared.focusPanel()
-        } label: {
-            Text(L10n.t("insights.title"))
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(isActive ? DSColor.onAccentFill : DSColor.textPrimary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(isActive ? NotesMetrics.pillStroke
-                              : (hover ? DSColor.fieldBackground : Color.clear))
-                )
-                .overlay(
-                    Capsule(style: .continuous)
-                        .strokeBorder(isActive ? Color.clear
-                                      : NotesMetrics.pillStroke.opacity(0.55),
-                                      style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                )
-                .contentShape(Capsule(style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .onHover { hover = $0 }
-        .animation(Motion.swap, value: isActive)
-        .animation(Motion.hoverFade, value: hover)
-        .help(L10n.t("insights.title"))
-    }
-}
-
 struct TodoTabRow: View {
     /// Which side of the row the separating rule is drawn on.
     ///
@@ -659,16 +643,14 @@ struct TodoTabRow: View {
 
     var body: some View {
         HStack(spacing: LabMetrics.tabsGap) {
-            // Insights FIRST, then Notes, then the rule, then the lists.
+            // Notes is the ONLY permanent pill here now.
             //
-            // Both fixed pills wear the OUTLINE treatment, but they are not the
-            // same rank and the difference is deliberate: Notes is where you
-            // work daily, Insights is somewhere you go once a week. So its pill
-            // is never filled with accent unless you are standing on its page,
-            // and it carries NO COUNT — a number there would compete with the
-            // counts that mean "things still to do".
-            InsightsPill()
-
+            // Insights had one beside it, which made the two the same rank —
+            // and they are not: Notes is a space you work in every day,
+            // Insights is a page you read once a week. It has moved into the
+            // avatar menu, where per-user, non-daily things belong, and the
+            // lists row gets back the ~100pt the pill was taking.
+            //
             // FIRST, and outside the scroller.
             //
             // A user can have ten or fifteen lists; there is exactly one Notes
@@ -1074,6 +1056,7 @@ private struct NewSectionButton: View {
 // it.
 private struct AccountButton: View {
     @State private var hover = false
+    @ObservedObject private var store = TodoStore.shared
 
     /// Read at render time rather than observed: sign-in state changes only
     /// through onboarding or Settings, both of which rebuild this row.
@@ -1083,16 +1066,29 @@ private struct AccountButton: View {
 
     var body: some View {
         Button {
-            SettingsWindowController.show()
+            if store.showsAvatarMenu { store.closeAvatarMenu() } else { store.openAvatarMenu() }
         } label: {
             AccountAvatar(email: account, diameter: 22)
-                .opacity(hover ? 0.82 : 1)
+                .opacity(hover && !store.showsAvatarMenu ? 0.82 : 1)
+                // The ONE exception to "full accent fill means active space".
+                // The avatar is not a destination, it is a toggle — so it may
+                // be lit while open without competing with the active list.
+                .overlay(
+                    Circle().strokeBorder(LabMetrics.accent,
+                                          lineWidth: store.showsAvatarMenu ? 2 : 0)
+                )
+                .background(
+                    Circle()
+                        .fill(LabMetrics.accent.opacity(store.showsAvatarMenu ? 0.20 : 0))
+                        .padding(-3)
+                )
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .onHover { hovering in
             withAnimation(NotchAnimation.hintFade) { hover = hovering }
         }
+        .animation(NotchAnimation.hintFade, value: store.showsAvatarMenu)
         .help(account ?? L10n.t("settings.open"))
         .accessibilityLabel(L10n.t("settings.open"))
     }
@@ -1899,19 +1895,25 @@ private struct CompletedEntryRow: View {
 
 struct CompletionSparkline: View {
     let counts: [Int]
+    /// The menu draws a smaller copy of the same mark. One view at two sizes,
+    /// not two drawings that can come to disagree about what a day looks like.
+    var barWidth: CGFloat = 4
+    var barGap: CGFloat = 3
+    var maxHeight: CGFloat = 16
 
     var body: some View {
         let peak = max(counts.max() ?? 0, 1)
-        HStack(alignment: .bottom, spacing: 3) {
+        HStack(alignment: .bottom, spacing: barGap) {
             ForEach(Array(counts.enumerated()), id: \.offset) { index, count in
                 let isToday = index == counts.count - 1
                 let ratio = Double(count) / Double(peak)
                 Capsule(style: .continuous)
                     .fill(fill(count: count, isToday: isToday, ratio: ratio))
-                    .frame(width: 4, height: count == 0 ? 4 : max(5, 16 * ratio))
+                    .frame(width: barWidth,
+                           height: count == 0 ? 3 : max(4, maxHeight * ratio))
             }
         }
-        .frame(height: 16, alignment: .bottom)
+        .frame(height: maxHeight, alignment: .bottom)
         .accessibilityLabel(L10n.t("todo.completed"))
     }
 
@@ -2937,6 +2939,8 @@ private struct ShortcutsOverlay: View {
         ("\u{21E5} / \u{21E7}\u{21E5}", "todo.sc.nestList"),
         ("\u{2318}I", "todo.sc.insights"),
         ("\u{21E7}\u{2318}A", "todo.sc.toggleAllDays"),
+        ("\u{2318},", "todo.sc.preferences"),
+        ("\u{2318}Q", "todo.sc.quit"),
     ]
 
     var body: some View {
