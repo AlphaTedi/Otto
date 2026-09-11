@@ -895,6 +895,45 @@ final class TodoStore: ObservableObject {
 
     // MARK: - Items
 
+    /// Create a to-do out of a phrase underlined in a note, and remember where
+    /// it came from.
+    ///
+    /// It goes through `addItem` rather than building an item of its own: one
+    /// creation path means a to-do born in a note lands at the top of its list,
+    /// files into a real collection, ticks the haptic and saves, exactly like
+    /// one typed into the capture field. A second path is how two kinds of
+    /// to-do come to behave differently.
+    @discardableResult
+    func addItem(fromNote noteID: UUID, phrase: String, title: String,
+                 collectionID: UUID, dueDate: Date?) -> TodoItem? {
+        guard let created = addItem(title: title, collectionID: collectionID,
+                                    urgency: .low, dueDate: dueDate) else { return nil }
+        guard let index = items.firstIndex(where: { $0.id == created.id }) else { return created }
+        items[index].sourceNoteID = noteID
+        items[index].sourcePhrase = phrase
+        scheduleSave()
+        return items[index]
+    }
+
+    /// The sections a note's action picker offers, in order — last-used first,
+    /// because the list you filed into last is overwhelmingly the one you mean
+    /// now. Shared with the 1-3 keys so the numbers match what is drawn.
+    func pickerSections() -> [TodoCollection] {
+        let all = collections.filter { !$0.isSystemToday }
+        guard let last = lastUsedCollectionID,
+              let index = all.firstIndex(where: { $0.id == last }) else { return all }
+        var ordered = all
+        ordered.insert(ordered.remove(at: index), at: 0)
+        return ordered
+    }
+
+    /// The to-do a note's underlined phrase produced, if it still exists.
+    /// Matched on the PHRASE rather than a character range: ranges do not
+    /// survive editing the lines above them.
+    func todo(forNote noteID: UUID, phrase: String) -> TodoItem? {
+        items.first { $0.sourceNoteID == noteID && $0.sourcePhrase == phrase }
+    }
+
     @discardableResult
     func addItem(title: String, collectionID: UUID, urgency: TodoUrgency,
                  dueDate: Date? = nil) -> TodoItem? {
@@ -963,6 +1002,7 @@ final class TodoStore: ObservableObject {
             }
             // Putting one back is not the same event as finishing it.
             HapticManager.shared.todoUncompleted()
+            refreshLinkedNote(for: id)
             scheduleSave()
             return
         } else {
@@ -986,7 +1026,19 @@ final class TodoStore: ObservableObject {
             }
         }
         HapticManager.shared.todoCompleted()
+        refreshLinkedNote(for: id)
         scheduleSave()
+    }
+
+    /// A to-do that came from a note carries its underline's state. Completing
+    /// it in a list has to show in the note, which is what makes this a live
+    /// record rather than a one-time source — a link that only runs one way is
+    /// a link the user stops trusting the moment they see it disagree.
+    private func refreshLinkedNote(for id: UUID) {
+        guard let item = items.first(where: { $0.id == id }),
+              let noteID = item.sourceNoteID,
+              NotesStore.shared.openNoteID == noteID else { return }
+        NoteEditorController.shared.refreshDetections(noteID: noteID)
     }
 
     func setUrgency(_ urgency: TodoUrgency, for id: UUID) {

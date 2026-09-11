@@ -86,7 +86,13 @@ are open), `insights-status` / `insights-enter` / `insights-leave` /
 counts, progressive-disclosure flags, keyboard focus),
 `menu-open` / `menu-close` / `menu-move <n>` / `menu-status` (the avatar menu —
 open state, keyboard highlight, the row labels and whether the sparkline has
-data to draw).
+data to draw),
+`actions-detect <text>` (run the underline detector over a string without
+touching a note), `actions-refresh` / `actions-status` / `actions-file` /
+`actions-complete` (the underlines in the OPEN note: which spans are marked,
+whether each is linked or done, and `markdownHasU` — which must always be
+false, because an underline that reaches the file has rewritten the user's
+note).
 
 **Check `todoContentHeight` against 556 whenever a surface is added.** It is the
 block's ceiling, and three separate bugs have been a new section drawn without

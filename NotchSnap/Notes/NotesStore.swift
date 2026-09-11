@@ -173,6 +173,7 @@ final class NotesStore: ObservableObject {
             notes = decoded
         }
         draft = (try? String(contentsOf: draftURL, encoding: .utf8)) ?? ""
+        loadDismissals()
     }
 
     // MARK: - Reading
@@ -439,6 +440,53 @@ final class NotesStore: ObservableObject {
     }
 
     /// One-shot: put the caret in the OPEN note's body.
+    /// Phrases the user has said are NOT tasks, per note.
+    ///
+    /// The only thing this feature persists. Detections themselves are
+    /// recomputed on every open — they are a guess, and a stale guess written
+    /// to disk is a guess that outlives the text it was about. A dismissal is
+    /// a decision, and a decision the detector forgets is one that reappears on
+    /// the next keystroke.
+    @Published private(set) var dismissedActions: [UUID: Set<String>] = [:]
+
+    /// File an underlined phrase as a to-do, and leave the note alone.
+    ///
+    /// The note is not touched — not the text, not the file. The only thing
+    /// that changes is that a to-do now exists pointing back at this phrase,
+    /// which is what lets the underline show a tick afterwards.
+    func createTodo(from phrase: String, in collectionID: UUID, note noteID: UUID) {
+        let due = ActionItemDetector.dueDate(in: phrase)
+        let title = ActionItemDetector.title(forPhrase: phrase)
+        TodoStore.shared.addItem(fromNote: noteID, phrase: phrase, title: title,
+                                 collectionID: collectionID, dueDate: due)
+        NoteEditorController.shared.pickerTarget = nil
+        NoteEditorController.shared.refreshDetections(noteID: noteID)
+    }
+
+    func dismissAction(_ phrase: String, in noteID: UUID) {
+        dismissedActions[noteID, default: []].insert(phrase)
+        persistDismissals()
+    }
+
+    func dismissed(in noteID: UUID) -> Set<String> { dismissedActions[noteID] ?? [] }
+
+    private static let dismissalsKey = "noteDismissedActions"
+
+    private func persistDismissals() {
+        let encodable = dismissedActions.reduce(into: [String: [String]]()) {
+            $0[$1.key.uuidString] = Array($1.value)
+        }
+        UserDefaults.standard.set(encodable, forKey: Self.dismissalsKey)
+    }
+
+    func loadDismissals() {
+        guard let raw = UserDefaults.standard.dictionary(forKey: Self.dismissalsKey)
+                as? [String: [String]] else { return }
+        dismissedActions = raw.reduce(into: [UUID: Set<String>]()) {
+            if let id = UUID(uuidString: $1.key) { $0[id] = Set($1.value) }
+        }
+    }
+
     @Published private(set) var bodyFocusRequest: UInt = 0
     func focusBody() { bodyFocusRequest &+= 1 }
 

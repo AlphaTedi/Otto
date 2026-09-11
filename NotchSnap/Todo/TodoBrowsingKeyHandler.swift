@@ -280,6 +280,35 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             // is not a state in which section-switching keys mean anything.
             if notes.openNoteID != nil {
                 let editor = NoteEditorController.shared
+
+                // THE PICKER OWNS THE KEYS WHILE IT IS UP.
+                //
+                // For people who never touch the mouse: ⌥↩ with the caret in an
+                // underlined phrase offers it, 1-3 file it, Esc cancels. This
+                // sits above the formatting block deliberately — while a picker
+                // is open the number row means "which list", not "which block
+                // format", and the two cannot both have it.
+                if let target = editor.pickerTarget {
+                    if keyCode == 53 { editor.pickerTarget = nil; return true }
+                    if !cmd, !option, !control, let digit = Int(chars),
+                       digit >= 1, digit <= 3 {
+                        let sections = TodoStore.shared.pickerSections()
+                        guard digit <= sections.count else { return true }
+                        notes.createTodo(from: target.phrase,
+                                         in: sections[digit - 1].id,
+                                         note: notes.openNoteID ?? UUID())
+                        return true
+                    }
+                    return true
+                }
+                if option, !cmd, !control, keyCode == 36 {
+                    if let hit = editor.actionAtCaret() {
+                        editor.pickerTarget = hit
+                        return true
+                    }
+                    return false
+                }
+
                 if cmd, option, !shift {
                     switch chars {
                     case "1", "\u{00A1}": editor.setBlock(.h1);   return true

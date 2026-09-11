@@ -2941,6 +2941,7 @@ private struct ShortcutsOverlay: View {
         ("\u{21E7}\u{2318}A", "todo.sc.toggleAllDays"),
         ("\u{2318},", "todo.sc.preferences"),
         ("\u{2318}Q", "todo.sc.quit"),
+        ("\u{2325}\u{21A9}", "notes.sc.actionPicker"),
     ]
 
     var body: some View {

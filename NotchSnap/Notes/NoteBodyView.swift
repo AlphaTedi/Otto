@@ -12,12 +12,14 @@ import SwiftUI
 struct NoteBodyView: NSViewRepresentable {
     let noteID: UUID
     @Binding var markdown: String
+    /// A click landed on an underlined phrase — the picker's cue.
+    var onActionTapped: ((NSRange, String) -> Void)?
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSTextView.scrollableTextView()
-        guard let view = scroll.documentView as? NSTextView else { return scroll }
+        let scroll = ActionTextView.scrollableTextView()
+        guard let view = scroll.documentView as? ActionTextView else { return scroll }
 
         view.delegate = context.coordinator
         view.isRichText = true
@@ -46,8 +48,19 @@ struct NoteBodyView: NSViewRepresentable {
             .noteBlock: NoteBlock.body.rawValue,
         ]
 
+        view.onActionClick = { [weak view] point in
+            guard let view else { return false }
+            guard let hit = NoteEditorController.shared.action(at: point) else { return false }
+            onActionTapped?(hit.range, hit.phrase)
+            return true
+        }
+        view.noteID = noteID
+
         context.coordinator.load(markdown, into: view)
         NoteEditorController.shared.textView = view
+        // On OPEN, not only after typing: a note you come back to should show
+        // what it found before you touch anything.
+        context.coordinator.scheduleDetection(noteID: noteID, delay: 0)
         return scroll
     }
 
@@ -82,6 +95,22 @@ struct NoteBodyView: NSViewRepresentable {
             loadedNoteID != noteID || lastKnownMarkdown != markdown
         }
 
+        private var detectionWork: DispatchWorkItem?
+
+        /// Re-detect after the user stops typing. Cancelling the previous item
+        /// is what makes it a debounce rather than a queue of passes.
+        @MainActor
+        func scheduleDetection(noteID: UUID, delay: TimeInterval) {
+            detectionWork?.cancel()
+            let work = DispatchWorkItem {
+                MainActor.assumeIsolated {
+                    NoteEditorController.shared.refreshDetections(noteID: noteID)
+                }
+            }
+            detectionWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+        }
+
         func load(_ markdown: String, into view: NSTextView) {
             loading = true
             lastKnownMarkdown = markdown
@@ -105,6 +134,10 @@ struct NoteBodyView: NSViewRepresentable {
                 lastKnownMarkdown = written
                 parent.markdown = written
                 NoteEditorController.shared.refreshState()
+                // Debounced, and generously: detection that fires between
+                // keystrokes would underline half-typed words and then take it
+                // back, which is worse than not detecting at all.
+                scheduleDetection(noteID: parent.noteID, delay: 1.5)
             }
         }
 
@@ -136,6 +169,70 @@ struct NoteBodyView: NSViewRepresentable {
 
         func textDidEndEditing(_ notification: Notification) {
             MainActor.assumeIsolated { NoteEditorController.shared.bodyFocused = false }
+        }
+    }
+}
+
+// MARK: - ActionTextView — the note's text view, plus the click on an underline
+//
+// Subclassed rather than handled with a gesture recognizer: a click inside a
+// text view is the text view's to place the caret with, and the only honest
+// place to decide "this one was on an underlined phrase instead" is before
+// `super.mouseDown` runs. A recognizer on top would fight the caret for every
+// click in the note.
+
+final class ActionTextView: NSTextView {
+    /// Returns true when the click was consumed by an underlined phrase.
+    var onActionClick: ((NSPoint) -> Bool)?
+    var noteID: UUID?
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if onActionClick?(point) == true { return }
+        super.mouseDown(with: event)
+    }
+
+    /// Right-click on an underlined phrase offers the two verbs the spec asks
+    /// for; anywhere else the ordinary text menu is untouched.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let point = convert(event.locationInWindow, from: nil)
+        guard let noteID,
+              let hit = MainActor.assumeIsolated({ NoteEditorController.shared.action(at: point) })
+        else { return super.menu(for: event) }
+
+        let menu = NSMenu()
+        let add = NSMenuItem(title: L10n.t("notes.action.add"),
+                             action: #selector(addAsTodo(_:)), keyEquivalent: "")
+        add.target = self
+        add.representedObject = hit.phrase
+        menu.addItem(add)
+        let reject = NSMenuItem(title: L10n.t("notes.action.notATask"),
+                                action: #selector(notATask(_:)), keyEquivalent: "")
+        reject.target = self
+        reject.representedObject = hit.phrase
+        menu.addItem(reject)
+        return menu
+    }
+
+    @objc private func addAsTodo(_ sender: NSMenuItem) {
+        guard let phrase = sender.representedObject as? String else { return }
+        MainActor.assumeIsolated {
+            guard let storage = textStorage else { return }
+            let full = NSRange(location: 0, length: storage.length)
+            var target: NSRange?
+            storage.enumerateAttribute(.noteAction, in: full, options: []) { value, range, stop in
+                if value as? String == phrase { target = range; stop.pointee = true }
+            }
+            guard let target else { return }
+            NoteEditorController.shared.pickerTarget = (target, phrase)
+        }
+    }
+
+    @objc private func notATask(_ sender: NSMenuItem) {
+        guard let phrase = sender.representedObject as? String, let noteID else { return }
+        MainActor.assumeIsolated {
+            NotesStore.shared.dismissAction(phrase, in: noteID)
+            NoteEditorController.shared.refreshDetections(noteID: noteID)
         }
     }
 }

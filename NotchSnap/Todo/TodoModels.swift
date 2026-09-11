@@ -86,12 +86,30 @@ struct TodoItem: Identifiable, Codable, Equatable {
     /// NC-3: sub-steps, shown only in the expanded state.
     var checklist: [ChecklistItem] = []
 
+    /// The note this to-do was lifted out of, and the phrase it was lifted
+    /// from — the link that lets an underline in a note show whether it is
+    /// done.
+    ///
+    /// THE LINK LIVES HERE, and that is the whole storage decision. The other
+    /// option was writing `- [ ] phrase` into the note's markdown, which would
+    /// be readable in Obsidian and would also EDIT THE USER'S FILE — the one
+    /// thing this feature promises not to do. A to-do pointing back at a phrase
+    /// costs nothing on the note's side: the `.md` stays exactly what the user
+    /// typed.
+    ///
+    /// The phrase, not a character range: ranges do not survive editing the
+    /// text above them, and a link that silently points at the wrong words is
+    /// worse than one that quietly stops matching.
+    var sourceNoteID: UUID?
+    var sourcePhrase: String?
+
     var hasDetails: Bool { !note.isEmpty || !checklist.isEmpty }
 
     init(id: UUID, title: String, collectionID: UUID, urgency: TodoUrgency,
          isCompleted: Bool, completedAt: Date?, dueDate: Date?,
          sortOrder: Int, createdAt: Date,
-         note: String = "", checklist: [ChecklistItem] = []) {
+         note: String = "", checklist: [ChecklistItem] = [],
+         sourceNoteID: UUID? = nil, sourcePhrase: String? = nil) {
         self.id = id
         self.title = title
         self.collectionID = collectionID
@@ -103,6 +121,8 @@ struct TodoItem: Identifiable, Codable, Equatable {
         self.createdAt = createdAt
         self.note = note
         self.checklist = checklist
+        self.sourceNoteID = sourceNoteID
+        self.sourcePhrase = sourcePhrase
     }
 
     // Hand-rolled decode so pre-note/checklist todos.json files (which lack
@@ -120,5 +140,11 @@ struct TodoItem: Identifiable, Codable, Equatable {
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
         checklist = try c.decodeIfPresent([ChecklistItem].self, forKey: .checklist) ?? []
+        // decodeIfPresent, like every field added after the first release: a
+        // todos.json written before this feature existed has neither key, and
+        // synthesized Codable would throw on the whole file rather than on the
+        // two values it cannot find.
+        sourceNoteID = try c.decodeIfPresent(UUID.self, forKey: .sourceNoteID)
+        sourcePhrase = try c.decodeIfPresent(String.self, forKey: .sourcePhrase)
     }
 }

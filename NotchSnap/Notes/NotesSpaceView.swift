@@ -717,6 +717,7 @@ private struct NoteDetailView: View {
     let isContainer: Bool
 
     @ObservedObject private var store = NotesStore.shared
+    @ObservedObject private var editor = NoteEditorController.shared
     @FocusState private var titleFocused: Bool
     @State private var titleDraft: String
     @State private var body_: String
@@ -750,7 +751,9 @@ private struct NoteDetailView: View {
             // Editable in place — no separate edit mode, no Save button. The
             // note is the editor, and now a rich one: NoteBodyView is an
             // NSTextView over the same markdown string that was there before.
-            NoteBodyView(noteID: note.id, markdown: $body_)
+            NoteBodyView(noteID: note.id, markdown: $body_) { range, phrase in
+                NoteEditorController.shared.pickerTarget = (range, phrase)
+            }
                 .onChange(of: body_) { store.setBody($0, for: note.id) }
                 // Lined up with the text inside the field above it, so the
                 // note reads as one column rather than as a header and a
@@ -774,6 +777,29 @@ private struct NoteDetailView: View {
 
             bottomBar
         }
+        // The section picker, over the note.
+        //
+        // Anchored at the TOP of the body rather than under the phrase itself:
+        // the phrase's rect is known to the layout manager, but a note scrolls
+        // inside a fixed frame, and a picker pinned to a moving line is a
+        // picker that slides off its own panel. The rule the spec actually
+        // cares about is that it must not cover the words it acts on, and at
+        // the head of the body it never does.
+        .overlay(alignment: .top) {
+            if let target = editor.pickerTarget {
+                ActionPicker(
+                    phrase: target.phrase,
+                    dueDate: ActionItemDetector.dueDate(in: target.phrase)
+                ) { collectionID in
+                    store.createTodo(from: target.phrase, in: collectionID, note: note.id)
+                } onDismiss: {
+                    editor.pickerTarget = nil
+                }
+                .padding(.top, LabMetrics.barHeight + 14)
+                .transition(.opacity.combined(with: .offset(y: -4)))
+            }
+        }
+        .animation(Motion.hintFade, value: editor.pickerTarget?.phrase)
         // Opening a note puts the caret in the CONTENT — driven from HERE,
         // not from the signal the store sends.
         //
@@ -821,6 +847,17 @@ private struct NoteDetailView: View {
                 .focused($titleFocused)
                 .onSubmit { commitTitle(); store.focusBody() }
                 .onChange(of: titleFocused) { if !$0 { commitTitle() } }
+
+            if editor.detectedCount > 0 {
+                // Never "0 impegni trovati": a count of nothing advertises a
+                // failure nobody asked about.
+                Text(editor.detectedCount == 1
+                     ? L10n.t("notes.action.foundOne")
+                     : String(format: L10n.t("notes.action.found"), "\(editor.detectedCount)"))
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(DSColor.textFaint)
+                    .fixedSize()
+            }
 
             HStack(spacing: 8) {
                 Text(store.isWriting ? L10n.t("notes.saving") : L10n.t("notes.saved"))

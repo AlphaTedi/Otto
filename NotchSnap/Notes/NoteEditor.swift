@@ -26,6 +26,12 @@ final class NoteEditorController: ObservableObject {
     @Published private(set) var italic = false
     @Published private(set) var underline = false
     @Published var bodyFocused = false
+    /// How many phrases the current note has underlined — the header's
+    /// "3 impegni trovati". Zero means the header shows only the date, never
+    /// "0 impegni trovati", which would advertise a failure nobody asked about.
+    @Published var detectedCount = 0
+    /// The span whose picker is open, if one is.
+    @Published var pickerTarget: (range: NSRange, phrase: String)?
 
     // MARK: Reading the caret
 
@@ -435,4 +441,110 @@ final class NoteEditorController: ObservableObject {
         storage.endEditing()
         view.didChangeText()
     }
+}
+
+// MARK: - Detected action items
+//
+// The underlines, and everything that acts on them. It lives on the controller
+// because the text view, the key router and the picker all need to ask the same
+// questions of the same selection — a second copy of "which span is the caret
+// in" is a second answer waiting to disagree.
+
+extension NoteEditorController {
+
+    /// Re-run detection over the note and mark what it finds.
+    ///
+    /// NEVER WHILE THE CARET IS INSIDE THE SPAN BEING EVALUATED. An underline
+    /// appearing under the words you are still typing is the single most
+    /// disruptive thing this feature could do, so a candidate containing the
+    /// insertion point is skipped this pass and picked up on the next one,
+    /// after the caret has moved on.
+    func refreshDetections(noteID: UUID) {
+        guard let view = textView, let storage = view.textStorage else { return }
+        let full = NSRange(location: 0, length: storage.length)
+        let caret = view.selectedRange().location
+
+        let found = ActionItemDetector.detect(
+            in: storage.string,
+            ignoring: NotesStore.shared.dismissed(in: noteID))
+
+        storage.beginEditing()
+        // Clear the previous pass before marking the new one: a span the user
+        // has since edited out of existence must lose its underline, and the
+        // cheapest correct way to do that is to stop trying to track it.
+        storage.removeAttribute(.noteAction, range: full)
+        storage.removeAttribute(.noteActionDone, range: full)
+        storage.removeAttribute(.underlineColor, range: full)
+        storage.removeAttribute(.strikethroughStyle, range: full)
+        // Only OUR underlines come off. A user's own ⌘U has to survive this.
+        storage.enumerateAttributes(in: full, options: []) { attributes, range, _ in
+            if attributes[.ottoUnderlineMark] != nil {
+                storage.removeAttribute(.underlineStyle, range: range)
+                storage.removeAttribute(.ottoUnderlineMark, range: range)
+            }
+        }
+
+        for action in found {
+            guard !NSLocationInRange(caret, action.range) else { continue }
+            let linked = TodoStore.shared.todo(forNote: noteID, phrase: action.phrase)
+            storage.addAttributes([
+                .noteAction: action.phrase,
+                .ottoUnderlineMark: true,
+                .underlineStyle: NSUnderlineStyle.single.rawValue,
+                .underlineColor: NSColor.controlAccentColor.withAlphaComponent(0.55),
+            ], range: action.range)
+            if let linked {
+                storage.addAttribute(.noteActionDone, value: linked.isCompleted,
+                                     range: action.range)
+                // A finished phrase reads finished, the same way a finished row
+                // does — struck through and stepped back.
+                if linked.isCompleted {
+                    storage.addAttribute(.strikethroughStyle,
+                                         value: NSUnderlineStyle.single.rawValue,
+                                         range: action.range)
+                }
+            }
+        }
+        storage.endEditing()
+        detectedCount = found.count
+    }
+
+    /// The detected span the caret is in, if any — what ⌥↩ acts on.
+    func actionAtCaret() -> (range: NSRange, phrase: String)? {
+        guard let view = textView, let storage = view.textStorage, storage.length > 0 else {
+            return nil
+        }
+        let caret = min(view.selectedRange().location, storage.length - 1)
+        var range = NSRange(location: 0, length: 0)
+        guard let phrase = storage.attribute(.noteAction, at: caret,
+                                             effectiveRange: &range) as? String else {
+            return nil
+        }
+        return (range, phrase)
+    }
+
+    /// The detected span at a point in the view — what a click acts on.
+    func action(at point: NSPoint) -> (range: NSRange, phrase: String)? {
+        guard let view = textView, let storage = view.textStorage, storage.length > 0,
+              let container = view.textContainer, let layout = view.layoutManager else {
+            return nil
+        }
+        let inset = NSPoint(x: point.x - view.textContainerOrigin.x,
+                            y: point.y - view.textContainerOrigin.y)
+        let index = layout.characterIndex(for: inset, in: container,
+                                          fractionOfDistanceBetweenInsertionPoints: nil)
+        guard index < storage.length else { return nil }
+        var range = NSRange(location: 0, length: 0)
+        guard let phrase = storage.attribute(.noteAction, at: index,
+                                             effectiveRange: &range) as? String else {
+            return nil
+        }
+        return (range, phrase)
+    }
+}
+
+extension NSAttributedString.Key {
+    /// Marks an underline as OTTO'S, so clearing detections cannot take the
+    /// user's own ⌘U underlines with it.
+    static let ottoUnderlineMark = NSAttributedString.Key("ottoUnderlineMark")
 }

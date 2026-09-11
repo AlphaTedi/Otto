@@ -288,6 +288,61 @@ enum DebugDriver {
                     }
                 }
                 appendState("roundtrip: \(cases.count - failures)/\(cases.count) identical")
+            } else if command == "actions-status" {
+                let editor = NoteEditorController.shared
+                let notes = NotesStore.shared
+                var report = "actions detected=\(editor.detectedCount)"
+                report += " picker=" + (editor.pickerTarget?.phrase ?? "nil")
+                if let noteID = notes.openNoteID, let view = editor.textView,
+                   let storage = view.textStorage {
+                    let full = NSRange(location: 0, length: storage.length)
+                    var spans: [String] = []
+                    storage.enumerateAttribute(.noteAction, in: full, options: []) { v, r, _ in
+                        if let phrase = v as? String {
+                            let linked = TodoStore.shared.todo(forNote: noteID, phrase: phrase)
+                            spans.append("'\(phrase)'" + (linked == nil ? "" :
+                                (linked!.isCompleted ? "[done]" : "[linked]")))
+                        }
+                        _ = r
+                    }
+                    report += " spans=[" + spans.joined(separator: " ") + "]"
+                    // THE PREMISE: what the file would receive must equal what
+                    // the user typed. Underlines must never reach it.
+                    report += " markdownHasU=\(NoteMarkdown.markdown(from: storage).contains("<u>"))"
+                    report += " dismissed=\(notes.dismissed(in: noteID).count)"
+                }
+                appendState(report)
+            } else if command.hasPrefix("actions-detect ") {
+                let text = String(command.dropFirst(15))
+                let found = ActionItemDetector.detect(in: text)
+                appendState("actions-detect n=\(found.count) phrases=["
+                            + found.map { "'\($0.phrase)'" }.joined(separator: " ") + "]")
+            } else if command == "actions-file" {
+                // File the first underlined span into the first offered
+                // section — the picker's own path, without the pointer.
+                let editor = NoteEditorController.shared
+                guard let noteID = NotesStore.shared.openNoteID,
+                      let storage = editor.textView?.textStorage,
+                      let section = TodoStore.shared.pickerSections().first else { return }
+                let full = NSRange(location: 0, length: storage.length)
+                var phrase: String?
+                storage.enumerateAttribute(.noteAction, in: full, options: []) { v, _, stop in
+                    if let p = v as? String { phrase = p; stop.pointee = true }
+                }
+                if let phrase {
+                    NotesStore.shared.createTodo(from: phrase, in: section.id, note: noteID)
+                }
+            } else if command == "actions-complete" {
+                // Tick the linked to-do from the LIST side, to prove the note
+                // follows.
+                let store = TodoStore.shared
+                if let item = store.items.first(where: { $0.sourceNoteID != nil && !$0.isCompleted }) {
+                    store.toggleComplete(item.id)
+                }
+            } else if command == "actions-refresh" {
+                if let id = NotesStore.shared.openNoteID {
+                    NoteEditorController.shared.refreshDetections(noteID: id)
+                }
             } else if command == "menu-open" {
                 TodoStore.shared.openAvatarMenu()
             } else if command == "menu-close" {

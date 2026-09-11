@@ -51,6 +51,20 @@ extension NSAttributedString.Key {
     /// The paragraph's block type, carried on its characters so a selection
     /// anywhere in the line can be asked what it is.
     static let noteBlock = NSAttributedString.Key("ottoNoteBlock")
+    /// A span Otto has underlined as a possible to-do. Carries the phrase, so
+    /// the span can be matched back to the to-do it created.
+    ///
+    /// SEPARATE FROM `.underlineStyle` ON PURPOSE, and this is the trap the
+    /// feature would otherwise have walked into: a user's own underline
+    /// serializes to `<u>…</u>`, so marking detections with the same attribute
+    /// would have written Otto's guesses into the user's markdown file on the
+    /// next save. The note is supposed to come out byte for byte as it was
+    /// typed. The visual still uses `.underlineStyle` — it is the only way to
+    /// get a correctly laid-out underline — and the serializer skips the `<u>`
+    /// wherever this attribute is present.
+    static let noteAction = NSAttributedString.Key("ottoNoteAction")
+    /// Set on a span whose to-do exists. The tick is drawn from it.
+    static let noteActionDone = NSAttributedString.Key("ottoNoteActionDone")
     /// How deeply the paragraph is nested, 0 for the outer level. Carried the
     /// same way and for the same reason as `noteBlock`.
     ///
@@ -410,7 +424,13 @@ enum NoteMarkdown {
             guard !text.isEmpty else { return }
             let raw = (attributes[.font] as? NSFont).map { NSFontManager.shared.traits(of: $0) } ?? []
             let traits = raw.subtracting(baseTraits)
-            let underlined = (attributes[.underlineStyle] as? Int).map { $0 != 0 } ?? false
+            // Otto's own underline is NOT the user's. A detected span wears
+            // `.underlineStyle` so it draws correctly, and is skipped here so it
+            // never reaches the file — the note keeps the words that were typed
+            // and none of the marks Otto put over them.
+            let isDetection = attributes[.noteAction] != nil
+            let underlined = !isDetection
+                && ((attributes[.underlineStyle] as? Int).map { $0 != 0 } ?? false)
             var wrapped = text
             // Innermost first, so `**_x_**` nests the way markdown expects.
             if traits.contains(.italicFontMask) { wrapped = "*\(wrapped)*" }
