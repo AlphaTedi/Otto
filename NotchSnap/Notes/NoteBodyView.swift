@@ -28,7 +28,7 @@ struct NoteBodyView: NSViewRepresentable {
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
-        view.textContainerInset = NSSize(width: 0, height: 0)
+        view.textContainerInset = NSSize(width: 28, height: 0)
         view.textContainer?.lineFragmentPadding = 0
         // The user's own text is never reformatted — no smart quotes, no
         // dash substitution, no automatic capitalisation. Lowercase, missing
@@ -37,7 +37,9 @@ struct NoteBodyView: NSViewRepresentable {
         view.isAutomaticDashSubstitutionEnabled = false
         view.isAutomaticTextReplacementEnabled = false
         view.isAutomaticSpellingCorrectionEnabled = false
-        view.insertionPointColor = NSColor.controlAccentColor
+        view.isAutomaticLinkDetectionEnabled = false
+        view.isAutomaticDataDetectionEnabled = false
+        view.insertionPointColor = NSColor(LabMetrics.accent)
         view.selectedTextAttributes = [
             .backgroundColor: NSColor.controlAccentColor.withAlphaComponent(0.28)
         ]
@@ -55,6 +57,9 @@ struct NoteBodyView: NSViewRepresentable {
             return true
         }
         view.noteID = noteID
+        view.onHeightChange = { height in
+            DispatchQueue.main.async { NoteEditorController.shared.contentHeight = height }
+        }
 
         context.coordinator.load(markdown, into: view)
         NoteEditorController.shared.textView = view
@@ -65,7 +70,9 @@ struct NoteBodyView: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
-        guard let view = scroll.documentView as? NSTextView else { return }
+        guard let view = scroll.documentView as? ActionTextView else { return }
+        context.coordinator.parent = self
+        view.noteID = noteID
         NoteEditorController.shared.textView = view
         // Reload when the note changed underneath us — a note opened from the
         // stream — or when the text arrived from somewhere that is NOT this
@@ -76,11 +83,20 @@ struct NoteBodyView: NSViewRepresentable {
         // genuine outside change is taken.
         if context.coordinator.shouldReload(noteID: noteID, markdown: markdown) {
             context.coordinator.load(markdown, into: view)
+            context.coordinator.scheduleDetection(noteID: noteID, delay: 0)
+        }
+    }
+
+    static func dismantleNSView(_ scroll: NSScrollView, coordinator: Coordinator) {
+        coordinator.cancelDetection()
+        if NoteEditorController.shared.textView === scroll.documentView {
+            NoteEditorController.shared.pickerTarget = nil
+            NoteEditorController.shared.textView = nil
         }
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
-        private let parent: NoteBodyView
+        var parent: NoteBodyView
         private(set) var loadedNoteID: UUID?
         /// The last markdown this view either loaded or produced. Anything
         /// different arriving from outside is a change this view did not make.
@@ -96,15 +112,21 @@ struct NoteBodyView: NSViewRepresentable {
         }
 
         private var detectionWork: DispatchWorkItem?
+        private var lastEdit = Date.distantPast
+        func cancelDetection() { detectionWork?.cancel() }
 
         /// Re-detect after the user stops typing. Cancelling the previous item
         /// is what makes it a debounce rather than a queue of passes.
         @MainActor
         func scheduleDetection(noteID: UUID, delay: TimeInterval) {
             detectionWork?.cancel()
-            let work = DispatchWorkItem {
+            let work = DispatchWorkItem { [weak self] in
+                guard let self else { return }
                 MainActor.assumeIsolated {
-                    NoteEditorController.shared.refreshDetections(noteID: noteID)
+                    guard let view = NoteEditorController.shared.textView as? ActionTextView,
+                          view.noteID == noteID else { return }
+                    NoteEditorController.shared.refreshDetections(noteID: noteID,
+                        excludingCaret: Date().timeIntervalSince(self.lastEdit) < 2)
                 }
             }
             detectionWork = work
@@ -130,6 +152,9 @@ struct NoteBodyView: NSViewRepresentable {
             guard !loading, let view = notification.object as? NSTextView,
                   let storage = view.textStorage else { return }
             MainActor.assumeIsolated {
+                lastEdit = Date()
+                NoteEditorController.shared.pickerTarget = nil
+                NoteEditorController.shared.clearDetections()
                 let written = NoteMarkdown.markdown(from: storage)
                 lastKnownMarkdown = written
                 parent.markdown = written
@@ -143,13 +168,20 @@ struct NoteBodyView: NSViewRepresentable {
 
         func textViewDidChangeSelection(_ notification: Notification) {
             guard !loading else { return }
-            MainActor.assumeIsolated { NoteEditorController.shared.refreshState() }
+            MainActor.assumeIsolated {
+                NoteEditorController.shared.refreshState()
+                (notification.object as? ActionTextView)?.showSelectionControl()
+                scheduleDetection(noteID: parent.noteID, delay: 1.5)
+            }
         }
 
         /// Space and Return are the two keys markdown-as-you-type and the list
         /// behaviour need to see BEFORE the text system spends them.
         func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
             MainActor.assumeIsolated {
+                if selector == #selector(NSResponder.deleteBackward(_:)) {
+                    return NoteEditorController.shared.handleBackspace()
+                }
                 if selector == #selector(NSResponder.insertNewline(_:)) {
                     return NoteEditorController.shared.handleReturn()
                 }
@@ -185,11 +217,122 @@ final class ActionTextView: NSTextView {
     /// Returns true when the click was consumed by an underlined phrase.
     var onActionClick: ((NSPoint) -> Bool)?
     var noteID: UUID?
+    var onHeightChange: ((CGFloat) -> Void)?
+    private var measuredHeight: CGFloat = 0
+
+    override func layout() {
+        super.layout()
+        guard let layout = layoutManager, let container = textContainer else { return }
+        layout.ensureLayout(for: container)
+        let height = ceil(layout.usedRect(for: container).height + layout.extraLineFragmentRect.height + 12)
+        if abs(height - measuredHeight) > 1 { measuredHeight = height; onHeightChange?(height) }
+    }
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if onActionClick?(point) == true { return }
+        if let hit = linkedControls().first(where: { $0.rect.contains(point) }), let noteID,
+           let linked = TodoStore.shared.todo(forNote: noteID, phrase: hit.phrase) {
+            TodoStore.shared.toggleComplete(linked.id)
+            NoteEditorController.shared.refreshDetections(noteID: noteID)
+            return
+        }
+        if let hit = controlTarget, controlRect.contains(point) {
+            MainActor.assumeIsolated {
+                if let noteID, let linked = TodoStore.shared.todo(forNote: noteID, phrase: hit.phrase) {
+                    TodoStore.shared.toggleComplete(linked.id)
+                    NoteEditorController.shared.refreshDetections(noteID: noteID)
+                } else { NoteEditorController.shared.pickerTarget = hit }
+            }
+            return
+        }
+        if MainActor.assumeIsolated({ NoteEditorController.shared.pickerTarget != nil }) {
+            MainActor.assumeIsolated { NoteEditorController.shared.pickerTarget = nil }
+            return
+        }
         super.mouseDown(with: event)
+    }
+
+    private var actionTracking: NSTrackingArea?
+    private var controlTarget: (range: NSRange, phrase: String)?
+    private var controlRect = NSRect.zero
+
+    func clearActionControl() { controlTarget = nil; controlRect = .zero; needsDisplay = true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let actionTracking { removeTrackingArea(actionTracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        actionTracking = area
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if controlTarget != nil, point.y >= controlRect.minY - 4, point.y <= controlRect.maxY + 4,
+           point.x >= controlRect.minX - 50 { return }
+        guard let hit = MainActor.assumeIsolated({ NoteEditorController.shared.action(at: point) }),
+              let layout = layoutManager, let container = textContainer else {
+            clearActionControl(); return
+        }
+        let glyphs = layout.glyphRange(forCharacterRange: hit.range, actualCharacterRange: nil)
+        let rect = layout.boundingRect(forGlyphRange: glyphs, in: container)
+            .offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
+        guard rect.insetBy(dx: 4, dy: 3).contains(point) else { clearActionControl(); return }
+        controlTarget = hit
+        // Keep the control in a reserved trailing gutter: never obscure text
+        // or inject attachment characters into the user's Markdown.
+        controlRect = NSRect(x: bounds.width - 24, y: rect.maxY - 21, width: 20, height: 20)
+        needsDisplay = true
+    }
+
+    func showSelectionControl() {
+        guard selectedRange().length > 0,
+              let target = NoteEditorController.shared.actionAtCaret(),
+              let layout = layoutManager, let container = textContainer else { return }
+        let glyphs = layout.glyphRange(forCharacterRange: target.range, actualCharacterRange: nil)
+        let rect = layout.boundingRect(forGlyphRange: glyphs, in: container)
+        controlTarget = target
+        controlRect = NSRect(x: bounds.width - 24, y: rect.maxY + textContainerOrigin.y - 21, width: 20, height: 20)
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) { clearActionControl() }
+
+    private func linkedControls() -> [(rect: NSRect, phrase: String, done: Bool)] {
+        guard let storage = textStorage, let layout = layoutManager, let container = textContainer else { return [] }
+        var controls: [(rect: NSRect, phrase: String, done: Bool)] = []
+        storage.enumerateAttribute(.noteActionDone, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+            guard let done = value as? Bool,
+                  let phrase = storage.attribute(.noteAction, at: range.location, effectiveRange: nil) as? String else { return }
+            let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            let bounds = layout.boundingRect(forGlyphRange: glyphs, in: container)
+            controls.append((NSRect(x: self.bounds.width - 23, y: bounds.maxY + self.textContainerOrigin.y - 19,
+                                    width: 16, height: 16), phrase, done))
+        }
+        return controls
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        for control in linkedControls() {
+            NSColor(LabMetrics.accent).setStroke()
+            let path = NSBezierPath(roundedRect: control.rect, xRadius: 5, yRadius: 5)
+            path.lineWidth = 1.5
+            path.stroke()
+            if control.done {
+                ("✓" as NSString).draw(in: control.rect.offsetBy(dx: 2, dy: -1), withAttributes: [
+                    .font: NSFont.systemFont(ofSize: 13), .foregroundColor: NSColor(LabMetrics.accent)
+                ])
+            }
+        }
+        guard let target = controlTarget else { return }
+        NSColor(LabMetrics.accent).setFill()
+        NSBezierPath(ovalIn: controlRect).fill()
+        let linked = noteID.flatMap { TodoStore.shared.todo(forNote: $0, phrase: target.phrase) }
+        let glyph = linked.map { $0.isCompleted ? "✓" : "○" } ?? "+"
+        (glyph as NSString).draw(in: controlRect.offsetBy(dx: 4, dy: 0), withAttributes: [
+            .font: NSFont.systemFont(ofSize: 15, weight: .medium), .foregroundColor: NSColor.black
+        ])
     }
 
     /// Right-click on an underlined phrase offers the two verbs the spec asks

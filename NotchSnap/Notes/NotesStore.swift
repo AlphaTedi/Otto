@@ -275,6 +275,8 @@ final class NotesStore: ObservableObject {
     /// the open note IS the editor.
     func setBody(_ text: String, for id: UUID) {
         guard let idx = notes.firstIndex(where: { $0.id == id }), notes[idx].content != text else { return }
+        TodoStore.shared.unlinkEditedNotePhrases(noteID: id, text: NoteMarkdown.attributed(
+            from: text, textColor: .labelColor, accent: .labelColor, mutedColor: .tertiaryLabelColor).string)
         notes[idx].content = text
         notes[idx].updatedAt = Date()
         scheduleSave()

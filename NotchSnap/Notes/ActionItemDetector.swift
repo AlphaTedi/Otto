@@ -232,6 +232,7 @@ struct ActionPicker: View {
     let onDismiss: () -> Void
 
     @ObservedObject private var store = TodoStore.shared
+    @ObservedObject private var editor = NoteEditorController.shared
 
     /// Three, then the rest behind a "…". With ten lists this must not become
     /// a menu — and the first one is preselected because the list you filed
@@ -242,6 +243,9 @@ struct ActionPicker: View {
 
     var body: some View {
         let shown = Array(sections.prefix(Self.maxShown))
+        VStack(alignment: .leading, spacing: 8) {
+        Text(phrase).font(.system(size: 12)).foregroundStyle(DSColor.textSecondary).lineLimit(2)
+        ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 11) {
             Text(L10n.t("notes.action.addTo"))
                 .font(.system(size: 12.5))
@@ -266,17 +270,11 @@ struct ActionPicker: View {
             }
 
             if sections.count > Self.maxShown {
-                Menu {
-                    ForEach(sections.dropFirst(Self.maxShown)) { section in
-                        Button(section.name) { onPick(section.id) }
-                    }
-                } label: {
-                    Text("\u{2026}")
-                        .font(.system(size: 12))
-                        .foregroundStyle(DSColor.textSecondary)
+                Button { editor.pickerExpanded.toggle() } label: {
+                    Text("…").font(.system(size: 14)).foregroundStyle(DSColor.textSecondary)
                 }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
+                .buttonStyle(.plain)
+                .help("↓")
             }
 
             if let dueDate {
@@ -298,6 +296,24 @@ struct ActionPicker: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+        }
+        }
+        if editor.pickerExpanded {
+            ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
+                        Button { onPick(section.id) } label: {
+                            Text(section.name).font(.system(size: 12))
+                                .frame(maxWidth: .infinity, alignment: .leading).padding(6)
+                                .background(index == editor.pickerIndex ? LabMetrics.accent.opacity(0.25) : Color.clear)
+                        }.buttonStyle(.plain).id(index)
+                    }
+                }
+            }.frame(height: min(90, CGFloat(sections.count) * 32))
+            .onChange(of: editor.pickerIndex) { proxy.scrollTo($0) }
+            }
+        }
         }
         .padding(.leading, 14)
         .padding(.trailing, 10)

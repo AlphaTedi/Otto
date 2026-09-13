@@ -337,7 +337,7 @@ enum NoteMarkdown {
         var start = 0
 
         while start <= string.length {
-            let lineRange = string.lineRange(for: NSRange(location: min(start, string.length), length: 0))
+            let lineRange = string.paragraphRange(for: NSRange(location: min(start, string.length), length: 0))
             // The paragraph without its newline.
             var contentRange = lineRange
             if contentRange.length > 0,
@@ -419,7 +419,11 @@ enum NoteMarkdown {
         // round-trip test, which is the only place a fault like this shows:
         // on screen the heading looked exactly right.
         let baseTraits = NSFontManager.shared.traits(of: NoteType.font(for: block))
-        attributed.enumerateAttributes(in: range, options: []) { attributes, runRange, _ in
+        let clean = NSMutableAttributedString(attributedString: attributed)
+        for key: NSAttributedString.Key in [.noteAction, .noteActionDone, .ottoUnderlineMark] {
+            clean.removeAttribute(key, range: NSRange(location: 0, length: clean.length))
+        }
+        clean.enumerateAttributes(in: range, options: []) { attributes, runRange, _ in
             let text = (attributed.string as NSString).substring(with: runRange)
             guard !text.isEmpty else { return }
             let raw = (attributes[.font] as? NSFont).map { NSFontManager.shared.traits(of: $0) } ?? []

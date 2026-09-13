@@ -247,6 +247,83 @@ enum DebugDriver {
                    from < n.stream.count, to < n.stream.count {
                     n.reorder(n.stream[from].id, before: n.stream[to].id)
                 }
+            } else if command == "notes-editor-tests" {
+                let editor = NoteEditorController.shared
+                let previousView = editor.textView
+                let scroll = ActionTextView.scrollableTextView()
+                let view = scroll.documentView as! ActionTextView
+                view.allowsUndo = true
+                let testWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
+                testWindow.contentView = scroll
+                editor.textView = view
+                defer { editor.textView = previousView; editor.refreshState() }
+                var failures = 0
+                var checks = 0
+                func load(_ markdown: String) {
+                    view.textStorage!.setAttributedString(NoteMarkdown.attributed(from: markdown,
+                        textColor: .labelColor, accent: .labelColor, mutedColor: .tertiaryLabelColor))
+                    view.setSelectedRange(NSRange(location: view.textStorage!.length, length: 0))
+                    view.typingAttributes = view.textStorage!.length > 0
+                        ? view.textStorage!.attributes(at: view.textStorage!.length - 1, effectiveRange: nil)
+                        : [.noteBlock: NoteBlock.body.rawValue, .font: NoteType.font(for: .body)]
+                    editor.refreshState()
+                }
+                func check(_ name: String, _ expected: String) {
+                    checks += 1
+                    let actual = NoteMarkdown.markdown(from: view.textStorage!)
+                    if actual != expected {
+                        failures += 1
+                        appendState("EDITOR FAIL \(name): \(actual.debugDescription) expected \(expected.debugDescription)")
+                    }
+                }
+                for (source, continued) in [("- prima", "- prima\n- "), ("1. prima", "1. prima\n2. "), ("- [x] fatta", "- [x] fatta\n- [ ] ")] {
+                    load(source)
+                    _ = editor.handleReturn()
+                    check("continue", continued)
+                    _ = editor.handleReturn()
+                    check("exit", source + "\n")
+                    view.insertText("testo", replacementRange: view.selectedRange())
+                    check("body after list", source + "\ntesto")
+                }
+                load("# Titolo")
+                _ = editor.handleReturn()
+                view.insertText("corpo", replacementRange: view.selectedRange())
+                check("heading return", "# Titolo\ncorpo")
+                load("riga\n")
+                editor.setBlock(.bullet)
+                check("format trailing paragraph", "riga\n- ")
+                load("")
+                editor.setBlock(.bullet)
+                view.insertText("👩🏽‍💻 prova", replacementRange: view.selectedRange())
+                check("empty list caret UTF16", "- 👩🏽‍💻 prova")
+                load("# Titolo")
+                editor.setBlock(.body)
+                check("heading to body", "Titolo")
+                load("**devo mandare il report**\n- [x] fatto")
+                let before = NoteMarkdown.markdown(from: view.textStorage!)
+                editor.refreshDetections(noteID: UUID())
+                check("decorations preserve markdown", before)
+                load("- prima")
+                view.insertLineBreak(nil)
+                view.insertText("continua", replacementRange: view.selectedRange())
+                check("soft return", "- prima\u{2028}continua")
+                load("- ")
+                _ = editor.handleBackspace()
+                check("backspace list marker", "")
+                load("parola")
+                view.undoManager?.removeAllActions()
+                view.undoManager?.beginUndoGrouping()
+                editor.setBlock(.h1)
+                view.undoManager?.endUndoGrouping()
+                view.undoManager?.undo()
+                check("format undo", "parola")
+                view.undoManager?.redo()
+                check("format redo", "# parola")
+                load((1...9).map { "\($0). riga" }.joined(separator: "\n"))
+                _ = editor.handleReturn()
+                view.insertText("dieci", replacementRange: view.selectedRange())
+                check("numbered caret 9 to 10", (1...9).map { "\($0). riga" }.joined(separator: "\n") + "\n10. dieci")
+                appendState("editor-tests: \(checks - failures)/\(checks) passed")
             } else if command == "notes-roundtrip" {
                 // markdown -> attributed -> markdown. Anything that does not
                 // come back identical is a format the editor would silently

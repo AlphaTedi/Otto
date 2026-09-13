@@ -29,9 +29,14 @@ final class NoteEditorController: ObservableObject {
     /// How many phrases the current note has underlined — the header's
     /// "3 impegni trovati". Zero means the header shows only the date, never
     /// "0 impegni trovati", which would advertise a failure nobody asked about.
+    @Published var contentHeight: CGFloat = 160
     @Published var detectedCount = 0
     /// The span whose picker is open, if one is.
-    @Published var pickerTarget: (range: NSRange, phrase: String)?
+    @Published var pickerExpanded = false
+    @Published var pickerIndex = 0
+    @Published var pickerTarget: (range: NSRange, phrase: String)? {
+        didSet { pickerExpanded = false; pickerIndex = 0 }
+    }
 
     // MARK: Reading the caret
 
@@ -47,7 +52,7 @@ final class NoteEditorController: ObservableObject {
         // lit state answers for the text you are about to extend rather than
         // for nothing.
         let probe = min(max(selection.location, 0), storage.length - 1)
-        let attributes = storage.attributes(at: probe, effectiveRange: nil)
+        let attributes = selection.length == 0 ? view.typingAttributes : storage.attributes(at: probe, effectiveRange: nil)
         activeBlock = (attributes[.noteBlock] as? String).flatMap(NoteBlock.init(rawValue:)) ?? .body
         let traits = (attributes[.font] as? NSFont).map { NSFontManager.shared.traits(of: $0) } ?? []
         bold = traits.contains(.boldFontMask)
@@ -109,17 +114,22 @@ final class NoteEditorController: ObservableObject {
         guard !paragraphs.isEmpty else { return }
         let selection = view.selectedRange()
 
+        var adjusted = selection
         edit(view) {
             // Back to front: retyping a marker changes the length of every
             // paragraph after it.
             for range in paragraphs.reversed() {
+                let before = storage.length
                 retype(storage, paragraph: range, to: block)
+                let delta = storage.length - before
+                if range.location <= adjusted.location { adjusted.location = max(range.location, adjusted.location + delta) }
+                else { adjusted.length = max(0, adjusted.length + delta) }
             }
+            renumber(storage)
         }
-        renumber(storage)
         // The caret does not move. Applying a format must never take focus or
         // the selection away from where the user left it.
-        view.setSelectedRange(NSRange(location: min(selection.location, storage.length), length: 0))
+        view.setSelectedRange(NSRange(location: min(adjusted.location, storage.length), length: min(adjusted.length, storage.length - min(adjusted.location, storage.length))))
         // What is typed NEXT belongs to the paragraph, never to the marker.
         //
         // The caret ends up immediately after a drawn marker, and an NSTextView
@@ -164,8 +174,9 @@ final class NoteEditorController: ObservableObject {
     func handleSpaceForMarkdown() -> Bool {
         guard let view = textView, let storage = view.textStorage else { return false }
         let caret = view.selectedRange().location
+        guard view.selectedRange().length == 0, !view.hasMarkedText() else { return false }
         let string = storage.string as NSString
-        let line = string.lineRange(for: NSRange(location: min(caret, string.length), length: 0))
+        let line = string.paragraphRange(for: NSRange(location: min(caret, string.length), length: 0))
         let typed = string.substring(with: NSRange(location: line.location,
                                                    length: max(0, caret - line.location)))
         let block: NoteBlock?
@@ -179,7 +190,7 @@ final class NoteEditorController: ObservableObject {
         }
         guard let block else { return false }
         edit(view) {
-            storage.deleteCharacters(in: NSRange(location: line.location, length: typed.count))
+            storage.deleteCharacters(in: NSRange(location: line.location, length: (typed as NSString).length))
         }
         setBlock(block)
         return true
@@ -199,10 +210,20 @@ final class NoteEditorController: ObservableObject {
     ///    out of the list entirely at the margin. That is the only way out
     ///    that does not involve reaching for the mouse.
     func handleReturn() -> Bool {
-        guard let view = textView, let storage = view.textStorage, activeBlock.isList else { return false }
+        guard let view = textView, let storage = view.textStorage else { return false }
+        if activeBlock == .h1 || activeBlock == .h2 {
+            let selection = view.selectedRange()
+            edit(view) {
+                storage.replaceCharacters(in: selection, with: NSAttributedString(string: "\n", attributes: view.typingAttributes))
+            }
+            view.setSelectedRange(NSRange(location: selection.location + 1, length: 0))
+            setBlock(.body)
+            return true
+        }
+        guard activeBlock.isList else { return false }
         let selection = view.selectedRange()
         let string = storage.string as NSString
-        let line = string.lineRange(for: NSRange(location: min(selection.location, string.length), length: 0))
+        let line = string.paragraphRange(for: NSRange(location: min(selection.location, string.length), length: 0))
         var content = line
         if content.length > 0,
            string.substring(with: NSRange(location: NSMaxRange(content) - 1, length: 1)) == "\n" {
@@ -236,13 +257,28 @@ final class NoteEditorController: ObservableObject {
         // actually wears, from the same counters the parser uses.
         insertion.append(Self.marker(continuing, index: 1, indent: level))
 
-        edit(view) { storage.replaceCharacters(in: selection, with: insertion) }
-        let caret = min(selection.location + insertion.length, storage.length)
+        var caret = selection.location + insertion.length
+        edit(view) {
+            storage.replaceCharacters(in: selection, with: insertion)
+            caret = renumber(storage, caret: caret) ?? caret
+        }
+        caret = min(caret, storage.length)
         view.setSelectedRange(NSRange(location: caret, length: 0))
-        renumber(storage)
         // What is typed NEXT belongs to the new row, not to the marker.
         resetTypingAttributes(view, to: continuing, indent: level)
         refreshState()
+        return true
+    }
+
+    func handleBackspace() -> Bool {
+        guard let view = textView, let storage = view.textStorage, activeBlock.isList,
+              view.selectedRange().length == 0 else { return false }
+        let caret = view.selectedRange().location
+        let text = storage.string as NSString
+        let paragraph = text.paragraphRange(for: NSRange(location: caret, length: 0))
+        let prefix = text.substring(with: NSRange(location: paragraph.location, length: caret - paragraph.location))
+        guard prefix.range(of: "^(\\d+\\.|•|☐|☑)\\s+$", options: .regularExpression) != nil else { return false }
+        setBlock(.body)
         return true
     }
 
@@ -252,10 +288,10 @@ final class NoteEditorController: ObservableObject {
         let string = storage.string as NSString
         guard string.length > 0 else { return [NSRange(location: 0, length: 0)] }
         var ranges: [NSRange] = []
-        var location = min(selection.location, string.length - 1)
+        var location = min(selection.location, string.length)
         let end = min(NSMaxRange(selection), string.length)
         repeat {
-            let line = string.lineRange(for: NSRange(location: location, length: 0))
+            let line = string.paragraphRange(for: NSRange(location: location, length: 0))
             ranges.append(line)
             location = NSMaxRange(line)
         } while location < end
@@ -309,7 +345,8 @@ final class NoteEditorController: ObservableObject {
         // Keep whatever inline traits the run already had; only the base size
         // and weight follow the block.
         storage.enumerateAttribute(.font, in: full, options: []) { value, subrange, _ in
-            let traits = (value as? NSFont).map { NSFontManager.shared.traits(of: $0) } ?? []
+            var traits = (value as? NSFont).map { NSFontManager.shared.traits(of: $0) } ?? []
+            if old == .h1 || old == .h2 { traits.remove(.boldFontMask) }
             storage.addAttribute(.font, value: NoteType.font(for: block, traits: traits), range: subrange)
         }
         storage.addAttribute(.foregroundColor,
@@ -342,12 +379,13 @@ final class NoteEditorController: ObservableObject {
     /// Numbered lists count from the top of their own run AND their own level,
     /// so deleting a row does not leave 1, 2, 4 — and a sub-list starts at 1
     /// rather than carrying on from its parent.
-    private func renumber(_ storage: NSTextStorage) {
+    @discardableResult
+    private func renumber(_ storage: NSTextStorage, caret: Int? = nil) -> Int? {
         let string = storage.string as NSString
         var counters = NoteMarkdown.NumberCounters()
         var location = 0
         while location < string.length {
-            let line = string.lineRange(for: NSRange(location: location, length: 0))
+            let line = string.paragraphRange(for: NSRange(location: location, length: 0))
             var content = line
             if content.length > 0,
                string.substring(with: NSRange(location: NSMaxRange(content) - 1, length: 1)) == "\n" {
@@ -370,12 +408,16 @@ final class NoteEditorController: ObservableObject {
                         storage.replaceCharacters(
                             in: NSRange(location: content.location, length: drawn),
                             with: Self.marker(.numbered, index: index, indent: indent))
-                        return renumber(storage)   // lengths moved; start again
+                        let adjusted = caret.map { value in
+                            content.location < value ? max(content.location, value + (wanted as NSString).length - drawn) : value
+                        }
+                        return renumber(storage, caret: adjusted)
                     }
                 }
             }
             location = NSMaxRange(line)
         }
+        return caret
     }
 
     // MARK: Nesting
@@ -436,10 +478,24 @@ final class NoteEditorController: ObservableObject {
     /// attribute at a time.
     private func edit(_ view: NSTextView, _ work: () -> Void) {
         guard let storage = view.textStorage else { return }
+        let previous = NSAttributedString(attributedString: storage)
+        let selection = view.selectedRange()
+        let typing = view.typingAttributes
+        view.undoManager?.registerUndo(withTarget: self) { controller in
+            controller.restore(previous, selection: selection, typing: typing, in: view)
+        }
         storage.beginEditing()
         work()
         storage.endEditing()
         view.didChangeText()
+    }
+
+    private func restore(_ text: NSAttributedString, selection: NSRange,
+                         typing: [NSAttributedString.Key: Any], in view: NSTextView) {
+        edit(view) { view.textStorage?.setAttributedString(text) }
+        view.setSelectedRange(selection)
+        view.typingAttributes = typing
+        refreshState()
     }
 }
 
@@ -459,54 +515,67 @@ extension NoteEditorController {
     /// disruptive thing this feature could do, so a candidate containing the
     /// insertion point is skipped this pass and picked up on the next one,
     /// after the caret has moved on.
-    func refreshDetections(noteID: UUID) {
+    func refreshDetections(noteID: UUID, excludingCaret: Bool = false) {
         guard let view = textView, let storage = view.textStorage else { return }
-        let full = NSRange(location: 0, length: storage.length)
-        let caret = view.selectedRange().location
+        guard !view.hasMarkedText() else { return }
 
-        let found = ActionItemDetector.detect(
+        var found = ActionItemDetector.detect(
             in: storage.string,
             ignoring: NotesStore.shared.dismissed(in: noteID))
-
-        storage.beginEditing()
-        // Clear the previous pass before marking the new one: a span the user
-        // has since edited out of existence must lose its underline, and the
-        // cheapest correct way to do that is to stop trying to track it.
-        storage.removeAttribute(.noteAction, range: full)
-        storage.removeAttribute(.noteActionDone, range: full)
-        storage.removeAttribute(.underlineColor, range: full)
-        storage.removeAttribute(.strikethroughStyle, range: full)
-        // Only OUR underlines come off. A user's own ⌘U has to survive this.
-        storage.enumerateAttributes(in: full, options: []) { attributes, range, _ in
-            if attributes[.ottoUnderlineMark] != nil {
-                storage.removeAttribute(.underlineStyle, range: range)
-                storage.removeAttribute(.ottoUnderlineMark, range: range)
-            }
+        for item in TodoStore.shared.items where item.sourceNoteID == noteID {
+            guard let phrase = item.sourcePhrase else { continue }
+            let range = (storage.string as NSString).range(of: phrase)
+            guard range.location != NSNotFound,
+                  !found.contains(where: { NSIntersectionRange($0.range, range).length > 0 }) else { continue }
+            found.append(DetectedAction(range: range, phrase: phrase, dueDate: item.dueDate))
         }
 
+        let typing = view.typingAttributes
+        clearDetections()
+        var count = 0
         for action in found {
-            guard !NSLocationInRange(caret, action.range) else { continue }
+            if excludingCaret, view.selectedRange().location >= action.range.location,
+               view.selectedRange().location <= NSMaxRange(action.range) { continue }
+            // Never replace a user's own underline with a suggestion.
+            var userUnderline = false
+            storage.enumerateAttribute(.underlineStyle, in: action.range) { value, _, _ in
+                if (value as? Int ?? 0) != 0 { userUnderline = true }
+            }
             let linked = TodoStore.shared.todo(forNote: noteID, phrase: action.phrase)
-            storage.addAttributes([
-                .noteAction: action.phrase,
-                .ottoUnderlineMark: true,
+            guard !userUnderline || linked != nil else { continue }
+            storage.addAttribute(.noteAction, value: action.phrase, range: action.range)
+            view.layoutManager?.addTemporaryAttributes([
                 .underlineStyle: NSUnderlineStyle.single.rawValue,
-                .underlineColor: NSColor.controlAccentColor.withAlphaComponent(0.55),
-            ], range: action.range)
+                .underlineColor: NSColor(LabMetrics.accent).withAlphaComponent(0.55)
+            ], forCharacterRange: action.range)
             if let linked {
-                storage.addAttribute(.noteActionDone, value: linked.isCompleted,
-                                     range: action.range)
-                // A finished phrase reads finished, the same way a finished row
-                // does — struck through and stepped back.
+                storage.addAttribute(.noteActionDone, value: linked.isCompleted, range: action.range)
                 if linked.isCompleted {
-                    storage.addAttribute(.strikethroughStyle,
-                                         value: NSUnderlineStyle.single.rawValue,
-                                         range: action.range)
+                    view.layoutManager?.addTemporaryAttributes([
+                        .strikethroughStyle: NSUnderlineStyle.single.rawValue,
+                        .foregroundColor: NSColor.tertiaryLabelColor
+                    ], forCharacterRange: action.range)
                 }
             }
+            count += 1
         }
-        storage.endEditing()
-        detectedCount = found.count
+        view.typingAttributes = typing.filter { $0.key != .noteAction && $0.key != .noteActionDone }
+        detectedCount = count
+        (view as? ActionTextView)?.needsDisplay = true
+        (view as? ActionTextView)?.showSelectionControl()
+    }
+
+    func clearDetections() {
+        guard let view = textView, let storage = view.textStorage else { return }
+        let full = NSRange(location: 0, length: storage.length)
+        for key: NSAttributedString.Key in [.underlineStyle, .underlineColor, .strikethroughStyle, .foregroundColor] {
+            view.layoutManager?.removeTemporaryAttribute(key, forCharacterRange: full)
+        }
+        storage.removeAttribute(.noteAction, range: full)
+        storage.removeAttribute(.noteActionDone, range: full)
+        view.typingAttributes.removeValue(forKey: .noteAction)
+        view.typingAttributes.removeValue(forKey: .noteActionDone)
+        (view as? ActionTextView)?.clearActionControl()
     }
 
     /// The detected span the caret is in, if any — what ⌥↩ acts on.
@@ -514,7 +583,12 @@ extension NoteEditorController {
         guard let view = textView, let storage = view.textStorage, storage.length > 0 else {
             return nil
         }
-        let caret = min(view.selectedRange().location, storage.length - 1)
+        let selection = view.selectedRange()
+        if selection.length > 0 {
+            let phrase = (storage.string as NSString).substring(with: selection).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !phrase.isEmpty { return (selection, phrase) }
+        }
+        let caret = min(selection.location, storage.length - 1)
         var range = NSRange(location: 0, length: 0)
         guard let phrase = storage.attribute(.noteAction, at: caret,
                                              effectiveRange: &range) as? String else {

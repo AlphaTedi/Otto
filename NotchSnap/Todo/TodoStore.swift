@@ -906,6 +906,7 @@ final class TodoStore: ObservableObject {
     @discardableResult
     func addItem(fromNote noteID: UUID, phrase: String, title: String,
                  collectionID: UUID, dueDate: Date?) -> TodoItem? {
+        if let existing = todo(forNote: noteID, phrase: phrase) { return existing }
         guard let created = addItem(title: title, collectionID: collectionID,
                                     urgency: .low, dueDate: dueDate) else { return nil }
         guard let index = items.firstIndex(where: { $0.id == created.id }) else { return created }
@@ -913,6 +914,18 @@ final class TodoStore: ObservableObject {
         items[index].sourcePhrase = phrase
         scheduleSave()
         return items[index]
+    }
+
+    func unlinkEditedNotePhrases(noteID: UUID, text: String) {
+        var changed = false
+        for index in items.indices where items[index].sourceNoteID == noteID {
+            if let phrase = items[index].sourcePhrase, !text.contains(phrase) {
+                items[index].sourceNoteID = nil
+                items[index].sourcePhrase = nil
+                changed = true
+            }
+        }
+        if changed { scheduleSave() }
     }
 
     /// The sections a note's action picker offers, in order — last-used first,
@@ -1060,10 +1073,14 @@ final class TodoStore: ObservableObject {
     }
 
     func delete(_ id: UUID) {
+        let sourceNote = items.first(where: { $0.id == id })?.sourceNoteID
         withAnimation(Motion.contentHug) {
             items.removeAll { $0.id == id }
         }
         HapticManager.shared.itemDeleted()
+        if let sourceNote, NotesStore.shared.openNoteID == sourceNote {
+            NoteEditorController.shared.refreshDetections(noteID: sourceNote)
+        }
         scheduleSave()
     }
 

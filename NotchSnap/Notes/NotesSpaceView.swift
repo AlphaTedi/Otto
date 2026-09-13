@@ -768,36 +768,22 @@ private struct NoteDetailView: View {
                 // even when there was room for all of it. It is the same
                 // subtraction the stream does: the block, less this view's own
                 // header and bottom row.
-                .frame(height: max(160, LabMetrics.todoBlockMaxHeight
+                .frame(height: min(max(100, editor.contentHeight), max(100, LabMetrics.todoBlockMaxHeight
                                    - LabMetrics.panelTopPadding
-                                   - LabMetrics.barHeight
-                                   - NotesMetrics.bottomBarHeight),
+                                   - LabMetrics.barHeight - 28
+                                   - NotesMetrics.bottomBarHeight
+                                   - (editor.pickerTarget == nil ? 0 : (editor.pickerExpanded ? 200 : 100)))),
                        alignment: .top)
                 .clipped()
 
-            bottomBar
-        }
-        // The section picker, over the note.
-        //
-        // Anchored at the TOP of the body rather than under the phrase itself:
-        // the phrase's rect is known to the layout manager, but a note scrolls
-        // inside a fixed frame, and a picker pinned to a moving line is a
-        // picker that slides off its own panel. The rule the spec actually
-        // cares about is that it must not cover the words it acts on, and at
-        // the head of the body it never does.
-        .overlay(alignment: .top) {
             if let target = editor.pickerTarget {
-                ActionPicker(
-                    phrase: target.phrase,
-                    dueDate: ActionItemDetector.dueDate(in: target.phrase)
-                ) { collectionID in
+                ActionPicker(phrase: target.phrase, dueDate: ActionItemDetector.dueDate(in: target.phrase)) { collectionID in
                     store.createTodo(from: target.phrase, in: collectionID, note: note.id)
-                } onDismiss: {
-                    editor.pickerTarget = nil
-                }
-                .padding(.top, LabMetrics.barHeight + 14)
-                .transition(.opacity.combined(with: .offset(y: -4)))
+                } onDismiss: { editor.pickerTarget = nil }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
             }
+            bottomBar
         }
         .animation(Motion.hintFade, value: editor.pickerTarget?.phrase)
         // Opening a note puts the caret in the CONTENT — driven from HERE,
@@ -816,13 +802,14 @@ private struct NoteDetailView: View {
         // Titles here are proposed by the app, never typed, so the title is
         // never the place to land. It is reached by clicking it, or by Rename.
         .onAppear { focusBody() }
+        .onChange(of: note.title) { if !titleFocused { titleDraft = $0 } }
         // Still subscribed, for every LATER request: ⏎ out of the title,
         // and the rename flow handing the caret back.
-        .onReceive(store.$bodyFocusRequest) { _ in
+        .onChange(of: store.bodyFocusRequest) { _ in
             guard store.openNoteID == note.id else { return }
             focusBody()
         }
-        .onReceive(store.$renameRequest) { _ in
+        .onChange(of: store.renameRequest) { _ in
             guard store.openNoteID == note.id else { return }
             DispatchQueue.main.async { titleFocused = true }
             FieldCaret.collapseToEnd()
@@ -950,7 +937,7 @@ private struct NoteDetailView: View {
             // supposed to take them further in. Every real route here (⏎ from
             // the stream, a click on a row) already has the panel key, so
             // nothing is lost by asking rather than insisting.
-            view.setSelectedRange(NSRange(location: view.string.count, length: 0))
+            view.setSelectedRange(NSRange(location: (view.string as NSString).length, length: 0))
             if view.window?.isKeyWindow == true {
                 view.window?.makeFirstResponder(view)
                 NoteEditorController.shared.bodyFocused = true

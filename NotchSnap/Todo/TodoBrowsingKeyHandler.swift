@@ -290,6 +290,16 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 // format", and the two cannot both have it.
                 if let target = editor.pickerTarget {
                     if keyCode == 53 { editor.pickerTarget = nil; return true }
+                    let sections = TodoStore.shared.pickerSections()
+                    if keyCode == 125 || keyCode == 126 {
+                        editor.pickerExpanded = true
+                        editor.pickerIndex = min(max(0, editor.pickerIndex + (keyCode == 125 ? 1 : -1)), max(0, sections.count - 1))
+                        return true
+                    }
+                    if keyCode == 36, sections.indices.contains(editor.pickerIndex), let noteID = notes.openNoteID {
+                        notes.createTodo(from: target.phrase, in: sections[editor.pickerIndex].id, note: noteID)
+                        return true
+                    }
                     if !cmd, !option, !control, let digit = Int(chars),
                        digit >= 1, digit <= 3 {
                         let sections = TodoStore.shared.pickerSections()
@@ -303,6 +313,11 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 }
                 if option, !cmd, !control, keyCode == 36 {
                     if let hit = editor.actionAtCaret() {
+                        if let noteID = notes.openNoteID,
+                           let linked = TodoStore.shared.todo(forNote: noteID, phrase: hit.phrase) {
+                            TodoStore.shared.toggleComplete(linked.id)
+                            return true
+                        }
                         editor.pickerTarget = hit
                         return true
                     }
