@@ -81,6 +81,34 @@ final class NoteEditorController: ObservableObject {
                                  value: turningOn ? NSUnderlineStyle.single.rawValue : 0,
                                  range: range)
         }
+        // Underlining a selected phrase is also an explicit request to turn
+        // that phrase into an action. Keep the user's underline as formatting,
+        // then reveal the same section picker used by detected commitments.
+        if turningOn, (view as? ActionTextView)?.noteID != nil {
+            let raw = (storage.string as NSString).substring(with: range)
+            let phrase = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !phrase.isEmpty else { return }
+            let leading = (raw as NSString).rangeOfCharacter(from: .whitespacesAndNewlines.inverted).location
+            let trailing = (raw as NSString).rangeOfCharacter(from: .whitespacesAndNewlines.inverted,
+                                                               options: .backwards).location
+            guard leading != NSNotFound, trailing != NSNotFound else { return }
+            let actionRange = NSRange(location: range.location + leading,
+                                      length: trailing - leading + 1)
+            storage.addAttribute(.noteAction, value: phrase, range: actionRange)
+            view.layoutManager?.addTemporaryAttributes([
+                .underlineStyle: NSUnderlineStyle.single.rawValue,
+                .underlineColor: NSColor(LabMetrics.accent).withAlphaComponent(0.85)
+            ], forCharacterRange: actionRange)
+            if actionRange.length > 0 {
+                view.layoutManager?.addTemporaryAttribute(.kern, value: 27,
+                    forCharacterRange: NSRange(location: NSMaxRange(actionRange) - 1, length: 1))
+            }
+            pickerTarget = (actionRange, phrase)
+            detectedCount = max(1, detectedCount)
+            (view as? ActionTextView)?.showSelectionControl()
+        } else if !turningOn {
+            pickerTarget = nil
+        }
     }
 
     private func toggleTrait(_ trait: NSFontTraitMask, isOn: Bool) {
@@ -522,6 +550,19 @@ extension NoteEditorController {
         var found = ActionItemDetector.detect(
             in: storage.string,
             ignoring: NotesStore.shared.dismissed(in: noteID))
+        // A user-applied underline is an explicit action cue. Reconstruct it
+        // on every open/refresh so its + action does not disappear after the
+        // first debounce or after reopening the note.
+        storage.enumerateAttribute(.underlineStyle,
+            in: NSRange(location: 0, length: storage.length), options: []) { value, range, _ in
+            guard (value as? Int ?? 0) != 0 else { return }
+            let phrase = (storage.string as NSString).substring(with: range)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !phrase.isEmpty,
+                  !found.contains(where: { NSIntersectionRange($0.range, range).length > 0 }) else { return }
+            found.append(DetectedAction(range: range, phrase: phrase,
+                                        dueDate: ActionItemDetector.dueDate(in: phrase)))
+        }
         for item in TodoStore.shared.items where item.sourceNoteID == noteID {
             guard let phrase = item.sourcePhrase else { continue }
             let range = (storage.string as NSString).range(of: phrase)
@@ -536,18 +577,18 @@ extension NoteEditorController {
         for action in found {
             if excludingCaret, view.selectedRange().location >= action.range.location,
                view.selectedRange().location <= NSMaxRange(action.range) { continue }
-            // Never replace a user's own underline with a suggestion.
-            var userUnderline = false
-            storage.enumerateAttribute(.underlineStyle, in: action.range) { value, _, _ in
-                if (value as? Int ?? 0) != 0 { userUnderline = true }
-            }
             let linked = TodoStore.shared.todo(forNote: noteID, phrase: action.phrase)
-            guard !userUnderline || linked != nil else { continue }
             storage.addAttribute(.noteAction, value: action.phrase, range: action.range)
             view.layoutManager?.addTemporaryAttributes([
                 .underlineStyle: NSUnderlineStyle.single.rawValue,
                 .underlineColor: NSColor(LabMetrics.accent).withAlphaComponent(0.55)
             ], forCharacterRange: action.range)
+            // Reserve the inline chip's width even before hover. Temporary
+            // kerning changes layout only; it never reaches Markdown.
+            if action.range.length > 0 {
+                view.layoutManager?.addTemporaryAttribute(.kern, value: 27,
+                    forCharacterRange: NSRange(location: NSMaxRange(action.range) - 1, length: 1))
+            }
             if let linked {
                 storage.addAttribute(.noteActionDone, value: linked.isCompleted, range: action.range)
                 if linked.isCompleted {
@@ -568,7 +609,8 @@ extension NoteEditorController {
     func clearDetections() {
         guard let view = textView, let storage = view.textStorage else { return }
         let full = NSRange(location: 0, length: storage.length)
-        for key: NSAttributedString.Key in [.underlineStyle, .underlineColor, .strikethroughStyle, .foregroundColor] {
+        for key: NSAttributedString.Key in [.underlineStyle, .underlineColor, .strikethroughStyle,
+                                            .foregroundColor, .backgroundColor, .kern] {
             view.layoutManager?.removeTemporaryAttribute(key, forCharacterRange: full)
         }
         storage.removeAttribute(.noteAction, range: full)

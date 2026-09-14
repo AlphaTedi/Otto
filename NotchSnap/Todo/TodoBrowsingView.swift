@@ -411,7 +411,7 @@ struct TodoTabView: View {
         // Not in the Notes space. "Click the empty panel to deselect a to-do"
         // has no meaning there, and a full-width tap gesture under the stream
         // is one more peer competing with every row for the same click.
-        .background(store.panelMode == .notes ? nil : DeselectCatcher())
+        .background((store.panelMode == .notes || store.panelMode == .calendar) ? nil : DeselectCatcher())
         .background(TodoBrowsingKeyHandler())
         // The catcher goes UNDER the menu, which is the whole reason it is a
         // separate overlay: a click-anywhere-else dismisser stacked on top
@@ -493,7 +493,8 @@ struct TodoTabView: View {
                 // handed to StreamView instead, which owns the composer and
                 // can put it on the right side of it.
                 if isContainerLayout, store.showsSpaceBar,
-                   store.panelMode != .notes, store.panelMode != .insights {
+                   store.panelMode != .notes, store.panelMode != .calendar,
+                   store.panelMode != .insights {
                     // No extra gap under it. The row already carries its own
                     // breathing room plus the rule's — measured, the added
                     // sectionGap made the panel 16pt taller than the same
@@ -529,6 +530,9 @@ struct TodoTabView: View {
                         // list, same position, same radius. That is why the
                         // draft row above is suppressed in this mode rather
                         // than the composer being tucked under it.
+                        NotesSpaceView()
+                            .transition(modeTransition)
+                    case .calendar:
                         NotesSpaceView()
                             .transition(modeTransition)
                     case .insights:
@@ -658,6 +662,7 @@ struct TodoTabRow: View {
             // moment the lists overflowed — the same way the "+" once did —
             // and the one space that is always there must always be reachable.
             NotesPill()
+            CalendarPill()
 
             // A rule, because the two sides of it are different kinds of
             // thing. Notes is one permanent space; the lists are many and they
@@ -2943,7 +2948,6 @@ private struct ShortcutsOverlay: View {
         ("\u{2318}Q", "todo.sc.quit"),
         ("\u{2325}\u{21A9}", "notes.sc.actionPicker"),
         ("1–3 / ↑↓ / ↩ / Esc", "notes.sc.pickerKeys"),
-        ("⇧⌘O", "meeting.shortcut"),
         ("⌃Tab / ⌃⇧Tab", "meeting.focusShortcut"),
         ("H / L / A / C / U", "meeting.contextShortcut"),
         ("⌘F", "meeting.searchShortcut"),
@@ -3031,5 +3035,4 @@ private struct SweepButton: View {
         .help(L10n.t("todo.clearCompleted"))
     }
 }
-
 

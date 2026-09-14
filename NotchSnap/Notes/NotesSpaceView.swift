@@ -192,6 +192,7 @@ struct NotesSpaceView: View {
     @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
 
     private var isContainer: Bool { notchLayout == .container }
+    private var isCalendarSpace: Bool { TodoStore.shared.panelMode == .calendar }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -208,8 +209,7 @@ struct NotesSpaceView: View {
                     .id(open.id)
                     .transition(.opacity)
             } else {
-                MeetingNotesFilter()
-                StreamView(isContainer: isContainer)
+                StreamView(isContainer: isContainer, isCalendarSpace: isCalendarSpace)
                     .transition(.opacity)
             }
         }
@@ -232,6 +232,7 @@ struct NotesSpaceView: View {
 
 private struct StreamView: View {
     let isContainer: Bool
+    let isCalendarSpace: Bool
 
     @ObservedObject private var store = NotesStore.shared
     @ObservedObject private var chrome = PanelChrome.shared
@@ -278,7 +279,17 @@ private struct StreamView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Composer(focused: $composerFocused, isContainer: isContainer)
+            if isCalendarSpace {
+                CalendarComposer(focused: $composerFocused)
+                    .padding(.horizontal, LabMetrics.barOuterInset)
+                    .notchEntry(index: 0)
+                    .padding(.bottom, LabMetrics.fieldToTabsGap)
+                    .background(GeometryReader { geo in
+                        Color.clear.preference(key: ComposerHeightKey.self, value: geo.size.height)
+                    })
+                    .onPreferenceChange(ComposerHeightKey.self) { composerHeight = $0 }
+            } else {
+                Composer(focused: $composerFocused, isContainer: isContainer)
                 .padding(.horizontal, LabMetrics.barOuterInset)
                 // Index 0 and the same gap as a list's capture field, so this
                 // field and that one are the SAME piece of furniture: same
@@ -291,6 +302,7 @@ private struct StreamView: View {
                     Color.clear.preference(key: ComposerHeightKey.self, value: geo.size.height)
                 })
                 .onPreferenceChange(ComposerHeightKey.self) { composerHeight = $0 }
+            }
 
             // THE FIELD FIRST, THE SECTIONS UNDER IT — the same order every
             // list has, and the reason this row is drawn here rather than at
@@ -338,7 +350,7 @@ private struct StreamView: View {
     private var streamBody: some View {
         let entries = store.stream
         if entries.isEmpty {
-            EmptyStreamState()
+            EmptyStreamState(isCalendarSpace: isCalendarSpace)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.top, 28)
         } else {
@@ -471,6 +483,11 @@ private struct Composer: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: LabMetrics.rowInnerGap) {
+                Image(systemName: "note.text")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(NotesMetrics.pillStroke)
+                    .frame(width: LabMetrics.checkboxSize, height: LabMetrics.checkboxSize)
+
                 ZStack(alignment: .topLeading) {
                     if store.draft.isEmpty {
                         Text(L10n.t("notes.composerPlaceholder"))
@@ -547,6 +564,57 @@ private struct Composer: View {
                 )
         }
         .animation(Motion.hintFade, value: store.draft.isEmpty)
+    }
+}
+
+/// The Calendar space uses the same stable leading slot as the to-do checkbox
+/// and Notes icon, so switching spaces never shifts the field's text.
+private struct CalendarComposer: View {
+    @FocusState.Binding var focused: Bool
+    @ObservedObject private var store = NotesStore.shared
+    @State private var hover = false
+
+    var body: some View {
+        HStack(spacing: LabMetrics.rowInnerGap) {
+            Image(systemName: "calendar")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(LabMetrics.accent)
+                .frame(width: LabMetrics.checkboxSize, height: LabMetrics.checkboxSize)
+
+            TextField(L10n.t("meeting.search"), text: $store.meetingQuery)
+                .textFieldStyle(.plain)
+                .font(DSFont.todoTitle)
+                .foregroundStyle(DSColor.textPrimaryBright)
+                .focused($focused)
+
+            Button { store.beginMeetingPicker() } label: {
+                Image(systemName: "calendar.badge.plus")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(DSColor.textSecondary)
+                    .frame(width: 30, height: 24)
+                    .background(Capsule().fill(DSColor.fieldBackground))
+            }
+            .buttonStyle(.plain)
+            .help(L10n.t("meeting.choose"))
+        }
+        .padding(.horizontal, LabMetrics.barPaddingH)
+        .padding(.vertical, LabMetrics.barPaddingV)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minHeight: LabMetrics.barHeight)
+        .background(
+            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+                .fill(Color.black.opacity(focused ? 0.14 : (hover ? 0.18 : 0.22)))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+                .strokeBorder(focused ? LabMetrics.accent.opacity(0.7)
+                                      : Color.dynamicOverlay(light: 0.07, dark: 0.08),
+                              lineWidth: 1)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous))
+        .onTapGesture { focused = true }
+        .onHover { hover = $0 }
+        .onChange(of: store.meetingSearchFocus) { if $0 { focused = true } }
     }
 }
 
@@ -699,14 +767,16 @@ private struct NoteEntryRow: View {
 // MARK: Empty state
 
 private struct EmptyStreamState: View {
+    let isCalendarSpace: Bool
+
     var body: some View {
         VStack(spacing: 12) {
-            Text(L10n.t("notes.emptyTitle"))
+            Text(L10n.t(isCalendarSpace ? "calendar.emptyTitle" : "notes.emptyTitle"))
                 .font(.system(size: 16))
                 .foregroundStyle(DSColor.textSecondary)
             // No illustration, no icon, no button: the composer above IS the
             // call to action, and anything here would compete with it.
-            Text(L10n.t("notes.emptyBody"))
+            Text(L10n.t(isCalendarSpace ? "calendar.emptyBody" : "notes.emptyBody"))
                 .font(.system(size: 13.5))
                 .foregroundStyle(DSColor.textHint)
                 .multilineTextAlignment(.center)
@@ -801,8 +871,10 @@ private struct NoteDetailView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 8)
             }
+            if !isContainer { Spacer(minLength: 0) }
             bottomBar
         }
+        .frame(maxHeight: isContainer ? nil : .infinity, alignment: .top)
         .animation(Motion.hintFade, value: editor.pickerTarget?.phrase)
         // Opening a note puts the caret in the CONTENT — driven from HERE,
         // not from the signal the store sends.
@@ -1054,7 +1126,7 @@ struct NotesPill: View {
             Text(L10n.t("filter.notes"))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(isActive ? NotesMetrics.pillStroke : DSColor.textPrimary)
-            Text("\(notes.notes.count)")
+            Text("\(notes.notes.filter { $0.meetingContext == nil }.count)")
                 .font(.system(size: 12, weight: .medium))
                 .monospacedDigit()
                 .foregroundColor(isActive ? NotesMetrics.pillStroke.opacity(0.65)
@@ -1091,8 +1163,39 @@ struct NotesPill: View {
     }
 }
 
+struct CalendarPill: View {
+    @ObservedObject private var store = TodoStore.shared
+    @ObservedObject private var notes = NotesStore.shared
+    @State private var hover = false
 
+    private var isActive: Bool { store.panelMode == .calendar }
+    private var count: Int { notes.notes.filter { $0.meetingContext != nil }.count }
 
+    var body: some View {
+        HStack(spacing: 5) {
+            Text(L10n.t("filter.calendar"))
+                .font(.system(size: 12, weight: .medium))
+            Text("\(count)")
+                .font(.system(size: 12, weight: .medium))
+                .monospacedDigit()
+                .opacity(0.65)
+        }
+        .foregroundStyle(isActive ? LabMetrics.accent : DSColor.textPrimary)
+        .padding(.horizontal, LabMetrics.tabPaddingH)
+        .padding(.vertical, LabMetrics.tabPaddingV)
+        .background(Capsule().fill(isActive ? LabMetrics.accent.opacity(0.16)
+                                             : (hover ? LabMetrics.accent.opacity(0.08) : Color.clear)))
+        .overlay(Capsule().strokeBorder(LabMetrics.accent.opacity(isActive ? 1 : (hover ? 0.7 : 0.45)),
+                                        lineWidth: isActive ? 1.5 : 1))
+        .contentShape(Capsule())
+        .onTapGesture { NotesStore.shared.enterCalendarSpace() }
+        .onHover { hover = $0 }
+        .animation(Motion.swap, value: isActive)
+        .animation(Motion.hoverFade, value: hover)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(L10n.t("filter.calendar"))
+    }
+}
 
 
 

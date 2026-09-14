@@ -1,4 +1,4 @@
-# Meeting notes — 1.47.0
+# Meeting notes — 1.48.0
 
 Implements the meeting-notes PRD supplied on 13 September 2026 on top of
 QuickNote, NotesStore, TodoStore and the existing TextKit editor.
@@ -8,7 +8,8 @@ QuickNote, NotesStore, TodoStore and the existing TextKit editor.
 - Every meeting-card variant offers Notes, including meetings without a call URL.
 - Opening an event starts a contextual draft, with no persisted note until writing.
   Task drafts retain their note/event context in a versioned local envelope.
-- Meeting notes are searchable in Notes → Meeting and remain available offline.
+- Meeting notes are searchable in the permanent Calendar space beside Notes and
+  remain available offline. The former All/Meeting row inside Notes was removed.
 - Tasks are real list items. Their durable `meetingNoteID` is independent of an
   editable source phrase. Session tasks, previous open actions, and archived
   completions are projections, not duplicate task records.
@@ -40,13 +41,13 @@ repeated opens creating duplicates while the event remains available.
 
 ## Keyboard
 
-Command-Shift-O opens the meeting selector outside text editors (Command-Shift-M
-already moves to-dos). Arrows/Return select, Escape backs out.
+The Calendar pill opens the meeting-note stream; its calendar-plus button opens
+the meeting selector. Arrows/Return select and Escape backs out.
 Control-Tab / Control-Shift-Tab cycle body, task draft, task rows, contextual controls.
 In the draft, Tab cycles the real destination list and Return submits. On task rows,
 Space toggles completion and Return edits. In contextual controls, H opens history,
 L links conversations, A expands previous actions, C expands completions, U undoes
-linking. Command-F in the Notes stream searches meeting notes. Existing Option-Return
+linking. Command-F in the Calendar stream searches meeting notes. Existing Option-Return
 conversion and rich-text shortcuts remain available in the note body.
 
 ## Verification

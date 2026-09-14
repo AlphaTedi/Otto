@@ -149,7 +149,6 @@ final class NotesStore: ObservableObject {
     @Published private(set) var isWriting = false
     @Published private(set) var saveError: String?
     @Published var pendingMeetingNote: QuickNote?
-    @Published var meetingOnly = false
     @Published var meetingQuery = ""
     @Published var meetingLinkQuery = ""
     @Published var meetingSearchFocus = false
@@ -227,10 +226,12 @@ final class NotesStore: ObservableObject {
     /// touched it. The array IS the order now — new notes go in at the top,
     /// which is the same default the sort produced — and a drag rewrites it.
     var stream: [QuickNote] {
-        guard meetingOnly else { return notes }
-        return notes.filter { $0.meetingContext != nil && (meetingQuery.isEmpty ||
-            ($0.title + "\n" + $0.content).range(of: meetingQuery, options: [.caseInsensitive, .diacriticInsensitive]) != nil) }
-            .sorted { $0.meetingContext!.start > $1.meetingContext!.start }
+        if TodoStore.shared.panelMode == .calendar {
+            return notes.filter { $0.meetingContext != nil && (meetingQuery.isEmpty ||
+                ($0.title + "\n" + $0.content).range(of: meetingQuery, options: [.caseInsensitive, .diacriticInsensitive]) != nil) }
+                .sorted { $0.meetingContext!.start > $1.meetingContext!.start }
+        }
+        return notes.filter { $0.meetingContext == nil }
     }
 
     func note(id: UUID) -> QuickNote? { notes.first { $0.id == id } }
@@ -365,6 +366,13 @@ final class NotesStore: ObservableObject {
         closeNoteState()
         TodoStore.shared.setMode(.notes)
         focusComposer()
+    }
+
+    /// Meeting notes are a sibling space, reached by the Calendar pill.
+    func enterCalendarSpace() {
+        closeNoteState()
+        TodoStore.shared.setMode(.calendar)
+        meetingSearchFocus = true
     }
 
     /// Leave Notes and go back to the list that was on screen.
@@ -653,12 +661,12 @@ final class NotesStore: ObservableObject {
 
 extension NotesStore {
     func beginMeetingPicker() {
-        if TodoStore.shared.panelMode != .notes {
+        if TodoStore.shared.panelMode != .calendar {
             meetingReturnMode = TodoStore.shared.panelMode
             meetingReturnCollection = TodoStore.shared.activeCollectionID
         }
         meetingPicker = true; meetingSelection = 0
-        TodoStore.shared.setMode(.notes)
+        TodoStore.shared.setMode(.calendar)
     }
 
     func cancelMeetingPicker() {
@@ -695,7 +703,7 @@ extension NotesStore {
 
     func openMeetingContext(_ meeting: DetectedMeeting) {
         let existing = meetingNote(for: meeting)
-        if TodoStore.shared.panelMode != .notes {
+        if TodoStore.shared.panelMode != .calendar {
             meetingReturnMode = TodoStore.shared.panelMode
             meetingReturnCollection = TodoStore.shared.activeCollectionID
         }
@@ -728,7 +736,7 @@ extension NotesStore {
             focusBody()
         }
         meetingPicker = false
-        TodoStore.shared.setMode(.notes)
+        TodoStore.shared.setMode(.calendar)
         CompletedArchive.shared.reloadIfNeeded()
     }
 

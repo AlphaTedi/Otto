@@ -42,6 +42,9 @@ enum TodoPanelMode: Equatable {
     /// and exactly one Notes, which is why it takes the head of the bar and
     /// never scrolls with them. State lives in NotesStore.
     case notes
+    /// Meeting notes and upcoming meeting entry points live in their own
+    /// permanent Calendar space beside Notes.
+    case calendar
     /// The Insights page. Like Notes it is a SPACE rather than a mode — it
     /// takes a fixed pill at the head of the bar — but unlike Notes it is a
     /// place you visit weekly, which is why its pill is never filled with
@@ -406,8 +409,8 @@ final class TodoStore: ObservableObject {
         expandedItemID = nil
     }
 
-    /// Walk the space bar as ONE ring: Notes, then every list, in the order
-    /// they are drawn.
+    /// Walk the space bar as ONE ring: Notes, Calendar, then every list in the
+    /// order they are drawn.
     ///
     /// Notes is a space and the lists are spaces, and they sit in one row —
     /// so the key that moves between them has to see one row too. Cycling the
@@ -417,19 +420,22 @@ final class TodoStore: ObservableObject {
     func cycleSpace(by offset: Int) {
         let row = visibleCollections
         guard !row.isEmpty else { return }
-        // Index 0 is Notes; the lists follow.
+        // Index 0 is Notes, 1 is Calendar; the lists follow.
         let current: Int = {
-            guard panelMode != .notes else { return 0 }
-            guard let index = row.firstIndex(where: { $0.id == activeCollectionID }) else { return 1 }
-            return index + 1
+            if panelMode == .notes { return 0 }
+            if panelMode == .calendar { return 1 }
+            guard let index = row.firstIndex(where: { $0.id == activeCollectionID }) else { return 2 }
+            return index + 2
         }()
-        let count = row.count + 1
+        let count = row.count + 2
         let next = ((current + offset) % count + count) % count
         if next == 0 {
             NotesStore.shared.enterSpace()
+        } else if next == 1 {
+            NotesStore.shared.enterCalendarSpace()
         } else {
-            if panelMode == .notes { NotesStore.shared.leaveSpace() }
-            withAnimation(Motion.contentHug) { activeCollectionID = row[next - 1].id }
+            if panelMode == .notes || panelMode == .calendar { NotesStore.shared.leaveSpace() }
+            withAnimation(Motion.contentHug) { activeCollectionID = row[next - 2].id }
             focusedItemID = nil
             expandedItemID = nil
         }
@@ -478,8 +484,8 @@ final class TodoStore: ObservableObject {
         //
         // The way out is the chevron, which now answers the pointer, plus
         // Esc and ⌘[ through the key router.
-        if panelMode == .notes, NotesStore.shared.openNoteID != nil { return false }
-        return panelMode == .browsing || panelMode == .voice || panelMode == .notes
+        if (panelMode == .notes || panelMode == .calendar), NotesStore.shared.openNoteID != nil { return false }
+        return panelMode == .browsing || panelMode == .voice || panelMode == .notes || panelMode == .calendar
             || panelMode == .insights
     }
 
@@ -1330,5 +1336,3 @@ final class TodoStore: ObservableObject {
         scheduleSave()
     }
 }
-
-

@@ -50,8 +50,7 @@ struct NoteBodyView: NSViewRepresentable {
             .noteBlock: NoteBlock.body.rawValue,
         ]
 
-        view.onActionClick = { [weak view] point in
-            guard let view else { return false }
+        view.onActionClick = { point in
             guard let hit = NoteEditorController.shared.action(at: point) else { return false }
             onActionTapped?(hit.range, hit.phrase)
             return true
@@ -262,7 +261,17 @@ final class ActionTextView: NSTextView {
     private var controlTarget: (range: NSRange, phrase: String)?
     private var controlRect = NSRect.zero
 
-    func clearActionControl() { controlTarget = nil; controlRect = .zero; needsDisplay = true }
+    func clearActionControl() {
+        if let old = controlTarget {
+            layoutManager?.removeTemporaryAttribute(.backgroundColor, forCharacterRange: old.range)
+            layoutManager?.addTemporaryAttribute(.underlineColor,
+                value: NSColor(LabMetrics.accent).withAlphaComponent(0.55),
+                forCharacterRange: old.range)
+        }
+        controlTarget = nil
+        controlRect = .zero
+        needsDisplay = true
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -274,8 +283,7 @@ final class ActionTextView: NSTextView {
 
     override func mouseMoved(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if controlTarget != nil, point.y >= controlRect.minY - 4, point.y <= controlRect.maxY + 4,
-           point.x >= controlRect.minX - 50 { return }
+        if controlTarget != nil, controlRect.insetBy(dx: -7, dy: -4).contains(point) { return }
         guard let hit = MainActor.assumeIsolated({ NoteEditorController.shared.action(at: point) }),
               let layout = layoutManager, let container = textContainer else {
             clearActionControl(); return
@@ -284,38 +292,61 @@ final class ActionTextView: NSTextView {
         let rect = layout.boundingRect(forGlyphRange: glyphs, in: container)
             .offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
         guard rect.insetBy(dx: 4, dy: 3).contains(point) else { clearActionControl(); return }
+        if controlTarget?.phrase != hit.phrase { clearActionControl() }
         controlTarget = hit
-        // Keep the control in a reserved trailing gutter: never obscure text
-        // or inject attachment characters into the user's Markdown.
-        controlRect = NSRect(x: bounds.width - 24, y: rect.maxY - 21, width: 20, height: 20)
+        layout.addTemporaryAttributes([
+            .backgroundColor: NSColor(LabMetrics.accent).withAlphaComponent(0.10),
+            .underlineColor: NSColor(LabMetrics.accent).withAlphaComponent(0.85)
+        ], forCharacterRange: hit.range)
+        // Keep the control beside the phrase in temporary layout space: never
+        // obscure text or inject attachment characters into Markdown.
+        controlRect = inlineControlRect(after: hit.range, size: 20)
         needsDisplay = true
     }
 
     func showSelectionControl() {
         guard selectedRange().length > 0,
-              let target = NoteEditorController.shared.actionAtCaret(),
-              let layout = layoutManager, let container = textContainer else { return }
-        let glyphs = layout.glyphRange(forCharacterRange: target.range, actualCharacterRange: nil)
-        let rect = layout.boundingRect(forGlyphRange: glyphs, in: container)
+              let target = NoteEditorController.shared.actionAtCaret() else { return }
         controlTarget = target
-        controlRect = NSRect(x: bounds.width - 24, y: rect.maxY + textContainerOrigin.y - 21, width: 20, height: 20)
+        controlRect = inlineControlRect(after: target.range, size: 20)
         needsDisplay = true
     }
 
     override func mouseExited(with event: NSEvent) { clearActionControl() }
 
     private func linkedControls() -> [(rect: NSRect, phrase: String, done: Bool)] {
-        guard let storage = textStorage, let layout = layoutManager, let container = textContainer else { return [] }
+        guard let storage = textStorage else { return [] }
         var controls: [(rect: NSRect, phrase: String, done: Bool)] = []
         storage.enumerateAttribute(.noteActionDone, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
             guard let done = value as? Bool,
                   let phrase = storage.attribute(.noteAction, at: range.location, effectiveRange: nil) as? String else { return }
-            let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-            let bounds = layout.boundingRect(forGlyphRange: glyphs, in: container)
-            controls.append((NSRect(x: self.bounds.width - 23, y: bounds.maxY + self.textContainerOrigin.y - 19,
-                                    width: 16, height: 16), phrase, done))
+            controls.append((inlineControlRect(before: range, size: 16), phrase, done))
         }
         return controls
+    }
+
+    /// Draw controls beside the phrase itself. The text container has a 28pt
+    /// inset, which reserves enough leading room for linked checkboxes.
+    private func inlineControlRect(after range: NSRange, size: CGFloat) -> NSRect {
+        guard let layout = layoutManager, let container = textContainer else { return .zero }
+        let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        guard glyphs.length > 0 else { return .zero }
+        let last = NSRange(location: NSMaxRange(glyphs) - 1, length: 1)
+        let rect = layout.boundingRect(forGlyphRange: last, in: container)
+            .offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
+        return NSRect(x: min(rect.maxX + 7, bounds.width - size - 4),
+                      y: rect.midY - size / 2, width: size, height: size)
+    }
+
+    private func inlineControlRect(before range: NSRange, size: CGFloat) -> NSRect {
+        guard let layout = layoutManager, let container = textContainer else { return .zero }
+        let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        guard glyphs.length > 0 else { return .zero }
+        let first = NSRange(location: glyphs.location, length: 1)
+        let rect = layout.boundingRect(forGlyphRange: first, in: container)
+            .offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
+        return NSRect(x: max(4, rect.minX - size - 6),
+                      y: rect.midY - size / 2, width: size, height: size)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -345,7 +376,7 @@ final class ActionTextView: NSTextView {
     /// for; anywhere else the ordinary text menu is untouched.
     override func menu(for event: NSEvent) -> NSMenu? {
         let point = convert(event.locationInWindow, from: nil)
-        guard let noteID,
+        guard noteID != nil,
               let hit = MainActor.assumeIsolated({ NoteEditorController.shared.action(at: point) })
         else { return super.menu(for: event) }
 

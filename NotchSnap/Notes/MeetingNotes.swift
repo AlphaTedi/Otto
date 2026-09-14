@@ -90,31 +90,6 @@ struct MeetingNotesButton: View {
     }
 }
 
-struct MeetingNotesFilter: View {
-    @FocusState private var searchFocused: Bool
-    @ObservedObject private var notes = NotesStore.shared
-    var body: some View {
-        HStack(spacing: 12) {
-            Button(L10n.t("meeting.all")) { notes.meetingOnly = false }
-                .foregroundStyle(notes.meetingOnly ? DSColor.textSecondary : DSColor.textPrimary)
-            Button(L10n.t("meeting.filter")) { notes.meetingOnly = true }
-                .foregroundStyle(notes.meetingOnly ? DSColor.textPrimary : DSColor.textSecondary)
-            if notes.meetingOnly {
-                TextField(L10n.t("meeting.search"), text: $notes.meetingQuery)
-                    .textFieldStyle(.plain)
-                    .accessibilityLabel(L10n.t("meeting.search"))
-                    .focused($searchFocused)
-            }
-            Spacer(minLength: 0)
-            if let pending = notes.pendingMeetingNote, !(notes.meetingTaskDrafts[pending.id] ?? "").isEmpty {
-                Button(L10n.t("meeting.resumeDraft")) { notes.open(pending.id) }
-            }
-        }
-        .buttonStyle(.plain).font(DSFont.checklistItem).padding(.horizontal, 20).padding(.vertical, 8)
-        .onChange(of: notes.meetingSearchFocus) { searchFocused = $0 }
-    }
-}
-
 struct MeetingSelectionView: View {
     @ObservedObject private var notes = NotesStore.shared
     @ObservedObject private var calendar = CalendarStore.shared

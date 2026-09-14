@@ -336,7 +336,8 @@ final class CalendarStore: ObservableObject {
         // respect an outstanding snooze (CA-5).
         guard activeAlert == nil else { return }
         // Ambient state above keeps updating; editing never loses its surface.
-        guard !(TodoStore.shared.panelMode == .notes && NotesStore.shared.openNoteID != nil) else { return }
+        guard !((TodoStore.shared.panelMode == .notes || TodoStore.shared.panelMode == .calendar)
+                && NotesStore.shared.openNoteID != nil) else { return }
         let alertWindow = TimeInterval(alertLeadMinutes * 60)
         let due = upcomingToday.first { meeting in
             guard !alertedIDs.contains(meeting.id) else { return false }

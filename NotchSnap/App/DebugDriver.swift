@@ -21,6 +21,8 @@ import SwiftUI
 @MainActor
 enum DebugDriver {
     private static let stateFile = URL(fileURLWithPath: "/tmp/notchsnap-debug-state.txt")
+    private static var verificationNoteID: UUID?
+    private static var verificationTodoID: UUID?
 
     static func install() {
         DistributedNotificationCenter.default().addObserver(
@@ -174,6 +176,19 @@ enum DebugDriver {
                 Task { @MainActor in await CalendarStore.shared.refresh() }
             } else if command == "notes-enter" {
                 NotesStore.shared.enterSpace()
+            } else if command == "notes-verification-create" {
+                let notes = NotesStore.shared
+                notes.enterSpace()
+                notes.draft = "Otto verification: chiamare agenzia e chiedere preventivo aggiornato"
+                if let created = notes.commitDraft() {
+                    verificationNoteID = created.id
+                    notes.open(created.id)
+                }
+            } else if command == "notes-verification-delete" {
+                if let id = verificationNoteID {
+                    NotesStore.shared.delete(id)
+                    verificationNoteID = nil
+                }
             } else if command == "notes-leave" {
                 NotesStore.shared.leaveSpace()
             } else if command.hasPrefix("notes-draft ") {
@@ -262,6 +277,18 @@ enum DebugDriver {
                 let editor = NoteEditorController.shared
                 let key = NSApp.keyWindow
                 appendState("meeting-status open=\(notes.openNote?.meetingContext != nil) persisted=\(notes.openNoteID.flatMap { notes.note(id: $0) } != nil) focus=\(notes.meetingFocus) bodyResponder=\(key?.firstResponder === editor.textView) alert=\(CalendarStore.shared.activeAlert != nil) contentHeight=\(AppState.shared.todoContentHeight)")
+            } else if command == "notes-calendar" {
+                NotesStore.shared.enterCalendarSpace()
+            } else if command.hasPrefix("actions-underline ") {
+                let phrase = String(command.dropFirst(18))
+                if let view = NoteEditorController.shared.textView {
+                    let range = (view.string as NSString).range(of: phrase)
+                    if range.location != NSNotFound {
+                        view.setSelectedRange(range)
+                        NoteEditorController.shared.refreshState()
+                        NoteEditorController.shared.toggleUnderline()
+                    }
+                }
             } else if command == "meeting-notes-tests" {
                 for line in MeetingNotesVerification.run() { appendState(line) }
             } else if command == "notes-editor-tests" {
@@ -400,8 +427,9 @@ enum DebugDriver {
                         _ = r
                     }
                     report += " spans=[" + spans.joined(separator: " ") + "]"
-                    // THE PREMISE: what the file would receive must equal what
-                    // the user typed. Underlines must never reach it.
+                    // Automatic action hints must never reach Markdown. An
+                    // explicit underline made by the user is real formatting
+                    // and is expected to serialize as <u>.
                     report += " markdownHasU=\(NoteMarkdown.markdown(from: storage).contains("<u>"))"
                     report += " dismissed=\(notes.dismissed(in: noteID).count)"
                 }
@@ -425,6 +453,21 @@ enum DebugDriver {
                 }
                 if let phrase {
                     NotesStore.shared.createTodo(from: phrase, in: section.id, note: noteID)
+                }
+            } else if command == "actions-verification-file" {
+                // File the synthetic verification note's action and remember
+                // the exact created ID, so cleanup can never touch user data.
+                guard let noteID = verificationNoteID,
+                      NotesStore.shared.openNoteID == noteID,
+                      let phrase = NoteEditorController.shared.pickerTarget?.phrase,
+                      let section = TodoStore.shared.pickerSections().first else { return }
+                NotesStore.shared.createTodo(from: phrase, in: section.id, note: noteID)
+                verificationTodoID = TodoStore.shared.todo(forNote: noteID, phrase: phrase)?.id
+                appendState("actions-filed=\(verificationTodoID != nil) linked=\(TodoStore.shared.todo(forNote: noteID, phrase: phrase) != nil)")
+            } else if command == "actions-verification-delete" {
+                if let id = verificationTodoID {
+                    TodoStore.shared.delete(id)
+                    verificationTodoID = nil
                 }
             } else if command == "actions-complete" {
                 // Tick the linked to-do from the LIST side, to prove the note

@@ -82,11 +82,7 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 if keyCode == 36, rows.indices.contains(notes.meetingSelection) { CalendarStore.shared.openNotes(for: rows[notes.meetingSelection]); return true }
                 return true
             }
-            // Command-Shift-M already moves tasks. O is free in this router.
-            if cmd, shift, !option, !control, lower == "o", !(NSApp.keyWindow?.firstResponder is NSTextView) {
-                notes.beginMeetingPicker(); return true
-            }
-            if store.panelMode == .notes {
+            if store.panelMode == .notes || store.panelMode == .calendar {
                 if let _ = NoteEditorController.shared.pickerTarget, keyCode == 53 {
                     NoteEditorController.shared.pickerTarget = nil; return true
                 }
@@ -133,11 +129,16 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                     // A task draft/title is its own editor, not the note body.
                     if let responder = NSApp.keyWindow?.firstResponder as? NSTextView,
                        responder !== NoteEditorController.shared.textView { return false }
-                } else if notes.openNoteID == nil, cmd, lower == "f" {
-                    notes.meetingOnly = true; notes.meetingSearchFocus = true; return true
-                } else if notes.openNoteID == nil, notes.meetingOnly, NSApp.keyWindow?.firstResponder is NSTextView {
+                } else if store.panelMode == .calendar, notes.openNoteID == nil, cmd, lower == "f" {
+                    notes.meetingSearchFocus = true; return true
+                } else if store.panelMode == .calendar, notes.openNoteID == nil,
+                          NSApp.keyWindow?.firstResponder is NSTextView {
                     if keyCode == 53 { notes.meetingSearchFocus = false; NSApp.keyWindow?.makeFirstResponder(nil); return true }
-                    if keyCode != 125 && keyCode != 126 && keyCode != 36 { return false }
+                    // Tab always walks the space bar. Empty-search left/right
+                    // do too; once a query exists they belong to its caret.
+                    let navigatesSpace = keyCode == 48
+                        || ((keyCode == 123 || keyCode == 124) && notes.meetingQuery.isEmpty)
+                    if !navigatesSpace && keyCode != 125 && keyCode != 126 && keyCode != 36 { return false }
                 }
             }
 
@@ -201,6 +202,9 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 if keyCode == 53 { store.setMode(.browsing); return true }
                 return false
             case .notes:
+                return handleNotes(cmd: cmd, shift: shift, option: option,
+                                   control: control, chars: chars, keyCode: keyCode, lower: lower)
+            case .calendar:
                 return handleNotes(cmd: cmd, shift: shift, option: option,
                                    control: control, chars: chars, keyCode: keyCode, lower: lower)
             case .insights:
@@ -444,8 +448,10 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 TodoStore.shared.cycleSpace(by: shift ? -1 : 1)
                 return true
             }
+            let isCalendarStream = TodoStore.shared.panelMode == .calendar
+            let navigationInputEmpty = isCalendarStream ? notes.meetingQuery.isEmpty : notes.draft.isEmpty
             if keyCode == 123 || keyCode == 124, !cmd, !option, !control,
-               notes.draft.isEmpty {
+               navigationInputEmpty {
                 TodoStore.shared.cycleSpace(by: keyCode == 124 ? 1 : -1)
                 return true
             }
@@ -459,14 +465,16 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             // instead — with a draft in the field those keys belong to the
             // text being written, and with nothing in it they belong to the
             // stream, which is the state you are in the moment after ⌘S.
-            let composerEmpty = notes.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let composerEmpty = isCalendarStream
+                ? notes.meetingQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                : notes.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
             // ⏎ closes the entry — the confirm key, the same one that files a
             // to-do and commits a step. Notes was the only surface in the app
             // asking for a modifier to do what Return does everywhere else.
             // ⇧⏎ falls through to the field and puts in a line break.
             if keyCode == 36, !cmd, !shift, !option, !control,
-               notes.openNoteID == nil, !composerEmpty {
+               !isCalendarStream, notes.openNoteID == nil, !composerEmpty {
                 notes.commitDraft()
                 notes.focusComposer()
                 return true
