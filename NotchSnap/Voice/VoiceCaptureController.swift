@@ -129,13 +129,6 @@ final class VoiceCaptureController: ObservableObject {
         drafts[index].title = title
     }
 
-    func cycleUrgency(at index: Int) {
-        guard drafts.indices.contains(index) else { return }
-        withAnimation(NotchAnimation.hintFade) {
-            drafts[index].urgency = drafts[index].urgency.next
-        }
-    }
-
     func setCategory(_ name: String?, at index: Int) {
         guard drafts.indices.contains(index) else { return }
         withAnimation(NotchAnimation.hintFade) {
@@ -174,7 +167,6 @@ final class VoiceCaptureController: ObservableObject {
             guard let collectionID = resolvedCollectionID(for: draft) else { continue }
             store.addItem(title: draft.title,
                           collectionID: collectionID,
-                          urgency: draft.urgency,
                           dueDate: draft.dueDate)
         }
         drafts = []

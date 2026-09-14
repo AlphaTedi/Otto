@@ -136,9 +136,12 @@ as a click, so it can't feel like a different kind of motion.
 - **Inline entity chips** in titles — links (clickable, host-shortened), dates,
   `@mentions`, `` `code` `` — rendered with `NSTextAttachment` in a real wrapping text
   flow (SwiftUI `Text` concatenation cannot embed views inline).
-- **Urgency**: 9 px dot for Medium/High only (Low is the silent default), with an
-  immediate hover/focus tooltip reading "Medium priority"; the creation combo always
-  spells out the full phrase.
+- **Urgency/priority: REMOVED 2026-09-14** (Marcello). The 9 px dot, its tooltip,
+  the row context-menu section, `TodoStore.setUrgency`, the `TodoItem.urgency`
+  field, the ⏫/🔼 Markdown markers and the Today high-urgency rule are all gone.
+  `TodoItem` decoders ignore the stale `urgency` key in old todos.json files;
+  old `.md` vault files keep their markers (write-only mirror, never re-read).
+  Do not reintroduce without a new decision entry.
 - **Tab indicators**: remaining-count number (✓ when all done). This *replaced* a
   circular progress ring, which was unreadable at 14 pt.
 - **Drag to reorder** both to-do rows (six-dot grip on hover) and category tabs.

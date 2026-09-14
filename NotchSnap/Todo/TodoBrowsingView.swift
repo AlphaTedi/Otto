@@ -38,23 +38,23 @@ private struct ScrollOffsetKey: PreferenceKey {
     }
 }
 
-/// Softens whichever edge of a scrolling region has content past it.
+/// Softens the top edge of the scrolling region, where content passes under
+/// the draft row.
 ///
 /// A capped ScrollView crops on a hard line, which reads as "the list ends
-/// here" — the reason to-dos below the fold and the whole Completed section
-/// looked missing rather than scrolled away. A fade says "this continues"
-/// without adding a control or a label to read, and it disappears at each end
-/// so a fully-scrolled list still terminates cleanly.
-private struct ScrollEdgeFade: ViewModifier {
+/// here". A fade says "this continues" without adding a control or a label
+/// to read, and it disappears at the end so a fully-scrolled list still
+/// terminates cleanly.
+///
+/// The bottom edge frosts instead of fading — see FrostTray: rows melt into
+/// live blur rather than dissolving into a painted gradient.
+private struct ScrollTopFade: ViewModifier {
     let scrollOffset: CGFloat
-    let contentHeight: CGFloat
-    let viewportHeight: CGFloat
 
     private let fade: CGFloat = 22
     /// 2pt of slack: sub-pixel offsets must not leave a permanent haze on a
     /// list that is actually at its end.
     private var hasAbove: Bool { scrollOffset > 2 }
-    private var hasBelow: Bool { contentHeight - scrollOffset - viewportHeight > 2 }
 
     func body(content: Content) -> some View {
         content.mask(
@@ -63,50 +63,66 @@ private struct ScrollEdgeFade: ViewModifier {
                                startPoint: .top, endPoint: .bottom)
                     .frame(height: fade)
                 Color.black
-                LinearGradient(colors: [.black, .black.opacity(hasBelow ? 0 : 1)],
-                               startPoint: .top, endPoint: .bottom)
-                    .frame(height: fade)
             }
             .animation(NotchAnimation.hintFade, value: hasAbove)
-            .animation(NotchAnimation.hintFade, value: hasBelow)
         )
     }
 }
 
-/// "More below" — a small floating control at the foot of a list that still
-/// overflows once the panel has grown as far as it can.
+/// The frosted foot the pills sit on — Apple's sidebar/toolbar recipe (cf.
+/// the WWDC app's top bar blurring the content scrolling beneath it), not a
+/// painted gradient.
 ///
-/// The fade tells you the list continues; this tells you what to do about it
-/// and does it for you. It only appears while there is genuinely something
-/// below, so it is never a permanent piece of furniture.
-private struct MoreBelowPill: View {
-    let action: () -> Void
-    @State private var hover = false
+/// One continuous tray from the panel foot up past the pills ~40pt into the
+/// scrolling list. The blur itself is PROGRESSIVE — `ProgressiveBlur` ramps
+/// the radius from 0 at the list end to full behind the pills (the BlurUIKit
+/// technique, via public `CIMaskedVariableBlur`) — with a translucent veil
+/// on top for the milky half of frosted glass (BlurUIKit's dimming pattern:
+/// live texture plus visible progression).
+///
+/// Corners follow the container: square toward the list, rounded (block
+/// radius, concentric) toward the panel foot — a square tray poked visibly
+/// past the silhouette's rounded corners.
+private struct FrostTray: View {
+    /// Which side the scrolling list is on — the dissolve faces it.
+    enum ListSide { case top, bottom }
+    /// How far the frost reaches past the pills into the list.
+    static let overhang: CGFloat = 40
+    /// Full blur radius at the pills' end.
+    static let blurRadius: CGFloat = 24
+
+    let listSide: ListSide
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    /// The milky half of the frost, per appearance — concrete, like the
+    /// LiquidGlass scrims, never semantic.
+    private var veil: Color { colorScheme == .dark ? .black : .white }
+    private var veilMax: Double { colorScheme == .dark ? 0.55 : 0.6 }
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
-                Text(L10n.t("todo.moreBelow"))
-                    .font(.system(size: 10, weight: .medium))
+        // Under Reduce Transparency a non-blurring effect view is just an
+        // opaque slab — show nothing. The pills carry their own glass, so
+        // they lose nothing.
+        if !reduceTransparency {
+            ZStack {
+                ProgressiveBlur(radius: Self.blurRadius,
+                                rampPoints: Self.overhang,
+                                deepEnd: listSide == .top ? .bottom : .top)
+                LinearGradient(
+                    colors: listSide == .top
+                        ? [.clear, veil.opacity(veilMax)]
+                        : [veil.opacity(veilMax), .clear],
+                    startPoint: .top, endPoint: .bottom
+                )
             }
-            .foregroundStyle(hover ? DSColor.textPrimaryBright : DSColor.textSecondary)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
-            .background(
-                Capsule().fill(DSColor.fieldBackground)
-            )
-            .overlay(
-                Capsule().strokeBorder(DSColor.panelBorder, lineWidth: 0.5)
-            )
-            // Lifts off the rows sliding underneath it.
-            .shadow(color: DSColor.shadowSoft, radius: 6, y: 2)
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            withAnimation(NotchAnimation.hintFade) { hover = hovering }
+            .clipShape(UnevenRoundedRectangle(
+                topLeadingRadius: 0,
+                bottomLeadingRadius: listSide == .top ? LabMetrics.blockRadius : 0,
+                bottomTrailingRadius: listSide == .top ? LabMetrics.blockRadius : 0,
+                topTrailingRadius: 0,
+                style: .continuous))
+            .allowsHitTesting(false)
         }
     }
 }
@@ -189,22 +205,6 @@ private struct CompletedInsetKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
-    }
-}
-
-/// UG-2 tooltip plumbing: the hovered/focused row's dot reports its anchor;
-/// TodoTabView renders the bubble at PANEL level so the list ScrollView's
-/// clipping can't cut it off (for the first row it floats over the tabs).
-private struct UrgencyTooltipInfo {
-    let text: String
-    let anchor: Anchor<CGRect>
-}
-
-private struct UrgencyTooltipKey: PreferenceKey {
-    static let defaultValue: [UrgencyTooltipInfo] = []
-    static func reduce(value: inout [UrgencyTooltipInfo],
-                       nextValue: () -> [UrgencyTooltipInfo]) {
-        value.append(contentsOf: nextValue())
     }
 }
 
@@ -362,21 +362,6 @@ struct TodoTabView: View {
             }
         }
         .padding(.top, LabMetrics.panelTopPadding)
-        // UG-2: immediate tooltip near the hovered/focused row's urgency dot,
-        // clamped so it can't overflow the panel's edges.
-        .overlayPreferenceValue(UrgencyTooltipKey.self) { infos in
-            GeometryReader { geo in
-                if let info = infos.first {
-                    let rect = geo[info.anchor]
-                    UrgencyTooltip(text: info.text)
-                        .position(x: min(max(rect.midX, 46), geo.size.width - 46),
-                                  y: rect.minY - 18)
-                        .transition(.opacity)
-                }
-            }
-            .allowsHitTesting(false)
-            .animation(NotchAnimation.hintFade, value: infos.first?.text)
-        }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         // Hugging height: the notch shape is a direct animated function of
         // this measurement.
@@ -607,13 +592,13 @@ struct TodoTabView: View {
 // context menu, so it was a second door to one room.
 
 struct TodoTabRow: View {
-    /// Which side of the row the separating rule is drawn on.
+    /// Which side of the row the gap to the list is on.
     ///
-    /// It is a parameter and not a nudge because the rule's placement is
-    /// load-bearing: it exists to divide the tabs from the LIST, so it has to
-    /// be on whichever side the list is. Getting this wrong is what once drew
-    /// the rule inside the list's own area and made the last row appear to
-    /// continue past the panel's edge.
+    /// It is a parameter and not a nudge because the gap's placement is
+    /// load-bearing: the pills sit on whichever side the list is NOT, so the
+    /// breathing room has to be on the side facing the rows. Getting this
+    /// wrong is what once drew the old divider inside the list's own area and
+    /// made the last row appear to continue past the panel's edge.
     enum RulePosition { case above, below }
 
     var rulePosition: RulePosition = .above
@@ -688,35 +673,40 @@ struct TodoTabRow: View {
             // Outside the scroller: the account is not a tab.
             AccountButton()
         }
+        // Floating chrome, not a container divider — the Notes bottom bar set
+        // this precedent (§9). No static strip behind the pills and no hairline
+        // rule any more: the row is glass pills over the panel, grouped so the
+        // material samples them together on macOS 26. What separates the
+        // scrolling rows from the pills now is the list's own bottom edge fade.
+        .glassGroup(spacing: LabMetrics.tabsGap)
         // No rule under the tab row (Marcello, 2026-07-26). The two paddings
         // stay: they were the breathing room either side of the line, and
         // together they are what now separates the tabs from the list.
         .padding(.horizontal, LabMetrics.tabsInset)
-        // The rule is part of the tab row's own LAYOUT, not an overlay pushed
-        // out of it.
-        //
-        // It used to be drawn at `-tabsDividerPaddingV`, 12pt above this row's
-        // top edge — which is inside the area the list occupies. So the last
-        // row and the rule were painted over each other and the list appeared
-        // to continue past its own boundary (Marcello, 2026-08-22). In the
-        // flow it cannot overlap anything, and the list is clipped to stop at
-        // it. See `.clipped()` on the scroll region.
-        //
-        // The SAME reasoning is why the side flips with the row: at the top of
-        // the panel the list is below, so the rule goes below too.
+        // The gap that used to hold the rule stays a gap — the pills still
+        // need breathing room from the list, just with nothing drawn in it.
+        // It is part of the row's own LAYOUT, not an overlay pushed out of
+        // it: the old rule was once drawn 12pt above this row's top edge,
+        // inside the area the list occupies, and the last row and the rule
+        // painted over each other (Marcello, 2026-08-22).
         .padding(.top, rulePosition == .above ? LabMetrics.tabsDividerPaddingV : 0)
         .padding(.bottom, rulePosition == .below ? LabMetrics.tabsDividerPaddingV : 0)
-        .overlay(alignment: rulePosition == .above ? .top : .bottom) {
-            Rectangle()
-                .fill(DSColor.hairlineOnPanel)
-                .frame(height: 1)
-        }
         // The outer breathing room mirrors as well, so the row keeps the same
         // distance from the panel edge whichever end it sits at.
         .padding(.top, rulePosition == .above ? LabMetrics.tabsTopPadding
                                               : LabMetrics.tabsBottomPadding)
         .padding(.bottom, rulePosition == .above ? LabMetrics.tabsBottomPadding
                                                  : LabMetrics.tabsTopPadding)
+        // The frosted foot: backs the pills down to the panel edge and
+        // dissolves into the list on whichever side the list is. A background
+        // overflowing its row — later siblings paint above earlier ones, so
+        // the list slides UNDER the frost, and backgrounds never enter
+        // layout, so the hug and the scroll budget cannot tell it is there.
+        .background(alignment: rulePosition == .above ? .bottom : .top) {
+            FrostTray(listSide: rulePosition == .above ? .top : .bottom)
+                .padding(rulePosition == .above ? .top : .bottom,
+                         -FrostTray.overhang)
+        }
     }
 
     private var tabScroller: some View {
@@ -1314,7 +1304,6 @@ struct TodoBrowsingView: View {
             // budget for that frame rather than collapsing to nothing.
             let natural = regionNaturalHeights[collection.id] ?? lastRegionNaturalHeight
             let viewport = natural > 0 ? min(natural, budget) : budget
-            let hasBelow = natural - scrollOffset - viewport > 2
             // Indicators ON. They were hidden, so a capped region gave the eye
             // nothing at all to say "there is more" — rows below the fold and
             // the entire Completed section read as missing rather than
@@ -1362,14 +1351,13 @@ struct TodoBrowsingView: View {
                 .frame(height: viewport)
                 // The list ENDS at its own bottom edge. Without this a row
                 // that overran the viewport kept drawing into the band the
-                // divider and the tabs live in, so the two overlapped and it
-                // read as a rendering fault rather than as a list continuing.
+                // tabs live in, so the two overlapped and it read as a
+                // rendering fault rather than as a list continuing.
                 .clipped()
-                // The edge that is cut off softens, so the list visibly
-                // continues past it instead of ending on a hard crop.
-                .modifier(ScrollEdgeFade(scrollOffset: scrollOffset,
-                                         contentHeight: natural,
-                                         viewportHeight: viewport))
+                // The cut-off top softens, so the list visibly continues
+                // past it instead of ending on a hard crop. The bottom
+                // frosts instead of fading — see FrostTray.
+                .modifier(ScrollTopFade(scrollOffset: scrollOffset))
                 // Completed sits BELOW the scroll region, not inside it.
                 //
                 // It was the last thing in the scrolling content, so on any
@@ -1409,18 +1397,6 @@ struct TodoBrowsingView: View {
                     }
                 }
                 .onPreferenceChange(CompletedInsetKey.self) { completedInsetHeight = $0 }
-                // A fade says "there is more"; this says how to get there, and
-                // takes you. Even at full height a long enough list still
-                // overflows, and the fade alone is easy to miss on a first run.
-                // No bottom fade. Its 54pt of transparent-to-black was meant
-                // to soften a half-cut row against the divider, but it painted
-                // whether or not anything was being cut — so an empty or short
-                // list wore a dark band across nothing (Marcello, 2026-08-22).
-                // The rule above the tabs already does the separating.
-                // No "More below" pill. The 54pt fade already says the list
-                // continues; a floating label over the last row was a second
-                // device carrying one message.
-                .animation(NotchAnimation.hintFade, value: hasBelow)
             }
             // The panel must animate every viewport change — opening
             // Completed, adding a row, switching to a shorter section — or
@@ -2174,7 +2150,7 @@ private struct RowFrameKey: PreferenceKey {
 //
 // DesignSystem.swift's `TodoRow` is the static visual reference for this
 // row's collapsed look; the live app row additionally needs completion
-// state, urgency dot, the NC-2 details indicator, and the expanded
+// state, the NC-2 details indicator, and the expanded
 // note/checklist editor — so this view exists, styled EXCLUSIVELY from the
 // same DS tokens so the two can't drift apart.
 
@@ -2184,8 +2160,6 @@ private struct TodoItemRow: View {
     let isFocused: Bool
     let isExpanded: Bool
     /// Shared with the list so the dragged row can dim itself.
-    /// Hover on the urgency dot alone — drives the priority tooltip.
-    @State private var urgencyHover = false
     @State private var hover = false
     /// Title editing. `nil` = not editing; a String = the live draft.
     /// Held separately from the item so an abandoned edit (Escape, clicking
@@ -2194,6 +2168,12 @@ private struct TodoItemRow: View {
     @FocusState private var titleFieldFocused: Bool
     @FocusState private var noteFocused: Bool
     @ObservedObject private var store = TodoStore.shared
+
+    /// Whether the row draws anything under its title — the note editor, the
+    /// inline steps, or the trailing step-draft row an expanded row always
+    /// carries. Only then does the slab need vertical air of its own; plain
+    /// rows are inset by their 37pt floor instead.
+    private var carriesDetails: Bool { isExpanded || !item.checklist.isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -2229,12 +2209,28 @@ private struct TodoItemRow: View {
         // (barOuterInset 16 + barPaddingH 20), so every checkbox in the panel
         // finally shares one vertical line. They were apart because this line
         // was lost when an earlier script aborted before writing.
+        //
+        // The SAME air vertically as between rows — but only when the row
+        // carries content below its title. Steps render inline now whether
+        // or not the row is expanded, and with no vertical air at all a
+        // stepped-but-never-opened row's hover/focus slab touched the
+        // checkbox on top and the last step at the bottom (Marcello,
+        // 2026-09-14).
+        //
+        // The value is the inter-row gap, not the 12pt side inset, and that
+        // is the whole point: a plain row already insets its content by
+        // ~5.5pt inside its 37pt floor, so content-to-content down the list
+        // runs ~17pt everywhere — 5.5 + 6 + 5.5 between plain rows, 6 + 6 +
+        // 5.5 after a stepped one. At 12 the stepped rows floated visibly
+        // looser than the rest of the list (Marcello, 2026-09-14).
+        // Plain rows keep no padding and their 37pt floor, which already
+        // insets them.
         .padding(.horizontal, LabMetrics.rowPaddingH)
-        .padding(.vertical, isExpanded ? 8 : 0)
+        .padding(.vertical, carriesDetails ? LabMetrics.listRowGap : 0)
         // A floor, not a fixed height: a title that wraps still grows. Without
         // it the row was exactly as tall as its content, so the checkbox had
         // 12pt either side and nothing above or below.
-        .frame(minHeight: isExpanded ? 0 : LabMetrics.rowMinHeight)
+        .frame(minHeight: carriesDetails ? 0 : LabMetrics.rowMinHeight)
         .background(
             RoundedRectangle(cornerRadius: LabMetrics.rowRadius, style: .continuous)
                 .fill(isExpanded ? DSColor.fieldBackground
@@ -2416,20 +2412,6 @@ private struct TodoItemRow: View {
                         .foregroundStyle(DSColor.textHint)
                 }
 
-                // UG-1/UG-5: 9px dot, Medium/High only — Low (the default)
-                // stays visually silent, so a dot always means "raised".
-                if item.urgency != .low && !item.isCompleted {
-                    UrgencyDot(urgency: item.urgency) { hovering in
-                        withAnimation(NotchAnimation.hintFade) { urgencyHover = hovering }
-                    }
-                    .anchorPreference(key: UrgencyTooltipKey.self, value: .bounds) { anchor in
-                        // The DOT's own hover, not the row's.
-                        urgencyHover
-                            ? [UrgencyTooltipInfo(text: item.urgency.fullLabel, anchor: anchor)]
-                            : []
-                    }
-                }
-
             }
             // Glyphs align to the FIRST line of the title, not to the centre
             // of a title that has wrapped to three lines.
@@ -2602,10 +2584,6 @@ private struct TodoItemRow: View {
     @ViewBuilder
     private var contextMenuItems: some View {
         Button(L10n.t("todo.editTitle")) { beginEditingTitle() }
-        Divider()
-        ForEach(TodoUrgency.allCases) { u in
-            Button(u.label) { TodoStore.shared.setUrgency(u, for: item.id) }
-        }
         Divider()
         Button(L10n.t("todo.moveTo")) { TodoMovePicker.shared.show(itemID: item.id) }
         Divider()

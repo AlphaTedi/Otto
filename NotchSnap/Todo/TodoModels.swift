@@ -9,45 +9,6 @@ import SwiftUI
 // the Notes composer still promotes to EKReminder; to-dos are their own
 // keyboard-first system.
 
-enum TodoUrgency: String, Codable, CaseIterable, Identifiable {
-    case low, medium, high
-    var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .low:    return L10n.t("urgency.low")
-        case .medium: return L10n.t("urgency.medium")
-        case .high:   return L10n.t("urgency.high")
-        }
-    }
-
-    /// UG-4: the full concept, stated in words — "Medium priority", never a
-    /// bare "Medium". Used everywhere urgency is the subject (creation combo,
-    /// its options, the dot tooltip).
-    var fullLabel: String {
-        L10n.t("urgency.\(rawValue).full")
-    }
-
-    /// TD-7: secondary to the collection colour — a small dot, never an accent
-    /// competing with the collection's identity. Values from DesignSystem.
-    var color: Color {
-        switch self {
-        case .low:    return DSColor.urgencyLow
-        case .medium: return DSColor.urgencyMedium
-        case .high:   return DSColor.urgencyHigh
-        }
-    }
-
-    /// KB-4: cycle order, wrapping back to low.
-    var next: TodoUrgency {
-        switch self {
-        case .low:    return .medium
-        case .medium: return .high
-        case .high:   return .low
-        }
-    }
-}
-
 struct TodoCollection: Identifiable, Codable, Equatable {
     let id: UUID
     var name: String
@@ -64,7 +25,7 @@ struct TodoCollection: Identifiable, Codable, Equatable {
 }
 
 /// NC-3: a step inside a to-do's checklist — a sub-detail, never a peer of
-/// top-level to-dos (no urgency, no collection, no completion timestamp).
+/// top-level to-dos (no collection, no completion timestamp).
 struct ChecklistItem: Identifiable, Codable, Equatable {
     let id: UUID
     var title: String
@@ -75,7 +36,6 @@ struct TodoItem: Identifiable, Codable, Equatable {
     let id: UUID
     var title: String
     var collectionID: UUID
-    var urgency: TodoUrgency = .low
     var isCompleted: Bool = false
     var completedAt: Date?
     var dueDate: Date?
@@ -106,7 +66,7 @@ struct TodoItem: Identifiable, Codable, Equatable {
 
     var hasDetails: Bool { !note.isEmpty || !checklist.isEmpty }
 
-    init(id: UUID, title: String, collectionID: UUID, urgency: TodoUrgency,
+    init(id: UUID, title: String, collectionID: UUID,
          isCompleted: Bool, completedAt: Date?, dueDate: Date?,
          sortOrder: Int, createdAt: Date,
          note: String = "", checklist: [ChecklistItem] = [],
@@ -114,7 +74,6 @@ struct TodoItem: Identifiable, Codable, Equatable {
         self.id = id
         self.title = title
         self.collectionID = collectionID
-        self.urgency = urgency
         self.isCompleted = isCompleted
         self.completedAt = completedAt
         self.dueDate = dueDate
@@ -133,7 +92,6 @@ struct TodoItem: Identifiable, Codable, Equatable {
         id = try c.decode(UUID.self, forKey: .id)
         title = try c.decode(String.self, forKey: .title)
         collectionID = try c.decode(UUID.self, forKey: .collectionID)
-        urgency = try c.decodeIfPresent(TodoUrgency.self, forKey: .urgency) ?? .low
         isCompleted = try c.decodeIfPresent(Bool.self, forKey: .isCompleted) ?? false
         completedAt = try c.decodeIfPresent(Date.self, forKey: .completedAt)
         dueDate = try c.decodeIfPresent(Date.self, forKey: .dueDate)

@@ -843,26 +843,17 @@ private struct NoteDetailView: View {
                 NoteEditorController.shared.pickerTarget = (range, phrase)
             }
                 .onChange(of: body_) { store.setBody($0, for: note.id) }
-                // Lined up with the text inside the field above it, so the
-                // note reads as one column rather than as a header and a
-                // separate document.
-                .padding(.horizontal, LabMetrics.barPaddingH + LabMetrics.rowInnerGap + 30)
+                // The text begins on the title's column. The old compound
+                // inset created decorative but unusable side bands and made
+                // the document visibly narrower than its own title field.
+                .padding(.horizontal, LabMetrics.blockPadding)
                 .padding(.top, 20)
                 .padding(.bottom, 8)
-                // The note is as tall as the panel allows, in BOTH layouts.
-                //
-                // Under the notch it was a flat 190 — a quarter of the block —
-                // so a note of any length was read through a slot and scrolled
-                // even when there was room for all of it. It is the same
-                // subtraction the stream does: the block, less this view's own
-                // header and bottom row.
-                .frame(height: min(max(100, editor.contentHeight), max(100, LabMetrics.todoBlockMaxHeight
-                                   - LabMetrics.panelTopPadding
-                                   - LabMetrics.barHeight - 28
-                                   - (note.meetingContext == nil || editor.pickerTarget != nil ? 0 : 250)
-                                   - NotesMetrics.bottomBarHeight
-                                   - (editor.pickerTarget == nil ? 0 : (editor.pickerExpanded ? 200 : 100)))),
-                       alignment: .top)
+                // A document editor owns the remaining room; it is not sized
+                // to its current line count. Sizing it to `contentHeight`
+                // turns a short note into a tiny scroll well and leaves most
+                // of the card as dead space.
+                .frame(height: editorViewportHeight, alignment: .top)
                 .clipped()
 
             if note.meetingContext != nil && editor.pickerTarget == nil { MeetingTasksView(note: note) }
@@ -1003,9 +994,21 @@ private struct NoteDetailView: View {
         }
         .glassGroup(spacing: 12)
         .padding(.horizontal, 24)
-        .padding(.top, 10)
-        .padding(.bottom, 16)
+        // The row's 76pt budget is exact: 36pt of controls, 16pt above and
+        // 24pt below. The visible bottom and side insets are both 24pt, so
+        // the floating capsules follow the outer card's concentric corners.
+        .padding(.top, 16)
+        .padding(.bottom, 24)
         .frame(height: NotesMetrics.bottomBarHeight, alignment: .top)
+    }
+
+    private var editorViewportHeight: CGFloat {
+        max(160, LabMetrics.todoBlockMaxHeight
+            - LabMetrics.panelTopPadding
+            - LabMetrics.barHeight - 28
+            - (note.meetingContext == nil || editor.pickerTarget != nil ? 0 : 250)
+            - NotesMetrics.bottomBarHeight
+            - (editor.pickerTarget == nil ? 0 : (editor.pickerExpanded ? 200 : 100)))
     }
 
     /// Hand the keyboard to the note's text and put the caret at the end of
@@ -1136,17 +1139,16 @@ struct NotesPill: View {
         }
         .padding(.horizontal, LabMetrics.tabPaddingH)
         .padding(.vertical, LabMetrics.tabPaddingV)
-        // ONE shape in every state.
+        // ONE shape in every state, and a GLASS surface under it.
         //
-        // The fill used to interpolate its radius between 48 active and 8
-        // resting, so hovering an inactive pill drew a rounded RECTANGLE and
-        // clicking it snapped to a capsule — two different objects for one
-        // control (Marcello, 2026-09-06: "sembra weird"). The state is the
-        // fill and the stroke; the shape does not move.
-        .background(Capsule(style: .continuous).fill(
-            isActive ? NotesMetrics.pillStroke.opacity(0.16)
-                     : (hover ? NotesMetrics.pillStroke.opacity(0.08) : Color.clear)
-        ))
+        // The fill used to be a flat tint of the pill colour — static plastic
+        // next to glass. It is now the material carrying that same tint, at
+        // the same strengths as before (0.16 active, 0.08 hover): the signal
+        // lives in the coloured text and the dashed stroke, so the fill stays
+        // a whisper and the contrast it was tuned for does not move.
+        .pillGlass(in: Capsule(style: .continuous),
+                   tint: isActive ? NotesMetrics.pillStroke.opacity(0.16)
+                        : (hover ? NotesMetrics.pillStroke.opacity(0.08) : nil))
         .overlay(
             Capsule(style: .continuous)
                 .strokeBorder(
@@ -1184,8 +1186,12 @@ struct CalendarPill: View {
         .foregroundStyle(isActive ? LabMetrics.accent : DSColor.textPrimary)
         .padding(.horizontal, LabMetrics.tabPaddingH)
         .padding(.vertical, LabMetrics.tabPaddingV)
-        .background(Capsule().fill(isActive ? LabMetrics.accent.opacity(0.16)
-                                             : (hover ? LabMetrics.accent.opacity(0.08) : Color.clear)))
+        // Glass under the same whisper of fill as before (0.16 active, 0.08
+        // hover) — the signal is the coloured text plus the solid stroke, so
+        // the fill stays out of the way. See NotesPill for the reasoning.
+        .pillGlass(in: Capsule(style: .continuous),
+                   tint: isActive ? LabMetrics.accent.opacity(0.16)
+                        : (hover ? LabMetrics.accent.opacity(0.08) : nil))
         .overlay(Capsule().strokeBorder(LabMetrics.accent.opacity(isActive ? 1 : (hover ? 0.7 : 0.45)),
                                         lineWidth: isActive ? 1.5 : 1))
         .contentShape(Capsule())
@@ -1197,5 +1203,4 @@ struct CalendarPill: View {
         .accessibilityLabel(L10n.t("filter.calendar"))
     }
 }
-
 

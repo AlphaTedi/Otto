@@ -19,7 +19,7 @@ import Combine
 //     Archive/
 //       2026-08-30.md    completed to-dos, one file per completion day
 //
-// Task lines use the Obsidian Tasks conventions (📅 due, ⏫/🔼 priority,
+// Task lines use the Obsidian Tasks conventions (📅 due,
 // ✅ completion date) so the files are not merely readable in a vault but
 // actually queryable by the plugin people already run.
 //
@@ -249,11 +249,6 @@ final class MarkdownVault: ObservableObject {
     private func taskLine(_ item: TodoItem) -> String {
         let dayKey = VaultFormatters.cached("yyyy-MM-dd")
         var line = "- [\(item.isCompleted ? "x" : " ")] \(item.title)"
-        switch item.urgency {
-        case .high:   line += " ⏫"
-        case .medium: line += " 🔼"
-        case .low:    break
-        }
         if let due = item.dueDate { line += " 📅 \(dayKey.string(from: due))" }
         if item.isCompleted, let at = item.completedAt {
             line += " ✅ \(dayKey.string(from: at))"

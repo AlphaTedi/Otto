@@ -77,7 +77,7 @@ enum MeetingNotesVerification {
             json.removeValue(forKey: "meetingContext")
             let legacyNote = try JSONDecoder().decode(QuickNote.self, from: JSONSerialization.data(withJSONObject: json))
             expect(legacyNote.content == first.content && legacyNote.meetingContext == nil, "legacy note decoder")
-            var task = TodoItem(id: UUID(), title: "Same", collectionID: UUID(), urgency: .low,
+            var task = TodoItem(id: UUID(), title: "Same", collectionID: UUID(),
                                 isCompleted: true, completedAt: date, dueDate: nil, sortOrder: 0, createdAt: date)
             task.meetingNoteID = first.id
             var taskJSON = try JSONSerialization.jsonObject(with: JSONEncoder().encode(task)) as! [String: Any]
@@ -86,7 +86,7 @@ enum MeetingNotesVerification {
             expect(oldTask.meetingNoteID == nil && oldTask.title == "Same", "legacy task decoder")
             let vault = MarkdownVault(directory: root.appendingPathComponent("Vault"))
             expect(vault.recordCompletion(task, from: TodoStore.shared), "archive writes metadata")
-            var second = TodoItem(id: UUID(), title: task.title, collectionID: task.collectionID, urgency: .low,
+            var second = TodoItem(id: UUID(), title: task.title, collectionID: task.collectionID,
                                   isCompleted: true, completedAt: date, dueDate: nil, sortOrder: 1, createdAt: date)
             second.meetingNoteID = first.id
             expect(vault.recordCompletion(second, from: TodoStore.shared), "same title same minute second UUID")

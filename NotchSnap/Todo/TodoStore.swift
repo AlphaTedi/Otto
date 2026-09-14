@@ -459,7 +459,7 @@ final class TodoStore: ObservableObject {
         guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let target = draftDestination?.id,
               addItem(title: title, collectionID: target,
-                      urgency: .low, dueDate: parsed?.date) != nil else { return false }
+                      dueDate: parsed?.date) != nil else { return false }
         draftTitle = ""
         // Re-assert rather than assume: the field reports its own focus, and
         // the list re-rendering underneath must not be able to take it.
@@ -758,7 +758,7 @@ final class TodoStore: ObservableObject {
     }
 
     /// TD-8: Today is a live smart aggregation — anything due today (or
-    /// overdue) or flagged High urgency, pulled from every collection.
+    /// overdue), pulled from every collection.
     /// Every other collection is a plain membership query.
     func openItems(in collection: TodoCollection) -> [TodoItem] {
         // A settling item is technically completed but its row hasn't exited
@@ -771,7 +771,6 @@ final class TodoStore: ObservableObject {
             let endOfToday = Calendar.current.startOfDay(for: Date()).addingTimeInterval(86400)
             base = items.filter { item in
                 guard stillVisible(item) else { return false }
-                if item.urgency == .high { return true }
                 if let due = item.dueDate, due < endOfToday { return true }
                 return false
             }
@@ -917,7 +916,7 @@ final class TodoStore: ObservableObject {
             return addMeetingItem(title: title, collectionID: collectionID, dueDate: dueDate, noteID: noteID, phrase: phrase)
         }
         guard let created = addItem(title: title, collectionID: collectionID,
-                                    urgency: .low, dueDate: dueDate,
+                                    dueDate: dueDate,
                                     meetingNoteID: NotesStore.shared.note(id: noteID)?.meetingContext == nil ? nil : noteID) else { return nil }
         guard let index = items.firstIndex(where: { $0.id == created.id }) else { return created }
         items[index].sourceNoteID = noteID
@@ -932,7 +931,7 @@ final class TodoStore: ObservableObject {
                         phrase: String? = nil) -> TodoItem? {
         let oldCollection = activeCollectionID
         let oldLast = lastUsedCollectionID
-        guard let created = addItem(title: title, collectionID: collectionID, urgency: .low,
+        guard let created = addItem(title: title, collectionID: collectionID,
                                     dueDate: dueDate, meetingNoteID: noteID),
               let index = items.firstIndex(where: { $0.id == created.id }) else { return nil }
         if let phrase { items[index].sourceNoteID = noteID; items[index].sourcePhrase = phrase }
@@ -977,7 +976,7 @@ final class TodoStore: ObservableObject {
     }
 
     @discardableResult
-    func addItem(title: String, collectionID: UUID, urgency: TodoUrgency,
+    func addItem(title: String, collectionID: UUID,
                  dueDate: Date? = nil, meetingNoteID: UUID? = nil) -> TodoItem? {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -996,7 +995,7 @@ final class TodoStore: ObservableObject {
         let next = (items.filter { $0.collectionID == target }.map(\.sortOrder).min() ?? 0) - 1
         var item = TodoItem(
             id: UUID(), title: trimmed, collectionID: target,
-            urgency: urgency, isCompleted: false, completedAt: nil,
+            isCompleted: false, completedAt: nil,
             dueDate: dueDate, sortOrder: next, createdAt: Date()
         )
         item.meetingNoteID = meetingNoteID
@@ -1082,14 +1081,6 @@ final class TodoStore: ObservableObject {
               let noteID = item.sourceNoteID,
               NotesStore.shared.openNoteID == noteID else { return }
         NoteEditorController.shared.refreshDetections(noteID: noteID)
-    }
-
-    func setUrgency(_ urgency: TodoUrgency, for id: UUID) {
-        guard let idx = items.firstIndex(where: { $0.id == id }) else { return }
-        withAnimation(Motion.swap) {
-            items[idx].urgency = urgency
-        }
-        scheduleSave()
     }
 
     /// KB-9: reassign an existing to-do to another collection.

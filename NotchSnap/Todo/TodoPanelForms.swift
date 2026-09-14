@@ -11,7 +11,7 @@ import AppKit
 // directly, wrapped in Buttons for behavior.
 //
 // TO-DO CREATION IS NO LONGER ONE OF THESE. It was `TodoCreateView` — a card
-// with a title field, a category combo, an urgency combo and a Create button,
+// with a title field, a category combo and a Create button,
 // which replaced the whole panel and so was detached from the section it was
 // filing into. It is now a draft row pinned above the list itself (see
 // InlineDraftRow in TodoBrowsingView.swift). What survived the deletion is

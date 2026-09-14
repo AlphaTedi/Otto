@@ -233,10 +233,6 @@ enum DSColor {
         static let innerStroke = Color.black.opacity(0.10)
     }
 
-    // Urgency (see TodoUrgency in notchsnap_todo_pivot_prd.md Section 10)
-    static let urgencyLow = Color(hex: "#8FBF7A")
-    static let urgencyMedium = Color(hex: "#E8C15A")
-    static let urgencyHigh = Color(hex: "#E07A5F")
 }
 
 enum DSSpacing {
@@ -362,9 +358,12 @@ struct CategoryTabChip: View {
         HStack(spacing: 5) {
             Text(title)
                 .font(.system(size: 12, weight: .medium))
-                // Active sits on the category's own fill and is therefore
-                // always dark; inactive sits on the panel and follows it.
-                .foregroundColor(isActive ? DSColor.onAccentFill : DSColor.textPrimary)
+                // Active sits on the category's own tint and is therefore
+                // always dark; inactive sits on plain glass and follows the
+                // panel, brightening on hover now that there is no hover
+                // wash behind it any more.
+                .foregroundColor(isActive ? DSColor.onAccentFill
+                                 : (hover ? DSColor.textPrimaryBright : DSColor.textPrimary))
 
             if let remaining {
                 if remaining == 0 {
@@ -385,14 +384,16 @@ struct CategoryTabChip: View {
         }
         .padding(.horizontal, LabMetrics.tabPaddingH)
         .padding(.vertical, LabMetrics.tabPaddingV)
-        // ONE shape, in every state. The fill is what changes.
+        // ONE shape, in every state — and now a GLASS fill, not a flat one.
         //
-        // The radius used to interpolate between 48 active and 8 resting, so a
-        // hovered chip would have drawn as a rounded RECTANGLE and the same
-        // chip clicked snapped to a capsule — two different objects for one
-        // control (Marcello, 2026-09-06, on the Notes pill; the lists share
-        // the component and had the same latent split). A capsule throughout
-        // removes the question: selection is a fill, not a silhouette.
+        // The active pill used to be a solid category-colour slab and every
+        // inactive one a flat wash: a row of static plastic sitting on a glass
+        // panel. The surface is now the material itself, carrying the section
+        // colour as a TINT (`pillGlass`: real tinted glass on macOS 26,
+        // ultraThinMaterial plus this same cast below it), so the active
+        // section still wears its own colour (TD-9/TD-2) on every system —
+        // and the resting pills are frosted capsules instead of bare text.
+        // Selection is still a fill, not a silhouette.
         //
         // Still not `matchedGeometryEffect`. A pill travelling between chips
         // was the better-looking idea and it caused a real bug: matched
@@ -401,12 +402,10 @@ struct CategoryTabChip: View {
         // ScrollView that clips at its own bounds. The first chip sits on that
         // boundary, so its pill was drawn partly outside the scroller and cut
         // (Marcello, 2026-09-05: "la prima section rimane sempre tagliata").
-        .background(
-            Capsule(style: .continuous)
-                .fill(isActive ? categoryColor
-                      : (hover ? DSColor.fieldBackground : Color.clear))
-        )
-        .clipShape(Capsule(style: .continuous))
+        .pillGlass(in: Capsule(style: .continuous),
+                   tint: isActive ? categoryColor.opacity(0.5) : nil)
+        // Hit-testing only registers on content, not on the glass area, so
+        // the capsule is stated explicitly as the tappable shape.
         .contentShape(Capsule(style: .continuous))
         .onHover { hover = $0 }
         .animation(Motion.swap, value: isActive)
@@ -633,59 +632,6 @@ struct ShortcutHintBadge: View {
     }
 }
 
-// MARK: - Reusable component: Combo box row (creation flow)
-
-/// Used for BOTH category and urgency selection in the creation flow.
-/// Category swatch is a rounded square; urgency swatch is a circle —
-/// this shape difference is intentional, see Section 3.2 of
-/// notchsnap_design_reference_prd.md. Do not standardize the two to one shape.
-struct ComboBoxRow: View {
-    enum SwatchShape { case roundedSquare, circle }
-
-    let label: String
-    let swatchColor: Color
-    let swatchShape: SwatchShape
-    let cycleShortcutHint: String
-    /// Urgency/entity PRD §1.4: the creation flow's urgency swatch is 11px —
-    /// the one place urgency is the row's primary subject.
-    var swatchDiameter: CGFloat = 10
-
-    var body: some View {
-        HStack {
-            HStack(spacing: 8) {
-                swatch
-                Text(label)
-                    .font(.system(size: 12))
-                    .foregroundColor(DSColor.textPrimaryBright)
-            }
-            Spacer()
-            ShortcutHintBadge(text: cycleShortcutHint)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(DSColor.fieldBackground)
-        .overlay(
-            RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
-                .stroke(DSColor.panelBorder, lineWidth: 0.5)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous))
-    }
-
-    @ViewBuilder
-    private var swatch: some View {
-        switch swatchShape {
-        case .roundedSquare:
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(swatchColor)
-                .frame(width: swatchDiameter, height: swatchDiameter)
-        case .circle:
-            Circle()
-                .fill(swatchColor)
-                .frame(width: swatchDiameter, height: swatchDiameter)
-        }
-    }
-}
-
 // MARK: - Reusable component: Primary action button (Create, etc.)
 
 /// A capsule, like every other action in the app and like macOS 26's own push
@@ -763,78 +709,11 @@ struct ColorSwatchButton: View {
     }
 }
 
-// MARK: - Addendum: urgency clarity & inline entity highlighting
+// MARK: - Addendum: inline entity highlighting
 // (notchsnap_urgency_entity_prd.md §3 — supplied by Marcello 2026-07-14.
-// Adapted in two flagged ways: labels route through L10n/TodoUrgency.fullLabel
-// because the app ships EN+IT tables, and the native .help() tooltip was
-// replaced by UrgencyTooltip per Marcello's answer to the §4 open question —
-// hover AND keyboard focus, immediate, no system delay.)
-
-// MARK: Urgency dot (§1)
-
-enum DSUrgencyDot {
-    static let diameter: CGFloat = 9
-    static let creationFlowSwatchDiameter: CGFloat = 11
-}
-
-struct UrgencyDot: View {
-    let urgency: TodoUrgency
-    /// Reports hover on the DOT ITSELF. The tooltip used to key off the row's
-    /// hover, so pointing anywhere on a to-do popped "Medium priority" — an
-    /// explanation nobody asked for (Marcello, 2026-07-26). UG-2 always meant
-    /// the dot.
-    var onHover: ((Bool) -> Void)? = nil
-
-    var body: some View {
-        Circle()
-            .fill(color)
-            .frame(width: DSUrgencyDot.diameter, height: DSUrgencyDot.diameter)
-            // A 9pt circle is a small target; pad the hit area without
-            // changing the layout so the tooltip isn't a pixel hunt.
-            .contentShape(Circle().inset(by: -4))
-            .onHover { onHover?($0) }
-    }
-
-    private var color: Color {
-        switch urgency {
-        case .low: return DSColor.urgencyLow.opacity(0.5) // UG-5: rows skip Low entirely
-        case .medium: return DSColor.urgencyMedium
-        case .high: return DSColor.urgencyHigh
-        }
-    }
-}
-
-/// §1.4 tooltip: dark bubble with a pointer, shown immediately on row
-/// hover/keyboard focus near the dot — never by default (UG-2/UG-3).
-struct UrgencyTooltip: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 10))
-            .foregroundColor(DSColor.textPrimaryBright)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(DSColor.divider)   // #2A2A2A per mockup
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .stroke(DSColor.hairlineOnPanel, lineWidth: 0.5)
-            )
-            .overlay(alignment: .bottom) {
-                // Pointer: the rotated-square trick from the mockup.
-                Rectangle()
-                    .fill(DSColor.divider)
-                    .frame(width: 7, height: 7)
-                    .rotationEffect(.degrees(45))
-                    .offset(y: 3.5)
-            }
-            .shadow(color: DSColor.shadowStrong, radius: 6, y: 2)
-            .fixedSize()
-    }
-}
+// The urgency half of that PRD is gone — priority was removed entirely on
+// 2026-09-14, dot, tooltip, model field and all. What remains is the entity
+// half: links, dates, @mentions and code chips.)
 
 // MARK: Inline entity chips (§2)
 
@@ -895,7 +774,7 @@ enum DSEntityChip {
 
 // NOTE: this SwiftUI view is a visual reference for a SINGLE chip's styling.
 // It cannot be dropped into a Text concatenation to achieve inline flow —
-// see §2.3 of the urgency/entity PRD. EntityTitleView's NSTextAttachment
+// see §2.3 of the entity PRD. EntityTitleView's NSTextAttachment
 // renderer reproduces these exact metrics.
 struct EntityChipReference: View {
     let kind: EntityKind

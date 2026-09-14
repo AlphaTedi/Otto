@@ -82,9 +82,13 @@ struct AvatarMenu: View {
                 }
             }
         }
-        .padding(8)
+        .padding(10)
         .frame(width: 276)
         .floatingGlass(in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.20), lineWidth: 1)
+        )
         .shadow(color: DSColor.shadowSoft, radius: 18, x: 0, y: 8)
     }
 
@@ -180,17 +184,21 @@ private struct AvatarMenuRowView: View {
         }
     }
 
-    /// Selection follows the current macOS accent rather than giving one row
-    /// a permanent coloured tile.
+    /// The current destination uses the same quiet cyan glass selection as
+    /// the formatting popover. Hover and keyboard focus extend that treatment
+    /// to any row without changing the menu's hierarchy.
     private var background: Color {
-        Color.accentColor.opacity(hover || isHighlighted ? 0.18 : 0)
+        if row.isDestination {
+            return LabMetrics.accent.opacity(hover || isHighlighted ? 0.20 : 0.14)
+        }
+        return LabMetrics.accent.opacity(hover || isHighlighted ? 0.18 : 0)
     }
 
     @Environment(\.menuRowPressed) private var isPressed
 
     private var pressedWash: Color {
         guard isPressed else { return .clear }
-        return Color.accentColor.opacity(0.12)
+        return LabMetrics.accent.opacity(0.14)
     }
 }
 

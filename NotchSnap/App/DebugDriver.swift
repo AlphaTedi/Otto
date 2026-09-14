@@ -104,7 +104,7 @@ enum DebugDriver {
             if command.hasPrefix("add ") {
                 let title = String(command.dropFirst(4))
                 if let target = store.lastUsedCollectionID ?? store.firstUserCollection?.id {
-                    store.addItem(title: title, collectionID: target, urgency: .low)
+                    store.addItem(title: title, collectionID: target)
                 }
             } else if command.hasPrefix("switch ") {
                 if let index = Int(command.dropFirst(7)) {
@@ -129,7 +129,7 @@ enum DebugDriver {
                                                              collections: collections)
                     let rendered = parsed.map { todo in
                         "{title='\(todo.title)' cat=\(todo.suggestedCategoryName ?? "nil") "
-                        + "urg=\(todo.urgency.rawValue) date=\(todo.dueDatePhrase ?? "nil")}"
+                        + "date=\(todo.dueDatePhrase ?? "nil")}"
                     }.joined(separator: " | ")
                     appendState("braindump engine=\(BrainDumpParser.activeEngine) "
                                 + "count=\(parsed.count) -> \(rendered)")

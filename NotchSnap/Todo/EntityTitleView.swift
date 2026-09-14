@@ -5,7 +5,7 @@ import SwiftUI
 //
 // SwiftUI Text can't embed views (icons, bordered backgrounds) inside a
 // wrapping text flow, so this is the NSAttributedString/NSTextAttachment
-// route the urgency/entity PRD §2.3 recommends: each recognized entity
+// route the entity PRD §2.3 recommends: each recognized entity
 // becomes a pre-rendered chip image attached inline; plain runs stay real
 // text; AppKit's layout manager handles wrapping (EH-6).
 //

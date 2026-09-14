@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CoreImage
 
 // MARK: - Liquid Glass, with a floor under it
 //
@@ -237,13 +238,13 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
 /// Light brightens toward white under dark labels, Dark deepens toward black
 /// under light ones. That is the invariant, not the specific values.
 enum LiquidGlassTuning {
-    /// Raycast's own surfaces sit near #07080a-#101111 — very deep. Pushed
-    /// further again after seeing the Figma beside the build: the drawing is
-    /// darker than anything the blur alone was going to produce.
-    static let lightScrim: Double = 0.74
-    /// 0.70 exactly — the panel's background is quoted as rgba(0,0,0,0.7) in
-    /// the export, so this stops being a judgement call.
-    static let darkScrim: Double = 0.70
+    /// The system glass already contributes a bright base in Light mode.
+    /// A heavy white layer on top turns it into an opaque white card and
+    /// erases the desktop colours that Liquid Glass is supposed to refract.
+    static let lightScrim: Double = 0.20
+    /// Same rule in Dark mode: enough floor for readable labels, not enough
+    /// black to hide the material and make the panel look painted.
+    static let darkScrim: Double = 0.42
 }
 
 extension View {
@@ -259,8 +260,25 @@ extension View {
     /// reading surface stays legible, and putting it on a toolbar hovering
     /// over a screenshot would bury the screenshot the toolbar is for. This is
     /// the navigation layer doing what Liquid Glass is actually for.
-    func floatingGlass<S: InsettableShape>(in shape: S) -> some View {
-        modifier(FloatingGlassSurface(shape: shape))
+    func floatingGlass<S: InsettableShape>(in shape: S, tint: Color? = nil) -> some View {
+        modifier(FloatingGlassSurface(shape: shape, tint: tint))
+    }
+
+    /// Glass for the space-bar pills — section chips, Notes, Calendar.
+    ///
+    /// Same three tiers as `floatingGlass` (real tinted glass on 26,
+    /// `.ultraThinMaterial` below it, opaque under Reduce Transparency) but
+    /// WITHOUT the hairline: each pill draws its own edge — Notes a dashed
+    /// stroke, Calendar a solid one, the section chips none — so a shared
+    /// stroke here would double every outline.
+    ///
+    /// The tint is used AS GIVEN, because "active" means different depths in
+    /// different places: a section chip needs a strong cast under dark
+    /// on-accent text, while Notes/Calendar carry the signal in coloured text
+    /// plus stroke and only want a whisper of fill. Pass nil for the resting
+    /// state — plain glass, no cast.
+    func pillGlass<S: InsettableShape>(in shape: S, tint: Color? = nil) -> some View {
+        modifier(PillGlassSurface(shape: shape, tint: tint))
     }
 }
 
@@ -283,6 +301,9 @@ extension View {
 /// user has asked for one.
 struct FloatingGlassSurface<S: InsettableShape>: ViewModifier {
     let shape: S
+    /// A restrained cast lets glass remain legible when it is hosted over a
+    /// deliberately dark surface such as Otto's simulated notch.
+    var tint: Color?
     @ObservedObject private var refresh = GlassRefresh.shared
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
@@ -293,11 +314,42 @@ struct FloatingGlassSurface<S: InsettableShape>: ViewModifier {
         } else if #available(macOS 26.0, *) {
             content
                 .glassEffect(Glass.regular
-                    .tint(Color.clear.opacity(refresh.token % 2 == 0 ? 1.0 : 0.9995)),
+                    .tint((tint ?? Color.clear)
+                        .opacity(refresh.token % 2 == 0 ? 1.0 : 0.9995)),
                              in: shape)
         } else {
-            content.background(.ultraThinMaterial, in: shape)
-                   .overlay(shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
+            content
+                .background(.ultraThinMaterial, in: shape)
+                .background(shape.fill((tint ?? .clear).opacity(0.13)))
+                .overlay(shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
+        }
+    }
+}
+
+/// Glass for the space-bar pills. Same tiers as `FloatingGlassSurface`, minus
+/// the hairline (each pill draws its own edge) and with the tint used as
+/// given — see `pillGlass(in:tint:)`.
+struct PillGlassSurface<S: InsettableShape>: ViewModifier {
+    let shape: S
+    /// nil ⇒ resting pill: plain glass, no colour cast.
+    var tint: Color?
+    @ObservedObject private var refresh = GlassRefresh.shared
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    func body(content: Content) -> some View {
+        if reduceTransparency {
+            content.background(shape.fill(Color(hex: "#1C1C1E")))
+                   .overlay(shape.strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
+        } else if #available(macOS 26.0, *) {
+            content
+                .glassEffect(Glass.regular
+                    .tint((tint ?? Color.clear)
+                        .opacity(refresh.token % 2 == 0 ? 1.0 : 0.9995)),
+                             in: shape)
+        } else {
+            content
+                .background(.ultraThinMaterial, in: shape)
+                .background(shape.fill(tint ?? .clear))
         }
     }
 }
@@ -337,5 +389,162 @@ extension View {
     /// above. Everything inside resolves as if the system were in Dark.
     func darkGroundSurface() -> some View {
         environment(\.colorScheme, .dark)
+    }
+}
+
+// MARK: - Progressive (variable) blur
+//
+// TRUE progressive blur: the blur RADIUS itself ramps along a gradient —
+// sharp where the list runs free, fully blurred behind the pills — not one
+// uniform blur faded in with opacity. That distinction is the whole lesson
+// of Tim Oliver's BlurUIKit (MIT): it holds the private `variableBlur`
+// CAFilter iOS composes its own frosted bars from. On macOS the same effect
+// is reachable through PUBLIC API: the `CIMaskedVariableBlur` Core Image
+// filter as the layer's `backgroundFilters`, driven by a grayscale mask
+// image. No private API, no snapshotting, live every frame the list scrolls.
+
+/// Which end of the view carries full blur.
+enum ProgressiveBlurDeepEnd {
+    /// Sharp at the top, fully blurred at the bottom (list above pills).
+    case bottom
+    /// Fully blurred at the top, sharp at the bottom (list below pills).
+    case top
+}
+
+/// An NSView that variable-blurs its BACKDROP (everything composited
+/// underneath it in the window) with a radius ramping from 0 at the shallow
+/// end to `radius` at the deep end, across `rampPoints`.
+///
+/// The mask image is drawn once per bounds size and rebuilt on resize only —
+/// same caching discipline as BlurUIKit's gradient masks.
+final class ProgressiveBlurView: NSView {
+    var radius: CGFloat = 24 { didSet { refreshFilter() } }
+    /// How many points the 0→full ramp spans, measured from the deep end.
+    /// Everything past the ramp (behind the pills) stays at full blur.
+    var rampPoints: CGFloat = 40 { didSet { refreshFilter() } }
+    var deepEnd: ProgressiveBlurDeepEnd = .bottom { didSet { refreshFilter() } }
+
+    private var maskSize: CGSize = .zero
+    private var maskImage: CGImage?
+    private var didInstallFallback = false
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        wantsLayer = true
+    }
+
+    override var isOpaque: Bool { false }
+
+    override func layout() {
+        super.layout()
+        refreshFilter()
+    }
+
+    fileprivate func refreshFilter() {
+        guard bounds.width > 1, bounds.height > 1 else { return }
+        guard let filter = CIFilter(name: "CIMaskedVariableBlur") else {
+            installFallbackBlur()
+            return
+        }
+        filter.setDefaults()
+        filter.setValue(radius, forKey: kCIInputRadiusKey)
+        if maskSize != bounds.size || maskImage == nil {
+            maskImage = makeMask(size: bounds.size)
+            maskSize = bounds.size
+        }
+        if let maskImage {
+            // `CIMaskedVariableBlur` uses its own `inputMask` parameter.
+            // `kCIInputMaskImageKey` is for filters such as blends and is
+            // not part of this filter's schema; using it throws an Objective-C
+            // exception during AppKit layout, which makes a Debug run appear
+            // to be an Xcode crash.
+            filter.setValue(CIImage(cgImage: maskImage), forKey: "inputMask")
+        }
+        wantsLayer = true
+        layer?.backgroundFilters = [filter]
+    }
+
+    /// Grayscale mask in Core Image coordinates (origin bottom-left):
+    /// white = full `radius`, black = sharp. Ramps across `rampPoints` from
+    /// the shallow end; the deep end stays white past the ramp.
+    private func makeMask(size: CGSize) -> CGImage? {
+        // 2x: a 1px/point mask bands visibly across a 40pt ramp.
+        let scale: CGFloat = 2
+        let w = max(1, Int(size.width * scale))
+        let h = max(1, Int(size.height * scale))
+        let space = CGColorSpaceCreateDeviceGray()
+        guard let ctx = CGContext(data: nil, width: w, height: h,
+                                  bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: space,
+                                  bitmapInfo: CGImageAlphaInfo.none.rawValue),
+              let gradient = CGGradient(
+                  colorsSpace: space,
+                  colors: [CGColor(gray: 0, alpha: 1),
+                           CGColor(gray: 1, alpha: 1)] as CFArray,
+                  locations: [0, 1])
+        else { return nil }
+
+        let hh = CGFloat(h)
+        let rampPx = min(rampPoints * scale, hh)
+        // Full-blur base everywhere.
+        ctx.setFillColor(gray: 1, alpha: 1)
+        ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+        // Then carve the ramp back toward sharp at the shallow end.
+        switch deepEnd {
+        case .bottom:
+            // Shallow end is the TOP: black at y=hh fading to white rampPx below it.
+            ctx.drawLinearGradient(gradient,
+                                   start: CGPoint(x: 0, y: hh),
+                                   end: CGPoint(x: 0, y: hh - rampPx),
+                                   options: [])
+        case .top:
+            // Shallow end is the BOTTOM: white rampPx above y=0 fading to black at y=0.
+            ctx.drawLinearGradient(gradient,
+                                   start: CGPoint(x: 0, y: rampPx),
+                                   end: CGPoint(x: 0, y: 0),
+                                   options: [])
+        }
+        return ctx.makeImage()
+    }
+
+    /// Should never trigger (`CIMaskedVariableBlur` ships since macOS 10.12),
+    /// but a frosted foot must never render as a hard band: a plain
+    /// within-window blur degrades to uniform frost instead of nothing.
+    private func installFallbackBlur() {
+        guard !didInstallFallback else { return }
+        didInstallFallback = true
+        let effect = NSVisualEffectView(frame: bounds)
+        effect.material = .hudWindow
+        effect.blendingMode = .withinWindow
+        effect.state = .active
+        effect.autoresizingMask = [.width, .height]
+        addSubview(effect)
+    }
+}
+
+/// SwiftUI host for `ProgressiveBlurView`. Sizes like any view — the mask
+/// follows bounds automatically.
+struct ProgressiveBlur: NSViewRepresentable {
+    var radius: CGFloat = 24
+    var rampPoints: CGFloat = 40
+    var deepEnd: ProgressiveBlurDeepEnd = .bottom
+
+    func makeNSView(context: Context) -> ProgressiveBlurView {
+        let view = ProgressiveBlurView(frame: .zero)
+        view.radius = radius
+        view.rampPoints = rampPoints
+        view.deepEnd = deepEnd
+        return view
+    }
+
+    func updateNSView(_ view: ProgressiveBlurView, context: Context) {
+        view.radius = radius
+        view.rampPoints = rampPoints
+        view.deepEnd = deepEnd
     }
 }

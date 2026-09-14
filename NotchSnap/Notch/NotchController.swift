@@ -99,11 +99,18 @@ class NotchController: ObservableObject {
             backing: .buffered,
             defer: false
         )
-        panel.level = .statusBar + 1
+        // A status-bar-level panel still belongs to the desktop compositor
+        // during a horizontal Spaces gesture, so it travels with the desktop
+        // even with `.stationary`. This is a tiny, transparent, click-through
+        // overlay outside its visible silhouette, so the public screen-saver
+        // overlay level is appropriate here: it stays at the hardware notch
+        // while the desktops slide underneath.
+        panel.level = .screenSaver
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary,
+                                    .fullScreenAuxiliary, .ignoresCycle]
         panel.ignoresMouseEvents = true  // Starts true — only false when expanded (prevents stealing clicks from other apps)
         panel.hidesOnDeactivate = false
         panel.isMovable = false

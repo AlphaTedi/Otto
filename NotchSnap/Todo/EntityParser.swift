@@ -1,6 +1,6 @@
 import Foundation
 
-// MARK: - EntityParser — inline entities in to-do titles (urgency/entity PRD §2)
+// MARK: - EntityParser — inline entities in to-do titles (entity PRD §2)
 //
 // Splits a title into plain-text runs and recognized entities so the row can
 // render Slack-style inline chips. Detection per §2.1:

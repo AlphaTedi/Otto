@@ -9,7 +9,7 @@ import Foundation
 // system/AI features land on a real seam instead of a retrofit).
 //
 // The intents are thin: parameter resolution here, one TodoStore call, done.
-// Anything richer (NL date parsing, urgency words) belongs in the store and
+// Anything richer (NL date parsing) belongs in the store and
 // its parsers, where the in-app paths already live — an intent that grew its
 // own logic would be a second creation path that drifts from the first.
 //
@@ -125,7 +125,7 @@ struct AddTodoIntent: AppIntent {
             ?? store.collections.first?.id
         guard let target,
               let item = store.addItem(title: title, collectionID: target,
-                                       urgency: .low, dueDate: parsed?.date) else {
+                                       dueDate: parsed?.date) else {
             throw AddTodoError.emptyTitle
         }
         let entity = TodoEntity.from(item)

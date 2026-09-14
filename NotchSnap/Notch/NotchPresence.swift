@@ -103,14 +103,13 @@ extension NotchPresenceState.Countdown {
 
     /// PURELY time-based, and deliberately not category-tinted.
     ///
-    /// The spec flagged the choice: urgency or which section the item belongs
-    /// to. It cannot be both — this dot is the only accent in an element that
-    /// carries no label, so a second meaning has nothing to disambiguate it
-    /// against. "How soon" is the question the indicator exists to answer, so
-    /// it is the one the colour answers: it warms as the clock runs down.
+    /// This dot is the only accent in an element that carries no label, so a
+    /// second meaning has nothing to disambiguate it against. "How soon" is
+    /// the question the indicator exists to answer, so it is the one the
+    /// colour answers: it warms as the clock runs down.
     var dotColor: Color {
         switch minutes {
-        case ..<2:  return DSColor.urgencyHigh      // now-ish
+        case ..<2:  return Color(hex: "#E07A5F")      // now-ish
         case ..<6:  return DSColor.CategoryPalette.coral
         case ..<16: return DSColor.CategoryPalette.amber
         default:    return DSColor.CategoryPalette.blue

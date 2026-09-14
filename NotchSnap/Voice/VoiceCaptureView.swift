@@ -95,7 +95,6 @@ struct VoiceCaptureView: View {
                         collectionColor: collectionColor(for: draft),
                         collectionName: collectionName(for: draft),
                         onTitleChange: { voice.updateTitle($0, at: index) },
-                        onCycleUrgency: { voice.cycleUrgency(at: index) },
                         onPickCategory: { voice.setCategory($0, at: index) },
                         onRemove: { voice.remove(at: index) },
                         onFocus: { voice.focusedDraftIndex = index }
@@ -201,7 +200,6 @@ private struct DraftCard: View {
     let collectionColor: Color
     let collectionName: String
     let onTitleChange: (String) -> Void
-    let onCycleUrgency: () -> Void
     let onPickCategory: (String?) -> Void
     let onRemove: () -> Void
     let onFocus: () -> Void
@@ -257,11 +255,6 @@ private struct DraftCard: View {
                 if let phrase = draft.dueDatePhrase, !phrase.isEmpty {
                     metaChip(phrase.capitalizedFirst)
                 }
-
-                Button(action: onCycleUrgency) {
-                    metaChip(draft.urgency.fullLabel)
-                }
-                .buttonStyle(.plain)
 
                 Spacer(minLength: 0)
             }

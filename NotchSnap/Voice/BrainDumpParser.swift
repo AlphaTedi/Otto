@@ -13,9 +13,8 @@ import FoundationModels
 //     preferred path. Zero network calls, free inference.
 //   • Everywhere else (incl. Marcello's 2018 Intel Mac, which can never run
 //     Foundation Models): a deterministic clause parser. Splits the ramble on
-//     spoken conjunctions, reads urgency words, matches category names, and
-//     hands date phrases to the EXISTING NLDateParser (VC-7 — dates are never
-//     reimplemented here).
+//     spoken conjunctions, matches category names, and hands date phrases to
+//     the EXISTING NLDateParser (VC-7 — dates are never reimplemented here).
 //
 // Both paths are fully on-device: the fallback is local string work, so the
 // "nothing leaves your Mac" promise holds on every machine, not just the
@@ -25,7 +24,6 @@ struct ParsedTodo: Identifiable, Equatable {
     let id = UUID()
     var title: String
     var suggestedCategoryName: String?
-    var urgency: TodoUrgency
     var dueDatePhrase: String?
     /// Resolved from `dueDatePhrase` by NLDateParser (VC-7).
     var dueDate: Date?
@@ -82,7 +80,7 @@ enum BrainDumpParser {
 
         // AV-3: last resort — keep the words, let the user clean them up.
         return [ParsedTodo(title: cleaned, suggestedCategoryName: nil,
-                           urgency: .low, dueDatePhrase: nil, dueDate: nil)]
+                           dueDatePhrase: nil, dueDate: nil)]
     }
 
     // MARK: - Engine 1: Apple Intelligence (macOS 26 + Apple silicon)
@@ -111,7 +109,6 @@ enum BrainDumpParser {
                 return ParsedTodo(
                     title: todo.title.trimmingCharacters(in: .whitespacesAndNewlines),
                     suggestedCategoryName: todo.suggestedCategoryName,
-                    urgency: TodoUrgency(spoken: todo.urgency),
                     dueDatePhrase: todo.dueDatePhrase,
                     dueDate: resolved?.date
                 )
@@ -149,9 +146,6 @@ enum BrainDumpParser {
             var clause = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard clause.count > 2 else { continue }
 
-            let urgency = detectUrgency(in: clause)
-            clause = strippingUrgencyPhrases(clause)
-
             let category = collections
                 .filter { !$0.isSystemToday }
                 .first { clause.range(of: $0.name, options: .caseInsensitive) != nil }
@@ -167,51 +161,12 @@ enum BrainDumpParser {
             }
 
             let title = tidyTitle(clause)
-            if title.isEmpty {
-                // The clause was ONLY an aside — "…, that one's kind of
-                // urgent". People say that about the task they just named, so
-                // apply it backwards instead of dropping it on the floor.
-                if urgency != .low, !result.isEmpty {
-                    result[result.count - 1].urgency = urgency
-                }
-                continue
-            }
+            guard !title.isEmpty else { continue }
 
             result.append(ParsedTodo(title: title,
                                      suggestedCategoryName: category?.name,
-                                     urgency: urgency,
                                      dueDatePhrase: datePhrase,
                                      dueDate: dueDate))
-        }
-        return result
-    }
-
-    private static let highWords = ["urgent", "urgently", "asap", "critical",
-                                    "important", "right away", "priority",
-                                    "urgente", "importante", "subito"]
-    private static let lowWords = ["whenever", "no rush", "sometime", "eventually",
-                                   "at some point", "quando puoi", "senza fretta"]
-
-    private static func detectUrgency(in clause: String) -> TodoUrgency {
-        let lower = clause.lowercased()
-        if highWords.contains(where: lower.contains) { return .high }
-        if lowWords.contains(where: lower.contains) { return .low }
-        return .low   // TD-2: Low is the default
-    }
-
-    /// Remove the urgency aside ("that one's urgent") so it doesn't survive
-    /// into the title — the urgency is captured structurally instead.
-    private static func strippingUrgencyPhrases(_ clause: String) -> String {
-        var result = clause
-        let asides = [
-            "that one's kind of urgent", "that one is kind of urgent",
-            "that one's urgent", "that one is urgent",
-            "kind of urgent", "it's urgent", "its urgent", "very urgent",
-            "and it's important", "that's important",
-        ]
-        for aside in asides {
-            result = result.replacingOccurrences(of: aside, with: "",
-                                                 options: [.caseInsensitive])
         }
         return result
     }
@@ -248,13 +203,6 @@ enum BrainDumpParser {
             }
         }
 
-        // Bare urgency adverbs carry no information once urgency is structural.
-        for adverb in ["urgently", "asap", "urgent", "right away"] {
-            if title.lowercased().hasSuffix(" " + adverb) {
-                title = String(title.dropLast(adverb.count + 1))
-            }
-        }
-
         title = title.trimmingCharacters(in: CharacterSet(charactersIn: " ,.;-"))
         title = title.replacingOccurrences(of: "\\s{2,}", with: " ",
                                            options: .regularExpression)
@@ -276,9 +224,6 @@ struct FMParsedTodo {
     @Guide(description: "Best-guess category name from the provided list, or omit if unclear")
     var suggestedCategoryName: String?
 
-    @Guide(description: "Exactly one of: low, medium, high — infer from urgency language like 'urgent' or 'whenever'")
-    var urgency: String
-
     @Guide(description: "A natural language date phrase if one was mentioned, e.g. 'tomorrow', otherwise omit")
     var dueDatePhrase: String?
 }
@@ -290,14 +235,3 @@ struct FMBrainDumpResult {
     var todos: [FMParsedTodo]
 }
 #endif
-
-extension TodoUrgency {
-    /// Map the model's free-text urgency onto the enum, defaulting to Low.
-    init(spoken: String) {
-        switch spoken.lowercased().trimmingCharacters(in: .whitespaces) {
-        case "high", "urgent", "alta":   self = .high
-        case "medium", "media", "med":   self = .medium
-        default:                          self = .low
-        }
-    }
-}
