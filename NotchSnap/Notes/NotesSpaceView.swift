@@ -165,7 +165,9 @@ enum NotesMetrics {
     static let entryGap: CGFloat = 18
     static let entryInset: CGFloat = 12
     static let highlightRadius: CGFloat = 16
-    static let bottomBarHeight: CGFloat = 52
+    /// Includes the breathing room that keeps floating controls concentric
+    /// with the lower corners of the expanded notch.
+    static let bottomBarHeight: CGFloat = 76
     /// Under the notch the height is a cost, not a resource: the composer
     /// stops at two lines and the text scrolls inside it instead of pushing
     /// the silhouette down.
@@ -969,7 +971,7 @@ private struct NoteDetailView: View {
     }
 
     private var bottomBar: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 10) {
             // In BOTH layouts. This row exists in the container too — it is
             // where the word count and the download already live — so the
             // toolbar costs no extra height there, and a note offering
@@ -991,20 +993,19 @@ private struct NoteDetailView: View {
                     .foregroundStyle(DSColor.textPrimaryBright)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 6)
-                    .background(Capsule().fill(DSColor.fieldBackground))
-                    .overlay(Capsule().strokeBorder(DSColor.panelBorder, lineWidth: 0.5))
                     .contentShape(Capsule())
+                    .floatingGlass(in: Capsule())
             }
             .buttonStyle(.plain)
             // Rename is gone from this row — the bar needs the width. It is
             // still the title in the header, and Rename in the stream's own
             // context menu.
         }
-        .padding(.horizontal, 8)
-        .frame(height: NotesMetrics.bottomBarHeight)
-        .overlay(alignment: .top) {
-            Rectangle().fill(DSColor.hairlineOnPanel).frame(height: 1)
-        }
+        .glassGroup(spacing: 12)
+        .padding(.horizontal, 24)
+        .padding(.top, 10)
+        .padding(.bottom, 16)
+        .frame(height: NotesMetrics.bottomBarHeight, alignment: .top)
     }
 
     /// Hand the keyboard to the note's text and put the caret at the end of
@@ -1196,6 +1197,5 @@ struct CalendarPill: View {
         .accessibilityLabel(L10n.t("filter.calendar"))
     }
 }
-
 
 

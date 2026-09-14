@@ -49,17 +49,16 @@ class AppState: ObservableObject {
     /// for tabs that need more room (e.g. Notes).
     @Published var activeNotchFilter: NotchContentFilter = .todos
 
-    /// Pivot PRD: the notch is a to-do app first. The Shelf/Clipboard/Notes
-    /// panels stay in the codebase but are hidden unless re-enabled from
-    /// Settings ("Show legacy panels").
+    /// Otto no longer exposes the pre-pivot capture, shelf or clipboard UI.
+    /// Keeping this compatibility property false prevents stale state from an
+    /// older install from becoming a hidden route back into those flows.
     var showLegacyPanels: Bool {
-        UserDefaults.standard.bool(forKey: "showLegacyPanels")
+        false
     }
 
-    /// Which of the two expanded designs is up. Same shape as
-    /// `showLegacyPanels`: the value lives in UserDefaults so views can bind
-    /// to it with @AppStorage and re-render themselves, while the geometry
-    /// code — which is not a view — reads it through here.
+    /// Which of the two expanded designs is up. The value lives in
+    /// UserDefaults so views can bind to it with @AppStorage and re-render
+    /// themselves, while geometry code reads it through here.
     var notchLayout: NotchLayout {
         NotchLayout(rawValue: UserDefaults.standard.string(forKey: "notchLayout") ?? "")
             ?? .panels

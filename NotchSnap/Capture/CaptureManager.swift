@@ -47,6 +47,9 @@ extension Notification.Name {
 @MainActor
 class CaptureManager: ObservableObject {
     static let shared = CaptureManager()
+    /// Kept as a defensive boundary while legacy implementation files remain
+    /// in the target for migration compatibility.
+    private static let captureIsAvailable = false
 
     @Published var isCapturing: Bool = false
     private var areaSelectorWindow: AreaSelectorWindow?
@@ -144,6 +147,7 @@ class CaptureManager: ObservableObject {
     }
 
     func setupHotkeyObservers() {
+        guard Self.captureIsAvailable else { return }
         NotificationCenter.default.addObserver(
             forName: .captureAreaSilent,
             object: nil,
@@ -166,10 +170,12 @@ class CaptureManager: ObservableObject {
     }
 
     func startCapture(mode: CaptureMode) async {
+        guard Self.captureIsAvailable else { return }
         await startCapture(mode: mode, openEditorAfter: false, silentCopy: false)
     }
 
     func startCapture(mode: CaptureMode, openEditorAfter: Bool, silentCopy: Bool) async {
+        guard Self.captureIsAvailable else { return }
         guard !isCapturing else {
             print("[CaptureManager] Already capturing — skipping")
             return
@@ -285,6 +291,7 @@ class CaptureManager: ObservableObject {
     // MARK: - Inline Area Capture (edit-before-capture flow)
 
     func startInlineCapture() async {
+        guard Self.captureIsAvailable else { return }
         guard !isCapturing else {
             print("[CaptureManager] Already capturing — skipping")
             return

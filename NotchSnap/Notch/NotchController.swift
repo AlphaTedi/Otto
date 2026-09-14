@@ -7,6 +7,9 @@ import SwiftUI
 @MainActor
 class NotchController: ObservableObject {
     static let shared = NotchController()
+    /// Screenshot and clipboard notifications belonged to the retired
+    /// NotchSnap product surface.
+    private static let legacyNotificationsAreAvailable = false
 
     @Published var state: NotchState = .idle
     @Published var contentVisible: Bool = false
@@ -159,14 +162,10 @@ class NotchController: ObservableObject {
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
-        // Space changes (e.g. switching to a fullscreen app's Space) can also leave
-        // the panel anchored to stale geometry — re-anchor on activation too.
-        NSWorkspace.shared.notificationCenter.addObserver(
-            self,
-            selector: #selector(screenParametersDidChange),
-            name: NSWorkspace.activeSpaceDidChangeNotification,
-            object: nil
-        )
+        // Do not set the frame during a Space swipe. The panel is
+        // `.stationary` + `.canJoinAllSpaces`, so AppKit keeps it pinned to
+        // the hardware notch; a manual re-anchor mid-transition makes it
+        // visibly travel with the desktop underneath it.
     }
 
     /// The display the notch belongs to.
@@ -475,13 +474,13 @@ class NotchController: ObservableObject {
     // MARK: - Show New Screenshot (Dynamic Island notification instead of full expand)
 
     func showNewScreenshot() {
-        guard let lastItem = AppState.shared.screenshots.first else { return }
-        triggerCaptureNotification(screenshot: lastItem)
+        // Screenshot capture was retired from Otto.
     }
 
     // MARK: - Capture Notification (thumbnail + checkmark)
 
     func triggerCaptureNotification(screenshot: ScreenshotItem) {
+        guard Self.legacyNotificationsAreAvailable else { return }
         // If already in notification, cancel and restart
         notificationTask?.cancel()
         resetNotificationContent()
@@ -502,6 +501,7 @@ class NotchController: ObservableObject {
     // MARK: - Clipboard Notification (icon + contextual text)
 
     func triggerClipboardNotification(item: ClipboardItem) {
+        guard Self.legacyNotificationsAreAvailable else { return }
         notificationTask?.cancel()
         resetNotificationContent()
         guard state != .expanded else { return }
@@ -705,7 +705,6 @@ class NotchController: ObservableObject {
             NSWorkspace.willSleepNotification,
             NSWorkspace.screensDidSleepNotification,
             NSWorkspace.sessionDidResignActiveNotification,
-            NSWorkspace.activeSpaceDidChangeNotification,
         ] {
             ws.addObserver(self, selector: #selector(attentionLeft), name: name, object: nil)
         }

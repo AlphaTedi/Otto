@@ -196,7 +196,6 @@ struct GeneralSettingsView: View {
     @AppStorage("soundEffectsEnabled") private var soundEffectsEnabled = true
     @AppStorage("hapticFeedback") private var hapticFeedback = true
     @AppStorage(L10n.storageKey) private var appLanguage = "system"
-    @AppStorage("showLegacyPanels") private var showLegacyPanels = false
 
     @ObservedObject private var updates = UpdateController.shared
 
@@ -242,21 +241,6 @@ struct GeneralSettingsView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
-                }
-            }
-
-            SettingsSection_Card(title: "Panels") {
-                Toggle(isOn: Binding(
-                    get: { showLegacyPanels },
-                    set: { newValue in
-                        showLegacyPanels = newValue
-                        // AppState reads the flag via computed properties —
-                        // nudge observers so the notch re-renders right away.
-                        appState.objectWillChange.send()
-                    }
-                )) {
-                    rowText("Show legacy panels",
-                            "Bring back the Tray, Notes, Shots and Clipboard tabs alongside To-dos. Off, the notch is a focused to-do list.")
                 }
             }
 

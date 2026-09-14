@@ -341,7 +341,26 @@ One change ("app refactoring fundamentals", Thomas) that set four foundations:
   `\(\.$text)` String parameter in a phrase fails the build at metadata
   extraction, not compile.
 
-## 9. Open threads
+## 9. The 2026-09-14 Otto boundary
+
+Otto no longer owns screenshot capture, clipboard monitoring, the screenshot shelf,
+or their notification UI. The legacy source remains temporarily for data migration,
+but it has no launch path, no Carbon shortcut, no Settings route, and no Screen
+Recording usage description. In particular, ⌃⇧2/3/4/5 and ⌃⇧Space are not registered
+by Otto, and copying to the system pasteboard must not expand the notch.
+
+The notch panel uses AppKit's `.canJoinAllSpaces`, `.stationary`, and
+`.fullScreenAuxiliary` collection behavior. Do not recalculate its frame from
+`activeSpaceDidChangeNotification`: that runs during the horizontal Spaces gesture and
+makes a stationary panel visibly move with the desktop. Reposition only on real display
+parameter changes.
+
+The Notes bottom bar is floating chrome, not a container divider. Keep its controls
+inside the lower inset and use `floatingGlass(in:)` for both the formatting capsule and
+the Markdown export control. This preserves the outer silhouette's corner geometry and
+uses real Liquid Glass on macOS 26 with the project material fallback on older systems.
+
+## 10. Open threads
 
 - **Google OAuth provider** — the structural fix for calendar sync fragility; reads
   Google's API live. Needs a Google Cloud OAuth client ID from Marcello. The

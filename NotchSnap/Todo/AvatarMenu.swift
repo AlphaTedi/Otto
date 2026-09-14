@@ -82,17 +82,10 @@ struct AvatarMenu: View {
                 }
             }
         }
-        .padding(7)
-        .frame(width: 268)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(DSColor.menuBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.13), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.7), radius: 27, x: 0, y: 12)
+        .padding(8)
+        .frame(width: 276)
+        .floatingGlass(in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: DSColor.shadowSoft, radius: 18, x: 0, y: 8)
     }
 
     /// One implementation per verb, reachable from the click and from ↩.
@@ -126,8 +119,8 @@ struct AvatarMenuRow: Identifiable {
     let shortcut: String?
     /// The current value, shown on the right — the notes folder's name.
     let detail: String?
-    /// A destination is brighter and heavier than a setting, and carries a
-    /// standing tint. It is somewhere you GO, not something you change.
+    /// A destination is slightly stronger than a setting; selection itself is
+    /// transient, following the standard macOS menu pattern.
     let isDestination: Bool
 }
 
@@ -145,7 +138,7 @@ private struct AvatarMenuRowView: View {
                 Text(row.label)
                     .font(.system(size: 13.5, weight: row.isDestination ? .medium : .regular))
                     .foregroundStyle(row.isDestination ? DSColor.textPrimaryBright
-                                                       : DSColor.textSecondary)
+                                                       : DSColor.textPrimary)
                 Spacer(minLength: 8)
                 if let sparkline {
                     CompletionSparkline(counts: sparkline,
@@ -187,23 +180,17 @@ private struct AvatarMenuRowView: View {
         }
     }
 
-    /// The Insights row carries a STANDING tint, because it is the destination
-    /// — not because it is selected. That is exactly why hover everywhere else
-    /// is a neutral wash and never accent: with one row permanently warm, an
-    /// accent hover on another would read as two selections at once.
+    /// Selection follows the current macOS accent rather than giving one row
+    /// a permanent coloured tile.
     private var background: Color {
-        if row.isDestination {
-            return LabMetrics.accent.opacity(hover || isHighlighted ? 0.20 : 0.14)
-        }
-        return Color.white.opacity(hover || isHighlighted ? 0.05 : 0)
+        Color.accentColor.opacity(hover || isHighlighted ? 0.18 : 0)
     }
 
     @Environment(\.menuRowPressed) private var isPressed
 
     private var pressedWash: Color {
         guard isPressed else { return .clear }
-        return row.isDestination ? LabMetrics.accent.opacity(0.10)
-                                 : Color.white.opacity(0.05)
+        return Color.accentColor.opacity(0.12)
     }
 }
 

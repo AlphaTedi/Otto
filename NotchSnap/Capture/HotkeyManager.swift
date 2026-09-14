@@ -10,12 +10,8 @@ import Carbon.HIToolbox
 // ✅ Works with accessory apps (no dock icon)
 // ✅ Survives app activation/deactivation
 //
-// Shortcuts:
-//   ⌃⇧4 → Area capture (silent)
-//   ⌃⇧3 → Fullscreen capture
-//   ⌃⇧2 → Window capture
-//   ⌃⇧5 → Area capture + open Editor
-//   ⌃⇧Space → Repeat last capture
+// Shortcuts are intentionally limited to Otto's to-do and notes flows. The
+// former NotchSnap capture bindings were retired with the product pivot.
 
 @MainActor
 class HotkeyManager {
@@ -32,13 +28,7 @@ class HotkeyManager {
 
     // Hot key IDs
     private enum HotKeyID: UInt32 {
-        case areaCapture = 1      // ⌃⇧4
-        case fullscreen = 2       // ⌃⇧3
-        case windowCapture = 3    // ⌃⇧2
-        case areaWithEditor = 4   // ⌃⇧5
-        case repeatLast = 5       // ⌃⇧Space
         case openNotes = 6        // ⌃⇧N — expand notch on the Notes tab
-        case openTray = 7         // ⌃⇧F — expand notch on the file Tray
         case quickEntry = 8       // ⌥Space — global to-do quick entry (KB-1)
         case openTodos = 9        // ⌃⇧T — expand notch on the To-do tab
         case openNotesSpace = 10  // ⌃⇧E — expand notch on the Notes space
@@ -65,17 +55,10 @@ class HotkeyManager {
 
         InstallEventHandler(GetApplicationEventTarget(), handler, 1, &eventType, nil, &eventHandler)
 
-        // Ctrl+Shift modifier mask for Carbon
+        // Ctrl+Shift modifier mask for Otto's own navigation shortcuts.
         let ctrlShift = UInt32(controlKey | shiftKey)
 
-        // Register all hot keys
-        registerHotKey(id: .areaCapture, keyCode: UInt32(kVK_ANSI_4), modifiers: ctrlShift)
-        registerHotKey(id: .fullscreen, keyCode: UInt32(kVK_ANSI_3), modifiers: ctrlShift)
-        registerHotKey(id: .windowCapture, keyCode: UInt32(kVK_ANSI_2), modifiers: ctrlShift)
-        registerHotKey(id: .areaWithEditor, keyCode: UInt32(kVK_ANSI_5), modifiers: ctrlShift)
-        registerHotKey(id: .repeatLast, keyCode: UInt32(kVK_Space), modifiers: ctrlShift)
         registerHotKey(id: .openNotes, keyCode: UInt32(kVK_ANSI_N), modifiers: ctrlShift)
-        registerHotKey(id: .openTray, keyCode: UInt32(kVK_ANSI_F), modifiers: ctrlShift)
         // KB-1: global quick entry, independent of whether the notch is open.
         // ⌥⌘N, not ⌥Space: launcher apps (Raycast, Alfred) claim ⌥Space by
         // default, so it silently never reached us on machines running one.
@@ -122,51 +105,11 @@ class HotkeyManager {
         guard let hotKey = HotKeyID(rawValue: id) else { return }
 
         switch hotKey {
-        case .areaCapture:
-            print("[HotkeyManager] ⌃⇧4 → Area capture")
-            NotificationCenter.default.post(name: .captureAreaSilent, object: nil)
-
-        case .fullscreen:
-            print("[HotkeyManager] ⌃⇧3 → Fullscreen capture")
-            Task {
-                await CaptureManager.shared.startCapture(mode: .fullscreen)
-            }
-
-        case .windowCapture:
-            print("[HotkeyManager] ⌃⇧2 → Window capture")
-            Task {
-                await CaptureManager.shared.startCapture(mode: .window)
-            }
-
-        case .areaWithEditor:
-            print("[HotkeyManager] ⌃⇧5 → Area capture + Editor")
-            NotificationCenter.default.post(name: .captureAreaWithEditor, object: nil)
-
-        case .repeatLast:
-            print("[HotkeyManager] ⌃⇧Space → Repeat last capture")
-            Task {
-                await CaptureManager.shared.startCapture(mode: AppState.shared.lastCaptureMode)
-            }
-
         case .openNotes:
-            // FB8: ⌃⇧N is "new to-do" — open the creation page directly on
-            // the default category (was Notes, which fell through to the last
-            // browsed category once legacy panels were hidden). Notes stays
-            // on ⌃⇧N only if someone re-enables the legacy panels.
-            if AppState.shared.showLegacyPanels {
-                print("[HotkeyManager] ⌃⇧N → Notch on Notes (legacy)")
-                Task { @MainActor in
-                    AppState.shared.pendingNotchFilter = .notes
-                    AppState.shared.focusNotesComposer = true
-                    NotchController.shared.triggerExpand()
-                    NotchController.shared.makeKeyForTyping()
-                }
-            } else {
-                print("[HotkeyManager] ⌃⇧N → new to-do (creation)")
-                Task { @MainActor in
-                    NotchController.shared.openCreateFresh()
-                    NotificationCenter.default.post(name: .quickEntryFired, object: nil)
-                }
+            print("[HotkeyManager] ⌃⇧N → new to-do (creation)")
+            Task { @MainActor in
+                NotchController.shared.openCreateFresh()
+                NotificationCenter.default.post(name: .quickEntryFired, object: nil)
             }
 
         case .openNotesSpace:
@@ -179,13 +122,6 @@ class HotkeyManager {
                 // keyboard focus — the panel is a non-activating window in an
                 // accessory app, so being "key within Otto" is not enough.
                 NotchController.shared.makeKeyForTyping()
-            }
-
-        case .openTray:
-            print("[HotkeyManager] ⌃⇧F → Notch on Tray")
-            Task { @MainActor in
-                AppState.shared.pendingNotchFilter = .tray
-                NotchController.shared.triggerExpand()
             }
 
         case .quickEntry:

@@ -1,7 +1,7 @@
 import AppKit
 import UniformTypeIdentifiers
 
-// MARK: - ClipboardMonitor — Observe pasteboard changes in real-time
+// MARK: - ClipboardMonitor — retired compatibility boundary
 //
 // NSPasteboard has no notification API — polling changeCount at 0.5s is the
 // standard approach (Maccy, Pasta, etc.).
@@ -17,6 +17,7 @@ import UniformTypeIdentifiers
 @MainActor
 class ClipboardMonitor: ObservableObject {
     static let shared = ClipboardMonitor()
+    private static let monitoringIsAvailable = false
 
     private var timer: Timer?
     private var lastChangeCount: Int = NSPasteboard.general.changeCount
@@ -36,22 +37,9 @@ class ClipboardMonitor: ObservableObject {
     ]
 
     func startMonitoring() {
-        lastChangeCount = NSPasteboard.general.changeCount
-        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.checkForChanges()
-            }
-        }
-
-        // Watch for ⌘C / ⌘X globally (and locally for our own windows).
-        keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard event.modifierFlags.contains(.command),
-                  let chars = event.charactersIgnoringModifiers?.lowercased(),
-                  chars == "c" || chars == "x" else { return }
-            Task { @MainActor in
-                self?.lastCopyKeystroke = Date()
-            }
-        }
+        // Clipboard history and its global ⌘C/⌘X observer belonged to
+        // NotchSnap. Otto deliberately leaves the pasteboard alone.
+        stopMonitoring()
     }
 
     func stopMonitoring() {
@@ -67,6 +55,9 @@ class ClipboardMonitor: ObservableObject {
     }
 
     private func checkForChanges() {
+        // A defensive boundary for any old caller left in a migration build.
+        // No clipboard data may enter Otto after the product pivot.
+        guard Self.monitoringIsAvailable else { return }
         let pb = NSPasteboard.general
         guard pb.changeCount != lastChangeCount else { return }
         lastChangeCount = pb.changeCount

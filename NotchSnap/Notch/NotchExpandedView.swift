@@ -6,30 +6,7 @@ import SwiftUI
 // visible so the notch shape can grow to make room for it.
 extension AppState {
     var notchAvailableFilters: [NotchContentFilter] {
-        // Pivot PRD: the notch is a to-do app. Everything else exists only
-        // when "Show legacy panels" is re-enabled from Settings.
-        guard showLegacyPanels else { return [.todos] }
-        var result: [NotchContentFilter] = []
-        // To-dos lead — they're the product; Tray and Notes are legacy tools.
-        result.append(.todos)
-        result.append(.tray)
-        result.append(.notes)
-        if !screenshots.isEmpty
-            || clipboardItems.contains(where: { $0.type == .screenshot || $0.type == .image }) {
-            result.append(.screenshots)
-        }
-        if !snippets.isEmpty {
-            result.append(.snippets)
-        }
-        if clipboardItems.contains(where: { $0.type == .url }) {
-            result.append(.links)
-        }
-        if clipboardItems.contains(where: {
-            $0.type != .url && $0.type != .screenshot && $0.type != .image
-        }) {
-            result.append(.text)
-        }
-        return result
+        [.todos]
     }
 
     /// Only show the bar when there's more than one category to switch between.
@@ -92,7 +69,6 @@ struct NotchExpandedView: View {
     // The app opens directly into the to-do experience (pivot PRD §11).
     @State private var filter: NotchContentFilter = .todos
     @State private var shelfDropTargeted = false
-    @AppStorage("showLegacyPanels") private var showLegacyPanels = false
 
     private var hasContent: Bool {
         !appState.screenshots.isEmpty || !appState.clipboardItems.isEmpty
@@ -163,15 +139,7 @@ struct NotchExpandedView: View {
         .onDrop(of: ShelfDropHandler.acceptedTypes, isTargeted: $shelfDropTargeted) { providers in
             // The Tray is a legacy panel — don't swallow drops into UI the
             // user can't see.
-            guard showLegacyPanels else { return false }
-            let handled = ShelfDropHandler.handle(providers: providers)
-            if handled {
-                // Stay on the Tray so the user sees the item fall in.
-                withAnimation(Motion.swap) {
-                    filter = .tray
-                }
-            }
-            return handled
+            false
         }
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -209,8 +177,8 @@ struct NotchExpandedView: View {
     /// Apply a one-shot filter request (e.g. drag-to-notch opens the Tray).
     private func consumePendingFilter() {
         guard let requested = appState.pendingNotchFilter else { return }
-        // Never route to a panel that's hidden behind the legacy toggle.
-        guard requested == .todos || showLegacyPanels else {
+        // The retired panels are never valid destinations.
+        guard requested == .todos else {
             appState.pendingNotchFilter = nil
             return
         }

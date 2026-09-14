@@ -68,8 +68,7 @@ struct NoteFormatBar: View {
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 4)
-        .background(Capsule().fill(DSColor.fieldBackground))
-        .overlay(Capsule().strokeBorder(DSColor.panelBorder, lineWidth: 0.5))
+        .floatingGlass(in: Capsule())
         // The whole bar steps back when the body has no caret: the note is
         // being read, not edited, and tools that cannot act should not look
         // like they can.

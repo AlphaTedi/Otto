@@ -23,6 +23,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if UserDefaults.standard.object(forKey: "soundEffectsEnabled") == nil {
             UserDefaults.standard.set(true, forKey: "soundEffectsEnabled")
         }
+        // The screenshot, shelf and clipboard product was retired. Clear the
+        // old opt-in so an installation upgraded from an older build cannot
+        // bring those surfaces back.
+        UserDefaults.standard.set(false, forKey: "showLegacyPanels")
 
         // Show onboarding if not completed
         let onboardingVersion = UserDefaults.standard.integer(forKey: "onboardingVersion")
@@ -46,31 +50,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         DebugDriver.install()
         #endif
 
-        // Setup Caps Lock hotkey observers
-        CaptureManager.shared.setupHotkeyObservers()
-
-        // Pre-warm SCShareableContent cache — eliminates 1-3s delay on first capture
-
         // Setup notch controller
         notchController = NotchController.shared
         notchController?.setup()
-
-        // Start clipboard monitoring
-        ClipboardMonitor.shared.startMonitoring()
-
-        // Restore pinned clipboard items + snippets
-        AppState.shared.loadClipboardArchive()
-
-        // Clear session on launch if configured
-        if AppState.shared.settings.clearSessionOnLaunch {
-            AppState.shared.clearSession()
-        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         hotkeyManager?.stop()
-        ClipboardMonitor.shared.stopMonitoring()
-        TempFileManager.shared.cleanupAll()
         // Flush the debounced stores. Every save path waits 500 ms to batch
         // keystrokes, so without this a quit inside that window silently
         // dropped the last edit — the one bug a to-do app must not have.
@@ -152,8 +138,6 @@ struct HiddenContextView: View {
 // MARK: - Menu Bar View
 
 struct MenuBarView: View {
-    @EnvironmentObject var appState: AppState
-
     var body: some View {
         VStack(spacing: 8) {
             Text("Otto")
@@ -161,32 +145,9 @@ struct MenuBarView: View {
 
             Divider()
 
-            Button("Capture Area ⌃⇧4") {
-                Task { await CaptureManager.shared.startCapture(mode: .area) }
-            }
-
-            Button("Capture Window ⌃⇧2") {
-                Task { await CaptureManager.shared.startCapture(mode: .window) }
-            }
-
-            Button("Capture Screen ⌃⇧3") {
-                Task { await CaptureManager.shared.startCapture(mode: .fullscreen) }
-            }
-
-            Button("Area + Editor ⌃⇧5") {
-                NotificationCenter.default.post(name: .captureAreaWithEditor, object: nil)
-            }
-
-            Divider()
-
-            Text("\(appState.screenshots.count) screenshots in session")
-                .font(.caption)
-                .foregroundColor(.secondary)
-
-            if !appState.screenshots.isEmpty {
-                Button("Clear session") {
-                    appState.clearSession()
-                }
+            Button("Open Otto") {
+                NotchController.shared.triggerExpand()
+                NotchController.shared.makeKeyForTyping()
             }
 
             Divider()

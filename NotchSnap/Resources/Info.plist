@@ -42,8 +42,6 @@
 	<string>Otto listens only while you hold a voice capture session open, so you can speak your to-dos instead of typing them. Audio is transcribed on this Mac and never leaves it.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>Otto creates and completes reminders in your Otto list so they sync with Apple Reminders.</string>
-	<key>NSScreenCaptureUsageDescription</key>
-	<string>Otto ha bisogno di accesso allo schermo per catturare screenshot.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Otto turns your spoken brain-dump into to-dos using on-device speech recognition. Nothing is sent to Apple or any server.</string>
 	<key>SUEnableAutomaticChecks</key>
