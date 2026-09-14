@@ -17,6 +17,7 @@ enum NoteTitleSource: String, Codable {
     case date
     /// The user typed it. Permanent: generation is off for this note forever.
     case user
+    case meeting
 }
 
 struct QuickNote: Identifiable, Codable, Equatable {
@@ -31,6 +32,7 @@ struct QuickNote: Identifiable, Codable, Equatable {
     /// way to find it again, which is why nothing waits for one.
     var title: String
     var titleSource: NoteTitleSource
+    var meetingContext: MeetingNoteContext? = nil
 
     var firstLine: String {
         content.split(separator: "\n").first.map(String.init) ?? content
@@ -73,11 +75,12 @@ struct QuickNote: Identifiable, Codable, Equatable {
     // Every new field gets a decodeIfPresent line here.
 
     enum CodingKeys: String, CodingKey {
-        case id, content, createdAt, updatedAt, promotedReminderID, title, titleSource
+        case id, content, createdAt, updatedAt, promotedReminderID, title, titleSource, meetingContext
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        meetingContext = try c.decodeIfPresent(MeetingNoteContext.self, forKey: .meetingContext)
         id = try c.decode(UUID.self, forKey: .id)
         content = try c.decode(String.self, forKey: .content)
         createdAt = try c.decode(Date.self, forKey: .createdAt)
@@ -144,6 +147,26 @@ final class NotesStore: ObservableObject {
     /// Two words, and only two: `Saved`, or `Saving…` while a write is in
     /// flight. No timestamps, no "all changes saved".
     @Published private(set) var isWriting = false
+    @Published private(set) var saveError: String?
+    @Published var pendingMeetingNote: QuickNote?
+    @Published var meetingOnly = false
+    @Published var meetingQuery = ""
+    @Published var meetingLinkQuery = ""
+    @Published var meetingSearchFocus = false
+    @Published var meetingPicker = false
+    @Published var meetingSelection = 0
+    @Published var meetingHistory = false
+    @Published var meetingLinkPicker = false
+    @Published var meetingTaskDrafts: [UUID: String] = [:]
+    @Published var meetingFocus = 0
+    @Published var meetingTaskSelection = 0
+    @Published var meetingReturnNoteID: UUID?
+    private var meetingReturnMode: TodoPanelMode?
+    private var meetingReturnCollection: UUID?
+    private var meetingPreviousGroup: (UUID, MeetingNoteContext)?
+    private var recoveryBlocked = false
+    var canExportNotes: Bool { !recoveryBlocked }
+    private var unresolvedMeetingNotes: [String: UUID] = [:]
     /// The row is gone from the stream immediately; the file follows only when
     /// this expires. No confirmation dialog anywhere in this surface.
     @Published private(set) var pendingDelete: PendingNoteDelete?
@@ -159,18 +182,36 @@ final class NotesStore: ObservableObject {
     private var deleteWork: Task<Void, Never>?
     private var titleWork: [UUID: Task<Void, Never>] = [:]
 
-    private static var notesDirectory: URL {
+    private let storageOverride: URL?
+    private var notesDirectory: URL {
+        if let storageOverride { return storageOverride }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return base.appendingPathComponent("\(AppBuild.supportRoot)/Notes", isDirectory: true)
     }
-    private var indexURL: URL { Self.notesDirectory.appendingPathComponent("notes.json") }
-    private var draftURL: URL { Self.notesDirectory.appendingPathComponent("draft.txt") }
+    private var indexURL: URL { notesDirectory.appendingPathComponent("notes.json") }
+    private var draftURL: URL { notesDirectory.appendingPathComponent("draft.txt") }
+    private var backupURL: URL { notesDirectory.appendingPathComponent("notes.backup.json") }
+    private var meetingDraftURL: URL { notesDirectory.appendingPathComponent("meeting-drafts.json") }
 
-    private init() {
-        try? FileManager.default.createDirectory(at: Self.notesDirectory, withIntermediateDirectories: true)
-        if let data = try? Data(contentsOf: indexURL),
-           let decoded = try? JSONDecoder().decode([QuickNote].self, from: data) {
-            notes = decoded
+    init(storageDirectory: URL? = nil) {
+        storageOverride = storageDirectory
+        try? FileManager.default.createDirectory(at: notesDirectory, withIntermediateDirectories: true)
+        let fm = FileManager.default
+        if fm.fileExists(atPath: indexURL.path) || fm.fileExists(atPath: backupURL.path) {
+            if let data = try? Data(contentsOf: indexURL), let decoded = try? JSONDecoder().decode([QuickNote].self, from: data) {
+                notes = decoded
+            } else if let data = try? Data(contentsOf: backupURL), let decoded = try? JSONDecoder().decode([QuickNote].self, from: data) {
+                notes = decoded
+                saveError = L10n.t("meeting.recovered")
+            } else {
+                recoveryBlocked = true
+                saveError = L10n.t("meeting.recoveryFailed")
+            }
+        }
+        if let data = try? Data(contentsOf: meetingDraftURL),
+           let envelope = try? JSONDecoder().decode(MeetingDraftEnvelope.self, from: data), envelope.version == 1 {
+            pendingMeetingNote = envelope.pendingNote
+            meetingTaskDrafts = envelope.taskDrafts
         }
         draft = (try? String(contentsOf: draftURL, encoding: .utf8)) ?? ""
         loadDismissals()
@@ -185,11 +226,16 @@ final class NotesStore: ObservableObject {
     /// silently, because the row would spring back only when something else
     /// touched it. The array IS the order now — new notes go in at the top,
     /// which is the same default the sort produced — and a drag rewrites it.
-    var stream: [QuickNote] { notes }
+    var stream: [QuickNote] {
+        guard meetingOnly else { return notes }
+        return notes.filter { $0.meetingContext != nil && (meetingQuery.isEmpty ||
+            ($0.title + "\n" + $0.content).range(of: meetingQuery, options: [.caseInsensitive, .diacriticInsensitive]) != nil) }
+            .sorted { $0.meetingContext!.start > $1.meetingContext!.start }
+    }
 
     func note(id: UUID) -> QuickNote? { notes.first { $0.id == id } }
 
-    var openNote: QuickNote? { openNoteID.flatMap(note(id:)) }
+    var openNote: QuickNote? { openNoteID.flatMap { note(id: $0) ?? (pendingMeetingNote?.id == $0 ? pendingMeetingNote : nil) } }
 
     // MARK: - Mutations
 
@@ -274,6 +320,10 @@ final class NotesStore: ObservableObject {
     /// Edit a note's body in place. There is no edit mode and no Save button:
     /// the open note IS the editor.
     func setBody(_ text: String, for id: UUID) {
+        if pendingMeetingNote?.id == id, !text.isEmpty {
+            pendingMeetingNote?.content = text
+            _ = ensureMeetingNote()
+        }
         guard let idx = notes.firstIndex(where: { $0.id == id }), notes[idx].content != text else { return }
         TodoStore.shared.unlinkEditedNotePhrases(noteID: id, text: NoteMarkdown.attributed(
             from: text, textColor: .labelColor, accent: .labelColor, mutedColor: .tertiaryLabelColor).string)
@@ -300,7 +350,7 @@ final class NotesStore: ObservableObject {
         let source = notes[idx]
         let copy = QuickNote(content: source.content,
                              title: source.title,
-                             titleSource: source.titleSource)
+                             titleSource: source.meetingContext == nil ? source.titleSource : .user)
         withAnimation(Motion.contentHug) { notes.insert(copy, at: idx) }
         scheduleSave()
     }
@@ -344,7 +394,11 @@ final class NotesStore: ObservableObject {
     }
 
     func open(_ id: UUID) {
-        guard note(id: id) != nil else { return }
+        guard note(id: id) != nil || pendingMeetingNote?.id == id else { return }
+        saveNow()
+        meetingFocus = 0
+        meetingHistory = false
+        meetingLinkPicker = false
         withAnimation(Motion.swap) {
             openNoteID = id
             selectedNoteID = id
@@ -359,11 +413,27 @@ final class NotesStore: ObservableObject {
 
     /// ⌘[, the chevron, or Esc. One level, not all the way out.
     func closeNote() {
+        saveNow()
+        if meetingHistory || meetingLinkPicker { meetingHistory = false; meetingLinkPicker = false; return }
+        if let previous = meetingReturnNoteID {
+            meetingReturnNoteID = nil
+            open(previous)
+            return
+        }
         withAnimation(Motion.swap) { openNoteID = nil }
-        focusComposer()
+        if let mode = meetingReturnMode {
+            meetingReturnMode = nil
+            if let collection = meetingReturnCollection { TodoStore.shared.activeCollectionID = collection }
+            meetingReturnCollection = nil
+            TodoStore.shared.setMode(mode)
+        }
+        else { focusComposer() }
     }
 
     private func closeNoteState() {
+        saveNow()
+        meetingHistory = false; meetingLinkPicker = false; meetingPicker = false
+        meetingReturnMode = nil; meetingReturnNoteID = nil
         openNoteID = nil
     }
 
@@ -403,7 +473,7 @@ final class NotesStore: ObservableObject {
         stamp.locale = Locale.current
         stamp.dateStyle = .long
         stamp.timeStyle = .short
-        let document = "# \(note.title)\n\n_\(stamp.string(from: note.createdAt))_\n\n\(note.content)\n"
+        let document = MarkdownVault.shared.markdown(for: note)
         try? document.write(to: url, atomically: true, encoding: .utf8)
     }
 
@@ -457,10 +527,13 @@ final class NotesStore: ObservableObject {
     /// that changes is that a to-do now exists pointing back at this phrase,
     /// which is what lets the underline show a tick afterwards.
     func createTodo(from phrase: String, in collectionID: UUID, note noteID: UUID) {
+        if note(id: noteID)?.meetingContext != nil, !saveNow() { return }
         let due = ActionItemDetector.dueDate(in: phrase)
         let title = ActionItemDetector.title(forPhrase: phrase)
-        TodoStore.shared.addItem(fromNote: noteID, phrase: phrase, title: title,
-                                 collectionID: collectionID, dueDate: due)
+        guard TodoStore.shared.addItem(fromNote: noteID, phrase: phrase, title: title,
+                                      collectionID: collectionID, dueDate: due) != nil else {
+            saveError = L10n.t("meeting.saveFailed"); return
+        }
         NoteEditorController.shared.pickerTarget = nil
         NoteEditorController.shared.refreshDetections(noteID: noteID)
     }
@@ -496,7 +569,7 @@ final class NotesStore: ObservableObject {
 
     /// Ask for a title, unless the user has already given one.
     func requestTitle(for id: UUID, force: Bool = false) {
-        guard let note = note(id: id) else { return }
+        guard let note = note(id: id), note.meetingContext == nil else { return }
         guard force || note.titleSource != .user else { return }
         titleWork[id]?.cancel()
         titleWork[id] = Task { @MainActor [weak self] in
@@ -532,7 +605,7 @@ final class NotesStore: ObservableObject {
     private func scheduleSave() {
         // Notes ride along in the Markdown storage folder too (Notes.md).
         // ONE writer: nothing in this surface writes a second copy anywhere.
-        MarkdownVault.shared.scheduleExport()
+        if storageOverride == nil { MarkdownVault.shared.scheduleExport() }
         isWriting = true
         saveWork?.cancel()
         saveWork = Task { @MainActor [weak self] in
@@ -545,20 +618,194 @@ final class NotesStore: ObservableObject {
         }
     }
 
-    /// Quit-time flush — same contract as TodoStore.saveNow().
-    func saveNow() {
-        saveWork?.cancel()
-        saveWork = nil
-        write()
+    /// A successful JSON write is the only source of the Saved state.
+    @discardableResult
+    func saveNow() -> Bool {
+        saveWork?.cancel(); saveWork = nil
+        let success = write()
         isWriting = false
+        return success
     }
 
-    private func write() {
-        if let data = try? JSONEncoder().encode(notes) {
-            // Atomic, matching every other store — a crash mid-write must
-            // not be able to truncate the notes index.
-            try? data.write(to: indexURL, options: .atomic)
+    @discardableResult
+    private func write() -> Bool {
+        guard !recoveryBlocked else { return false }
+        do {
+            let data = try JSONEncoder().encode(notes)
+            if let previous = try? Data(contentsOf: indexURL),
+               (try? JSONDecoder().decode([QuickNote].self, from: previous)) != nil {
+                try previous.write(to: backupURL, options: .atomic)
+            }
+            try data.write(to: indexURL, options: .atomic)
+            try draft.write(to: draftURL, atomically: true, encoding: .utf8)
+            let envelope = MeetingDraftEnvelope(pendingNote: pendingMeetingNote.flatMap {
+                (meetingTaskDrafts[$0.id] ?? "").isEmpty ? nil : $0
+            }, taskDrafts: meetingTaskDrafts)
+            try JSONEncoder().encode(envelope).write(to: meetingDraftURL, options: .atomic)
+            saveError = nil
+            return true
+        } catch {
+            saveError = L10n.t("meeting.saveFailed")
+            return false
         }
-        try? draft.write(to: draftURL, atomically: true, encoding: .utf8)
     }
+}
+
+extension NotesStore {
+    func beginMeetingPicker() {
+        if TodoStore.shared.panelMode != .notes {
+            meetingReturnMode = TodoStore.shared.panelMode
+            meetingReturnCollection = TodoStore.shared.activeCollectionID
+        }
+        meetingPicker = true; meetingSelection = 0
+        TodoStore.shared.setMode(.notes)
+    }
+
+    func cancelMeetingPicker() {
+        meetingPicker = false
+        if openNoteID == nil { closeNote() }
+    }
+
+    func observeMeetings(_ meetings: [DetectedMeeting]) {
+        var changed = false
+        for meeting in meetings {
+            guard let note = meetingNote(for: meeting), let index = notes.firstIndex(where: { $0.id == note.id }),
+                  let context = note.meetingContext else { continue }
+            if context.title != meeting.title || context.start != meeting.start || context.end != meeting.end {
+                var updated = MeetingNoteContext(meeting: meeting, conversationID: context.conversationID)
+                updated.manuallyLinked = context.manuallyLinked
+                notes[index].meetingContext = updated
+                if notes[index].titleSource == .meeting { notes[index].title = meeting.title }
+                changed = true
+            }
+        }
+        if changed { scheduleSave() }
+    }
+
+    var meetingHistoryRows: [QuickNote] {
+        guard let note = openNote else { return [] }
+        let source = meetingLinkPicker ? notes.filter { $0.meetingContext != nil && $0.id != note.id } : sessions(for: note)
+        return source.filter { meetingLinkQuery.isEmpty || $0.title.range(of: meetingLinkQuery, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+    }
+
+    func meetingNote(for meeting: DetectedMeeting) -> QuickNote? {
+        MeetingNoteResolver.note(for: meeting.noteReference, in: notes)
+            ?? unresolvedMeetingNotes[meeting.id].flatMap { id in note(id: id) ?? (pendingMeetingNote?.id == id ? pendingMeetingNote : nil) }
+    }
+
+    func openMeetingContext(_ meeting: DetectedMeeting) {
+        let existing = meetingNote(for: meeting)
+        if TodoStore.shared.panelMode != .notes {
+            meetingReturnMode = TodoStore.shared.panelMode
+            meetingReturnCollection = TodoStore.shared.activeCollectionID
+        }
+        else if let current = openNoteID, current != existing?.id { meetingReturnNoteID = current }
+        if let existing {
+            if let index = notes.firstIndex(where: { $0.id == existing.id }), let old = existing.meetingContext {
+                var updated = MeetingNoteContext(meeting: meeting, conversationID: old.conversationID)
+                updated.manuallyLinked = old.manuallyLinked
+                notes[index].meetingContext = updated
+                if notes[index].titleSource == .meeting { notes[index].title = meeting.title }
+                scheduleSave()
+            }
+            open(existing.id)
+        } else if let pending = pendingMeetingNote,
+                  let key = meeting.noteReference?.occurrenceKey,
+                  pending.meetingContext?.eventReference?.occurrenceKey == key {
+            open(pending.id)
+        } else {
+            // Persist any unfinished task draft before changing its context.
+            if let pending = pendingMeetingNote, !(meetingTaskDrafts[pending.id] ?? "").isEmpty {
+                _ = ensureMeetingNote()
+            }
+            var pending = QuickNote(content: "", title: meeting.title, titleSource: .meeting)
+            pending.meetingContext = MeetingNoteContext(meeting: meeting,
+                conversationID: MeetingNoteResolver.conversation(for: meeting.noteReference, in: notes) ?? UUID())
+            pendingMeetingNote = pending
+            if meeting.noteReference?.occurrenceKey == nil { unresolvedMeetingNotes[meeting.id] = pending.id }
+            openNoteID = pending.id
+            meetingFocus = 0
+            focusBody()
+        }
+        meetingPicker = false
+        TodoStore.shared.setMode(.notes)
+        CompletedArchive.shared.reloadIfNeeded()
+    }
+
+    @discardableResult
+    func ensureMeetingNote() -> QuickNote? {
+        guard let pending = pendingMeetingNote, pending.id == openNoteID else {
+            guard let note = openNote, saveNow() else { return nil }
+            return note
+        }
+        if let canonical = MeetingNoteResolver.note(for: pending.meetingContext?.eventReference, in: notes) {
+            openNoteID = canonical.id; pendingMeetingNote = nil
+            return saveNow() ? canonical : nil
+        }
+        notes.insert(pending, at: 0)
+        pendingMeetingNote = nil
+        guard saveNow() else { return nil }
+        if storageOverride == nil { MarkdownVault.shared.scheduleExport() }
+        return pending
+    }
+
+    func meetingDraftChanged(_ text: String, noteID: UUID) {
+        meetingTaskDrafts[noteID] = text
+        scheduleSave()
+    }
+
+    @discardableResult
+    func submitMeetingTask(to collection: UUID) -> Bool {
+        guard let id = openNoteID else { return false }
+        let raw = (meetingTaskDrafts[id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty, let note = ensureMeetingNote() else { return false }
+        let parsed = NLDateParser.parse(raw)
+        guard TodoStore.shared.addMeetingItem(title: parsed?.cleanedTitle ?? raw, collectionID: collection,
+                                             dueDate: parsed?.date, noteID: note.id) != nil else {
+            saveError = L10n.t("meeting.saveFailed"); return false
+        }
+        meetingTaskDrafts[id] = ""
+        saveNow()
+        return true
+    }
+
+    func sessions(for note: QuickNote) -> [QuickNote] {
+        guard let context = note.meetingContext else { return [] }
+        return notes.filter { $0.meetingContext?.conversationID == context.conversationID && $0.id != note.id }
+            .sorted { $0.meetingContext!.start > $1.meetingContext!.start }
+    }
+
+    func openSession(_ id: UUID) {
+        if meetingReturnNoteID == nil { meetingReturnNoteID = openNoteID }
+        open(id)
+    }
+
+    func linkMeeting(to conversation: UUID) {
+        if let pending = pendingMeetingNote, pending.id == openNoteID, let old = pending.meetingContext {
+            meetingPreviousGroup = (pending.id, old)
+            pendingMeetingNote?.meetingContext?.conversationID = conversation
+            pendingMeetingNote?.meetingContext?.manuallyLinked = true
+            meetingLinkPicker = false
+            return
+        }
+        guard let note = ensureMeetingNote(), let index = notes.firstIndex(where: { $0.id == note.id }),
+              let old = note.meetingContext else { return }
+        meetingPreviousGroup = (note.id, old)
+        notes[index].meetingContext?.conversationID = conversation
+        notes[index].meetingContext?.manuallyLinked = true
+        meetingLinkPicker = false
+        scheduleSave()
+    }
+
+    func undoMeetingLink() {
+        if let (id, old) = meetingPreviousGroup, pendingMeetingNote?.id == id {
+            pendingMeetingNote?.meetingContext = old; meetingPreviousGroup = nil; return
+        }
+        guard let (id, old) = meetingPreviousGroup, let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        notes[index].meetingContext = old
+        meetingPreviousGroup = nil
+        scheduleSave()
+    }
+
+    var canUndoMeetingLink: Bool { meetingPreviousGroup != nil }
 }

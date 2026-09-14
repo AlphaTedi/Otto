@@ -437,7 +437,13 @@ final class EventKitCalendarProvider: MeetingProvider {
             location: event.location,
             videoURL: detected?.url,
             platform: detected?.platform,
-            isAllDay: event.isAllDay
+            isAllDay: event.isAllDay,
+            noteReference: MeetingEventReference(provider: "eventkit", account: event.calendar.source.sourceIdentifier,
+                calendar: event.calendar.calendarIdentifier, event: event.eventIdentifier ?? "",
+                series: nil, originalStart: event.occurrenceDate,
+                exact: event.eventIdentifier != nil && !event.hasRecurrenceRules && !event.isDetached),
+            calendarLabel: event.calendar.title,
+            timeZoneID: event.timeZone?.identifier ?? TimeZone.current.identifier
         )
     }
 

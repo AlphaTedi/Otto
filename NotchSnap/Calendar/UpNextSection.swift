@@ -124,6 +124,7 @@ struct MeetingCard: View {
                 HStack(alignment: .center, spacing: 8) {
                     // JOIN only exists when there is actually a link to open —
                     // a dead button would be worse than no button.
+                    MeetingNotesButton(meeting: event)
                     if event.videoURL != nil {
                         JoinButton(showsShortcut: isNext) { open() }
                     }

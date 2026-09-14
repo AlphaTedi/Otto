@@ -1597,8 +1597,8 @@ struct TodoBrowsingView: View {
     /// The live completions, keyed the way the archive keys them — so history
     /// can drop the entries the store is still showing.
     private func liveCompletedIDs(in collection: TodoCollection) -> Set<String> {
-        Set(store.completedItems(in: collection).map {
-            CompletedArchive.identity(title: $0.title, at: $0.completedAt ?? .distantPast)
+        Set(store.completedItems(in: collection).flatMap {
+            [$0.id.uuidString, CompletedArchive.identity(title: $0.title, at: $0.completedAt ?? .distantPast)]
         })
     }
 
@@ -2943,6 +2943,10 @@ private struct ShortcutsOverlay: View {
         ("\u{2318}Q", "todo.sc.quit"),
         ("\u{2325}\u{21A9}", "notes.sc.actionPicker"),
         ("1–3 / ↑↓ / ↩ / Esc", "notes.sc.pickerKeys"),
+        ("⇧⌘O", "meeting.shortcut"),
+        ("⌃Tab / ⌃⇧Tab", "meeting.focusShortcut"),
+        ("H / L / A / C / U", "meeting.contextShortcut"),
+        ("⌘F", "meeting.searchShortcut"),
     ]
 
     var body: some View {

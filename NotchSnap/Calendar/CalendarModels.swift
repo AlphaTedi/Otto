@@ -29,6 +29,9 @@ struct DetectedMeeting: Identifiable, Equatable {
     /// "Google Meet" / "Zoom" / "Teams", shown next to the attendees.
     var platform: String?
     var isAllDay: Bool
+    var noteReference: MeetingEventReference? = nil
+    var calendarLabel: String = ""
+    var timeZoneID: String = TimeZone.current.identifier
 
     var minutesUntilStart: Int {
         Int((start.timeIntervalSinceNow / 60).rounded(.down))

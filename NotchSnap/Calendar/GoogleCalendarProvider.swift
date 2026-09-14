@@ -86,7 +86,7 @@ final class GoogleCalendarProvider: MeetingProvider {
                 .flatMap { ($0?["error"] as? [String: Any])?["message"] as? String }
             throw GoogleOAuth.AuthError.tokenExchange(detail ?? "HTTP \(http.statusCode)")
         }
-        return Self.parse(data)
+        return Self.parse(data, account: GoogleOAuth.shared.account ?? "")
     }
 
     // MARK: Parsing
@@ -95,13 +95,13 @@ final class GoogleCalendarProvider: MeetingProvider {
     // recorded payloads — the live path needs a client ID that only Marcello
     // can create.
 
-    nonisolated static func parse(_ data: Data) -> [DetectedMeeting] {
+    nonisolated static func parse(_ data: Data, account: String = "", calendar: String = "primary") -> [DetectedMeeting] {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let items = root["items"] as? [[String: Any]] else { return [] }
-        return items.compactMap(meeting(from:))
+        return items.compactMap { meeting(from: $0, account: account, calendar: calendar) }
     }
 
-    nonisolated static func meeting(from item: [String: Any]) -> DetectedMeeting? {
+    nonisolated static func meeting(from item: [String: Any], account: String = "", calendar: String = "primary") -> DetectedMeeting? {
         guard let id = item["id"] as? String else { return nil }
         // Cancelled instances of a recurring series still come back.
         if (item["status"] as? String) == "cancelled" { return nil }
@@ -138,7 +138,12 @@ final class GoogleCalendarProvider: MeetingProvider {
             location: item["location"] as? String,
             videoURL: conference.url,
             platform: conference.platform,
-            isAllDay: false
+            isAllDay: false,
+            noteReference: MeetingEventReference(provider: "google", account: account.lowercased(), calendar: calendar,
+                event: id, series: item["recurringEventId"] as? String,
+                originalStart: (item["originalStartTime"] as? [String: Any]).flatMap { date(from: $0) }, exact: !account.isEmpty),
+            calendarLabel: calendar == "primary" ? L10n.t("meeting.primaryCalendar") : calendar,
+            timeZoneID: startInfo["timeZone"] as? String ?? TimeZone.current.identifier
         )
     }
 

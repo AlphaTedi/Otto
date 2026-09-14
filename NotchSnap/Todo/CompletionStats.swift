@@ -62,7 +62,8 @@ enum CompletionStats {
             guard let at = item.completedAt else { continue }
             let name = store.collection(id: item.collectionID)?.name
             if let section, name != section { continue }
-            let id = CompletedArchive.identity(title: item.title, at: at)
+            let id = item.id.uuidString
+            seen.insert(CompletedArchive.identity(title: item.title, at: at))
             guard seen.insert(id).inserted else { continue }
             out.append(Completion(id: id, title: item.title, sectionName: name,
                                   completedAt: at, liveID: item.id))

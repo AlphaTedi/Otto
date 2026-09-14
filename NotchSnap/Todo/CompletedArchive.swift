@@ -28,6 +28,8 @@ struct ArchivedCompletion: Identifiable, Equatable {
     /// the honest thing for a historical record to say.
     let sectionName: String?
     let completedAt: Date
+    var taskID: UUID? = nil
+    var meetingNoteID: UUID? = nil
 }
 
 @MainActor
@@ -36,6 +38,7 @@ final class CompletedArchive: ObservableObject {
 
     @Published private(set) var entries: [ArchivedCompletion] = []
     @Published private(set) var hasLoaded = false
+    @Published private(set) var readError = false
 
     private var directory: URL {
         MarkdownVault.shared.directory.appendingPathComponent("Archive", isDirectory: true)
@@ -50,21 +53,22 @@ final class CompletedArchive: ObservableObject {
     /// can have changed under the panel.
     func reload() {
         let fm = FileManager.default
+        readError = false
         guard let files = try? fm.contentsOfDirectory(at: directory,
                                                       includingPropertiesForKeys: nil) else {
+            readError = !fm.fileExists(atPath: MarkdownVault.shared.directory.path) || fm.fileExists(atPath: directory.path)
             entries = []
             hasLoaded = true
             return
         }
         var found: [ArchivedCompletion] = []
         for url in files where url.pathExtension == "md" {
-            guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
-            for line in text.components(separatedBy: "\n") {
-                if let entry = Self.parse(line) { found.append(entry) }
-            }
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else { readError = true; continue }
+            found.append(contentsOf: Self.parseDocument(text))
         }
         // Newest first, the same order the live Completed section uses.
-        entries = found.sorted { $0.completedAt > $1.completedAt }
+        var seen = Set<String>()
+        entries = found.sorted { $0.completedAt > $1.completedAt }.filter { seen.insert($0.id).inserted }
         hasLoaded = true
     }
 
@@ -87,6 +91,42 @@ final class CompletedArchive: ObservableObject {
     //
     // Indented detail lines (steps, the note) follow it and are skipped — they
     // belong to the to-do's body, not to the record of it having happened.
+
+    struct Metadata: Codable {
+        var v = 1
+        var taskID: UUID
+        var meetingNoteID: UUID?
+        var completedAt: Date?
+    }
+
+    nonisolated static func metadata(_ line: String) -> Metadata? {
+        let clean = line.trimmingCharacters(in: .whitespaces)
+        guard clean.hasPrefix("<!-- otto:"), clean.hasSuffix(" -->"),
+              let data = String(clean.dropFirst(10).dropLast(4)).data(using: .utf8),
+              let value = try? JSONDecoder().decode(Metadata.self, from: data), value.v == 1 else { return nil }
+        return value
+    }
+
+    nonisolated static func metadataLine(for item: TodoItem) -> String {
+        let value = Metadata(taskID: item.id, meetingNoteID: item.meetingNoteID, completedAt: item.completedAt)
+        let data = try! JSONEncoder().encode(value)
+        return "  <!-- otto:" + String(decoding: data, as: UTF8.self) + " -->"
+    }
+
+    nonisolated static func parseDocument(_ text: String) -> [ArchivedCompletion] {
+        let lines = text.components(separatedBy: "\n")
+        var found: [ArchivedCompletion] = []
+        for index in lines.indices {
+            guard let old = parse(lines[index]) else { continue }
+            if index + 1 < lines.count, let meta = metadata(lines[index + 1]) {
+                found.append(ArchivedCompletion(id: meta.taskID.uuidString, title: old.title,
+                    sectionName: old.sectionName, completedAt: meta.completedAt ?? old.completedAt,
+                    taskID: meta.taskID, meetingNoteID: meta.meetingNoteID))
+            } else { found.append(old) }
+        }
+        let modern = Set(found.filter { $0.taskID != nil }.map { identity(title: $0.title, at: $0.completedAt) })
+        return found.filter { $0.taskID != nil || !modern.contains($0.id) }
+    }
 
     /// Read from the RIGHT, not the left.
     ///

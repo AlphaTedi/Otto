@@ -295,7 +295,8 @@ xcrun stapler staple "$DMG" 2>&1 | tail -1 | sed 's/^/   /'
 echo
 echo "8. Publishing to GitHub"
 if ! command -v gh > /dev/null; then
-    echo "   gh not installed — upload $DMG manually."
+    echo "   gh not installed — cannot publish the release."
+    exit 1
 elif [ -z "$TAG" ]; then
     echo "   No git tag found; tag the commit first, or upload manually."
 elif gh release view "$TAG" > /dev/null 2>&1; then
@@ -318,9 +319,13 @@ fi
 # cannot push code to users.
 echo
 echo "9. Generating the update feed"
-SPARKLE_BIN=$(find ~/Library/Developer/Xcode/DerivedData -path "*artifacts/sparkle/Sparkle/bin" -type d 2>/dev/null | head -1)
+SPARKLE_BIN="$OUT/dd/SourcePackages/artifacts/sparkle/Sparkle/bin"
+if [ ! -x "$SPARKLE_BIN/generate_appcast" ]; then
+    SPARKLE_BIN=$(find ~/Library/Developer/Xcode/DerivedData -path "*artifacts/sparkle/Sparkle/bin" -type d 2>/dev/null | head -1)
+fi
 if [ -z "$SPARKLE_BIN" ]; then
-    echo "   Sparkle tools not found. Run: xcodebuild -resolvePackageDependencies"
+    echo "   Sparkle tools not found. Cannot publish the update feed."
+    exit 1
 else
     FEEDDIR="$OUT/feed"
     rm -rf "$FEEDDIR"; mkdir -p "$FEEDDIR"

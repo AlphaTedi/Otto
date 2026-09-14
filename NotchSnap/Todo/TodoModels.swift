@@ -102,6 +102,7 @@ struct TodoItem: Identifiable, Codable, Equatable {
     /// worse than one that quietly stops matching.
     var sourceNoteID: UUID?
     var sourcePhrase: String?
+    var meetingNoteID: UUID? = nil
 
     var hasDetails: Bool { !note.isEmpty || !checklist.isEmpty }
 
@@ -146,5 +147,6 @@ struct TodoItem: Identifiable, Codable, Equatable {
         // two values it cannot find.
         sourceNoteID = try c.decodeIfPresent(UUID.self, forKey: .sourceNoteID)
         sourcePhrase = try c.decodeIfPresent(String.self, forKey: .sourcePhrase)
+        meetingNoteID = try c.decodeIfPresent(UUID.self, forKey: .meetingNoteID)
     }
 }

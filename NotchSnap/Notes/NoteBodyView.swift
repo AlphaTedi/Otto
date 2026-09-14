@@ -228,6 +228,12 @@ final class ActionTextView: NSTextView {
         if abs(height - measuredHeight) > 1 { measuredHeight = height; onHeightChange?(height) }
     }
 
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted, NotesStore.shared.openNote?.meetingContext != nil { NotesStore.shared.meetingFocus = 0 }
+        return accepted
+    }
+
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         if let hit = linkedControls().first(where: { $0.rect.contains(point) }), let noteID,

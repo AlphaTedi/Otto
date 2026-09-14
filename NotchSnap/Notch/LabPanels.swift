@@ -495,6 +495,7 @@ private struct LabMeetingCard: View {
                     .padding(.top, 3)
 
                 HStack(alignment: .center, spacing: 8) {
+                    MeetingNotesButton(meeting: meeting)
                     if meeting.videoURL != nil {
                         LabJoinButton(showsShortcut: isNext) { join() }
                     }

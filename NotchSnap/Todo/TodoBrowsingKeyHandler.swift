@@ -72,6 +72,75 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             let store = TodoStore.shared
             let lower = chars.lowercased()
 
+            let notes = NotesStore.shared
+            if notes.meetingPicker {
+                let rows = CalendarStore.shared.upcomingToday
+                if keyCode == 53 { notes.cancelMeetingPicker(); return true }
+                if keyCode == 125 || keyCode == 126 {
+                    notes.meetingSelection = min(max(0, notes.meetingSelection + (keyCode == 125 ? 1 : -1)), max(0, rows.count - 1)); return true
+                }
+                if keyCode == 36, rows.indices.contains(notes.meetingSelection) { CalendarStore.shared.openNotes(for: rows[notes.meetingSelection]); return true }
+                return true
+            }
+            // Command-Shift-M already moves tasks. O is free in this router.
+            if cmd, shift, !option, !control, lower == "o", !(NSApp.keyWindow?.firstResponder is NSTextView) {
+                notes.beginMeetingPicker(); return true
+            }
+            if store.panelMode == .notes {
+                if let _ = NoteEditorController.shared.pickerTarget, keyCode == 53 {
+                    NoteEditorController.shared.pickerTarget = nil; return true
+                }
+                if notes.meetingHistory || notes.meetingLinkPicker {
+                    if keyCode == 53 { notes.meetingHistory = false; notes.meetingLinkPicker = false; notes.focusBody(); return true }
+                    if keyCode == 125 || keyCode == 126 {
+                        notes.meetingSelection = min(max(0, notes.meetingSelection + (keyCode == 125 ? 1 : -1)), max(0, notes.meetingHistoryRows.count - 1)); return true
+                    }
+                    if keyCode == 36, notes.meetingHistoryRows.indices.contains(notes.meetingSelection) {
+                        let row = notes.meetingHistoryRows[notes.meetingSelection]
+                        if notes.meetingLinkPicker, let group = row.meetingContext?.conversationID { notes.linkMeeting(to: group) }
+                        else { notes.openSession(row.id) }
+                        return true
+                    }
+                    return !(NSApp.keyWindow?.firstResponder is NSTextView)
+                }
+                if notes.openNote?.meetingContext != nil {
+                    if control, !cmd, !option, keyCode == 48 {
+                        notes.meetingFocus = (notes.meetingFocus + (shift ? 3 : 1)) % 4
+                        return true
+                    }
+                    if keyCode == 53 {
+                        if NSApp.keyWindow?.firstResponder is NSTextView || notes.meetingFocus == 1 || notes.meetingFocus == 2 {
+                            NotificationCenter.default.post(name: .meetingTaskCommand, object: "cancel")
+                            NSApp.keyWindow?.makeFirstResponder(nil); notes.meetingFocus = 3; return true
+                        }
+                    }
+                    if notes.meetingFocus == 1, keyCode == 48, !cmd, !control {
+                        NotificationCenter.default.post(name: .meetingTaskCommand, object: "destination"); return true
+                    }
+                    if notes.meetingFocus == 2, !(NSApp.keyWindow?.firstResponder is NSTextView) {
+                        if keyCode == 125 || keyCode == 126 { notes.meetingTaskSelection = max(0, notes.meetingTaskSelection + (keyCode == 125 ? 1 : -1)); return true }
+                        if keyCode == 49 || keyCode == 36 {
+                            NotificationCenter.default.post(name: .meetingTaskCommand, object: keyCode == 49 ? "complete" : "edit"); return true
+                        }
+                    }
+                    if notes.meetingFocus == 3, !(NSApp.keyWindow?.firstResponder is NSTextView) {
+                        if lower == "h" { notes.meetingHistory = true; notes.meetingSelection = 0; return true }
+                        if lower == "l" { notes.meetingLinkPicker = true; notes.meetingLinkQuery = ""; notes.meetingSelection = 0; return true }
+                        if lower == "a" { NotificationCenter.default.post(name: .meetingTaskCommand, object: "previous"); return true }
+                        if lower == "c" { NotificationCenter.default.post(name: .meetingTaskCommand, object: "completed"); return true }
+                        if lower == "u" { notes.undoMeetingLink(); return true }
+                    }
+                    // A task draft/title is its own editor, not the note body.
+                    if let responder = NSApp.keyWindow?.firstResponder as? NSTextView,
+                       responder !== NoteEditorController.shared.textView { return false }
+                } else if notes.openNoteID == nil, cmd, lower == "f" {
+                    notes.meetingOnly = true; notes.meetingSearchFocus = true; return true
+                } else if notes.openNoteID == nil, notes.meetingOnly, NSApp.keyWindow?.firstResponder is NSTextView {
+                    if keyCode == 53 { notes.meetingSearchFocus = false; NSApp.keyWindow?.makeFirstResponder(nil); return true }
+                    if keyCode != 125 && keyCode != 126 && keyCode != 36 { return false }
+                }
+            }
+
             // The avatar menu is modal in the same sense: while it is up the
             // panel underneath it is inert, and it owns ↑↓↩ and Esc.
             if store.showsAvatarMenu {

@@ -222,6 +222,7 @@ final class CalendarStore: ObservableObject {
         #endif
         let fetched = await provider.upcomingToday()
         withAnimation(NotchAnimation.contentHug) { meetings = fetched }
+        NotesStore.shared.observeMeetings(fetched)
         evaluateAlerts()
     }
 
@@ -334,6 +335,8 @@ final class CalendarStore: ObservableObject {
         // Stage 2 — active alert (CA-3). Skip anything already alerted, and
         // respect an outstanding snooze (CA-5).
         guard activeAlert == nil else { return }
+        // Ambient state above keeps updating; editing never loses its surface.
+        guard !(TodoStore.shared.panelMode == .notes && NotesStore.shared.openNoteID != nil) else { return }
         let alertWindow = TimeInterval(alertLeadMinutes * 60)
         let due = upcomingToday.first { meeting in
             guard !alertedIDs.contains(meeting.id) else { return false }
@@ -358,6 +361,15 @@ final class CalendarStore: ObservableObject {
         NotchController.shared.presentMeetingAlert()
         armAutoSnooze()
         scheduleAutoCollapse(for: meeting)
+    }
+
+    func openNotes(for meeting: DetectedMeeting) {
+        if activeAlert != nil { clearAlert(whileCollapsing: false) }
+        alertedIDs.insert(meeting.id)
+        NotchController.shared.cancelCollapse()
+        NotesStore.shared.openMeetingContext(meeting)
+        NotchController.shared.focusPanel()
+        DispatchQueue.main.async { NotesStore.shared.focusBody() }
     }
 
     // MARK: The alert's own clock

@@ -247,6 +247,23 @@ enum DebugDriver {
                    from < n.stream.count, to < n.stream.count {
                     n.reorder(n.stream[from].id, before: n.stream[to].id)
                 }
+            } else if command == "meeting-notes-open" {
+                let meeting = DetectedMeeting(id: "otto-verification-meeting", title: "Meeting notes verification",
+                    start: Date(), end: Date().addingTimeInterval(1800), attendees: [], attendeeEmails: [], isAllDay: false)
+                NotchController.shared.presentMeetingAlert()
+                CalendarStore.shared.openNotes(for: meeting)
+            } else if command.hasPrefix("meeting-layout ") {
+                let name = String(command.dropFirst(15))
+                UserDefaults.standard.set(name == "container" ? "container" : "panels", forKey: "notchLayout")
+                AppState.shared.todoContentHeight = 0
+                AppState.shared.labColumnHeight = 0
+            } else if command == "meeting-notes-status" {
+                let notes = NotesStore.shared
+                let editor = NoteEditorController.shared
+                let key = NSApp.keyWindow
+                appendState("meeting-status open=\(notes.openNote?.meetingContext != nil) persisted=\(notes.openNoteID.flatMap { notes.note(id: $0) } != nil) focus=\(notes.meetingFocus) bodyResponder=\(key?.firstResponder === editor.textView) alert=\(CalendarStore.shared.activeAlert != nil) contentHeight=\(AppState.shared.todoContentHeight)")
+            } else if command == "meeting-notes-tests" {
+                for line in MeetingNotesVerification.run() { appendState(line) }
             } else if command == "notes-editor-tests" {
                 let editor = NoteEditorController.shared
                 let previousView = editor.textView

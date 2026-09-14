@@ -907,12 +907,35 @@ final class TodoStore: ObservableObject {
     func addItem(fromNote noteID: UUID, phrase: String, title: String,
                  collectionID: UUID, dueDate: Date?) -> TodoItem? {
         if let existing = todo(forNote: noteID, phrase: phrase) { return existing }
+        if NotesStore.shared.note(id: noteID)?.meetingContext != nil {
+            return addMeetingItem(title: title, collectionID: collectionID, dueDate: dueDate, noteID: noteID, phrase: phrase)
+        }
         guard let created = addItem(title: title, collectionID: collectionID,
-                                    urgency: .low, dueDate: dueDate) else { return nil }
+                                    urgency: .low, dueDate: dueDate,
+                                    meetingNoteID: NotesStore.shared.note(id: noteID)?.meetingContext == nil ? nil : noteID) else { return nil }
         guard let index = items.firstIndex(where: { $0.id == created.id }) else { return created }
         items[index].sourceNoteID = noteID
         items[index].sourcePhrase = phrase
         scheduleSave()
+        return items[index]
+    }
+
+    /// A meeting task is acknowledged only after its JSON record is durable.
+    /// Failure leaves the draft available and rolls back the uncommitted row.
+    func addMeetingItem(title: String, collectionID: UUID, dueDate: Date?, noteID: UUID,
+                        phrase: String? = nil) -> TodoItem? {
+        let oldCollection = activeCollectionID
+        let oldLast = lastUsedCollectionID
+        guard let created = addItem(title: title, collectionID: collectionID, urgency: .low,
+                                    dueDate: dueDate, meetingNoteID: noteID),
+              let index = items.firstIndex(where: { $0.id == created.id }) else { return nil }
+        if let phrase { items[index].sourceNoteID = noteID; items[index].sourcePhrase = phrase }
+        saveWork?.cancel(); saveWork = nil
+        guard writePayload() else {
+            items.removeAll { $0.id == created.id }
+            activeCollectionID = oldCollection; lastUsedCollectionID = oldLast
+            return nil
+        }
         return items[index]
     }
 
@@ -949,7 +972,7 @@ final class TodoStore: ObservableObject {
 
     @discardableResult
     func addItem(title: String, collectionID: UUID, urgency: TodoUrgency,
-                 dueDate: Date? = nil) -> TodoItem? {
+                 dueDate: Date? = nil, meetingNoteID: UUID? = nil) -> TodoItem? {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
@@ -965,11 +988,12 @@ final class TodoStore: ObservableObject {
         // (Marcello, 2026-08-16). Ordering is the user's to change by dragging
         // — but the thing they just made has to be the thing they can see.
         let next = (items.filter { $0.collectionID == target }.map(\.sortOrder).min() ?? 0) - 1
-        let item = TodoItem(
+        var item = TodoItem(
             id: UUID(), title: trimmed, collectionID: target,
             urgency: urgency, isCompleted: false, completedAt: nil,
             dueDate: dueDate, sortOrder: next, createdAt: Date()
         )
+        item.meetingNoteID = meetingNoteID
         withAnimation(Motion.contentHug) { items.append(item) }
         lastUsedCollectionID = target
         // Step 5 of the capture flow: the created to-do's collection becomes
@@ -1251,20 +1275,25 @@ final class TodoStore: ObservableObject {
         MarkdownVault.shared.exportNow()
     }
 
-    private func writePayload() {
+    @discardableResult
+    private func writePayload() -> Bool {
         let payload = Payload(
             collections: collections,
             items: items,
             lastUsedCollectionID: lastUsedCollectionID
         )
-        guard let data = try? JSONEncoder().encode(payload) else { return }
+        guard let data = try? JSONEncoder().encode(payload) else { return false }
         // Promote the last-known-good primary to the backup BEFORE
         // overwriting it, then write the new primary atomically so a
         // crash mid-write can never leave a truncated file.
-        if let existing = try? Data(contentsOf: fileURL), !existing.isEmpty {
-            try? existing.write(to: backupURL, options: .atomic)
-        }
-        try? data.write(to: fileURL, options: .atomic)
+        do {
+            if let existing = try? Data(contentsOf: fileURL),
+               (try? JSONDecoder().decode(Payload.self, from: existing)) != nil {
+                try existing.write(to: backupURL, options: .atomic)
+            }
+            try data.write(to: fileURL, options: .atomic)
+            return true
+        } catch { return false }
     }
 
     // MARK: - Archiving (completed → Markdown history)

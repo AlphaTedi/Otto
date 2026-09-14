@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 // MARK: - MarkdownVault — the human-readable home of every to-do and note
 //
@@ -33,7 +34,10 @@ import Foundation
 // created themselves.
 
 @MainActor
-final class MarkdownVault {
+final class MarkdownVault: ObservableObject {
+    @Published private(set) var mirrorError = false
+    private let directoryOverride: URL?
+    init(directory: URL? = nil) { directoryOverride = directory }
     static let shared = MarkdownVault()
 
     private var exportWork: Task<Void, Never>?
@@ -47,7 +51,7 @@ final class MarkdownVault {
             .appendingPathComponent("Documents/\(AppBuild.vaultFolderName)", isDirectory: true)
     }
 
-    var directory: URL { AppState.shared.settings.vaultDirectory }
+    var directory: URL { directoryOverride ?? AppState.shared.settings.vaultDirectory }
     private var archiveDirectory: URL { directory.appendingPathComponent("Archive", isDirectory: true) }
     private var manifestURL: URL { directory.appendingPathComponent(".otto-vault.json") }
 
@@ -70,30 +74,37 @@ final class MarkdownVault {
         exportWork = nil
         let store = TodoStore.shared
         let fm = FileManager.default
-        try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
-
+        mirrorError = false
+        do { try fm.createDirectory(at: directory, withIntermediateDirectories: true) }
+        catch { mirrorError = true; return }
+        let previous = (try? JSONDecoder().decode([String].self, from: Data(contentsOf: manifestURL))) ?? []
         var written: [String] = []
-        var usedNames = Set<String>()
+        let existing = (try? fm.contentsOfDirectory(atPath: directory.path)) ?? []
+        var usedNames = Set(existing.filter { !previous.contains($0) && $0.hasSuffix(".md") }
+            .map { String($0.dropLast(3)).lowercased() })
         for collection in store.collections where !collection.isSystemToday {
             let name = uniqueFileName(for: collection.name, used: &usedNames)
             let url = directory.appendingPathComponent(name)
             let body = sectionMarkdown(for: collection, store: store)
-            try? body.write(to: url, atomically: true, encoding: .utf8)
-            written.append(name)
+            do { try body.write(to: url, atomically: true, encoding: .utf8); written.append(name) }
+            catch { mirrorError = true; if previous.contains(name) { written.append(name) } }
         }
 
-        if let notes = notesMarkdown() {
-            let name = "Notes.md"
+        if !NotesStore.shared.canExportNotes {
+            // A failed recovery must never erase the last readable mirror.
+            written.append(contentsOf: previous.filter { !written.contains($0) })
+            mirrorError = true
+        } else if let notes = notesMarkdown() {
+            let name = uniqueFileName(for: "Notes", used: &usedNames)
             let url = directory.appendingPathComponent(name)
-            try? notes.write(to: url, atomically: true, encoding: .utf8)
-            written.append(name)
+            do { try notes.write(to: url, atomically: true, encoding: .utf8); written.append(name) }
+            catch { mirrorError = true; if previous.contains(name) { written.append(name) } }
         }
 
         // Remove files WE wrote for sections that no longer exist — and only
         // those. The manifest is the boundary between the app's files and
         // the user's own; anything not in it is never deleted.
-        let previous = (try? JSONDecoder().decode([String].self,
-                                                  from: Data(contentsOf: manifestURL))) ?? []
+        if mirrorError { written.append(contentsOf: previous.filter { !written.contains($0) }) }
         for stale in Set(previous).subtracting(written) {
             try? fm.removeItem(at: directory.appendingPathComponent(stale))
         }
@@ -130,20 +141,35 @@ final class MarkdownVault {
         try? fm.createDirectory(at: archiveDirectory, withIntermediateDirectories: true)
         let day = VaultFormatters.cached("yyyy-MM-dd").string(from: at)
         let url = archiveDirectory.appendingPathComponent("\(day).md")
+        if fm.fileExists(atPath: url.path), (try? String(contentsOf: url, encoding: .utf8)) == nil { return false }
         var lines = ((try? String(contentsOf: url, encoding: .utf8)) ?? "# \(day)\n")
             .components(separatedBy: "\n")
         let key = archiveKeyLine(for: item, at: at, store: store)
-        if lines.contains(key) { return true }
+        if let stored = CompletedArchive.parseDocument(lines.joined(separator: "\n")).first(where: { $0.taskID == item.id }),
+           stored.meetingNoteID == item.meetingNoteID { return true }
+        // Upgrade only an unannotated legacy block. Omonymous UUID blocks
+        // remain separate even when their human-readable line is identical.
+        if let legacy = lines.indices.first(where: { lines[$0] == key &&
+            ($0 + 1 >= lines.count || CompletedArchive.metadata(lines[$0 + 1]) == nil) }) {
+            lines.insert(CompletedArchive.metadataLine(for: item), at: legacy + 1)
+            do {
+                try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+                let read = try String(contentsOf: url, encoding: .utf8)
+                return CompletedArchive.parseDocument(read).contains { $0.taskID == item.id && $0.meetingNoteID == item.meetingNoteID }
+            } catch { return false }
+        }
         // Trailing blank kept, so the file ends in a newline after the block.
         while lines.last == "" { lines.removeLast() }
         lines.append("")
         lines.append(key)
+        lines.append(CompletedArchive.metadataLine(for: item))
         lines.append(contentsOf: detailLines(for: item, indent: "  ")
             .split(separator: "\n", omittingEmptySubsequences: true).map(String.init))
         lines.append("")
         do {
             try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
-            return true
+            let read = try String(contentsOf: url, encoding: .utf8)
+            return CompletedArchive.parseDocument(read).contains { $0.taskID == item.id && $0.meetingNoteID == item.meetingNoteID }
         } catch {
             return false
         }
@@ -158,7 +184,10 @@ final class MarkdownVault {
         guard let body = try? String(contentsOf: url, encoding: .utf8) else { return }
         var lines = body.components(separatedBy: "\n")
         let key = archiveKeyLine(for: item, at: at, store: store)
-        guard let start = lines.firstIndex(of: key) else { return }
+        let metadataIndex = lines.firstIndex { CompletedArchive.metadata($0)?.taskID == item.id }
+        let legacyIndex = lines.indices.first { lines[$0] == key &&
+            ($0 + 1 >= lines.count || CompletedArchive.metadata(lines[$0 + 1]) == nil) }
+        guard let start = metadataIndex.map({ $0 - 1 }) ?? legacyIndex, start >= 0 else { return }
         var end = start + 1
         while end < lines.count, lines[end].hasPrefix("  ") { end += 1 }
         lines.removeSubrange(start..<end)
@@ -229,7 +258,7 @@ final class MarkdownVault {
         if item.isCompleted, let at = item.completedAt {
             line += " ✅ \(dayKey.string(from: at))"
         }
-        return line + "\n" + detailLines(for: item, indent: "  ")
+        return line + "\n" + CompletedArchive.metadataLine(for: item) + "\n" + detailLines(for: item, indent: "  ")
     }
 
     /// Steps and the note, indented under their to-do the way Obsidian nests
@@ -237,6 +266,12 @@ final class MarkdownVault {
     /// for a task line.
     private func detailLines(for item: TodoItem, indent: String) -> String {
         var out = ""
+        if let id = item.meetingNoteID {
+            let note = NotesStore.shared.note(id: id)
+            out += "\(indent)> " + (note?.title ?? L10n.t("meeting.deletedNote"))
+            if let context = note?.meetingContext { out += " · " + context.dateLabel }
+            out += "\n"
+        }
         for step in item.checklist {
             out += "\(indent)- [\(step.isDone ? "x" : " ")] \(step.title)\n"
         }
@@ -254,7 +289,24 @@ final class MarkdownVault {
         let stamp = VaultFormatters.cached("yyyy-MM-dd HH:mm")
         var out = "# Notes\n"
         for note in notes.sorted(by: { $0.createdAt > $1.createdAt }) {
-            out += "\n## \(stamp.string(from: note.createdAt))\n\n\(note.content)\n"
+            out += "\n" + markdown(for: note)
+        }
+        return out
+    }
+
+    func markdown(for note: QuickNote) -> String {
+        guard let context = note.meetingContext else {
+            return "## \(note.title)\n\n\(note.content)\n"
+        }
+        var out = "## \(note.title)\n\n\(context.dateLabel) · \(context.calendarLabel)\n"
+        out += "<!-- otto-meeting:{\"v\":1,\"noteID\":\"\(note.id)\",\"conversationID\":\"\(context.conversationID)\"} -->\n\n"
+        out += note.content + "\n"
+        let live = TodoStore.shared.items.filter { $0.meetingNoteID == note.id }
+        for item in live { out += taskLine(item) }
+        CompletedArchive.shared.reloadIfNeeded()
+        let ids = Set(live.map(\.id))
+        for item in CompletedArchive.shared.entries where item.meetingNoteID == note.id && !ids.contains(item.taskID ?? UUID()) {
+            out += "- [x] \(item.title) ✅ \(VaultFormatters.cached("yyyy-MM-dd").string(from: item.completedAt))\n"
         }
         return out
     }

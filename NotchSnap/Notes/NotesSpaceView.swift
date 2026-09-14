@@ -195,7 +195,11 @@ struct NotesSpaceView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let open = store.openNote {
+            if store.meetingPicker {
+                MeetingSelectionView()
+            } else if let open = store.openNote, store.meetingHistory || store.meetingLinkPicker {
+                MeetingHistoryView(note: open)
+            } else if let open = store.openNote {
                 NoteDetailView(note: open, isContainer: isContainer)
                     // Per NOTE, not per surface. Without it SwiftUI reuses the
                     // same view for the next note opened, `onAppear` does not
@@ -204,6 +208,7 @@ struct NotesSpaceView: View {
                     .id(open.id)
                     .transition(.opacity)
             } else {
+                MeetingNotesFilter()
                 StreamView(isContainer: isContainer)
                     .transition(.opacity)
             }
@@ -267,7 +272,7 @@ private struct StreamView: View {
         // so a stream of three notes hugs exactly as before.
         return max(120, LabMetrics.todoBlockMaxHeight
                    - LabMetrics.panelTopPadding
-                   - composerHeight
+                   - composerHeight - 36
                    - chrome.tabRow)
     }
 
@@ -518,7 +523,7 @@ private struct Composer: View {
     private var hint: some View {
         HStack(spacing: 8) {
             if !store.draft.isEmpty {
-                Text(store.isWriting ? L10n.t("notes.saving") : L10n.t("notes.saved"))
+                Text(store.saveError != nil ? L10n.t("meeting.saveFailed") : (store.isWriting ? L10n.t("notes.saving") : L10n.t("notes.saved")))
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(NotesMetrics.pillStroke.opacity(0.8))
                     .fixedSize()
@@ -721,6 +726,7 @@ private struct NoteDetailView: View {
     @FocusState private var titleFocused: Bool
     @State private var titleDraft: String
     @State private var body_: String
+    @ObservedObject private var vault = MarkdownVault.shared
 
     /// Seeded HERE and not in `onAppear`, and that ordering is the whole of
     /// the "I open a note and it is blank" bug.
@@ -747,6 +753,16 @@ private struct NoteDetailView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
                 .padding(.horizontal, LabMetrics.barOuterInset)
+            if note.meetingContext != nil { MeetingContextControls(note: note) }
+            if vault.mirrorError {
+                Text(L10n.t("meeting.mirrorFailed")).font(DSFont.checklistItem).foregroundStyle(DSColor.textSecondary).padding(.horizontal, 22)
+            }
+            if let error = store.saveError {
+                HStack {
+                    Text(error).font(DSFont.checklistItem).foregroundStyle(DSColor.textSecondary)
+                    Button(L10n.t("meeting.retry")) { store.saveNow() }
+                }.padding(.horizontal, 22)
+            }
 
             // Editable in place — no separate edit mode, no Save button. The
             // note is the editor, and now a rich one: NoteBodyView is an
@@ -771,11 +787,13 @@ private struct NoteDetailView: View {
                 .frame(height: min(max(100, editor.contentHeight), max(100, LabMetrics.todoBlockMaxHeight
                                    - LabMetrics.panelTopPadding
                                    - LabMetrics.barHeight - 28
+                                   - (note.meetingContext == nil || editor.pickerTarget != nil ? 0 : 250)
                                    - NotesMetrics.bottomBarHeight
                                    - (editor.pickerTarget == nil ? 0 : (editor.pickerExpanded ? 200 : 100)))),
                        alignment: .top)
                 .clipped()
 
+            if note.meetingContext != nil && editor.pickerTarget == nil { MeetingTasksView(note: note) }
             if let target = editor.pickerTarget {
                 ActionPicker(phrase: target.phrase, dueDate: ActionItemDetector.dueDate(in: target.phrase)) { collectionID in
                     store.createTodo(from: target.phrase, in: collectionID, note: note.id)
@@ -847,7 +865,7 @@ private struct NoteDetailView: View {
             }
 
             HStack(spacing: 8) {
-                Text(store.isWriting ? L10n.t("notes.saving") : L10n.t("notes.saved"))
+                Text(store.saveError != nil ? L10n.t("meeting.saveFailed") : (store.isWriting ? L10n.t("notes.saving") : L10n.t("notes.saved")))
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(DSColor.textFaint)
                     .fixedSize()
