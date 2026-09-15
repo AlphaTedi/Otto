@@ -1139,16 +1139,17 @@ struct NotesPill: View {
         }
         .padding(.horizontal, LabMetrics.tabPaddingH)
         .padding(.vertical, LabMetrics.tabPaddingV)
-        // ONE shape in every state, and a GLASS surface under it.
+        // ONE shape in every state.
         //
-        // The fill used to be a flat tint of the pill colour — static plastic
-        // next to glass. It is now the material carrying that same tint, at
-        // the same strengths as before (0.16 active, 0.08 hover): the signal
-        // lives in the coloured text and the dashed stroke, so the fill stays
-        // a whisper and the contrast it was tuned for does not move.
-        .pillGlass(in: Capsule(style: .continuous),
-                   tint: isActive ? NotesMetrics.pillStroke.opacity(0.16)
-                        : (hover ? NotesMetrics.pillStroke.opacity(0.08) : nil))
+        // The fill used to interpolate its radius between 48 active and 8
+        // resting, so hovering an inactive pill drew a rounded RECTANGLE and
+        // clicking it snapped to a capsule — two different objects for one
+        // control (Marcello, 2026-09-06: "sembra weird"). The state is the
+        // fill and the stroke; the shape does not move.
+        .background(Capsule(style: .continuous).fill(
+            isActive ? NotesMetrics.pillStroke.opacity(0.16)
+                     : (hover ? NotesMetrics.pillStroke.opacity(0.08) : Color.clear)
+        ))
         .overlay(
             Capsule(style: .continuous)
                 .strokeBorder(
@@ -1186,12 +1187,8 @@ struct CalendarPill: View {
         .foregroundStyle(isActive ? LabMetrics.accent : DSColor.textPrimary)
         .padding(.horizontal, LabMetrics.tabPaddingH)
         .padding(.vertical, LabMetrics.tabPaddingV)
-        // Glass under the same whisper of fill as before (0.16 active, 0.08
-        // hover) — the signal is the coloured text plus the solid stroke, so
-        // the fill stays out of the way. See NotesPill for the reasoning.
-        .pillGlass(in: Capsule(style: .continuous),
-                   tint: isActive ? LabMetrics.accent.opacity(0.16)
-                        : (hover ? LabMetrics.accent.opacity(0.08) : nil))
+        .background(Capsule().fill(isActive ? LabMetrics.accent.opacity(0.16)
+                                             : (hover ? LabMetrics.accent.opacity(0.08) : Color.clear)))
         .overlay(Capsule().strokeBorder(LabMetrics.accent.opacity(isActive ? 1 : (hover ? 0.7 : 0.45)),
                                         lineWidth: isActive ? 1.5 : 1))
         .contentShape(Capsule())
@@ -1203,4 +1200,3 @@ struct CalendarPill: View {
         .accessibilityLabel(L10n.t("filter.calendar"))
     }
 }
-

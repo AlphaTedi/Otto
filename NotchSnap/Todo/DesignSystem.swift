@@ -358,12 +358,9 @@ struct CategoryTabChip: View {
         HStack(spacing: 5) {
             Text(title)
                 .font(.system(size: 12, weight: .medium))
-                // Active sits on the category's own tint and is therefore
-                // always dark; inactive sits on plain glass and follows the
-                // panel, brightening on hover now that there is no hover
-                // wash behind it any more.
-                .foregroundColor(isActive ? DSColor.onAccentFill
-                                 : (hover ? DSColor.textPrimaryBright : DSColor.textPrimary))
+                // Active sits on the category's own fill and is therefore
+                // always dark; inactive sits on the panel and follows it.
+                .foregroundColor(isActive ? DSColor.onAccentFill : DSColor.textPrimary)
 
             if let remaining {
                 if remaining == 0 {
@@ -384,16 +381,14 @@ struct CategoryTabChip: View {
         }
         .padding(.horizontal, LabMetrics.tabPaddingH)
         .padding(.vertical, LabMetrics.tabPaddingV)
-        // ONE shape, in every state — and now a GLASS fill, not a flat one.
+        // ONE shape, in every state. The fill is what changes.
         //
-        // The active pill used to be a solid category-colour slab and every
-        // inactive one a flat wash: a row of static plastic sitting on a glass
-        // panel. The surface is now the material itself, carrying the section
-        // colour as a TINT (`pillGlass`: real tinted glass on macOS 26,
-        // ultraThinMaterial plus this same cast below it), so the active
-        // section still wears its own colour (TD-9/TD-2) on every system —
-        // and the resting pills are frosted capsules instead of bare text.
-        // Selection is still a fill, not a silhouette.
+        // The radius used to interpolate between 48 active and 8 resting, so a
+        // hovered chip would have drawn as a rounded RECTANGLE and the same
+        // chip clicked snapped to a capsule — two different objects for one
+        // control (Marcello, 2026-09-06, on the Notes pill; the lists share
+        // the component and had the same latent split). A capsule throughout
+        // removes the question: selection is a fill, not a silhouette.
         //
         // Still not `matchedGeometryEffect`. A pill travelling between chips
         // was the better-looking idea and it caused a real bug: matched
@@ -402,10 +397,12 @@ struct CategoryTabChip: View {
         // ScrollView that clips at its own bounds. The first chip sits on that
         // boundary, so its pill was drawn partly outside the scroller and cut
         // (Marcello, 2026-09-05: "la prima section rimane sempre tagliata").
-        .pillGlass(in: Capsule(style: .continuous),
-                   tint: isActive ? categoryColor.opacity(0.5) : nil)
-        // Hit-testing only registers on content, not on the glass area, so
-        // the capsule is stated explicitly as the tappable shape.
+        .background(
+            Capsule(style: .continuous)
+                .fill(isActive ? categoryColor
+                      : (hover ? DSColor.fieldBackground : Color.clear))
+        )
+        .clipShape(Capsule(style: .continuous))
         .contentShape(Capsule(style: .continuous))
         .onHover { hover = $0 }
         .animation(Motion.swap, value: isActive)

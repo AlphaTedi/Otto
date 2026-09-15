@@ -374,3 +374,18 @@ uses real Liquid Glass on macOS 26 with the project material fallback on older s
   default category, drag reorder, voice, calendar) is committed-pending.
 - PRD open questions never closed: onboarding moment for the calendar connection;
   configurable "tentative" meetings.
+
+### 2026-09-15 scroll chrome correction
+
+On macOS 26 a capped scrolling list declares a transparent 64pt bottom
+`safeAreaBar` and requests the public `.soft` scroll-edge style. The bar is the
+geometry SwiftUI needs to progressively blur and dissolve content underneath a
+custom control region; applying the style without a bar does not establish
+that overlap. Earlier macOS releases use a matched 64pt opacity ramp plus a
+masked within-window `NSVisualEffectView`. No private variable-blur selector or
+Core Image background filter is used. Pill styling remains the earlier design:
+list pills restore v1.47.0 with no resting fill and the full section color when
+active; Notes and Calendar restore v1.48.0 with their low-opacity active/hover tint
+plus their distinct dashed or solid strokes.
+
+Short lists do not reserve the edge bar, preserving their natural content height.

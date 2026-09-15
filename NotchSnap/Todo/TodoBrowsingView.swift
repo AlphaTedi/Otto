@@ -38,20 +38,28 @@ private struct ScrollOffsetKey: PreferenceKey {
     }
 }
 
-/// Softens the top edge of the scrolling region, where content passes under
-/// the draft row.
+/// Depth shared by the native Tahoe edge bar and the pre-Tahoe fallback.
+/// Keeping one value makes the transition meet the section row at the same
+/// point on every supported macOS release.
+private let sectionBarFrostDepth: CGFloat = 64
+
+/// Softens both edges of the scrolling region, where content passes under
+/// the draft row and into the frosted section bar.
 ///
 /// A capped ScrollView crops on a hard line, which reads as "the list ends
 /// here". A fade says "this continues" without adding a control or a label
 /// to read, and it disappears at the end so a fully-scrolled list still
 /// terminates cleanly.
 ///
-/// The bottom edge frosts instead of fading — see FrostTray: rows melt into
-/// live blur rather than dissolving into a painted gradient.
-private struct ScrollTopFade: ViewModifier {
+private struct ScrollEdgeFade: ViewModifier {
     let scrollOffset: CGFloat
+    let hasBelow: Bool
 
-    private let fade: CGFloat = 22
+    private let topFade: CGFloat = 22
+    /// Long enough to dissolve a complete row before the viewport clips it.
+    /// The section-bar material extends across this same area, so the result
+    /// is a frosted continuation rather than a row cut on a straight line.
+    private let bottomFade: CGFloat = sectionBarFrostDepth
     /// 2pt of slack: sub-pixel offsets must not leave a permanent haze on a
     /// list that is actually at its end.
     private var hasAbove: Bool { scrollOffset > 2 }
@@ -61,68 +69,39 @@ private struct ScrollTopFade: ViewModifier {
             VStack(spacing: 0) {
                 LinearGradient(colors: [.black.opacity(hasAbove ? 0 : 1), .black],
                                startPoint: .top, endPoint: .bottom)
-                    .frame(height: fade)
+                    .frame(height: topFade)
                 Color.black
+                LinearGradient(colors: [.black, .black.opacity(hasBelow ? 0 : 1)],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(height: bottomFade)
             }
             .animation(NotchAnimation.hintFade, value: hasAbove)
+            .animation(NotchAnimation.hintFade, value: hasBelow)
         )
     }
 }
 
-/// The frosted foot the pills sit on — Apple's sidebar/toolbar recipe (cf.
-/// the WWDC app's top bar blurring the content scrolling beneath it), not a
-/// painted gradient.
-///
-/// One continuous tray from the panel foot up past the pills ~40pt into the
-/// scrolling list. The blur itself is PROGRESSIVE — `ProgressiveBlur` ramps
-/// the radius from 0 at the list end to full behind the pills (the BlurUIKit
-/// technique, via public `CIMaskedVariableBlur`) — with a translucent veil
-/// on top for the milky half of frosted glass (BlurUIKit's dimming pattern:
-/// live texture plus visible progression).
-///
-/// Corners follow the container: square toward the list, rounded (block
-/// radius, concentric) toward the panel foot — a square tray poked visibly
-/// past the silhouette's rounded corners.
-private struct FrostTray: View {
-    /// Which side the scrolling list is on — the dissolve faces it.
-    enum ListSide { case top, bottom }
-    /// How far the frost reaches past the pills into the list.
-    static let overhang: CGFloat = 40
-    /// Full blur radius at the pills' end.
-    static let blurRadius: CGFloat = 24
+/// Tahoe's public scroll-edge API needs a declared bar to know how much of a
+/// custom bottom control region it protects. Applying `.soft` alone leaves no
+/// geometry for the effect and produces the hard crop we saw in the panel.
+/// Older systems retain the matched fade + NSVisualEffectView fallback.
+private struct TodoScrollEdgeEffect: ViewModifier {
+    let isScrollable: Bool
+    let scrollOffset: CGFloat
+    let hasBelow: Bool
 
-    let listSide: ListSide
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-
-    /// The milky half of the frost, per appearance — concrete, like the
-    /// LiquidGlass scrims, never semantic.
-    private var veil: Color { colorScheme == .dark ? .black : .white }
-    private var veilMax: Double { colorScheme == .dark ? 0.55 : 0.6 }
-
-    var body: some View {
-        // Under Reduce Transparency a non-blurring effect view is just an
-        // opaque slab — show nothing. The pills carry their own glass, so
-        // they lose nothing.
-        if !reduceTransparency {
-            ZStack {
-                ProgressiveBlur(radius: Self.blurRadius,
-                                rampPoints: Self.overhang,
-                                deepEnd: listSide == .top ? .bottom : .top)
-                LinearGradient(
-                    colors: listSide == .top
-                        ? [.clear, veil.opacity(veilMax)]
-                        : [veil.opacity(veilMax), .clear],
-                    startPoint: .top, endPoint: .bottom
-                )
-            }
-            .clipShape(UnevenRoundedRectangle(
-                topLeadingRadius: 0,
-                bottomLeadingRadius: listSide == .top ? LabMetrics.blockRadius : 0,
-                bottomTrailingRadius: listSide == .top ? LabMetrics.blockRadius : 0,
-                topTrailingRadius: 0,
-                style: .continuous))
-            .allowsHitTesting(false)
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(macOS 26.0, *), isScrollable {
+            content
+                .safeAreaBar(edge: .bottom, spacing: 0) {
+                    Color.clear
+                        .frame(height: sectionBarFrostDepth)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+                .scrollEdgeEffectStyle(.soft, for: .bottom)
+        } else {
+            content.modifier(ScrollEdgeFade(scrollOffset: scrollOffset, hasBelow: hasBelow))
         }
     }
 }
@@ -603,6 +582,8 @@ struct TodoTabRow: View {
 
     var rulePosition: RulePosition = .above
 
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
     @ObservedObject private var store = TodoStore.shared
     /// The category tab currently being dragged (nil when idle).
     @State private var draggedCollectionID: UUID?
@@ -677,7 +658,7 @@ struct TodoTabRow: View {
         // this precedent (§9). No static strip behind the pills and no hairline
         // rule any more: the row is glass pills over the panel, grouped so the
         // material samples them together on macOS 26. What separates the
-        // scrolling rows from the pills now is the list's own bottom edge fade.
+        // scrolling rows from the pills is the shared fade + frosted material.
         .glassGroup(spacing: LabMetrics.tabsGap)
         // No rule under the tab row (Marcello, 2026-07-26). The two paddings
         // stay: they were the breathing room either side of the line, and
@@ -697,16 +678,32 @@ struct TodoTabRow: View {
                                               : LabMetrics.tabsBottomPadding)
         .padding(.bottom, rulePosition == .above ? LabMetrics.tabsBottomPadding
                                                  : LabMetrics.tabsTopPadding)
-        // The frosted foot: backs the pills down to the panel edge and
-        // dissolves into the list on whichever side the list is. A background
-        // overflowing its row — later siblings paint above earlier ones, so
-        // the list slides UNDER the frost, and backgrounds never enter
-        // layout, so the hug and the scroll budget cannot tell it is there.
-        .background(alignment: rulePosition == .above ? .bottom : .top) {
-            FrostTray(listSide: rulePosition == .above ? .top : .bottom)
-                .padding(rulePosition == .above ? .top : .bottom,
-                         -FrostTray.overhang)
+
+        .background {
+            if !reduceTransparency {
+                if #available(macOS 26.0, *) {
+                    // The ScrollView owns the native soft edge on Tahoe.
+                    // Adding another material here would flatten its adaptive
+                    // fade into the dark band this change is removing.
+                    EmptyView()
+                } else {
+                    GeometryReader { geometry in
+                        SectionBarFrost(reversed: rulePosition == .below)
+                            .frame(width: geometry.size.width,
+                                   height: geometry.size.height + sectionBarFrostDepth)
+                            .clipShape(UnevenRoundedRectangle(
+                                topLeadingRadius: rulePosition == .below ? LabMetrics.blockRadius : 0,
+                                bottomLeadingRadius: rulePosition == .above ? LabMetrics.blockRadius : 0,
+                                bottomTrailingRadius: rulePosition == .above ? LabMetrics.blockRadius : 0,
+                                topTrailingRadius: rulePosition == .below ? LabMetrics.blockRadius : 0))
+                            .offset(y: rulePosition == .above ? -sectionBarFrostDepth : 0)
+                    }
+                    .allowsHitTesting(false)
+                }
+            }
         }
+        .zIndex(1)
+
     }
 
     private var tabScroller: some View {
@@ -1304,6 +1301,7 @@ struct TodoBrowsingView: View {
             // budget for that frame rather than collapsing to nothing.
             let natural = regionNaturalHeights[collection.id] ?? lastRegionNaturalHeight
             let viewport = natural > 0 ? min(natural, budget) : budget
+            let hasBelow = natural > viewport + max(scrollOffset, 0) + 2
             // Indicators ON. They were hidden, so a capped region gave the eye
             // nothing at all to say "there is more" — rows below the fold and
             // the entire Completed section read as missing rather than
@@ -1348,16 +1346,18 @@ struct TodoBrowsingView: View {
                     lastRegionNaturalHeight = height
                 }
                 .onPreferenceChange(ScrollOffsetKey.self) { scrollOffset = $0 }
+                // The custom safe-area bar must be installed BEFORE the
+                // viewport frame. Installed after it, SwiftUI adds its 64pt
+                // outside the cap and the 556pt panel becomes 620pt tall.
+                .modifier(TodoScrollEdgeEffect(isScrollable: natural > budget,
+                                               scrollOffset: scrollOffset,
+                                               hasBelow: hasBelow))
                 .frame(height: viewport)
                 // The list ENDS at its own bottom edge. Without this a row
                 // that overran the viewport kept drawing into the band the
                 // tabs live in, so the two overlapped and it read as a
                 // rendering fault rather than as a list continuing.
                 .clipped()
-                // The cut-off top softens, so the list visibly continues
-                // past it instead of ending on a hard crop. The bottom
-                // frosts instead of fading — see FrostTray.
-                .modifier(ScrollTopFade(scrollOffset: scrollOffset))
                 // Completed sits BELOW the scroll region, not inside it.
                 //
                 // It was the last thing in the scrolling content, so on any
@@ -3013,4 +3013,3 @@ private struct SweepButton: View {
         .help(L10n.t("todo.clearCompleted"))
     }
 }
-

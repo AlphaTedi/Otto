@@ -1,6 +1,5 @@
 import SwiftUI
 import AppKit
-import CoreImage
 
 // MARK: - Liquid Glass, with a floor under it
 //
@@ -354,6 +353,52 @@ struct PillGlassSurface<S: InsettableShape>: ViewModifier {
     }
 }
 
+/// Live within-window material with a continuous alpha ramp. This varies
+/// material coverage, not the Gaussian radius (AppKit does not expose that).
+/// The mask belongs to the effect view so AppKit masks the actual backdrop.
+struct SectionBarFrost: NSViewRepresentable {
+    var reversed = false
+    func makeNSView(context: Context) -> SectionBarFrostView {
+        SectionBarFrostView()
+    }
+    func updateNSView(_ view: SectionBarFrostView, context: Context) {
+        view.reversed = reversed
+        view.needsLayout = true
+    }
+}
+
+final class SectionBarFrostView: NSVisualEffectView {
+    var reversed = false
+    private var lastSize = CGSize.zero
+    private var lastReversed = false
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        material = .hudWindow
+        blendingMode = .withinWindow
+        state = .active
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is unsupported") }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func layout() {
+        super.layout()
+        guard bounds.width > 0, bounds.height > 0,
+              bounds.size != lastSize || reversed != lastReversed else { return }
+        lastSize = bounds.size
+        lastReversed = reversed
+        let size = bounds.size
+        let flip = reversed
+        maskImage = NSImage(size: size, flipped: false) { rect in
+            guard let gradient = NSGradient(colorsAndLocations:
+                (.black, 0), (.black, 0.35),
+                (.black.withAlphaComponent(0.6), 0.65),
+                (.clear, 1)) else { return false }
+            gradient.draw(in: rect, angle: flip ? 270 : 90)
+            return true
+        }
+    }
+}
+
 // MARK: - Surfaces that are dark whatever the system is set to
 //
 // Two rules, and every colour decision in the app falls under one of them.
@@ -389,162 +434,5 @@ extension View {
     /// above. Everything inside resolves as if the system were in Dark.
     func darkGroundSurface() -> some View {
         environment(\.colorScheme, .dark)
-    }
-}
-
-// MARK: - Progressive (variable) blur
-//
-// TRUE progressive blur: the blur RADIUS itself ramps along a gradient —
-// sharp where the list runs free, fully blurred behind the pills — not one
-// uniform blur faded in with opacity. That distinction is the whole lesson
-// of Tim Oliver's BlurUIKit (MIT): it holds the private `variableBlur`
-// CAFilter iOS composes its own frosted bars from. On macOS the same effect
-// is reachable through PUBLIC API: the `CIMaskedVariableBlur` Core Image
-// filter as the layer's `backgroundFilters`, driven by a grayscale mask
-// image. No private API, no snapshotting, live every frame the list scrolls.
-
-/// Which end of the view carries full blur.
-enum ProgressiveBlurDeepEnd {
-    /// Sharp at the top, fully blurred at the bottom (list above pills).
-    case bottom
-    /// Fully blurred at the top, sharp at the bottom (list below pills).
-    case top
-}
-
-/// An NSView that variable-blurs its BACKDROP (everything composited
-/// underneath it in the window) with a radius ramping from 0 at the shallow
-/// end to `radius` at the deep end, across `rampPoints`.
-///
-/// The mask image is drawn once per bounds size and rebuilt on resize only —
-/// same caching discipline as BlurUIKit's gradient masks.
-final class ProgressiveBlurView: NSView {
-    var radius: CGFloat = 24 { didSet { refreshFilter() } }
-    /// How many points the 0→full ramp spans, measured from the deep end.
-    /// Everything past the ramp (behind the pills) stays at full blur.
-    var rampPoints: CGFloat = 40 { didSet { refreshFilter() } }
-    var deepEnd: ProgressiveBlurDeepEnd = .bottom { didSet { refreshFilter() } }
-
-    private var maskSize: CGSize = .zero
-    private var maskImage: CGImage?
-    private var didInstallFallback = false
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        wantsLayer = true
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        wantsLayer = true
-    }
-
-    override var isOpaque: Bool { false }
-
-    override func layout() {
-        super.layout()
-        refreshFilter()
-    }
-
-    fileprivate func refreshFilter() {
-        guard bounds.width > 1, bounds.height > 1 else { return }
-        guard let filter = CIFilter(name: "CIMaskedVariableBlur") else {
-            installFallbackBlur()
-            return
-        }
-        filter.setDefaults()
-        filter.setValue(radius, forKey: kCIInputRadiusKey)
-        if maskSize != bounds.size || maskImage == nil {
-            maskImage = makeMask(size: bounds.size)
-            maskSize = bounds.size
-        }
-        if let maskImage {
-            // `CIMaskedVariableBlur` uses its own `inputMask` parameter.
-            // `kCIInputMaskImageKey` is for filters such as blends and is
-            // not part of this filter's schema; using it throws an Objective-C
-            // exception during AppKit layout, which makes a Debug run appear
-            // to be an Xcode crash.
-            filter.setValue(CIImage(cgImage: maskImage), forKey: "inputMask")
-        }
-        wantsLayer = true
-        layer?.backgroundFilters = [filter]
-    }
-
-    /// Grayscale mask in Core Image coordinates (origin bottom-left):
-    /// white = full `radius`, black = sharp. Ramps across `rampPoints` from
-    /// the shallow end; the deep end stays white past the ramp.
-    private func makeMask(size: CGSize) -> CGImage? {
-        // 2x: a 1px/point mask bands visibly across a 40pt ramp.
-        let scale: CGFloat = 2
-        let w = max(1, Int(size.width * scale))
-        let h = max(1, Int(size.height * scale))
-        let space = CGColorSpaceCreateDeviceGray()
-        guard let ctx = CGContext(data: nil, width: w, height: h,
-                                  bitsPerComponent: 8, bytesPerRow: 0,
-                                  space: space,
-                                  bitmapInfo: CGImageAlphaInfo.none.rawValue),
-              let gradient = CGGradient(
-                  colorsSpace: space,
-                  colors: [CGColor(gray: 0, alpha: 1),
-                           CGColor(gray: 1, alpha: 1)] as CFArray,
-                  locations: [0, 1])
-        else { return nil }
-
-        let hh = CGFloat(h)
-        let rampPx = min(rampPoints * scale, hh)
-        // Full-blur base everywhere.
-        ctx.setFillColor(gray: 1, alpha: 1)
-        ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
-        // Then carve the ramp back toward sharp at the shallow end.
-        switch deepEnd {
-        case .bottom:
-            // Shallow end is the TOP: black at y=hh fading to white rampPx below it.
-            ctx.drawLinearGradient(gradient,
-                                   start: CGPoint(x: 0, y: hh),
-                                   end: CGPoint(x: 0, y: hh - rampPx),
-                                   options: [])
-        case .top:
-            // Shallow end is the BOTTOM: white rampPx above y=0 fading to black at y=0.
-            ctx.drawLinearGradient(gradient,
-                                   start: CGPoint(x: 0, y: rampPx),
-                                   end: CGPoint(x: 0, y: 0),
-                                   options: [])
-        }
-        return ctx.makeImage()
-    }
-
-    /// Should never trigger (`CIMaskedVariableBlur` ships since macOS 10.12),
-    /// but a frosted foot must never render as a hard band: a plain
-    /// within-window blur degrades to uniform frost instead of nothing.
-    private func installFallbackBlur() {
-        guard !didInstallFallback else { return }
-        didInstallFallback = true
-        let effect = NSVisualEffectView(frame: bounds)
-        effect.material = .hudWindow
-        effect.blendingMode = .withinWindow
-        effect.state = .active
-        effect.autoresizingMask = [.width, .height]
-        addSubview(effect)
-    }
-}
-
-/// SwiftUI host for `ProgressiveBlurView`. Sizes like any view — the mask
-/// follows bounds automatically.
-struct ProgressiveBlur: NSViewRepresentable {
-    var radius: CGFloat = 24
-    var rampPoints: CGFloat = 40
-    var deepEnd: ProgressiveBlurDeepEnd = .bottom
-
-    func makeNSView(context: Context) -> ProgressiveBlurView {
-        let view = ProgressiveBlurView(frame: .zero)
-        view.radius = radius
-        view.rampPoints = rampPoints
-        view.deepEnd = deepEnd
-        return view
-    }
-
-    func updateNSView(_ view: ProgressiveBlurView, context: Context) {
-        view.radius = radius
-        view.rampPoints = rampPoints
-        view.deepEnd = deepEnd
     }
 }
