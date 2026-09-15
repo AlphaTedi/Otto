@@ -12,7 +12,8 @@ class NotchController: ObservableObject {
     private static let legacyNotificationsAreAvailable = false
 
     @Published var state: NotchState = .idle
-    @Published var contentVisible: Bool = false
+    /// Visibility follows presentation; cancelled tasks cannot strand an empty panel.
+    var contentVisible: Bool { state == .expanded }
     @Published var screenshotJustArrived: Bool = false
 
     // Notification state (Dynamic Island style)
@@ -30,7 +31,6 @@ class NotchController: ObservableObject {
     private var localMouseMonitor: Any?
     private var keyMonitor: Any?
     private var hoverTask: Task<Void, Never>?
-    private var expandTask: Task<Void, Never>?
     private var collapseTask: Task<Void, Never>?
     private var notificationTask: Task<Void, Never>?
     private var autoCollapseTimer: Timer?
@@ -264,35 +264,28 @@ class NotchController: ObservableObject {
         // second open rendered flat and desaturated where the first was right.
         GlassRefresh.shared.bump()
 
-        expandTask = Task { @MainActor in
-            // Allow key + accept mouse events so drag-and-drop works in expanded state
-            (panel as? NotchPanel)?.allowKey = true
-            panel?.ignoresMouseEvents = false
-            // Take key on EVERY open, not only the keyboard ones.
-            //
-            // `allowKey` was set and then nothing ever asked for it on a
-            // hover-open, so the panel sat unfocused: on macOS 26 the glass
-            // draws its INACTIVE variant when its window is not key — lighter
-            // and desaturated, which is the washed-out notch — and
-            // `NSApp.keyWindow` was never ours, so typing went to Quick Find
-            // instead of the field. `makeKey` on a nonactivating panel does
-            // NOT bring the app forward; that is what the style mask is for.
-            panel?.makeKey()
+        // Allow key + accept mouse events so drag-and-drop works in expanded state
+        (panel as? NotchPanel)?.allowKey = true
+        panel?.ignoresMouseEvents = false
+        // Take key on EVERY open, not only the keyboard ones.
+        //
+        // `allowKey` was set and then nothing ever asked for it on a
+        // hover-open, so the panel sat unfocused: on macOS 26 the glass
+        // draws its INACTIVE variant when its window is not key — lighter
+        // and desaturated, which is the washed-out notch — and
+        // `NSApp.keyWindow` was never ours, so typing went to Quick Find
+        // instead of the field. `makeKey` on a nonactivating panel does
+        // NOT bring the app forward; that is what the style mask is for.
+        panel?.makeKey()
 
-            // Step 1: animate the SHAPE (immediate)
-            withAnimation(NotchAnimation.expand) {
-                state = .expanded
-            }
-            AppState.shared.isNotchExpanded = true
-
-            // Step 2: content fades in with delay (stagger) — the delay is in NotchAnimation.contentIn
-            withAnimation(NotchAnimation.contentIn) {
-                contentVisible = true
-            }
-
-            // Start auto-collapse timer
-            startAutoCollapseTimer()
+        // Step 1: animate the SHAPE (immediate)
+        withAnimation(NotchAnimation.expand) {
+            state = .expanded
         }
+        AppState.shared.isNotchExpanded = true
+
+        // Start auto-collapse timer
+        startAutoCollapseTimer()
     }
 
     /// Policy rule 2: a real click outside the panel closes it no matter
@@ -387,32 +380,14 @@ class NotchController: ObservableObject {
         guard state == .expanded, collapseTask == nil,
               !isDragSessionActive, force || !isUserEngaged else { return }
 
-        expandTask?.cancel()
-        expandTask = nil
         hoverTask?.cancel()
 
         collapseTask = Task { @MainActor in
-            // Step 1: hide content FIRST (immediate)
-            withAnimation(NotchAnimation.contentOut) {
-                contentVisible = false
-            }
-
-            // Step 2: after 80ms close the shape
-            try? await Task.sleep(nanoseconds: 80_000_000) // 80ms
-            if Task.isCancelled {
-                // The collapse was called off inside this 80ms window — the
-                // cursor came back, or something cancelled it.
-                //
-                // Step 1 already hid the content. Returning here used to leave
-                // the panel EXPANDED with contentVisible == false: an open,
-                // black, empty notch that stayed that way until Escape
-                // (Marcello, 2026-08-04). Put the content back, since we are
-                // no longer collapsing, and release the task so a later
-                // collapse is not blocked by the `collapseTask == nil` guard.
-                withAnimation(NotchAnimation.contentIn) { contentVisible = true }
-                collapseTask = nil
-                return
-            }
+            // Keep the content visible until the panel actually closes. A cancelled
+            // task must neither hide content nor clear a newer collapse task.
+            do { try await Task.sleep(nanoseconds: 80_000_000) }
+            catch { return }
+            guard !Task.isCancelled else { return }
 
             // Feedback only when the collapse actually happens — a collapse
             // cancelled by hovering back in must stay silent.
@@ -594,10 +569,9 @@ class NotchController: ObservableObject {
     func collapse() {
         hoverTask?.cancel()
         collapseTask?.cancel()
-        expandTask?.cancel()
+        collapseTask = nil
         withAnimation(NotchAnimation.collapse) {
             state = .idle
-            contentVisible = false
         }
         AppState.shared.isNotchExpanded = false
         TodoStore.shared.releaseDraftFocus()

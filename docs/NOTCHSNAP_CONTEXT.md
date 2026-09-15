@@ -389,3 +389,14 @@ active; Notes and Calendar restore v1.48.0 with their low-opacity active/hover t
 plus their distinct dashed or solid strokes.
 
 Short lists do not reserve the edge bar, preserving their natural content height.
+
+### 2026-09-15 interrupted presentation hotfix
+
+Content visibility is derived from `state == .expanded`, not separately stored.
+The previous collapse task hid every `notchEntry` child before its 80ms delay;
+interrupted transitions depended on a cancelled task restoring visibility and
+could let stale cancellation cleanup clear a newer task. Opening now executes
+synchronously on MainActor. Cancelled collapse tasks return without touching
+presentation or task ownership, and content stays visible until actual closure.
+`verify-presentation` exercises 30 rapid/cancelled presentation cycles without
+creating or deleting user data.

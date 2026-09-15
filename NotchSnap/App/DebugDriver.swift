@@ -37,6 +37,28 @@ enum DebugDriver {
     private static func handle(_ command: String) {
         let store = TodoStore.shared
         switch command {
+        case "verify-presentation":
+            Task { @MainActor in
+                let controller = NotchController.shared
+                var failures = 0
+                for _ in 0..<30 {
+                    controller.collapse()
+                    controller.triggerExpand()
+                    if controller.state != .expanded || !controller.contentVisible { failures += 1 }
+                    controller.triggerCollapse(force: true)
+                    try? await Task.sleep(nanoseconds: 20_000_000)
+                    controller.cancelCollapse()
+                    if controller.state != .expanded || !controller.contentVisible { failures += 1 }
+                    controller.triggerCollapse(force: true)
+                    controller.triggerExpand()
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    if controller.state != .expanded || !controller.contentVisible { failures += 1 }
+                    controller.collapse()
+                    if controller.contentVisible { failures += 1 }
+                }
+                controller.triggerExpand()
+                appendState("presentation regression: 30 cycles, failures=\(failures)")
+            }
         case "expand":
             NotchController.shared.expand()
         case "collapse":
