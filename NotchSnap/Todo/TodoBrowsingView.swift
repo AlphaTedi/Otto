@@ -995,14 +995,20 @@ private struct VoiceChip: View {
     }
 }
 
-// MARK: - NewSectionButton — the "+" at the end of the tabs
+// MARK: - NewSectionButton — "New section" at the end of the tabs
 //
-// A plain glyph at the same weight as any other piece of chrome, not a filled
-// chip. Creating a section is a rare, structural act; it should be findable
-// and never louder than the tabs it sits beside. Everything ELSE about a
-// section — default, reorder, delete — is on that section's own right-click
-// menu, where it applies to the tab you are pointing at rather than to
-// whichever one happened to be active.
+// A WORD, not a glyph. The "+" was two crossing lines with no label, which
+// makes the one structural act in this bar the only thing in it you have to
+// already know (Marcello, 2026-09-20). It reads as a normal member of the row
+// now — same type, same weight as an inactive tab — and it says what it does.
+//
+// Creating a section is rare, so it is never louder than the tabs beside it.
+// Everything ELSE about a section — default, reorder, delete — is on that
+// section's own right-click menu, where it applies to the tab you are pointing
+// at rather than to whichever one happened to be active.
+//
+// ⇧⌘N does the same thing from the keyboard. ⌘N was already the new TO-DO, and
+// the two are close enough on purpose: same verb, one level apart.
 
 private struct NewSectionButton: View {
     @State private var hover = false
@@ -1012,17 +1018,19 @@ private struct NewSectionButton: View {
             TodoStore.shared.setMode(.newCategory)
             NotchController.shared.focusPanel()
         } label: {
-            // Two bare crossing lines in a 24pt box — no glyph weight, no
-            // background, no border. Drawn rather than set, because an SF
-            // "plus" carries its own optical padding and metrics that will
-            // not match a 12pt/1pt cross.
-            ZStack {
-                Rectangle().frame(width: 12, height: 1)
-                Rectangle().frame(width: 1, height: 12)
-            }
-            .foregroundStyle(hover ? DSColor.glyphStrong : DSColor.glyph)
-            .frame(width: 24, height: 24)
-            .contentShape(Rectangle())
+            Text(L10n.t("todo.newSection"))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(hover ? DSColor.textPrimary : DSColor.textSecondary)
+                .fixedSize()
+                .padding(.horizontal, LabMetrics.tabPaddingH)
+                .padding(.vertical, LabMetrics.tabPaddingV)
+                // The same capsule an inactive tab wears on hover, so it
+                // belongs to the row rather than sitting beside it.
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(hover ? DSColor.fieldBackground : Color.clear)
+                )
+                .contentShape(Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -2925,6 +2933,7 @@ private struct ShortcutsOverlay: View {
         ("\u{2318},", "todo.sc.preferences"),
         ("\u{2318}Q", "todo.sc.quit"),
         ("\u{2325}\u{21A9}", "notes.sc.actionPicker"),
+        ("\u{21E7}\u{2318}N", "todo.sc.newSection"),
         ("1–3 / ↑↓ / ↩ / Esc", "notes.sc.pickerKeys"),
         ("⌃Tab / ⌃⇧Tab", "meeting.focusShortcut"),
         ("H / L / A / C / U", "meeting.contextShortcut"),

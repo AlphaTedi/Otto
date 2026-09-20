@@ -764,6 +764,17 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 return true
             }
 
+            // ⇧⌘N makes a SECTION. It had no key at all: the only way to create
+            // one was clicking a "+" with no label, which made the one
+            // structural act in the bar both the least findable and the only
+            // mouse-only one (Marcello, 2026-09-20). One level up from ⌘N, and
+            // deliberately adjacent to it — same verb, different scale.
+            if cmd, shift, lower == "n" {
+                store.setMode(.newCategory)
+                NotchController.shared.focusPanel()
+                return true
+            }
+
             // VC-1: ⇧⌘V starts the voice brain-dump (panel-only, per
             // Marcello — no global audio trigger).
             if cmd, shift, lower == "v", VoiceFeature.isEnabled {
