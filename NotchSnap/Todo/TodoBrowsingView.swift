@@ -744,7 +744,7 @@ struct TodoTabRow: View {
                         // The bar's own ground only. Reaching up over the list
                         // is the overlay's job now, and doing it from both
                         // places stacked two materials on the same pixels.
-                        SectionBarFrost(reversed: rulePosition == .below)
+                        SectionBarFrost(reversed: rulePosition == .below, ramped: false)
                             .frame(width: geometry.size.width,
                                    height: geometry.size.height)
                             .clipShape(UnevenRoundedRectangle(

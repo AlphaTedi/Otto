@@ -358,19 +358,31 @@ struct PillGlassSurface<S: InsettableShape>: ViewModifier {
 /// The mask belongs to the effect view so AppKit masks the actual backdrop.
 struct SectionBarFrost: NSViewRepresentable {
     var reversed = false
+    /// False for the BAR'S OWN GROUND, which must be uniform.
+    ///
+    /// Measured, not guessed: the view tree showed the bar's material at
+    /// y=354..421 and the list's ramp at y=421..473, touching exactly. Both
+    /// were ramped and both pointed the same way, so at the junction the bar
+    /// had faded to nothing and the overlay restarted at full — a sawtooth,
+    /// and the sawtooth is the hard line (2026-09-20). Solid under the pills,
+    /// ramping only above them, is one continuous fall.
+    var ramped = true
     func makeNSView(context: Context) -> SectionBarFrostView {
         SectionBarFrostView()
     }
     func updateNSView(_ view: SectionBarFrostView, context: Context) {
         view.reversed = reversed
+        view.ramped = ramped
         view.needsLayout = true
     }
 }
 
 final class SectionBarFrostView: NSVisualEffectView {
     var reversed = false
+    var ramped = true
     private var lastSize = CGSize.zero
     private var lastReversed = false
+    private var lastRamped = true
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -383,9 +395,16 @@ final class SectionBarFrostView: NSVisualEffectView {
     override func layout() {
         super.layout()
         guard bounds.width > 0, bounds.height > 0,
-              bounds.size != lastSize || reversed != lastReversed else { return }
+              bounds.size != lastSize || reversed != lastReversed
+                || ramped != lastRamped else { return }
         lastSize = bounds.size
         lastReversed = reversed
+        lastRamped = ramped
+        guard ramped else {
+            // Uniform: this is a ground, not a fade.
+            maskImage = nil
+            return
+        }
         let size = bounds.size
         let flip = reversed
         // A LONG, CONTINUOUS ramp — the shape of it is the whole effect.

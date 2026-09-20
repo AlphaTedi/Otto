@@ -47,7 +47,10 @@ enum SpaceAnchor {
     private typealias ConnectionID = Int32
 
     private typealias FnMainConnection = @convention(c) () -> ConnectionID
-    private typealias FnSpaceCreate = @convention(c) (ConnectionID, UnsafeMutableRawPointer?, CFDictionary?) -> CGSSpaceID
+    /// The second argument is declared `void *` in the headers that circulate
+    /// and is passed as the literal 1 by every working caller. Passing NULL
+    /// returns 0 — measured here, not assumed (2026-09-20).
+    private typealias FnSpaceCreate = @convention(c) (ConnectionID, Int, CFDictionary?) -> CGSSpaceID
     private typealias FnSpaceSetAbsoluteLevel = @convention(c) (ConnectionID, CGSSpaceID, Int32) -> Void
     private typealias FnShowSpaces = @convention(c) (ConnectionID, CFArray) -> Void
     private typealias FnHideSpaces = @convention(c) (ConnectionID, CFArray) -> Void
@@ -111,7 +114,7 @@ enum SpaceAnchor {
         } else {
             // The second argument is documented nowhere and is NULL in every
             // known use; the options dictionary is likewise empty.
-            let created = spaceCreate(connection, nil, nil)
+            let created = spaceCreate(connection, 1, nil)
             guard created != 0 else {
                 lastError = "CGSSpaceCreate returned 0"
                 return false

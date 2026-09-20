@@ -129,9 +129,17 @@ class NotchController: ObservableObject {
         // If the private symbols are gone, this falls back to exactly the
         // behaviour Otto shipped before: the flag goes back on and the notch
         // travels, which is a visible annoyance rather than a broken app.
-        panel.collectionBehavior = SpaceAnchor.isAvailable
-            ? [.stationary, .fullScreenAuxiliary, .ignoresCycle]
-            : [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        // START with the AppKit behaviour, always.
+        //
+        // This used to be decided by `SpaceAnchor.isAvailable` — whether the
+        // SYMBOLS resolved — and that is the wrong question. The symbols
+        // resolved and the pin then failed (`CGSSpaceCreate` returned 0), so
+        // the window had neither the private space nor `.canJoinAllSpaces`:
+        // strictly worse than before the feature existed. The flag is only
+        // dropped once a pin has actually SUCCEEDED, which is a fact rather
+        // than a capability.
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary,
+                                    .fullScreenAuxiliary, .ignoresCycle]
         panel.ignoresMouseEvents = true  // Starts true — only false when expanded (prevents stealing clicks from other apps)
         panel.hidesOnDeactivate = false
         panel.isMovable = false
@@ -177,7 +185,12 @@ class NotchController: ObservableObject {
         panel.orderFront(nil)
         // Only AFTER the window exists on screen: the window number is 0
         // until it is ordered in, and the window server has nothing to pin.
-        SpaceAnchor.pin(panel)
+        //
+        // AppKit's flag comes off only if this worked. A failed pin leaves the
+        // window exactly as it behaved before any of this existed.
+        if SpaceAnchor.pin(panel) {
+            panel.collectionBehavior = [.stationary, .fullScreenAuxiliary, .ignoresCycle]
+        }
         self.panel = panel
         applyNotchAppearance()
 
