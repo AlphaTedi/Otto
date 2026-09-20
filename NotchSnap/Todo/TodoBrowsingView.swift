@@ -41,7 +41,12 @@ private struct ScrollOffsetKey: PreferenceKey {
 /// Depth shared by the native Tahoe edge bar and the pre-Tahoe fallback.
 /// Keeping one value makes the transition meet the section row at the same
 /// point on every supported macOS release.
-private let sectionBarFrostDepth: CGFloat = 64
+/// How far the section bar's material reaches up over the list.
+///
+/// 64 was the height of one row, which made the fade exactly as tall as the
+/// thing it was fading — so a row met full strength almost as soon as it met
+/// anything. Half again as much gives the ramp somewhere to be gradual.
+private let sectionBarFrostDepth: CGFloat = 96
 
 /// Softens both edges of the scrolling region, where content passes under
 /// the draft row and into the frosted section bar.
@@ -110,18 +115,14 @@ private struct TodoScrollEdgeEffect: ViewModifier {
     let hasBelow: Bool
 
     func body(content: Content) -> some View {
+        // ONLY the mask. The frosted material belongs to the section bar and is
+        // drawn there, reaching up over this region — see TodoTabRow.
+        //
+        // An overlay here was the previous attempt and it is the thing to not
+        // do again: any surface laid ON the list has an edge of its own, and
+        // that edge reads as exactly the line it was added to remove.
         content
             .modifier(ScrollEdgeFade(scrollOffset: scrollOffset, hasBelow: hasBelow))
-            .overlay(alignment: .bottom) {
-                if isScrollable, hasBelow {
-                    SectionBarFrost(reversed: false)
-                        .frame(height: sectionBarFrostDepth)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                        .transition(.opacity)
-                }
-            }
-            .animation(NotchAnimation.hintFade, value: hasBelow)
     }
 }
 
@@ -705,12 +706,22 @@ struct TodoTabRow: View {
 
         .background {
             if !reduceTransparency {
-                if #available(macOS 26.0, *) {
-                    // The ScrollView owns the native soft edge on Tahoe.
-                    // Adding another material here would flatten its adaptive
-                    // fade into the dark band this change is removing.
-                    EmptyView()
-                } else {
+                // THE FADE IS THE BAR'S OWN BACKGROUND, reaching up over the
+                // list — not a veil laid on top of it.
+                //
+                // That distinction is the whole bug. Painted over the list, the
+                // frost has a boundary of its own, and a boundary is a line: it
+                // put a second edge on top of the one it was meant to remove
+                // (Marcello, 2026-09-20, screenshot). Grown UPWARD out of the
+                // bar instead, there is no second surface — the rows simply
+                // travel into the material the pills already sit on, and the
+                // place where the list "ends" stops existing as a place.
+                //
+                // On every version, including Tahoe. The native scroll-edge
+                // effect was tried here and could not win: the region is
+                // cropped outside the ScrollView, so whatever the effect drew
+                // inside it was cut on a straight line afterwards.
+                do {
                     GeometryReader { geometry in
                         SectionBarFrost(reversed: rulePosition == .below)
                             .frame(width: geometry.size.width,

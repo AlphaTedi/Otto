@@ -388,10 +388,25 @@ final class SectionBarFrostView: NSVisualEffectView {
         lastReversed = reversed
         let size = bounds.size
         let flip = reversed
+        // A LONG, CONTINUOUS ramp — the shape of it is the whole effect.
+        //
+        // It used to hold full strength for the first third and then fall away
+        // over the rest. A ramp with a flat section has a knee where the two
+        // meet, and a knee at this scale reads as an edge: it replaced the line
+        // it was meant to dissolve (Marcello, 2026-09-20).
+        //
+        // Seven stops easing out instead, opaque only at the very lip and
+        // reaching zero well before the top, so there is nowhere along it where
+        // the rate of change jumps. Fewer stops were tried; the banding is
+        // visible on a dark panel.
         maskImage = NSImage(size: size, flipped: false) { rect in
             guard let gradient = NSGradient(colorsAndLocations:
-                (.black, 0), (.black, 0.35),
-                (.black.withAlphaComponent(0.6), 0.65),
+                (.black, 0),
+                (.black.withAlphaComponent(0.97), 0.18),
+                (.black.withAlphaComponent(0.86), 0.36),
+                (.black.withAlphaComponent(0.64), 0.54),
+                (.black.withAlphaComponent(0.36), 0.70),
+                (.black.withAlphaComponent(0.14), 0.85),
                 (.clear, 1)) else { return false }
             gradient.draw(in: rect, angle: flip ? 270 : 90)
             return true
