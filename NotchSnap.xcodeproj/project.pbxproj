@@ -73,6 +73,7 @@
 		5526A8F0BE72BC26415C37CF /* ServiceManagement.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 84C92F197DAF6CED42810033 /* ServiceManagement.framework */; };
 		57FD7FB54260751DC5FD3F66 /* NotchShapeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7942B954C2418CDD5041B8A /* NotchShapeView.swift */; };
 		57FD7FB54260751DC5FD3F6A /* LiquidGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7942B954C2418CDD5041B8E /* LiquidGlass.swift */; };
+		AA01BB02CC03DD04EE05F0C6 /* SpaceAnchor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C6AA01BB02CC03DD04EE05 /* SpaceAnchor.swift */; };
 		57FD7FB54260751DC5FD3F69 /* LabPanels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7942B954C2418CDD5041B8D /* LabPanels.swift */; };
 		57FD7FB54260751DC5FD3F68 /* AppBuild.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7942B954C2418CDD5041B8C /* AppBuild.swift */; };
 		57FD7FB54260751DC5FD3F67 /* NotchPresence.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7942B954C2418CDD5041B8B /* NotchPresence.swift */; };
@@ -239,6 +240,7 @@
 		D2E3F40516A7B8C9D0E1F2A3 /* AnnotationToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationToolbar.swift; sourceTree = "<group>"; };
 		D7942B954C2418CDD5041B8A /* NotchShapeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchShapeView.swift; sourceTree = "<group>"; };
 		D7942B954C2418CDD5041B8E /* LiquidGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlass.swift; sourceTree = "<group>"; };
+		F0C6AA01BB02CC03DD04EE05 /* SpaceAnchor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SpaceAnchor.swift; path = SpaceAnchor.swift; sourceTree = "<group>"; };
 		D7942B954C2418CDD5041B8D /* LabPanels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabPanels.swift; sourceTree = "<group>"; };
 		D7942B954C2418CDD5041B8C /* AppBuild.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBuild.swift; sourceTree = "<group>"; };
 		D7942B954C2418CDD5041B8B /* NotchPresence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchPresence.swift; sourceTree = "<group>"; };
@@ -479,6 +481,7 @@
 				CDE65A9C4E12466ED5903603 /* NotchController.swift */,
 				D7942B954C2418CDD5041B8A /* NotchShapeView.swift */,
 				D7942B954C2418CDD5041B8E /* LiquidGlass.swift */,
+				F0C6AA01BB02CC03DD04EE05 /* SpaceAnchor.swift */,
 				D7942B954C2418CDD5041B8D /* LabPanels.swift */,
 				D7942B954C2418CDD5041B8B /* NotchPresence.swift */,
 				96E1B1ED1D889C06D708A9E8 /* NotchRootView.swift */,
@@ -673,6 +676,7 @@
 				06FE3C740C45168B53D42F4C /* NotchController.swift in Sources */,
 				57FD7FB54260751DC5FD3F66 /* NotchShapeView.swift in Sources */,
 				57FD7FB54260751DC5FD3F6A /* LiquidGlass.swift in Sources */,
+				AA01BB02CC03DD04EE05F0C6 /* SpaceAnchor.swift in Sources */,
 				57FD7FB54260751DC5FD3F69 /* LabPanels.swift in Sources */,
 				57FD7FB54260751DC5FD3F68 /* AppBuild.swift in Sources */,
 				57FD7FB54260751DC5FD3F67 /* NotchPresence.swift in Sources */,

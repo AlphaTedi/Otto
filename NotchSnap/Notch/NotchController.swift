@@ -27,6 +27,10 @@ class NotchController: ObservableObject {
     @Published var notificationWide: Bool = false
 
     private var panel: NSPanel?
+    #if DEBUG
+    /// Read-only, for the runtime probes in DebugDriver. Never in Release.
+    var panelForDebug: NSPanel? { panel }
+    #endif
     private var mouseMonitor: Any?
     private var localMouseMonitor: Any?
     private var keyMonitor: Any?
@@ -109,8 +113,21 @@ class NotchController: ObservableObject {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary,
-                                    .fullScreenAuxiliary, .ignoresCycle]
+        // WHO OWNS SPACE MEMBERSHIP decides whether the notch slides.
+        //
+        // `.canJoinAllSpaces` asks AppKit to present the window on every
+        // space, and AppKit carries it across during a swipe — that carrying
+        // IS the bug. When SpaceAnchor is available the window server is told
+        // directly instead, and the flag is dropped so the two cannot both
+        // claim the job; `.stationary` stays either way, as the instruction
+        // not to animate.
+        //
+        // If the private symbols are gone, this falls back to exactly the
+        // behaviour Otto shipped before: the flag goes back on and the notch
+        // travels, which is a visible annoyance rather than a broken app.
+        panel.collectionBehavior = SpaceAnchor.isAvailable
+            ? [.stationary, .fullScreenAuxiliary, .ignoresCycle]
+            : [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         panel.ignoresMouseEvents = true  // Starts true — only false when expanded (prevents stealing clicks from other apps)
         panel.hidesOnDeactivate = false
         panel.isMovable = false
@@ -154,6 +171,9 @@ class NotchController: ObservableObject {
         panel.contentView = hostingView
 
         panel.orderFront(nil)
+        // Only AFTER the window exists on screen: the window number is 0
+        // until it is ordered in, and the window server has nothing to pin.
+        SpaceAnchor.pinToAllSpaces(panel)
         self.panel = panel
         applyNotchAppearance()
 
@@ -169,10 +189,23 @@ class NotchController: ObservableObject {
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
-        // Do not set the frame during a Space swipe. The panel is
-        // `.stationary` + `.canJoinAllSpaces`, so AppKit keeps it pinned to
-        // the hardware notch; a manual re-anchor mid-transition makes it
-        // visibly travel with the desktop underneath it.
+        // Do not set the frame during a Space swipe. Re-anchoring the frame
+        // mid-transition is itself a way to make the panel visibly travel
+        // with the desktop underneath it.
+        //
+        // Re-pin when the set of spaces CHANGES, though. A window is added to
+        // the spaces that existed at the time; make a new desktop afterwards
+        // and the notch is simply absent from it. Mission Control posts this
+        // when spaces are added or removed.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let panel = self?.panel else { return }
+                SpaceAnchor.pinToAllSpaces(panel)
+            }
+        }
     }
 
     /// The display the notch belongs to.

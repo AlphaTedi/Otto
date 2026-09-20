@@ -502,6 +502,20 @@ enum DebugDriver {
                 if let id = NotesStore.shared.openNoteID {
                     NoteEditorController.shared.refreshDetections(noteID: id)
                 }
+            } else if command == "space-anchor" {
+                let available = SpaceAnchor.isAvailable
+                var report = "space-anchor available=\(available)"
+                if let panel = NotchController.shared.panelForDebug {
+                    let pinned = SpaceAnchor.pinToAllSpaces(panel)
+                    report += " windowNumber=\(panel.windowNumber)"
+                    report += " pinned=\(pinned) spaces=\(SpaceAnchor.lastPinnedSpaceCount)"
+                    report += " behavior=\(panel.collectionBehavior.rawValue)"
+                    report += " joinsAll=\(panel.collectionBehavior.contains(.canJoinAllSpaces))"
+                    report += " stationary=\(panel.collectionBehavior.contains(.stationary))"
+                } else {
+                    report += " (nessun pannello)"
+                }
+                appendState(report)
             } else if command == "menu-open" {
                 TodoStore.shared.openAvatarMenu()
             } else if command == "menu-close" {
