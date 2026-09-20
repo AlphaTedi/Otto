@@ -278,6 +278,28 @@ class NotchController: ObservableObject {
         // NOT bring the app forward; that is what the style mask is for.
         panel?.makeKey()
 
+        // The caret is ready in EVERY space, not just Notes and Calendar.
+        //
+        // Those two focus their own field in `onAppear`, so they were ready to
+        // type the moment they were drawn. A to-do section's draft row waits
+        // for `draftWantsFocus`, which only the ⌃⇧N hotkey ever set — so
+        // opening on Grocery, Work or Personal left you with a field you had
+        // to click before you could write (Marcello, 2026-09-20). Same
+        // contract, now asked for from the same place.
+        //
+        // HERE and not in `triggerHover`: a panel that opened because the
+        // pointer crossed it must never take the caret away from whatever the
+        // user was actually typing in.
+        //
+        // After `makeKey()` above, deliberately — the field's
+        // `makeFirstResponder` on a window that is not key yet is thrown away
+        // when the window later becomes key and resets to its initial
+        // responder. That ordering is the same one `makeKeyForTyping` had to
+        // learn.
+        if TodoStore.shared.panelMode == .browsing {
+            TodoStore.shared.draftWantsFocus = true
+        }
+
         // Step 1: animate the SHAPE (immediate)
         withAnimation(NotchAnimation.expand) {
             state = .expanded

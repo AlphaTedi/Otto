@@ -438,6 +438,7 @@ final class TodoStore: ObservableObject {
             withAnimation(Motion.contentHug) { activeCollectionID = row[next - 2].id }
             focusedItemID = nil
             expandedItemID = nil
+            readyToType()
         }
     }
 
@@ -896,6 +897,23 @@ final class TodoStore: ObservableObject {
         focusedItemID = nil
         expandedItemID = nil
         if changed { HapticManager.shared.sectionChanged() }
+        readyToType()
+    }
+
+    /// Put the caret in this section's draft row, the way entering Notes or
+    /// Calendar puts it in theirs.
+    ///
+    /// Those two spaces focus their own field on appear, which is why they
+    /// were always ready to type and a to-do section never was. One call, from
+    /// the two places a section becomes the active one.
+    ///
+    /// Only while the panel is OPEN: asking for the caret in a panel nobody
+    /// can see is a request that gets thrown away when it later becomes key,
+    /// and worse, it would arm the field for a hover-open that must not take
+    /// focus from the app the user is actually typing in.
+    private func readyToType() {
+        guard AppState.shared.isNotchExpanded, panelMode == .browsing else { return }
+        draftWantsFocus = true
     }
 
     // MARK: - Items

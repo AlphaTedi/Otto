@@ -81,28 +81,47 @@ private struct ScrollEdgeFade: ViewModifier {
     }
 }
 
-/// Tahoe's public scroll-edge API needs a declared bar to know how much of a
-/// custom bottom control region it protects. Applying `.soft` alone leaves no
-/// geometry for the effect and produces the hard crop we saw in the panel.
-/// Older systems retain the matched fade + NSVisualEffectView fallback.
+/// The soft bottom edge, and the frosted blur behind it.
+///
+/// WHY THIS IS NOT `.scrollEdgeEffectStyle(.soft)` ANY MORE. Tahoe's own edge
+/// effect renders INSIDE the scroll view — and the region is cropped OUTSIDE
+/// it, by a `.frame(height:)` and a `.clipped()` that exist so a long row
+/// cannot draw into the band the pills live in. The crop happened after the
+/// effect and cut on a straight line regardless, which is the hard edge the
+/// last row was sliced by (Marcello, 2026-09-20, screenshot). Two systems, one
+/// of them with the last word.
+///
+/// So the CROP ITSELF is what softens. A mask sized to the frame clips exactly
+/// as `.clipped()` did — nothing draws past the edge — but its bottom is a
+/// gradient, so a row dissolves instead of being guillotined.
+///
+/// On top of that, a real frosted blur: `SectionBarFrost` is an
+/// NSVisualEffectView, so it blurs what is BEHIND it in the window, which is
+/// the rows themselves. Its own gradient mask ramps that blur from nothing at
+/// the top to full at the bottom. Public API throughout — there is no public
+/// variable-radius blur on macOS, and a stack of one masked effect view is the
+/// honest approximation: the radius is constant, the AMOUNT of it ramps.
+///
+/// Both halves are gated on `hasBelow`, so a short list and a list scrolled to
+/// its end show neither — no haze over content that does not continue.
 private struct TodoScrollEdgeEffect: ViewModifier {
     let isScrollable: Bool
     let scrollOffset: CGFloat
     let hasBelow: Bool
 
-    @ViewBuilder func body(content: Content) -> some View {
-        if #available(macOS 26.0, *), isScrollable {
-            content
-                .safeAreaBar(edge: .bottom, spacing: 0) {
-                    Color.clear
+    func body(content: Content) -> some View {
+        content
+            .modifier(ScrollEdgeFade(scrollOffset: scrollOffset, hasBelow: hasBelow))
+            .overlay(alignment: .bottom) {
+                if isScrollable, hasBelow {
+                    SectionBarFrost(reversed: false)
                         .frame(height: sectionBarFrostDepth)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
+                        .transition(.opacity)
                 }
-                .scrollEdgeEffectStyle(.soft, for: .bottom)
-        } else {
-            content.modifier(ScrollEdgeFade(scrollOffset: scrollOffset, hasBelow: hasBelow))
-        }
+            }
+            .animation(NotchAnimation.hintFade, value: hasBelow)
     }
 }
 
@@ -643,12 +662,17 @@ struct TodoTabRow: View {
 
             // OUTSIDE the scroller, like the account button beside it.
             //
-            // The "+" used to be the last thing INSIDE the scrolling strip, so
-            // at five sections it scrolled off the end and there was no way
-            // left to make a new one (Marcello, 2026-08-23: "I have lost the
-            // plus"). The sole entry point for creating something cannot be
-            // allowed to leave the screen.
-            NewSectionButton()
+            // "New section" lives INSIDE the scroller now, after the last tab.
+            //
+            // It was pulled out on 2026-08-23 for a good reason — at five
+            // sections it scrolled off the end and there was no way left to
+            // make one ("I have lost the plus"). That objection is answered
+            // rather than ignored: the act has a key now, ⇧⌘N, so it can no
+            // longer become unreachable by scrolling, and pinned to the right
+            // edge it had stopped reading as a member of the row and started
+            // reading as chrome bolted to the panel (Marcello, 2026-09-20).
+            //
+            // If it ever loses the shortcut, it has to come back out here.
 
             Spacer(minLength: LabMetrics.tabsGap)
             // Outside the scroller: the account is not a tab.
@@ -707,6 +731,14 @@ struct TodoTabRow: View {
     }
 
     private var tabScroller: some View {
+        // ScrollViewReader so the KEYBOARD can drag the strip.
+        //
+        // ←/→ walk the sections, and past the fourth or fifth the selected one
+        // was simply off-screen: the highlight moved somewhere you could not
+        // see, so the bar said nothing about which section you were now in
+        // (Marcello, 2026-09-20). The same fix the Notes stream already uses
+        // for its own rows.
+        ScrollViewReader { proxy in
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: LabMetrics.tabsGap) {
                 ForEach(Array(store.visibleCollections.enumerated()), id: \.element.id) { index, collection in
@@ -730,6 +762,7 @@ struct TodoTabRow: View {
                             && collection.id == store.activeCollectionID,
                         remaining: store.remainingCount(for: collection)
                     )
+                    .id(collection.id)
                     .contentShape(RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous))
                     .onTapGesture { store.selectCollection(collection.id) }
                     .accessibilityAddTraits(.isButton)
@@ -844,6 +877,11 @@ struct TodoTabRow: View {
                         ))
                 }
 
+                // Last in the strip, after the tabs it creates siblings for.
+                // It scrolls with them: it is a member of the row, not chrome
+                // bolted to the panel's right edge.
+                NewSectionButton()
+
             }
             .animation(NotchAnimation.hintFade, value: dropBeforeCollectionID)
             .animation(NotchAnimation.hintFade, value: dropCollectionAtEnd)
@@ -880,6 +918,23 @@ struct TodoTabRow: View {
             // midline (Marcello, 2026-08-09).
         }
         .scrollDisabled(!tabsOverflow)
+        // A soft trailing edge when, and only when, there is more to reach.
+        //
+        // Chosen over a literal "…" or a "More" label: both are controls the
+        // reader has to interpret, and a chip half-dissolved at the edge says
+        // "this continues" in the language the panel already speaks — the
+        // to-do list fades at its own bottom edge for the same reason. It
+        // disappears at rest so a bar that fits shows no decoration at all.
+        .mask(
+            LinearGradient(
+                stops: tabsOverflow
+                    ? [.init(color: .black, location: 0),
+                       .init(color: .black, location: 0.88),
+                       .init(color: .black.opacity(0), location: 1)]
+                    : [.init(color: .black, location: 0), .init(color: .black, location: 1)],
+                startPoint: .leading, endPoint: .trailing)
+        )
+        .animation(NotchAnimation.hintFade, value: tabsOverflow)
         .padding(.horizontal, -2)          // see the slack above
         .onPreferenceChange(TabsContentWidthKey.self) { tabsContentWidth = $0 }
         .background(
@@ -889,6 +944,20 @@ struct TodoTabRow: View {
             }
         )
         .onPreferenceChange(TabsViewportWidthKey.self) { tabsViewportWidth = $0 }
+        // Keep the ACTIVE section in view whenever it changes, however it
+        // changed — arrows, ⌘1-9, or a click on a half-visible chip.
+        //
+        // `.center` rather than `.leading`: entering from either side lands
+        // the same way, so walking right and walking back left do not scroll
+        // by different amounts. Animated with the panel's own content curve so
+        // the strip slides rather than jumping.
+        .onChange(of: store.activeCollectionID) { active in
+            guard let active, tabsOverflow else { return }
+            withAnimation(NotchAnimation.contentHug) {
+                proxy.scrollTo(active, anchor: .center)
+            }
+        }
+        }
     }
 }
 
@@ -1354,18 +1423,16 @@ struct TodoBrowsingView: View {
                     lastRegionNaturalHeight = height
                 }
                 .onPreferenceChange(ScrollOffsetKey.self) { scrollOffset = $0 }
-                // The custom safe-area bar must be installed BEFORE the
-                // viewport frame. Installed after it, SwiftUI adds its 64pt
-                // outside the cap and the 556pt panel becomes 620pt tall.
+                .frame(height: viewport)
+                // The list still ENDS at its own bottom edge — a row that
+                // overran the viewport must not draw into the band the pills
+                // live in. But the edge is a gradient mask now rather than
+                // `.clipped()`: same guarantee, no straight cut. It has to
+                // come AFTER the frame, or the ramp is positioned against the
+                // content's natural height instead of the viewport's bottom.
                 .modifier(TodoScrollEdgeEffect(isScrollable: natural > budget,
                                                scrollOffset: scrollOffset,
                                                hasBelow: hasBelow))
-                .frame(height: viewport)
-                // The list ENDS at its own bottom edge. Without this a row
-                // that overran the viewport kept drawing into the band the
-                // tabs live in, so the two overlapped and it read as a
-                // rendering fault rather than as a list continuing.
-                .clipped()
                 // Completed sits BELOW the scroll region, not inside it.
                 //
                 // It was the last thing in the scrolling content, so on any

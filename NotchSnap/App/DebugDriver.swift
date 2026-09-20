@@ -734,7 +734,8 @@ enum DebugDriver {
         progress=\(progress.map { String(format: "%.2f", $0) } ?? "nil") \
         expandedRow=\(store.expandedItemID != nil) focused=\(store.focusedItemID != nil) \
         findQuery='\(store.findQuery)' findMatches=\(store.findMatches.count) \
-        draftFocused=\(store.draftFocused) dest=\(store.draftDestination?.name ?? "nil") \
+        draftFocused=\(store.draftFocused) draftWantsFocus=\(store.draftWantsFocus) \
+        dest=\(store.draftDestination?.name ?? "nil") \
         draft='\(store.draftTitle)' \
         layout=\(app.notchLayout) \
         todoContentHeight=\(app.todoContentHeight) \
