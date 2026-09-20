@@ -1,124 +1,155 @@
 import AppKit
 
-// MARK: - SpaceAnchor — pinning the notch to the hardware, not to a desktop
+// MARK: - SpaceAnchor — a space of our own, which no desktop can carry away
 //
-// THIS FILE USES PRIVATE APIS, deliberately and against the project's usual
-// rule. What follows is why, and what was done to make that survivable.
+// THIS FILE USES PRIVATE APIS, deliberately, against the project's usual rule
+// and with Marcello's decision on the record (2026-09-20). What follows is the
+// technique, why the public one cannot work, and what makes this survivable.
 //
-// The public recipe — `.canJoinAllSpaces` + `.stationary` — is what Otto
-// already had, and it does not hold: during a horizontal Spaces swipe AppKit
-// re-parents the window with the transition, so a panel that is meant to be a
-// hole in the hardware slides away with the desktop underneath it (Marcello,
-// reported repeatedly through 2026-09). Raising the level to `.screenSaver`
-// was tried and did not change it.
+// THE PUBLIC RECIPE CANNOT DO IT. `.canJoinAllSpaces` + `.stationary` asks
+// AppKit to present the window on every space, and AppKit carries it across
+// during a swipe — the carrying IS the bug. `.screenSaver` level did not change
+// it. Neither did adding the window to every existing space by hand: a window
+// that is a member of the space being animated animates with it, however many
+// other spaces it is also in. That was the first attempt here and it failed for
+// a reason worth keeping: membership is not the same as residence.
 //
-// Alcove solves it and solves it well, which is the comparison that settled
-// this. Its binary imports thirteen `CGS*` symbols — `CGSMainConnectionID`,
-// `CGSAddWindowsToSpaces`, `CGSCopyManagedDisplaySpaces`,
-// `CGSSpaceSetAbsoluteLevel` among them. There is no public equivalent: the
-// window server owns space membership, and AppKit's wrapper over it is the
-// thing getting in the way. Marcello's call, made with the cost in front of
-// him (2026-09-20).
+// WHAT ALCOVE DOES, and it is the whole trick: it does not join the desktops'
+// spaces at all. It CREATES ONE OF ITS OWN, sets that space's absolute level
+// above them, shows it permanently, and puts its window in it. A window living
+// in a space that belongs to no desktop is not part of any desktop's transition
+// — the desktops slide underneath and it does not move, because it was never
+// standing on one. Its binary imports exactly the symbols that spell this out:
+// CGSSpaceCreate, CGSSpaceSetAbsoluteLevel, CGSShowSpaces, CGSAddWindowsToSpaces.
 //
-// THE COST, AND THE MITIGATION. Linking an undocumented symbol directly means
-// that the day Apple renames or removes it, dyld cannot resolve it and the app
-// DOES NOT LAUNCH AT ALL — not "this feature stops working", the whole thing
-// refuses to open, silently, for everyone who took a macOS update. So nothing
-// here is linked. Every symbol is resolved at runtime with `dlsym`, and if any
-// one of them is missing this type reports itself unavailable and the caller
-// keeps AppKit's own behaviour. The worst case is the bug we have today.
+// The first version of this file borrowed only three symbols and called that
+// prudence. It left out the mechanism — which is how it shipped a pin that did
+// nothing (Marcello's screenshot, two notches mid-swipe).
 //
-// Nothing here touches data or privileges — these are window-management calls.
-// They need no entitlement, and notarization does not inspect for them, so the
-// signing and update pipeline is unaffected.
+// NOTHING IS LINKED. Every symbol is resolved with `dlsym` at runtime. Linking
+// an undocumented symbol means that the day Apple renames it, dyld cannot
+// resolve it and the app DOES NOT LAUNCH — not "the feature stops", the whole
+// thing refuses to open, silently, for everyone who took an OS update. Resolved
+// at runtime, a missing symbol makes `isAvailable` false and the caller keeps
+// AppKit's behaviour: the notch travels, which is an annoyance rather than a
+// brick.
 
 @MainActor
 enum SpaceAnchor {
 
-    // MARK: The symbols
+    // MARK: Types
     //
-    // Resolved once. `CGSMainConnectionID` and `CGSAddWindowsToSpaces` are the
-    // only two this needs — Alcove imports eleven more for features Otto does
-    // not have (creating and destroying spaces, hiding them). Borrowing the
-    // smallest possible surface is the difference between one call to re-check
-    // after a macOS update and thirteen.
+    // CGSSpaceID is 64-bit. Getting this width wrong is not a compile error and
+    // not a nil — it is a call into the window server with a mangled argument,
+    // so it is stated once here rather than spelled out at each use.
 
-    private typealias MainConnectionID = @convention(c) () -> Int32
-    private typealias CopyManagedDisplaySpaces = @convention(c) (Int32) -> Unmanaged<CFArray>?
-    private typealias AddWindowsToSpaces = @convention(c) (Int32, CFArray, CFArray) -> Void
+    private typealias CGSSpaceID = UInt64
+    private typealias ConnectionID = Int32
 
-    private static let handle: UnsafeMutableRawPointer? = {
-        // The symbols live in CoreGraphics, which is already loaded — this is
-        // a lookup in the running process, not a load of anything new.
-        dlopen(nil, RTLD_LAZY)
-    }()
+    private typealias FnMainConnection = @convention(c) () -> ConnectionID
+    private typealias FnSpaceCreate = @convention(c) (ConnectionID, UnsafeMutableRawPointer?, CFDictionary?) -> CGSSpaceID
+    private typealias FnSpaceSetAbsoluteLevel = @convention(c) (ConnectionID, CGSSpaceID, Int32) -> Void
+    private typealias FnShowSpaces = @convention(c) (ConnectionID, CFArray) -> Void
+    private typealias FnHideSpaces = @convention(c) (ConnectionID, CFArray) -> Void
+    private typealias FnSpaceDestroy = @convention(c) (ConnectionID, CGSSpaceID) -> Void
+    private typealias FnAddWindowsToSpaces = @convention(c) (ConnectionID, CFArray, CFArray) -> Void
+
+    private static let handle: UnsafeMutableRawPointer? = dlopen(nil, RTLD_LAZY)
 
     private static func symbol<T>(_ name: String, as type: T.Type) -> T? {
         guard let handle, let pointer = dlsym(handle, name) else { return nil }
         return unsafeBitCast(pointer, to: type)
     }
 
-    private static let mainConnectionID = symbol("CGSMainConnectionID", as: MainConnectionID.self)
-    private static let copySpaces = symbol("CGSCopyManagedDisplaySpaces",
-                                           as: CopyManagedDisplaySpaces.self)
-    private static let addWindows = symbol("CGSAddWindowsToSpaces", as: AddWindowsToSpaces.self)
+    private static let mainConnection = symbol("CGSMainConnectionID", as: FnMainConnection.self)
+    private static let spaceCreate = symbol("CGSSpaceCreate", as: FnSpaceCreate.self)
+    private static let spaceSetAbsoluteLevel = symbol("CGSSpaceSetAbsoluteLevel",
+                                                      as: FnSpaceSetAbsoluteLevel.self)
+    private static let showSpaces = symbol("CGSShowSpaces", as: FnShowSpaces.self)
+    private static let hideSpaces = symbol("CGSHideSpaces", as: FnHideSpaces.self)
+    private static let spaceDestroy = symbol("CGSSpaceDestroy", as: FnSpaceDestroy.self)
+    private static let addWindows = symbol("CGSAddWindowsToSpaces", as: FnAddWindowsToSpaces.self)
 
-    /// True when every symbol resolved. When false the caller must keep doing
-    /// whatever it did before — this type will not half-work.
+    /// Every symbol the technique needs. All or nothing — a half-resolved
+    /// version of this would make a space and fail to show it, which is worse
+    /// than not trying.
     static var isAvailable: Bool {
-        mainConnectionID != nil && copySpaces != nil && addWindows != nil
+        mainConnection != nil && spaceCreate != nil && spaceSetAbsoluteLevel != nil
+            && showSpaces != nil && addWindows != nil
     }
+
+    // MARK: State
+
+    private static var space: CGSSpaceID?
+    private(set) static var lastError: String?
 
     // MARK: Pinning
 
-    /// Put `window` on EVERY space, at the window-server level.
+    /// Move `window` into a space of Otto's own, above the desktops.
     ///
-    /// The difference from `.canJoinAllSpaces` is who does it. That flag asks
-    /// AppKit to present the window on each space, and AppKit carries it
-    /// across during the transition — which is the slide. Adding it to every
-    /// space directly means it is genuinely resident on all of them at once,
-    /// so a swipe has nothing to carry: the desktops move and the window does
-    /// not, because it was never on the one that left.
-    ///
-    /// Returns false if anything was unavailable, so the caller can fall back.
+    /// Idempotent: the space is made once and reused. Called again after the
+    /// window is re-ordered or the displays change, because a window loses its
+    /// space membership when its window number changes.
     @discardableResult
-    static func pinToAllSpaces(_ window: NSWindow) -> Bool {
-        guard let mainConnectionID, let copySpaces, let addWindows else { return false }
+    static func pin(_ window: NSWindow) -> Bool {
+        guard let mainConnection, let spaceCreate, let spaceSetAbsoluteLevel,
+              let showSpaces, let addWindows else {
+            lastError = "symbols unavailable"
+            return false
+        }
         let windowNumber = window.windowNumber
-        guard windowNumber > 0 else { return false }
-
-        let connection = mainConnectionID()
-        guard let displays = copySpaces(connection)?.takeRetainedValue() as? [[String: Any]] else {
+        guard windowNumber > 0 else {
+            lastError = "window not on screen yet"
             return false
         }
 
-        // The shape is one entry per DISPLAY, each holding that display's
-        // spaces. Flattened, because the notch belongs to the hardware and the
-        // hardware does not care which display's desktop you swiped to.
-        var spaceIDs: [NSNumber] = []
-        for display in displays {
-            guard let spaces = display["Spaces"] as? [[String: Any]] else { continue }
-            for space in spaces {
-                // Fullscreen spaces report their id under the same key; there
-                // is nothing to filter out, and filtering would put the notch
-                // back to being absent exactly where it is wanted most.
-                if let id = space["id64"] as? NSNumber {
-                    spaceIDs.append(id)
-                } else if let id = space["ManagedSpaceID"] as? NSNumber {
-                    spaceIDs.append(id)
-                }
+        let connection = mainConnection()
+
+        let target: CGSSpaceID
+        if let existing = space {
+            target = existing
+        } else {
+            // The second argument is documented nowhere and is NULL in every
+            // known use; the options dictionary is likewise empty.
+            let created = spaceCreate(connection, nil, nil)
+            guard created != 0 else {
+                lastError = "CGSSpaceCreate returned 0"
+                return false
             }
+            space = created
+            target = created
+
+            // ABOVE the desktops. This is the line that makes the swipe leave
+            // it alone: a space with an absolute level of its own is not part
+            // of the row of desktops the gesture scrolls through.
+            spaceSetAbsoluteLevel(connection, target, Int32(CGShieldingWindowLevel()))
+            // And permanently visible, or the window inside it is on a space
+            // nobody is looking at.
+            showSpaces(connection, [NSNumber(value: target)] as CFArray)
         }
-        guard !spaceIDs.isEmpty else { return false }
 
         addWindows(connection,
                    [NSNumber(value: windowNumber)] as CFArray,
-                   spaceIDs as CFArray)
-        lastPinnedSpaceCount = spaceIDs.count
+                   [NSNumber(value: target)] as CFArray)
+        lastError = nil
         return true
     }
 
-    /// How many spaces the last pin covered. Diagnostics only — a boolean
-    /// "it worked" cannot tell a real pin from one that found no spaces.
-    private(set) static var lastPinnedSpaceCount = 0
+    /// Give the space back. Not strictly required — the window server cleans up
+    /// when the process dies — but a space left showing after a crash-free quit
+    /// is litter in someone else's Mission Control.
+    static func release() {
+        guard let mainConnection, let space else { return }
+        let connection = mainConnection()
+        hideSpaces?(connection, [NSNumber(value: space)] as CFArray)
+        spaceDestroy?(connection, space)
+        self.space = nil
+    }
+
+    /// Diagnostics for the runtime probe: a boolean cannot tell a real pin from
+    /// one that quietly did nothing.
+    static var debugDescription: String {
+        "available=\(isAvailable) space=\(space.map(String.init) ?? "nil") "
+            + "shieldLevel=\(CGShieldingWindowLevel()) error=\(lastError ?? "none")"
+    }
 }

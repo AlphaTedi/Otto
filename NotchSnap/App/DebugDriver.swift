@@ -503,15 +503,12 @@ enum DebugDriver {
                     NoteEditorController.shared.refreshDetections(noteID: id)
                 }
             } else if command == "space-anchor" {
-                let available = SpaceAnchor.isAvailable
-                var report = "space-anchor available=\(available)"
+                var report = "space-anchor " + SpaceAnchor.debugDescription
                 if let panel = NotchController.shared.panelForDebug {
-                    let pinned = SpaceAnchor.pinToAllSpaces(panel)
-                    report += " windowNumber=\(panel.windowNumber)"
-                    report += " pinned=\(pinned) spaces=\(SpaceAnchor.lastPinnedSpaceCount)"
-                    report += " behavior=\(panel.collectionBehavior.rawValue)"
+                    let pinned = SpaceAnchor.pin(panel)
+                    report += " windowNumber=\(panel.windowNumber) pinned=\(pinned)"
+                    report += " level=\(panel.level.rawValue)"
                     report += " joinsAll=\(panel.collectionBehavior.contains(.canJoinAllSpaces))"
-                    report += " stationary=\(panel.collectionBehavior.contains(.stationary))"
                 } else {
                     report += " (nessun pannello)"
                 }

@@ -41,12 +41,12 @@ private struct ScrollOffsetKey: PreferenceKey {
 /// Depth shared by the native Tahoe edge bar and the pre-Tahoe fallback.
 /// Keeping one value makes the transition meet the section row at the same
 /// point on every supported macOS release.
-/// How far the section bar's material reaches up over the list.
+/// How far the blur reaches up over the list, above the pills.
 ///
-/// 64 was the height of one row, which made the fade exactly as tall as the
-/// thing it was fading — so a row met full strength almost as soon as it met
-/// anything. Half again as much gives the ramp somewhere to be gradual.
-private let sectionBarFrostDepth: CGFloat = 96
+/// 96 covered too much of the list and read as a haze over the to-dos rather
+/// than as the bar's own edge (Marcello, 2026-09-20). Localised to just above
+/// the pills: enough for the ramp to be gradual, not enough to be a mood.
+private let sectionBarFrostDepth: CGFloat = 52
 
 /// Softens both edges of the scrolling region, where content passes under
 /// the draft row and into the frosted section bar.
@@ -115,14 +115,32 @@ private struct TodoScrollEdgeEffect: ViewModifier {
     let hasBelow: Bool
 
     func body(content: Content) -> some View {
-        // ONLY the mask. The frosted material belongs to the section bar and is
-        // drawn there, reaching up over this region — see TodoTabRow.
+        // THE BLUR HAS TO BE ABOVE THE LIST, or it blurs nothing.
         //
-        // An overlay here was the previous attempt and it is the thing to not
-        // do again: any surface laid ON the list has an edge of its own, and
-        // that edge reads as exactly the line it was added to remove.
+        // `NSVisualEffectView` in `.withinWindow` mode blurs what is BEHIND it
+        // in the window. Mounted as the section bar's `.background` it sat
+        // behind the bar and behind nothing else, so it contributed a tint and
+        // no blur at all — a gradient, which is exactly what it looked like
+        // (Marcello, 2026-09-20: "il blur non c'è").
+        //
+        // As an overlay on the scroll region it is above the rows, so the rows
+        // are what it blurs. The edge problem that sent it to `.background` in
+        // the first place is answered by geometry instead: it is flush with the
+        // bottom of the region, which is where the bar begins, so its lower
+        // edge lands inside the bar's own material and there is no boundary to
+        // see. Only the top ramps.
         content
             .modifier(ScrollEdgeFade(scrollOffset: scrollOffset, hasBelow: hasBelow))
+            .overlay(alignment: .bottom) {
+                if isScrollable, hasBelow {
+                    SectionBarFrost(reversed: false)
+                        .frame(height: sectionBarFrostDepth)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                        .transition(.opacity)
+                }
+            }
+            .animation(NotchAnimation.hintFade, value: hasBelow)
     }
 }
 
@@ -723,15 +741,21 @@ struct TodoTabRow: View {
                 // inside it was cut on a straight line afterwards.
                 do {
                     GeometryReader { geometry in
+                        // The bar's own ground only. Reaching up over the list
+                        // is the overlay's job now, and doing it from both
+                        // places stacked two materials on the same pixels.
                         SectionBarFrost(reversed: rulePosition == .below)
                             .frame(width: geometry.size.width,
-                                   height: geometry.size.height + sectionBarFrostDepth)
+                                   height: geometry.size.height)
                             .clipShape(UnevenRoundedRectangle(
                                 topLeadingRadius: rulePosition == .below ? LabMetrics.blockRadius : 0,
                                 bottomLeadingRadius: rulePosition == .above ? LabMetrics.blockRadius : 0,
                                 bottomTrailingRadius: rulePosition == .above ? LabMetrics.blockRadius : 0,
                                 topTrailingRadius: rulePosition == .below ? LabMetrics.blockRadius : 0))
-                            .offset(y: rulePosition == .above ? -sectionBarFrostDepth : 0)
+                            // No offset any more. It existed to pull the
+                            // upward extension back over the list; with the
+                            // extension gone it would only shift the bar's own
+                            // ground off the bar.
                     }
                     .allowsHitTesting(false)
                 }

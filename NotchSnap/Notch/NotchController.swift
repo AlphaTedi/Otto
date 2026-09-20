@@ -109,7 +109,11 @@ class NotchController: ObservableObject {
         // overlay outside its visible silhouette, so the public screen-saver
         // overlay level is appropriate here: it stays at the hardware notch
         // while the desktops slide underneath.
-        panel.level = .screenSaver
+        // The public half of the same recipe. `.screenSaver` (1000) is still
+        // inside the range the Spaces transition composites; the shielding
+        // level is the documented "above everything" constant, and Alcove
+        // imports it alongside the private calls for exactly this reason.
+        panel.level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()))
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
@@ -173,7 +177,7 @@ class NotchController: ObservableObject {
         panel.orderFront(nil)
         // Only AFTER the window exists on screen: the window number is 0
         // until it is ordered in, and the window server has nothing to pin.
-        SpaceAnchor.pinToAllSpaces(panel)
+        SpaceAnchor.pin(panel)
         self.panel = panel
         applyNotchAppearance()
 
@@ -203,7 +207,7 @@ class NotchController: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor in
                 guard let panel = self?.panel else { return }
-                SpaceAnchor.pinToAllSpaces(panel)
+                SpaceAnchor.pin(panel)
             }
         }
     }
