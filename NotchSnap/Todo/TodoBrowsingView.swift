@@ -113,6 +113,10 @@ private struct TodoScrollEdgeEffect: ViewModifier {
     let isScrollable: Bool
     let scrollOffset: CGFloat
     let hasBelow: Bool
+    /// The container gets the mask but no material — see the bar's background.
+    /// The soft mask stays either way: it is what stops a row being cut in
+    /// half, which was the original complaint and is not what was objected to.
+    let isContainer: Bool
 
     func body(content: Content) -> some View {
         // THE BLUR HAS TO BE ABOVE THE LIST, or it blurs nothing.
@@ -132,7 +136,7 @@ private struct TodoScrollEdgeEffect: ViewModifier {
         content
             .modifier(ScrollEdgeFade(scrollOffset: scrollOffset, hasBelow: hasBelow))
             .overlay(alignment: .bottom) {
-                if isScrollable, hasBelow {
+                if isScrollable, hasBelow, !isContainer {
                     SectionBarFrost(reversed: false)
                         .frame(height: sectionBarFrostDepth)
                         .allowsHitTesting(false)
@@ -723,7 +727,18 @@ struct TodoTabRow: View {
                                                  : LabMetrics.tabsTopPadding)
 
         .background {
-            if !reduceTransparency {
+            // THE CONTAINER KEEPS ITS BLACK GROUND.
+            //
+            // The notch silhouette is pretending to be a hole in the hardware,
+            // and hardware is not translucent. A frosted band behind the pills
+            // reads as a lighter stripe laid inside that hole — visible in the
+            // screenshot as a grey strip under the row (Marcello, 2026-09-21).
+            // The floating panels are a card over the desktop and keep it,
+            // because there the material is what the card is made of.
+            //
+            // `.below` IS the container: the rule sits under the row only when
+            // the row is at the top, and it is at the top only there.
+            if !reduceTransparency, rulePosition != .below {
                 // THE FADE IS THE BAR'S OWN BACKGROUND, reaching up over the
                 // list — not a veil laid on top of it.
                 //
@@ -1203,6 +1218,11 @@ private struct AccountButton: View {
 struct TodoBrowsingView: View {
     @ObservedObject private var store = TodoStore.shared
     @ObservedObject private var archive = CompletedArchive.shared
+    @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
+
+    /// The container is a hole in the hardware and keeps its black ground; the
+    /// floating panels are a card over the desktop and keep their material.
+    private var isContainerLayout: Bool { notchLayout == .container }
 
     /// FB3+4: ONE scroll region for the whole browsing body (open list +
     /// Completed together), capped to the panel's budget. Two independent
@@ -1467,7 +1487,8 @@ struct TodoBrowsingView: View {
                 // content's natural height instead of the viewport's bottom.
                 .modifier(TodoScrollEdgeEffect(isScrollable: natural > budget,
                                                scrollOffset: scrollOffset,
-                                               hasBelow: hasBelow))
+                                               hasBelow: hasBelow,
+                                               isContainer: isContainerLayout))
                 // Completed sits BELOW the scroll region, not inside it.
                 //
                 // It was the last thing in the scrolling content, so on any
