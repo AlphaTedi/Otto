@@ -1340,13 +1340,9 @@ struct TodoBrowsingView: View {
     @State private var completedInsetHeight: CGFloat = LabMetrics.completedHeaderHeight
         + DSSpacing.tabRowBottomMargin + 10
     @State private var draggedItemID: UUID?
-    /// Which edge `scrollTo` aims at. Walking down, keep the focused row at
-    /// the bottom; walking up, at the top. One fixed anchor makes the list
-    /// leap a whole viewport the moment the user reverses direction.
-    @State private var scrollAnchor: UnitPoint = .bottom
-    @State private var lastFocusedIndex: Int?
     /// Where each row sits, in `rowSpace`. Published by the rows themselves so
-    /// the gesture can resolve a pointer position to a gap.
+    /// the gesture can resolve a pointer position to a gap, and so keyboard
+    /// focus only scrolls when its row has actually left the viewport.
     @State private var rowFrames: [UUID: CGRect] = [:]
     @State private var dragOffset: CGFloat = 0
     /// The row the dragged item would land ABOVE. Arc-style: nothing moves
@@ -1484,23 +1480,23 @@ struct TodoBrowsingView: View {
                     Color.clear.frame(height: 1).id(Self.bottomAnchor)
                 }
                 .coordinateSpace(name: Self.scrollSpace)
-                // Arrow keys move a focus ring the list was not following, so
-                // past the fold you were selecting rows you could not see —
-                // still moving, still invisible (Marcello, 2026-08-23). The
-                // region now brings the focused row into view.
-                //
-                // `.bottom` going down and `.top` going up, rather than one
-                // anchor for both: aiming at the same edge in both directions
-                // makes the list jump a whole viewport the moment you reverse.
+                // Keep keyboard focus visible, but preserve the user's scroll
+                // position whenever the row already fits. The old unconditional
+                // `scrollTo(anchor:)` snapped every clicked row to an edge,
+                // even in the middle of the viewport, so opening neighbouring
+                // to-dos made the whole list appear to jump at random.
                 .onChange(of: store.focusedItemID) { focused in
                     guard let focused else { return }
-                    let index = store.visibleFocusIndex(of: focused)
-                    if let index, let last = lastFocusedIndex {
-                        scrollAnchor = index >= last ? .bottom : .top
-                    }
-                    lastFocusedIndex = index
-                    withAnimation(NotchAnimation.hintFade) {
-                        proxy.scrollTo(focused, anchor: scrollAnchor)
+                    revealRowIfNeeded(focused, viewport: viewport, proxy: proxy)
+                }
+                // Expanding changes the row's height after the click. Wait for
+                // that layout to settle, then reveal only the overflow. A row
+                // that still fits produces no scroll at all.
+                .onChange(of: store.expandedItemID) { expanded in
+                    guard let expanded else { return }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        guard store.expandedItemID == expanded else { return }
+                        revealRowIfNeeded(expanded, viewport: viewport, proxy: proxy)
                     }
                 }
                 .onPreferenceChange(SectionHeightKey.self) { height in
@@ -1564,6 +1560,31 @@ struct TodoBrowsingView: View {
             // the hug snaps instead of growing. Keyed on the viewport itself
             // so any route into a new height takes the same spring.
             .animation(NotchAnimation.contentHug, value: viewport)
+        }
+    }
+
+    /// Scroll the least possible amount, and only when the complete row is
+    /// outside the visible list region. Row frames are in content coordinates;
+    /// adding `scrollOffset` gives the current viewport in that same space.
+    private func revealRowIfNeeded(_ id: UUID,
+                                   viewport: CGFloat,
+                                   proxy: ScrollViewProxy) {
+        guard let frame = rowFrames[id] else { return }
+        let margin: CGFloat = 8
+        let visibleTop = max(0, scrollOffset) + margin
+        let visibleBottom = max(0, scrollOffset) + viewport - margin
+
+        if frame.minY < visibleTop {
+            withAnimation(NotchAnimation.hintFade) {
+                proxy.scrollTo(id, anchor: .top)
+            }
+        } else if frame.maxY > visibleBottom {
+            // A row taller than the viewport cannot fit in full; anchoring its
+            // top keeps the title and collapse control available.
+            let anchor: UnitPoint = frame.height >= viewport - margin * 2 ? .top : .bottom
+            withAnimation(NotchAnimation.hintFade) {
+                proxy.scrollTo(id, anchor: anchor)
+            }
         }
     }
 
@@ -2404,7 +2425,14 @@ private struct TodoItemRow: View {
         // Plain rows keep no padding and their 37pt floor, which already
         // insets them.
         .padding(.horizontal, LabMetrics.rowPaddingH)
-        .padding(.vertical, carriesDetails ? LabMetrics.listRowGap : 0)
+        .padding(.top, carriesDetails ? LabMetrics.listRowGap : 0)
+        // The title row is visually taller than the 10pt step draft because
+        // its text carries `rowTextInset` above and below. Adding that inset
+        // at the foot makes the visible air above the main checkbox and below
+        // “Type to add a step” equal inside an opened card.
+        .padding(.bottom, carriesDetails
+                 ? LabMetrics.listRowGap + (isExpanded ? LabMetrics.rowTextInset : 0)
+                 : 0)
         // A floor, not a fixed height: a title that wraps still grows. Without
         // it the row was exactly as tall as its content, so the checkbox had
         // 12pt either side and nothing above or below.
@@ -2780,13 +2808,19 @@ private struct TodoItemRow: View {
 
     /// The connector rule + indent shared by notes and steps.
     private func indented<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        HStack(spacing: 0) {
+        let connectorWidth: CGFloat = 0.5
+        // Centre the connector on the parent checkbox's vertical axis while
+        // keeping the child content on the existing checklist indent.
+        let connectorLeading = (LabMetrics.checkboxSize - connectorWidth) / 2
+        let contentLeading = DSSpacing.checklistIndent - connectorLeading - connectorWidth
+
+        return HStack(spacing: 0) {
             Rectangle()
                 .fill(DSColor.panelBorder)
-                .frame(width: 0.5)
-                .padding(.leading, 6)
+                .frame(width: connectorWidth)
+                .padding(.leading, connectorLeading)
             content()
-                .padding(.leading, 17)   // 6 + 0.5 + 17 ≈ DSSpacing.checklistIndent
+                .padding(.leading, contentLeading)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .fixedSize(horizontal: false, vertical: true)

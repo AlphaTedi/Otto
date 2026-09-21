@@ -403,3 +403,14 @@ synchronously on MainActor. Cancelled collapse tasks return without touching
 presentation or task ownership, and content stays visible until actual closure.
 `verify-presentation` exercises 30 rapid/cancelled presentation cycles without
 creating or deleting user data.
+
+### 2026-09-21 compact checklist follow-up
+
+A closed to-do shows two checklist steps and an exact hidden-step count; only
+the opened to-do shows the complete checklist and its draft row. The checklist
+connector is centred on the parent checkbox while preserving the child indent,
+and an opened card adds the title's text inset below its draft row so its visual
+top and bottom padding match. Focus no longer calls `scrollTo` unconditionally:
+an already-visible row keeps the current viewport, while a row that is above or
+below it scrolls to the nearest edge. After expansion, one delayed geometry
+check reveals the new overflow only if the complete opened row no longer fits.
