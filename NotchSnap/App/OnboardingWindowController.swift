@@ -18,6 +18,22 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     nonisolated func windowWillClose(_ notification: Notification) {
         Task { @MainActor in
             OnboardingWindowController.sharedController = nil
+            // CLOSING IT COUNTS AS HAVING SEEN IT.
+            //
+            // The launch gate is `onboardingVersion < 1`, and only the "Done"
+            // button at the end of the flow used to write that. Anyone who
+            // read the first screen and closed the window — the red button,
+            // ⌘W, anything but walking to the last page — left the flag at 0,
+            // so the introduction came back on every launch and after every
+            // update (Marcello, 2026-09-21).
+            //
+            // Dismissing an introduction IS the decision that you are done
+            // with it. Writing it here rather than in `dismiss()` covers every
+            // route out, which is the same reason the line above lives here.
+            //
+            // Settings can still bring it back: that path sets the key to 0
+            // deliberately, and this only ever moves it forward.
+            UserDefaults.standard.set(1, forKey: "onboardingVersion")
         }
     }
 
