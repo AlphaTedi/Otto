@@ -148,18 +148,26 @@ private struct TodoScrollEdgeEffect: ViewModifier {
         // bottom of the region, which is where the bar begins, so its lower
         // edge lands inside the bar's own material and there is no boundary to
         // see. Only the top ramps.
+        // ONE BACKGROUND. The list dissolves into the panel's own ground, and
+        // the pills sit on that same ground — Raycast's answer (Marcello,
+        // 2026-09-21, reference screenshot).
+        //
+        // Four attempts put a material here, and every one produced a line,
+        // for a reason that only became clear against a working reference
+        // (github.com/martinhoeller/swiftui-progressive-blur-example): that
+        // example uses ONE effect view with the bar's content drawn directly
+        // on it. This panel had two — a band behind the pills and a ramp above
+        // it — and two surfaces always have an edge between them.
+        //
+        // The one-material version is not available here without restructuring:
+        // the list and the bar are STACKED, not layered, so the list never
+        // passes behind the pills and a blur there has nothing to blur. That is
+        // the real progressive blur, and it is a layout change, not a styling
+        // one. Until then: no material, a soft dissolve, no line — by
+        // construction, because there is only one surface for a line to be the
+        // edge of.
         content
             .modifier(ScrollEdgeFade(scrollOffset: scrollOffset, hasBelow: hasBelow))
-            .overlay(alignment: .bottom) {
-                if isScrollable, hasBelow, !isContainer {
-                    SectionBarFrost(reversed: false)
-                        .frame(height: sectionBarFrostDepth)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                        .transition(.opacity)
-                }
-            }
-            .animation(NotchAnimation.hintFade, value: hasBelow)
     }
 }
 
@@ -750,56 +758,9 @@ struct TodoTabRow: View {
         .padding(.bottom, rulePosition == .above ? LabMetrics.tabsBottomPadding
                                                  : LabMetrics.tabsTopPadding)
 
-        .background {
-            // THE CONTAINER KEEPS ITS BLACK GROUND.
-            //
-            // The notch silhouette is pretending to be a hole in the hardware,
-            // and hardware is not translucent. A frosted band behind the pills
-            // reads as a lighter stripe laid inside that hole — visible in the
-            // screenshot as a grey strip under the row (Marcello, 2026-09-21).
-            // The floating panels are a card over the desktop and keep it,
-            // because there the material is what the card is made of.
-            //
-            // `.below` IS the container: the rule sits under the row only when
-            // the row is at the top, and it is at the top only there.
-            if !reduceTransparency, rulePosition != .below {
-                // THE FADE IS THE BAR'S OWN BACKGROUND, reaching up over the
-                // list — not a veil laid on top of it.
-                //
-                // That distinction is the whole bug. Painted over the list, the
-                // frost has a boundary of its own, and a boundary is a line: it
-                // put a second edge on top of the one it was meant to remove
-                // (Marcello, 2026-09-20, screenshot). Grown UPWARD out of the
-                // bar instead, there is no second surface — the rows simply
-                // travel into the material the pills already sit on, and the
-                // place where the list "ends" stops existing as a place.
-                //
-                // On every version, including Tahoe. The native scroll-edge
-                // effect was tried here and could not win: the region is
-                // cropped outside the ScrollView, so whatever the effect drew
-                // inside it was cut on a straight line afterwards.
-                do {
-                    GeometryReader { geometry in
-                        // The bar's own ground only. Reaching up over the list
-                        // is the overlay's job now, and doing it from both
-                        // places stacked two materials on the same pixels.
-                        SectionBarFrost(reversed: rulePosition == .below, ramped: false)
-                            .frame(width: geometry.size.width,
-                                   height: geometry.size.height)
-                            .clipShape(UnevenRoundedRectangle(
-                                topLeadingRadius: rulePosition == .below ? LabMetrics.blockRadius : 0,
-                                bottomLeadingRadius: rulePosition == .above ? LabMetrics.blockRadius : 0,
-                                bottomTrailingRadius: rulePosition == .above ? LabMetrics.blockRadius : 0,
-                                topTrailingRadius: rulePosition == .below ? LabMetrics.blockRadius : 0))
-                            // No offset any more. It existed to pull the
-                            // upward extension back over the list; with the
-                            // extension gone it would only shift the bar's own
-                            // ground off the bar.
-                    }
-                    .allowsHitTesting(false)
-                }
-            }
-        }
+        // No background here. A frosted band behind the pills was the second
+        // of two surfaces in this panel, and its top edge was the hard line
+        // under the list — see TodoScrollEdgeEffect for the whole story.
         .zIndex(1)
 
     }
