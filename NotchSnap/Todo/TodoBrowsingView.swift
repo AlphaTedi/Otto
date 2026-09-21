@@ -2444,12 +2444,15 @@ private struct TodoItemRow: View {
                                               : (hover ? Color.dynamicOverlay(light: 0.04, dark: 0.04)
                                                        : .clear)))
         )
-        // No ring on a focused row. The system accent drew a blue outline that
-        // belonged to no other surface in the panel; the slab behind the row
-        // says "focused" on its own, which is what the export does.
+        // Expanded rows borrow the section tint already used by their
+        // checkbox, but at a deliberately quiet opacity. `strokeBorder` keeps
+        // the entire hairline inside the card: a centered `stroke` put half a
+        // pixel outside the row and the scroll/clipping layers could shave it
+        // off along an edge or corner.
         .overlay(
             RoundedRectangle(cornerRadius: LabMetrics.rowRadius, style: .continuous)
-                .stroke(isExpanded ? DSColor.focusAccent : .clear, lineWidth: 0.5)
+                .strokeBorder(isExpanded ? accent.opacity(0.38) : .clear,
+                              lineWidth: 1)
         )
         .animation(Motion.hintFade, value: isFocused)
         // Was a bare assignment. The row's own background snapped, and so did
