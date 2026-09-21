@@ -198,6 +198,15 @@ private struct SectionHeightKey: PreferenceKey {
         + LabMetrics.tabsTopPadding + 31 + LabMetrics.tabsBottomPadding
 }
 
+/// The draft field's real width, so its height is measured against the box it
+/// is actually wrapping in.
+private struct DraftFieldWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 private struct DraftBlockKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
@@ -2064,6 +2073,8 @@ struct CompletionSparkline: View {
 // the row quietly wears the section it will actually file into.
 
 private struct InlineDraftRow: View {
+    /// Reported by the field itself; 0 until the first layout pass.
+    @State private var measuredFieldWidth: CGFloat = 0
     /// The destination section's color.
     let accent: Color
 
@@ -2092,11 +2103,21 @@ private struct InlineDraftRow: View {
     /// has to be computed here — where `draftTitle` is observed — or the field
     /// stays stuck at one line while the text wraps out of sight.
     private var fieldHeight: CGFloat {
+        // THE FIELD'S OWN WIDTH, measured — not the panel's minus a list of
+        // subtractions.
+        //
+        // The estimate is where both bugs came from. It wrapped the text at a
+        // different width than the field does, so the computed height was for
+        // a different number of lines than the one on screen: the row spilled
+        // out of its own box while the measurement still thought it fitted,
+        // and then caught up all at once when the two finally agreed. That
+        // catching-up is the jump (Marcello, 2026-09-21).
+        //
+        // The estimate survives only as the value for the first frame, before
+        // the geometry reader has reported anything.
         let panelWidth = CGFloat(NotchController.shared.expandedWidth)
-        // Panel padding ×2, the row's own inset ×2, the checkbox and its gap,
-        // and the ⇥ badge. Estimated slightly narrow so the line count rounds
-        // up rather than clipping the last line.
-        let width = max(120, panelWidth - CGFloat(DSSpacing.panelPadding) * 2 - 20 - 24 - 112)
+        let estimate = max(120, panelWidth - CGFloat(DSSpacing.panelPadding) * 2 - 20 - 24 - 112)
+        let width = measuredFieldWidth > 0 ? measuredFieldWidth : estimate
         let text = store.draftTitle.isEmpty ? " " : store.draftTitle
         let measured = NSAttributedString(
             string: text, attributes: [.font: NSFont.systemFont(ofSize: DSFont.todoTitleSize)]
@@ -2150,6 +2171,13 @@ private struct InlineDraftRow: View {
                     .frame(height: fieldHeight)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear.preference(key: DraftFieldWidthKey.self,
+                                               value: proxy.size.width)
+                    }
+                )
+                .onPreferenceChange(DraftFieldWidthKey.self) { measuredFieldWidth = $0 }
 
                 // Spelled out, not a bare ⇥. The glyph alone was "not really
                 // clear enough, and it's really hard to understand what you

@@ -194,20 +194,7 @@ private extension View {
 }
 
 /// The stack's tap target, present only when tapping it would do something.
-private struct StackTapGesture: ViewModifier {
-    let enabled: Bool
-    let action: () -> Void
 
-    func body(content: Content) -> some View {
-        if enabled {
-            content
-                .contentShape(Rectangle())
-                .onTapGesture(perform: action)
-        } else {
-            content
-        }
-    }
-}
 
 // MARK: - Auto-snoozing Snooze
 
@@ -313,7 +300,6 @@ struct AutoSnoozeButton: View {
 /// the stack opens the full list.
 struct LabMeetingBlock: View {
     @ObservedObject private var calendar = CalendarStore.shared
-    @State private var expanded = false
 
     var body: some View {
         // ONE snapshot per evaluation, and this is a crash fix, not tidying.
@@ -342,119 +328,26 @@ struct LabMeetingBlock: View {
         }
     }
 
+    /// ONE CARD: the meeting that is next, and nothing else.
+    ///
+    /// It used to open into a stack of every meeting today, the way a
+    /// notification group opens. That stack is taller than the space above the
+    /// panel, so it drew straight over the to-do window and the two became
+    /// unreadable together (Marcello, 2026-09-21, screenshot). The rest of the
+    /// day is not lost — it is in the Calendar space, which is where a list of
+    /// meetings belongs and where it has room to be a list.
+    ///
+    /// So there is no expanded state to overlap with, no deck under the card
+    /// promising one, and no tap gesture offering to open it. A card that
+    /// cannot expand should not look like it can.
     @ViewBuilder
     private func body(for meetings: [DetectedMeeting], next: DetectedMeeting) -> some View {
-        if expanded {
-            VStack(alignment: .trailing, spacing: LabMetrics.stackExpandedGap) {
-                // Apple puts the control above the opened stack, on the right.
-                Button {
-                    withAnimation(NotchAnimation.contentHug) { expanded = false }
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "chevron.up")
-                            .font(.system(size: 9, weight: .semibold))
-                        Text(L10n.t("cal.showLess"))
-                            .font(.system(size: 11, weight: .medium))
-                    }
-                    .foregroundStyle(DSColor.textPrimaryBright)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Capsule(style: .continuous)
-                        .fill(Color.dynamicOverlay(light: 0.09, dark: 0.12)))
-                    .contentShape(Capsule(style: .continuous))
-                }
-                .buttonStyle(.plain)
-
-                // Each meeting is its OWN card with air between, exactly as an
-                // opened notification stack becomes a list of notifications —
-                // not one container that happens to hold several rows.
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: LabMetrics.stackExpandedGap) {
-                        ForEach(Array(meetings.enumerated()), id: \.element.id) { index, meeting in
-                            LabMeetingCard(meeting: meeting, isNext: index == 0)
-                                .padding(LabMetrics.blockPadding)
-                                .labBlock(radius: LabMetrics.meetingRadius)
-                        }
-                    }
-                }
-                .frame(maxHeight: LabMetrics.meetingBlockMaxHeight)
-            }
-            .frame(width: LabMetrics.blockWidth, alignment: .trailing)
-            .transition(.opacity)
-        } else {
-            LabMeetingCard(meeting: next, isNext: true)
-                .padding(LabMetrics.blockPadding)
-                .labBlock(radius: LabMetrics.meetingRadius)
-                // The deck, drawn as the card's BACKGROUND rather than as
-                // siblings in a ZStack.
-                //
-                // That placement is the fix, not a detail: a background is
-                // handed the card's own frame, so the rounded rects get a
-                // definite height. As ZStack siblings they had a width and no
-                // height, and a Shape with no height is greedy — it grew to
-                // fill the window and painted the screen black (Marcello,
-                // 2026-08-19).
-                //
-                // Scaled from the TOP so they stay pinned under the card's top
-                // edge and only their bottom sliver shows, then nudged down —
-                // the lock-screen stack, where the deck reads as depth rather
-                // than as a list you have to parse.
-                .background(alignment: .top) {
-                    ForEach(0..<peekCount(meetings), id: \.self) { i in
-                        let depth = CGFloat(i + 1)
-                        // A FLAT fill, not glass.
-                        //
-                        // Each of these used to be its own glass surface,
-                        // stacked directly under another one — and glass
-                        // cannot sample glass, so they sampled the card above
-                        // them and came out inconsistent with it. They also
-                        // cost a backdrop layer each (three offscreen textures
-                        // apiece) to render a 4pt sliver that is 96% hidden.
-                        // A fill is indistinguishable here and free.
-                        RoundedRectangle(cornerRadius: LabMetrics.meetingRadius,
-                                         style: .continuous)
-                            // The slivers are the same object as the card in
-                            // front of them, seen from further back — so they
-                            // deepen the appearance rather than being black.
-                            // On a light panel a black sliver read as a shadow
-                            // cast by nothing.
-                            // `depth` is a CGFloat because the scale and offset
-                            // below need one; `opacity` wants a Double, and the
-                            // literal on its own left the compiler unable to
-                            // choose. Stated rather than inferred.
-                            .fill(DSColor.stackedCardFill.opacity(Double(1 - 0.22 * depth)))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: LabMetrics.meetingRadius,
-                                                 style: .continuous)
-                                    .strokeBorder(DSColor.hairlineOnPanel, lineWidth: 1)
-                            )
-                            .scaleEffect(1 - LabMetrics.stackScaleStep * depth, anchor: .top)
-                            .offset(y: LabMetrics.stackOffset * depth)
-                            .shadow(color: DSColor.shadowSoft, radius: 8, y: 3)
-                            // Furthest back, furthest down the z-order.
-                            .zIndex(-depth)
-                    }
-                }
-                // One target: the visible card and the slivers under it do the
-                // same thing, the way a notification stack behaves.
-                //
-                // Installed ONLY when there is a deck to open. It used to be
-                // unconditional with a `guard meetings.count > 1` inside, so
-                // on the ordinary single-meeting card there was a full-card
-                // tap target that swallowed clicks and did nothing with them —
-                // and `contentShape(Rectangle())` here covers the buttons.
-                // A gesture that competes with the controls it sits over and
-                // then declines to act is the worst of both.
-                .modifier(StackTapGesture(enabled: meetings.count > 1) {
-                    withAnimation(NotchAnimation.contentHug) { expanded = true }
-                })
+        LabMeetingCard(meeting: next, isNext: true)
+            .padding(LabMetrics.blockPadding)
+            .labBlock(radius: LabMetrics.meetingRadius)
                 .transition(.opacity)
-        }
     }
 
-    private func peekCount(_ meetings: [DetectedMeeting]) -> Int {
-        min(LabMetrics.maxStackPeek, max(0, meetings.count - 1))
-    }
 }
 
 // MARK: - One meeting card

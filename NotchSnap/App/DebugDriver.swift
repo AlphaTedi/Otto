@@ -502,6 +502,26 @@ enum DebugDriver {
                 if let id = NotesStore.shared.openNoteID {
                     NoteEditorController.shared.refreshDetections(noteID: id)
                 }
+            } else if command.hasPrefix("draft-height ") {
+                // The field's height is computed from a WIDTH. Report both, so
+                // "it wraps wrong" is a number rather than an impression.
+                let text = String(command.dropFirst(13))
+                TodoStore.shared.draftTitle = text
+                let panelWidth = CGFloat(NotchController.shared.expandedWidth)
+                let estimate = max(120, panelWidth - CGFloat(DSSpacing.panelPadding) * 2 - 20 - 24 - 112)
+                func height(at width: CGFloat) -> CGFloat {
+                    let measured = NSAttributedString(
+                        string: text.isEmpty ? " " : text,
+                        attributes: [.font: NSFont.systemFont(ofSize: DSFont.todoTitleSize)]
+                    ).boundingRect(with: NSSize(width: width, height: .greatestFiniteMagnitude),
+                                   options: [.usesLineFragmentOrigin, .usesFontLeading]).height
+                    return max(HighlightingTitleField.lineHeight,
+                               min(ceil(measured), HighlightingTitleField.maxHeight))
+                }
+                var report = "draft-height chars=\(text.count) panelWidth=\(Int(panelWidth))"
+                report += " estimate=\(Int(estimate)) hEstimate=\(Int(height(at: estimate)))"
+                report += " cap=\(Int(HighlightingTitleField.maxHeight))"
+                appendState(report)
             } else if command == "space-anchor" {
                 var report = "space-anchor " + SpaceAnchor.debugDescription
                 if let panel = NotchController.shared.panelForDebug {
