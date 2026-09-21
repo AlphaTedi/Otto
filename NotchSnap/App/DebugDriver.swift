@@ -114,6 +114,27 @@ enum DebugDriver {
             }
         case "collapse-row":
             withAnimation(NotchAnimation.contentHug) { store.expandedItemID = nil }
+        case "step-preview-status":
+            if let item = store.items.max(by: { $0.checklist.count < $1.checklist.count }) {
+                let previous = store.expandedItemID
+                store.expandedItemID = nil
+                let closedVisible = ChecklistDisclosure.visibleCount(
+                    total: item.checklist.count, expanded: false
+                )
+                let closedHidden = ChecklistDisclosure.hiddenCount(
+                    total: item.checklist.count, expanded: false
+                )
+                store.expandedItemID = item.id
+                let openVisible = ChecklistDisclosure.visibleCount(
+                    total: item.checklist.count, expanded: true
+                )
+                appendState("step preview: total=\(item.checklist.count) "
+                            + "closedVisible=\(closedVisible) closedHidden=\(closedHidden) "
+                            + "openVisible=\(openVisible)")
+                store.expandedItemID = previous
+            } else {
+                appendState("step preview: no items")
+            }
         case "presence":
             appendState("presence: " + NotchPresence.shared.state.debugDescription)
         case "presence-rest":

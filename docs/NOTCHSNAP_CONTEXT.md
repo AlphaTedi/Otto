@@ -129,8 +129,11 @@ as a click, so it can't feel like a different kind of motion.
   (the field is monitor-fed, not a focused `TextField` — a real field would select-all
   and eat the seeding keystroke).
 - **Notes + checklists** per to-do, expanded via click or →. Notes are one wrapping
-  freeform block; steps are a separate checklist ending in an always-open empty row
-  (type, `⏎`, and the caret lands on the next one — no "add step" button exists).
+  freeform block. A closed to-do previews at most two checklist steps plus an exact
+  “N more steps” disclosure; opening it reveals the full checklist and its trailing
+  empty row (type, `⏎`, and the caret lands on the next one — no "add step" button
+  exists). Opening another to-do therefore compacts the previous checklist instead
+  of leaving every sub-step in the main list.
 - **Natural-language dates** in the title ("tom" → due date), highlighted inline in the
   accent colour and stripped only on Create.
 - **Inline entity chips** in titles — links (clickable, host-shortened), dates,

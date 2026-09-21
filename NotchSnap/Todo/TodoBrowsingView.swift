@@ -2,6 +2,21 @@ import SwiftUI
 import UniformTypeIdentifiers
 import AppKit
 
+/// One parent row stays useful while closed without letting a long checklist
+/// take over the whole section. Shared with DebugDriver so the runtime check
+/// exercises the exact disclosure rule the view uses.
+enum ChecklistDisclosure {
+    static let collapsedLimit = 2
+
+    static func visibleCount(total: Int, expanded: Bool) -> Int {
+        expanded ? total : min(total, collapsedLimit)
+    }
+
+    static func hiddenCount(total: Int, expanded: Bool) -> Int {
+        max(0, total - visibleCount(total: total, expanded: expanded))
+    }
+}
+
 // MARK: - TodoTabView — the whole to-do panel (design PRD §§1-7)
 //
 // One surface, four modes (TodoPanelMode): browsing and creation share the
@@ -1380,14 +1395,20 @@ struct TodoBrowsingView: View {
         let completedCount = store.completedItems(in: collection).count
             + archive.historyCount(section: collection.isSystemToday ? nil : collection.name,
                                    excluding: liveCompletedIDs(in: collection))
-        // Steps are real rows on screen now, so they have to count toward the
-        // budget. Three to-dos with five steps each is eighteen rows, not
-        // three — and a region that only counted parents would lay them out
-        // past what the notch can display, which is exactly the bug the cap
-        // exists to prevent (2026-08-05).
-        // +1 per checklist for the trailing draft row, which is now on screen
-        // in the list as well.
-        let stepCount = open.reduce(0) { $0 + $1.checklist.count + ($1.checklist.isEmpty ? 0 : 1) }
+        // Closed rows preview at most two checklist entries and add one quiet
+        // disclosure row when more are hidden. Only the opened row renders
+        // every entry plus its trailing draft. Count exactly that furniture
+        // here so the inline-vs-scroll decision matches what is on screen.
+        let stepCount = open.reduce(0) { count, item in
+            let expanded = store.expandedItemID == item.id
+            let visible = ChecklistDisclosure.visibleCount(total: item.checklist.count,
+                                                            expanded: expanded)
+            let hidden = ChecklistDisclosure.hiddenCount(total: item.checklist.count,
+                                                          expanded: expanded)
+            let disclosure = hidden > 0 ? 1 : 0
+            let draft = expanded ? 1 : 0
+            return count + visible + disclosure + draft
+        }
         let visibleRows = openCount + stepCount + (store.completedExpanded ? completedCount : 0)
 
         let content = VStack(alignment: .leading, spacing: 0) {
@@ -2338,29 +2359,27 @@ private struct TodoItemRow: View {
         VStack(alignment: .leading, spacing: 6) {
             titleRow
 
-            // Notes stay behind the click. Steps do not.
+            // Notes stay behind the click. A closed row keeps only a compact
+            // checklist preview; opening it reveals the whole checklist and
+            // the draft row. This keeps one detailed to-do useful without
+            // leaving every previous to-do fully expanded in the list.
             //
             // A step used to be invisible until you opened the to-do, which
             // meant you had to click into every item to find out whether it
             // had any — so a checklist you had written was, during ordinary
             // browsing, simply not there (Marcello's spec, 2026-08-18). Steps
-            // now render inline, always, and stay tickable from the list.
+            // now preview inline and stay tickable from the list. Two entries
+            // are enough to show that the checklist exists; the count below
+            // them says exactly how much remains hidden.
             //
-            // The draft row comes with them. It was held back to the opened
-            // to-do at first, which left the list showing a checklist with no
-            // hint that it could be added to — "you don't have anything that
-            // shows you how you can add a new step" (Marcello, 2026-08-19).
-            // The empty row IS the affordance, so keeping it hidden was
-            // keeping the feature hidden.
-            //
-            // It appears under a to-do that HAS steps, not under every to-do:
-            // an empty "Type to add a step" line beneath all twenty rows of a
-            // list would be a lot of furniture to advertise one gesture.
+            // The draft row belongs only to the opened form. Repeating "Type
+            // to add a step" beneath every closed parent was the largest part
+            // of the clutter this disclosure is meant to remove.
             if isExpanded {
                 noteBlock
             }
             if !item.checklist.isEmpty || isExpanded {
-                stepsBlock()
+                stepsBlock(expanded: isExpanded)
             }
         }
         // 12pt horizontal, always. That puts a row's checkbox at
@@ -2710,20 +2729,53 @@ private struct TodoItemRow: View {
     /// The steps checklist. Same indent and connector rule in the list as in
     /// the opened row — deliberately the identical treatment, because they are
     /// the identical rows; only where you can reach them has changed.
-    private func stepsBlock() -> some View {
-        indented {
+    private func stepsBlock(expanded: Bool) -> some View {
+        let visibleCount = ChecklistDisclosure.visibleCount(total: item.checklist.count,
+                                                             expanded: expanded)
+        let hiddenCount = ChecklistDisclosure.hiddenCount(total: item.checklist.count,
+                                                           expanded: expanded)
+        return indented {
             VStack(alignment: .leading, spacing: 5) {
-                ForEach(item.checklist) { step in
+                ForEach(Array(item.checklist.prefix(visibleCount))) { step in
                     StepRow(step: step, parentID: item.id, accent: accent)
                 }
-                // Always present, always last, styled exactly like a real
-                // step. There is no "add step" button because there is nothing
-                // to press: the empty row IS the affordance, and committing one
-                // leaves you sitting on the next.
-                StepDraftRow(parentID: item.id, accent: accent)
+
+                if hiddenCount > 0 {
+                    Button {
+                        store.focusedItemID = item.id
+                        withAnimation(NotchAnimation.contentHug) {
+                            store.expandedItemID = item.id
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 8, weight: .semibold))
+                            Text(moreStepsLabel(hiddenCount))
+                                .font(DSFont.checklistItem)
+                        }
+                        .foregroundStyle(DSColor.textHint)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(L10n.t("todo.sc.expandRow"))
+                    .accessibilityLabel(moreStepsLabel(hiddenCount))
+                }
+
+                if expanded {
+                    // Always last in an opened row, styled exactly like a real
+                    // step. The empty row is the add affordance and committing
+                    // one leaves the caret on the next empty row.
+                    StepDraftRow(parentID: item.id, accent: accent)
+                }
             }
         }
         .padding(.top, 2)
+    }
+
+    private func moreStepsLabel(_ count: Int) -> String {
+        if count == 1 { return L10n.t("todo.oneMoreStep") }
+        return String(format: L10n.t("todo.moreSteps"), "\(count)")
     }
 
     /// The connector rule + indent shared by notes and steps.
