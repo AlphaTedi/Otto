@@ -426,7 +426,9 @@ other screens still used live in `SharedGlass.swift`.
 
 Deliberate departures from the spec: no Accessibility row (⌃⇧N is a Carbon
 hotkey and needs no Accessibility grant, so asking for it would be a false
-request), and with it the bolt chip in the orbit visual. The calendar alert
+request), and with it the bolt chip in the orbit visual. No traffic lights and
+no ⌘W (Marcello, same day, after Dia's onboarding): the only ways out are
+"Open Otto" or quitting, and a quit mid-flow resumes at that step next launch. The calendar alert
 lead default moved from 2 to 5 minutes, as the spec's closed decision 4 says
 and as the permissions caption reads from that setting.
 

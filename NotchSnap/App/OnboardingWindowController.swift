@@ -36,24 +36,17 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
             self.removeKeyMonitor()
             self.model.permissions.stopWatching()
             OnboardingWindowController.sharedController = nil
-            // CLOSING IT COUNTS AS HAVING SEEN IT.
+            // The launch gate is `onboardingVersion < 1`. The window has no
+            // close button and ⌘W does nothing (Marcello, 2026-09-24: finish
+            // it or quit, the way Dia's onboarding works), so the one route
+            // here is "Open Otto" at the end — this is completion.
             //
-            // The launch gate is `onboardingVersion < 1`, and only the "Done"
-            // button at the end of the flow used to write that. Anyone who
-            // read the first screen and closed the window — the red button,
-            // ⌘W, anything but walking to the last page — left the flag at 0,
-            // so the introduction came back on every launch and after every
-            // update (Marcello, 2026-09-21).
-            //
-            // Dismissing an introduction IS the decision that you are done
-            // with it. Writing it here rather than in `dismiss()` covers every
-            // route out, which is the same reason the line above lives here.
+            // Quitting mid-flow never reaches this: the gate stays at 0 and
+            // the next launch resumes at `onboarding.lastStep`.
             //
             // Settings can still bring it back: that path sets the key to 0
             // deliberately, and this only ever moves it forward.
             UserDefaults.standard.set(1, forKey: "onboardingVersion")
-            // Seen, but not necessarily completed (SPEC §2) — and a closed
-            // flow starts from the top next time rather than mid-way.
             UserDefaults.standard.set(0, forKey: OnboardingModel.Keys.lastStep)
             if !AppState.shared.settings.showInDock {
                 NSApp.setActivationPolicy(.accessory)
@@ -103,7 +96,9 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         let size = OBMetric.windowSize
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.titled, .closable, .fullSizeContentView],
+            // Titled for key-window behaviour and the system shadow, but not
+            // closable: no traffic lights at all. Finishing is the way out.
+            styleMask: [.titled, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
@@ -124,7 +119,9 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         // 460-pt minimum into a 460-pt CONTENT minimum and added the titlebar,
         // and the window came out 492 tall.
 
-        // Only the close button (SPEC §3).
+        // No traffic lights (Marcello, 2026-09-24 — departs from SPEC §3,
+        // which kept the close button).
+        window.standardWindowButton(.closeButton)?.isHidden = true
         window.standardWindowButton(.miniaturizeButton)?.isHidden = true
         window.standardWindowButton(.zoomButton)?.isHidden = true
 
@@ -193,7 +190,9 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
             for step in steps {
                 controller.model.debugJump(to: step)
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
-                DebugDriver.note("onboarding window frame=\(window.frame) content=\(view.frame)")
+                DebugDriver.note("onboarding window frame=\(window.frame) content=\(view.frame) "
+                    + "closeHidden=\(window.standardWindowButton(.closeButton)?.isHidden ?? true) "
+                    + "closable=\(window.styleMask.contains(.closable))")
                 guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
                 view.cacheDisplay(in: view.bounds, to: rep)
                 let file = directory.appendingPathComponent(
@@ -231,7 +230,9 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         let chars = event.charactersIgnoringModifiers?.lowercased() ?? ""
         let typing = window.firstResponder is NSTextView
 
-        if command && chars == "w" { window.performClose(nil); return true }
+        // ⌘W is swallowed rather than passed on: the window is not closable,
+        // and letting it through would only beep.
+        if command && chars == "w" { return true }
         if command && chars == "[" { model.back(); return true }
         // A focused text field keeps its own keys — ↵ saves the to-do there.
         if typing { return false }
