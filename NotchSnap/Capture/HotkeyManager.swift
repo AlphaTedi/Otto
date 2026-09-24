@@ -17,6 +17,11 @@ import Carbon.HIToolbox
 class HotkeyManager {
     static let shared = HotkeyManager()
 
+    /// The global new-to-do shortcut as it is shown to people. One source for
+    /// every place that prints it — the onboarding once showed ⌥⌘N, which was
+    /// never the binding.
+    static let quickEntryDisplay = "\u{2303}\u{21E7}N"
+
     private var hotKeyRefs: [EventHotKeyRef?] = []
     private var eventHandler: EventHandlerRef?
 
@@ -108,7 +113,12 @@ class HotkeyManager {
         case .openNotes:
             print("[HotkeyManager] ⌃⇧N → new to-do (creation)")
             Task { @MainActor in
-                NotchController.shared.openCreateFresh()
+                // The onboarding's shortcut step is practising this very key:
+                // there it lights the keycaps, and opening the notch on top of
+                // the lesson would bury it.
+                if !OnboardingWindowController.capturesQuickEntry {
+                    NotchController.shared.openCreateFresh()
+                }
                 NotificationCenter.default.post(name: .quickEntryFired, object: nil)
             }
 

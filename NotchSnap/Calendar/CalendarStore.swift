@@ -51,7 +51,9 @@ final class CalendarStore: ObservableObject {
 
     /// Lead times, in minutes — configurable per the PRD's Settings mockup.
     @AppStorage("calAmbientLeadMinutes") var ambientLeadMinutes: Int = 15
-    @AppStorage("calAlertLeadMinutes") var alertLeadMinutes: Int = 2
+    /// 5 by default: the onboarding promises a heads-up five minutes before
+    /// a meeting (onboarding SPEC §13.4), and reads this value to say so.
+    @AppStorage("calAlertLeadMinutes") var alertLeadMinutes: Int = 5
     @AppStorage("calSnoozeMinutes") var snoozeMinutes: Int = 5
     /// Set once the user connects, so we don't re-prompt on every launch.
     @AppStorage("calendarConnected") private var connectedPreference = false

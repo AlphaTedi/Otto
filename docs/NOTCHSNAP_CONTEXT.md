@@ -414,3 +414,30 @@ top and bottom padding match. Focus no longer calls `scrollTo` unconditionally:
 an already-visible row keeps the current viewport, while a row that is above or
 below it scrolls to the nearest edge. After expansion, one delayed geometry
 check reveals the new overflow only if the complete opened row no longer fits.
+
+### 2026-09-24 onboarding Direction B
+
+The onboarding was rebuilt from Marcello's handoff (`otto-onboarding` SPEC.md +
+PNGs + reference HTML): an 860×460 window, six steps (welcome, focus, notch,
+shortcut, permissions, done) in `NotchSnap/App/Onboarding*.swift`. Host Grotesk
+is bundled (OFL) and registered per process on first use. The old flow
+(`OnboardingView.swift`, `OnboardingDesign.swift`) is gone; the two glass views
+other screens still used live in `SharedGlass.swift`.
+
+Deliberate departures from the spec: no Accessibility row (⌃⇧N is a Carbon
+hotkey and needs no Accessibility grant, so asking for it would be a false
+request), and with it the bolt chip in the orbit visual. The calendar alert
+lead default moved from 2 to 5 minutes, as the spec's closed decision 4 says
+and as the permissions caption reads from that setting.
+
+Traps met on the way, worth keeping:
+- SwiftUI `Text` avoids a one-word last line, so it breaks lines differently
+  from CSS — `OBText` draws and measures with NSStringDrawing instead.
+- Any `.kern` attribute, even 0, turns pair kerning off; use `.tracking`.
+- An `NSHostingView` that IS a titled window's content view keeps growing the
+  window by the titlebar height; host it inside a plain container view.
+- CSS in the reference is content-box: a bordered 16-pt box renders 18–19 pt.
+
+Verification: `onboarding-snap <dir> [steps]` (DEBUG) writes every step, dark
+and light, as PNGs via `cacheDisplay` — no Screen Recording needed — for
+side-by-side comparison with the handoff's PNGs.

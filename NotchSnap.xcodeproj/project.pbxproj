@@ -12,8 +12,12 @@
 		06FE3C740C45168B53D42F4C /* NotchController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDE65A9C4E12466ED5903603 /* NotchController.swift */; };
 		08284509974CD670AA69BB0B /* TextExtractionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F008497BB5485486B0CAEB8D /* TextExtractionView.swift */; };
 		0C95DD96AE7700E58D54F005 /* ScreenCaptureKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22ACC55133418148325C1F8B /* ScreenCaptureKit.framework */; };
-		0D99CA6FF0A3543AE50C6B61 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A32063A8096DCB7171E34409 /* OnboardingView.swift */; };
-		7B53500704A4454B9C8BC8E0 /* OnboardingDesign.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29DFCC1118A34D48815EB0B0 /* OnboardingDesign.swift */; };
+		0D99CA6FF0A3543AE50C6B61 /* SharedGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = A32063A8096DCB7171E34409 /* SharedGlass.swift */; };
+		0B0B0B0B0B0B0B0B0B0B0B01 /* OnboardingTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F01 /* OnboardingTheme.swift */; };
+		0B0B0B0B0B0B0B0B0B0B0B02 /* OnboardingModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F02 /* OnboardingModel.swift */; };
+		0B0B0B0B0B0B0B0B0B0B0B03 /* OnboardingComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F03 /* OnboardingComponents.swift */; };
+		0B0B0B0B0B0B0B0B0B0B0B04 /* OnboardingSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F04 /* OnboardingSteps.swift */; };
+		0B0B0B0B0B0B0B0B0B0B0B05 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F05 /* OnboardingFlow.swift */; };
 		EE01AA02BB03CC04DD05FF06 /* ShelfItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF06EE01AA02BB03CC04DD05 /* ShelfItem.swift */; };
 		0F663776CDD3D605C249FA70 /* AnnotationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53C8C36D1B4598D827B5BD40 /* AnnotationModel.swift */; };
 		11223344556677889900AABB /* OnboardingWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2233445566778899AABB0011 /* OnboardingWindowController.swift */; };
@@ -89,6 +93,7 @@
 		783F0A910ED1AA000D5FAD3B /* NotchExpandedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517D724F18CF2E7DAF0B50FD /* NotchExpandedView.swift */; };
 		79CD8C455B2985D2300B74C1 /* EditorWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40DCF526EB073868E4ABC6FF /* EditorWindowController.swift */; };
 		7D78789693A898B4B8C836D2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0DB683226254E1B7C70E8137 /* Assets.xcassets */; };
+		AA01BB02CC03DD04EE05F0D1 /* HostGrotesk-VariableFont_wght.ttf in Resources */ = {isa = PBXBuildFile; fileRef = F0D1AA01BB02CC03DD04EE05 /* HostGrotesk-VariableFont_wght.ttf */; };
 		7F0BFF55548F7C161DF3B435 /* AnnotationCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 301237CAA34036B66D14C7D8 /* AnnotationCanvas.swift */; };
 		9B5B414A97835E27F0FEF62B /* TextBlockOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 832E446F8E89ED0271805F51 /* TextBlockOverlay.swift */; };
 		A0AB4C4959DAA42A0BA5CFF0 /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4A97437F68ABBA30F9930CE /* EditorView.swift */; };
@@ -135,6 +140,7 @@
 		0750A568AF81D73916FDA1CD /* NotchSnap.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NotchSnap.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0A04E44863E9A630E97B3472 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		0DB683226254E1B7C70E8137 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F0D1AA01BB02CC03DD04EE05 /* HostGrotesk-VariableFont_wght.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; name = HostGrotesk-VariableFont_wght.ttf; path = Fonts/HostGrotesk-VariableFont_wght.ttf; sourceTree = "<group>"; };
 		1B63530D4E04AB5C54526B71 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
 		1D1573CE4ECF92AE73C92E80 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
 		2233445566778899AABB0011 /* OnboardingWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingWindowController.swift; sourceTree = "<group>"; };
@@ -217,8 +223,12 @@
 		A1B2C3D4E5F60003A2B3C4D5 /* ClipboardTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardTile.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60004A2B3C4D5 /* SoundManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundManager.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60004A2B3C4DD /* DebugDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugDriver.swift; sourceTree = "<group>"; };
-		A32063A8096DCB7171E34409 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
-		29DFCC1118A34D48815EB0B0 /* OnboardingDesign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingDesign.swift; sourceTree = "<group>"; };
+		A32063A8096DCB7171E34409 /* SharedGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedGlass.swift; sourceTree = "<group>"; };
+		0F0F0F0F0F0F0F0F0F0F0F01 /* OnboardingTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingTheme.swift; sourceTree = "<group>"; };
+		0F0F0F0F0F0F0F0F0F0F0F02 /* OnboardingModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingModel.swift; sourceTree = "<group>"; };
+		0F0F0F0F0F0F0F0F0F0F0F03 /* OnboardingComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingComponents.swift; sourceTree = "<group>"; };
+		0F0F0F0F0F0F0F0F0F0F0F04 /* OnboardingSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingSteps.swift; sourceTree = "<group>"; };
+		0F0F0F0F0F0F0F0F0F0F0F05 /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
 		A54EE6536F83A25DC71266E2 /* AreaSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AreaSelector.swift; sourceTree = "<group>"; };
 		AA00BB11CC22DD33EE44FE01 /* Local.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Local.xcconfig; path = Config/Local.xcconfig; sourceTree = "<group>"; };
 		A9AC6B6EB302353AFBED2BB8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -398,6 +408,7 @@
 			isa = PBXGroup;
 			children = (
 				0DB683226254E1B7C70E8137 /* Assets.xcassets */,
+				F0D1AA01BB02CC03DD04EE05 /* HostGrotesk-VariableFont_wght.ttf */,
 				A9AC6B6EB302353AFBED2BB8 /* Info.plist */,
 				6979633FE3E63CD36BC9B344 /* NotchSnap.entitlements */,
 				AA00BB11CC22DD33EE44FF20 /* Sounds */,
@@ -460,8 +471,12 @@
 				AA00BB11CC22DD33EE44FC02 /* LaunchIntegrity.swift */,
 				AA00BB11CC22DD33EE44SP11 /* UpdateController.swift */,
 				2F1B783B764932999A1FEF0B /* SettingsView.swift */,
-				A32063A8096DCB7171E34409 /* OnboardingView.swift */,
-				29DFCC1118A34D48815EB0B0 /* OnboardingDesign.swift */,
+				A32063A8096DCB7171E34409 /* SharedGlass.swift */,
+				0F0F0F0F0F0F0F0F0F0F0F01 /* OnboardingTheme.swift */,
+				0F0F0F0F0F0F0F0F0F0F0F02 /* OnboardingModel.swift */,
+				0F0F0F0F0F0F0F0F0F0F0F03 /* OnboardingComponents.swift */,
+				0F0F0F0F0F0F0F0F0F0F0F04 /* OnboardingSteps.swift */,
+				0F0F0F0F0F0F0F0F0F0F0F05 /* OnboardingFlow.swift */,
 				FF46EE41AA42BB43CC44DD45 /* Localization.swift */,
 				F1A2B3C4D5E6F7A8B9C0D1E2 /* HapticManager.swift */,
 				DD44EE55FF66AA11BB22CC33 /* NotchLivePreview.swift */,
@@ -593,6 +608,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				7D78789693A898B4B8C836D2 /* Assets.xcassets in Resources */,
+				AA01BB02CC03DD04EE05F0D1 /* HostGrotesk-VariableFont_wght.ttf in Resources */,
 				AA00BB11CC22DD33EE44FF01 /* screenshot_capture.aiff in Resources */,
 				AA00BB11CC22DD33EE44FF02 /* notch_expand.aiff in Resources */,
 				AA00BB11CC22DD33EE44FF03 /* notch_collapse.aiff in Resources */,
@@ -662,8 +678,12 @@
 				AA00BB11CC22DD33EE44FC01 /* LaunchIntegrity.swift in Sources */,
 				AA00BB11CC22DD33EE44SP10 /* UpdateController.swift in Sources */,
 				1F1C19FC2912D0907E997C14 /* SettingsView.swift in Sources */,
-				0D99CA6FF0A3543AE50C6B61 /* OnboardingView.swift in Sources */,
-				7B53500704A4454B9C8BC8E0 /* OnboardingDesign.swift in Sources */,
+				0D99CA6FF0A3543AE50C6B61 /* SharedGlass.swift in Sources */,
+				0B0B0B0B0B0B0B0B0B0B0B01 /* OnboardingTheme.swift in Sources */,
+				0B0B0B0B0B0B0B0B0B0B0B02 /* OnboardingModel.swift in Sources */,
+				0B0B0B0B0B0B0B0B0B0B0B03 /* OnboardingComponents.swift in Sources */,
+				0B0B0B0B0B0B0B0B0B0B0B04 /* OnboardingSteps.swift in Sources */,
+				0B0B0B0B0B0B0B0B0B0B0B05 /* OnboardingFlow.swift in Sources */,
 				C1D718E235EFE1AEDF61E840 /* AppSettings.swift in Sources */,
 				EE01AA02BB03CC04DD05FF06 /* ShelfItem.swift in Sources */,
 				0F663776CDD3D605C249FA70 /* AnnotationModel.swift in Sources */,

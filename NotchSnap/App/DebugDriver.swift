@@ -149,6 +149,17 @@ enum DebugDriver {
                 if let target = store.lastUsedCollectionID ?? store.firstUserCollection?.id {
                     store.addItem(title: title, collectionID: target)
                 }
+            } else if command.hasPrefix("onboarding-snap ") {
+                // onboarding-snap <dir> [step,step…] — PNGs of the real window.
+                let parts = command.dropFirst(16).split(separator: " ")
+                let directory = URL(fileURLWithPath: String(parts.first ?? "/tmp/otto-onboarding"))
+                let steps = parts.count > 1
+                    ? parts[1].split(separator: ",").compactMap { Int($0) }.compactMap { OnboardingStep(rawValue: $0) }
+                    : OnboardingStep.allCases
+                Task { @MainActor in
+                    await OnboardingWindowController.debugSnapshots(to: directory, steps: steps)
+                    appendState("onboarding-snap done: \(directory.path)")
+                }
             } else if command.hasPrefix("switch ") {
                 if let index = Int(command.dropFirst(7)) {
                     store.selectCollection(atIndex: index)
@@ -797,6 +808,8 @@ enum DebugDriver {
         chromeTabRow=\(PanelChrome.shared.tabRow)
         """)
     }
+
+    static func note(_ text: String) { appendState(text) }
 
     private static func appendState(_ text: String) {
         let line = "[\(Date())] \(text)\n"
