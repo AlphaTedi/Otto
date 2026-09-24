@@ -281,7 +281,22 @@ private struct StreamView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if isCalendarSpace {
+            if !isContainer {
+                // U5 capture header, floating panels only: the same chrome
+                // as a list's field, so switching space never moves it.
+                Group {
+                    if isCalendarSpace {
+                        CalendarCaptureHeader(focused: $composerFocused)
+                    } else {
+                        NotesCaptureHeader(focused: $composerFocused)
+                    }
+                }
+                .notchEntry(index: 0)
+                .background(GeometryReader { geo in
+                    Color.clear.preference(key: ComposerHeightKey.self, value: geo.size.height)
+                })
+                .onPreferenceChange(ComposerHeightKey.self) { composerHeight = $0 }
+            } else if isCalendarSpace {
                 CalendarComposer(focused: $composerFocused)
                     .padding(.horizontal, LabMetrics.barOuterInset)
                     .notchEntry(index: 0)
@@ -616,6 +631,74 @@ private struct CalendarComposer: View {
         .contentShape(RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous))
         .onTapGesture { focused = true }
         .onHover { hover = $0 }
+        .onChange(of: store.meetingSearchFocus) { if $0 { focused = true } }
+    }
+}
+
+// MARK: U5 capture headers (floating panels)
+
+private struct NotesCaptureHeader: View {
+    @FocusState.Binding var focused: Bool
+    @ObservedObject private var store = NotesStore.shared
+
+    var body: some View {
+        CaptureHeader(
+            tint: .notes,
+            placeholder: L10n.t("capture.notePlaceholder"),
+            showsPlaceholder: store.draft.isEmpty,
+            isTyping: !store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            saveLabel: String(format: L10n.t("capture.saveTo"), L10n.t("filter.notes")),
+            onSave: { store.commitDraft() },
+            onDot: { TodoStore.shared.cycleCollection() }
+        ) {
+            // The user's text is NEVER reformatted — lowercase, missing
+            // punctuation and typos are preserved exactly.
+            TextField("", text: $store.draft, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 18))
+                .foregroundStyle(SpaceInk.a(1))
+                .focused($focused)
+                .lineLimit(10)
+                .onChange(of: store.draft) { _ in store.draftChanged() }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { focused = true }
+    }
+}
+
+private struct CalendarCaptureHeader: View {
+    @FocusState.Binding var focused: Bool
+    @ObservedObject private var store = NotesStore.shared
+
+    var body: some View {
+        CaptureHeader(
+            tint: .calendar,
+            placeholder: L10n.t("meeting.search"),
+            showsPlaceholder: store.meetingQuery.isEmpty,
+            isTyping: false,
+            saveLabel: nil,
+            onSave: {},
+            onDot: { TodoStore.shared.cycleCollection() }
+        ) {
+            HStack(spacing: 8) {
+                TextField("", text: $store.meetingQuery)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 18))
+                    .foregroundStyle(SpaceInk.a(1))
+                    .focused($focused)
+                Button { store.beginMeetingPicker() } label: {
+                    Image(systemName: "calendar.badge.plus")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(DSColor.textSecondary)
+                        .frame(width: 30, height: 24)
+                        .background(Capsule().fill(DSColor.fieldBackground))
+                }
+                .buttonStyle(.plain)
+                .help(L10n.t("meeting.choose"))
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { focused = true }
         .onChange(of: store.meetingSearchFocus) { if $0 { focused = true } }
     }
 }
@@ -1126,45 +1209,52 @@ struct NotesPill: View {
     private var isActive: Bool { store.panelMode == .notes }
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 6) {
             Text(L10n.t("filter.notes"))
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(isActive ? NotesMetrics.pillStroke : DSColor.textPrimary)
+                .font(.system(size: 13, weight: .semibold))
             Text("\(notes.notes.filter { $0.meetingContext == nil }.count)")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 13, weight: .semibold))
                 .monospacedDigit()
-                .foregroundColor(isActive ? NotesMetrics.pillStroke.opacity(0.65)
-                                          : DSColor.textSecondary)
+                .opacity(0.55)
                 .contentTransition(.numericText())
         }
-        .padding(.horizontal, LabMetrics.tabPaddingH)
-        .padding(.vertical, LabMetrics.tabPaddingV)
-        // ONE shape in every state.
-        //
-        // The fill used to interpolate its radius between 48 active and 8
-        // resting, so hovering an inactive pill drew a rounded RECTANGLE and
-        // clicking it snapped to a capsule — two different objects for one
-        // control (Marcello, 2026-09-06: "sembra weird"). The state is the
-        // fill and the stroke; the shape does not move.
+        .foregroundColor(isActive ? SpacePillStyle.onFill : DSColor.textPrimary)
+        .padding(.horizontal, SpacePillStyle.paddingH)
+        .frame(height: 28)
+        // Never squeezed: when the lists overflow, the scroller gives way, not
+        // this pill (its capsule ends were being cut off).
+        .fixedSize()
+        // U5 §5.1: a 1.4-pt dashed amber edge at 55%; selected, a solid
+        // amber fill with dark text. ONE capsule in every state
+        // (Marcello, 2026-09-06).
         .background(Capsule(style: .continuous).fill(
-            isActive ? NotesMetrics.pillStroke.opacity(0.16)
-                     : (hover ? NotesMetrics.pillStroke.opacity(0.08) : Color.clear)
+            isActive ? SpaceTint.notes.base.color.opacity(0.85)
+                     : (hover ? SpaceTint.notes.base.color.opacity(0.10) : Color.clear)
         ))
+        // A 14-pt circular radius rather than `Capsule`: a stroked capsule at
+        // this size rendered a flat tick at each end (seen on Calendar's solid
+        // edge; the dashes here were hiding the same thing).
         .overlay(
-            Capsule(style: .continuous)
-                .strokeBorder(
-                    NotesMetrics.pillStroke.opacity(isActive ? 1 : (hover ? 0.7 : 0.45)),
-                    style: StrokeStyle(lineWidth: isActive ? 1.5 : 1, dash: [4, 3])
-                )
+            RoundedRectangle(cornerRadius: 14, style: .circular)
+                .strokeBorder(SpaceTint.notes.base.color.opacity(isActive ? 0.85 : 0.55),
+                              style: StrokeStyle(lineWidth: 1.4, dash: isActive ? [] : [4, 3]))
         )
         .contentShape(Capsule(style: .continuous))
         .onTapGesture { NotesStore.shared.enterSpace() }
         .onHover { hover = $0 }
-        .animation(Motion.swap, value: isActive)
+        .reportsActivePill(isActive)
         .animation(Motion.hoverFade, value: hover)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(L10n.t("filter.notes"))
     }
+}
+
+/// U5's space-pill numbers, shared by Notes and Calendar.
+enum SpacePillStyle {
+    /// 11 of padding inside the 1.4-pt border — the reference's content-box
+    /// 11 + border, which lands the text where the section pills' 12 does.
+    static let paddingH: CGFloat = 12.4
+    static let onFill = Color(hex: "#1A1622")
 }
 
 struct CalendarPill: View {
@@ -1176,25 +1266,27 @@ struct CalendarPill: View {
     private var count: Int { notes.notes.filter { $0.meetingContext != nil }.count }
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 6) {
             Text(L10n.t("filter.calendar"))
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 13, weight: .semibold))
             Text("\(count)")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 13, weight: .semibold))
                 .monospacedDigit()
-                .opacity(0.65)
+                .opacity(0.55)
         }
-        .foregroundStyle(isActive ? LabMetrics.accent : DSColor.textPrimary)
-        .padding(.horizontal, LabMetrics.tabPaddingH)
-        .padding(.vertical, LabMetrics.tabPaddingV)
-        .background(Capsule().fill(isActive ? LabMetrics.accent.opacity(0.16)
-                                             : (hover ? LabMetrics.accent.opacity(0.08) : Color.clear)))
-        .overlay(Capsule().strokeBorder(LabMetrics.accent.opacity(isActive ? 1 : (hover ? 0.7 : 0.45)),
-                                        lineWidth: isActive ? 1.5 : 1))
-        .contentShape(Capsule())
+        .foregroundStyle(isActive ? SpacePillStyle.onFill : DSColor.textPrimary)
+        .padding(.horizontal, SpacePillStyle.paddingH)
+        .frame(height: 28)
+        .fixedSize()
+        // U5 §5.1: a 1.4-pt solid teal edge at 45%; selected, a teal fill.
+        .background(Capsule(style: .continuous).fill(isActive ? SpaceTint.calendar.base.color.opacity(0.85)
+                                             : (hover ? SpaceTint.calendar.base.color.opacity(0.10) : Color.clear)))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .circular)
+            .strokeBorder(SpaceTint.calendar.base.color.opacity(isActive ? 0.85 : 0.45), lineWidth: 1.4))
+        .contentShape(Capsule(style: .continuous))
         .onTapGesture { NotesStore.shared.enterCalendarSpace() }
         .onHover { hover = $0 }
-        .animation(Motion.swap, value: isActive)
+        .reportsActivePill(isActive)
         .animation(Motion.hoverFade, value: hover)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(L10n.t("filter.calendar"))

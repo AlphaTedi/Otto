@@ -18,6 +18,9 @@ struct TodoCollection: Identifiable, Codable, Equatable {
     /// TD-8: true only for the built-in smart Today aggregation. Today is a
     /// live query across every collection, not a membership bucket.
     var isSystemToday: Bool = false
+    /// The space's ambient tint (U5): a key into `SpaceTint.palette`. Optional
+    /// so files written before it decode — the store fills it in on load.
+    var tint: String? = nil
 
     var color: Color {
         Color(nsColor: NSColor.fromHex(colorHex) ?? .systemBlue)

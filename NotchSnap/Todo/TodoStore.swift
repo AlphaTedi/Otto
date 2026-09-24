@@ -308,6 +308,9 @@ final class TodoStore: ObservableObject {
 
     /// What is being typed into the draft row.
     @Published var draftTitle = ""
+    /// The to-do the capture field just filed, highlighted for 1.2 s (U5).
+    @Published private(set) var justAddedID: UUID?
+    private var justAddedClear: Task<Void, Never>?
     /// True while the caret is actually in the draft row.
     ///
     /// Distinct from "the row exists", which is now always. Only the caret
@@ -459,13 +462,30 @@ final class TodoStore: ObservableObject {
         let title = parsed?.cleanedTitle ?? draftTitle
         guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let target = draftDestination?.id,
-              addItem(title: title, collectionID: target,
-                      dueDate: parsed?.date) != nil else { return false }
+              let added = addItem(title: title, collectionID: target,
+                                  dueDate: parsed?.date) else { return false }
         draftTitle = ""
+        markJustAdded(added.id)
         // Re-assert rather than assume: the field reports its own focus, and
         // the list re-rendering underneath must not be able to take it.
         draftWantsFocus = true
         return true
+    }
+
+    #if DEBUG
+    func debugMarkJustAdded(_ id: UUID) { markJustAdded(id) }
+    #endif
+
+    /// U5 §4.2: the new row wears its space's colour for 1.2 s, then fades
+    /// over 400 ms.
+    private func markJustAdded(_ id: UUID) {
+        justAddedID = id
+        justAddedClear?.cancel()
+        justAddedClear = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.4)) { self?.justAddedID = nil }
+        }
     }
 
     /// Whether the space bar is drawn.
@@ -751,6 +771,7 @@ final class TodoStore: ObservableObject {
             TodoCollection(id: UUID(), name: "Personal", colorHex: "#C99EE0",
                            sortOrder: 2, shortcutKey: "3"),
         ]
+        assignMissingTints()
         scheduleSave()
     }
 
@@ -827,9 +848,11 @@ final class TodoStore: ObservableObject {
     func addCollection(name: String, colorHex: String) -> TodoCollection {
         let next = (collections.map(\.sortOrder).max() ?? -1) + 1
         let shortcut = next < 9 ? String(next + 1) : nil
+        let taken = Set(collections.compactMap(\.tint))
         let collection = TodoCollection(
             id: UUID(), name: name, colorHex: colorHex,
-            sortOrder: next, shortcutKey: shortcut
+            sortOrder: next, shortcutKey: shortcut,
+            tint: SpaceTint.assign(name: name, isToday: false, taken: taken).key
         )
         withAnimation(Motion.contentHug) { collections.append(collection) }
         scheduleSave()
@@ -1292,6 +1315,22 @@ final class TodoStore: ObservableObject {
         collections = payload.collections.sorted { $0.sortOrder < $1.sortOrder }
         items = payload.items
         lastUsedCollectionID = payload.lastUsedCollectionID
+        assignMissingTints()
+    }
+
+    /// Lists from before U5 have no tint: give each one, once, and save it,
+    /// so a list keeps its colour however it is renamed or moved later.
+    private func assignMissingTints() {
+        var taken = Set(collections.compactMap(\.tint))
+        var changed = false
+        for index in collections.indices where collections[index].tint == nil {
+            let tint = SpaceTint.assign(name: collections[index].name,
+                                        isToday: collections[index].isSystemToday, taken: taken)
+            collections[index].tint = tint.key
+            taken.insert(tint.key)
+            changed = true
+        }
+        if changed { scheduleSave() }
     }
 
     private func scheduleSave() {

@@ -456,3 +456,34 @@ click-to-open caret follows the space on screen
 or the to-do draft row. ⌃⇧N still jumps to the default section on purpose.
 Verified with the DEBUG `place-test` command (opens an existing note, writes
 nothing).
+
+### 2026-09-25 U5 main panel iteration
+
+From the `otto-u5` handoff. Scope decided by Marcello: the FLOATING PANELS get
+all of it; the NOTCH CONTAINER gets everything except its text input field,
+which stays exactly as it was (its pills stay at the top, too).
+
+- Space tints (`SpaceTint.swift`): base / light / neighbour per space, stored on
+  the list as `TodoCollection.tint` (optional, assigned once on load: Grocery,
+  Work, Personal by name, then the palette). Colour is ambient only —
+  checkboxes and titles are untouched.
+- `SpaceChrome.swift`: the ambient glow (two radial layers, `α·(1−t)^2.2`,
+  under the selected pill, OKLCH hue crossfade 350 ms, drift paused while
+  hidden, none under Reduce Motion), the floating rim, the floating capture
+  header (dot, 18 pt text, "Switch space ⇥" ↔ "Save to <Space> ↵", 60 pt,
+  hairline), and the gear that replaced the avatar (it opens the same menu, so
+  Insights / Shortcuts / Quit stay reachable).
+- Floating grid: list inset 10, row gap 13 → checkbox at 22, text at 53 under
+  the field's text. Esc in the floating field clears the text first.
+- Pills (both layouts): 28 tall, 13/600, selected = light fill + dark text;
+  Notes dashed amber, Calendar solid teal.
+- Floating panel radius 40 → 32 (Marcello, same day).
+
+Kept deliberately: the floating panel stays glass (the spec's gradient is
+described as "the current look"), 657 wide and 556 tall; row vertical rhythm
+unchanged. Trap: a stroked `Capsule` at 28 pt rendered a flat tick at each end —
+use `RoundedRectangle(cornerRadius: 14, style: .circular)`.
+
+Verification: DEBUG `u5-snap <dir>` renders every state off screen (the live
+glass cannot be captured). Launch the Debug binary with `-notchLayout container`
+to render the container without touching the user's saved setting.

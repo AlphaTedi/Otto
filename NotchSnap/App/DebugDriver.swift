@@ -234,6 +234,76 @@ enum DebugDriver {
                 // The click path: open, then take the caret.
                 NotchController.shared.triggerExpand()
                 NotchController.shared.makeKeyForTyping()
+            } else if command.hasPrefix("u5-snap ") {
+                // u5-snap <dir> — renders the panel in every U5 state. Writes
+                // nothing: selection, a typed draft (cleared) and a highlight.
+                let directory = URL(fileURLWithPath: String(command.dropFirst(8)))
+                Task { @MainActor in
+                    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                    let controller = NotchController.shared
+                    let notes = NotesStore.shared
+                    let original = store.activeCollectionID
+                    controller.triggerExpand()
+                    // The live panel draws inside system glass, which a
+                    // bitmap cache cannot capture — so the same view is hosted
+                    // off screen on the spec's own panel background instead.
+                    let container = AppState.shared.notchLayout == .container
+                    let size = NSSize(width: container ? 560 : LabMetrics.blockWidth,
+                                      height: container ? 520 : LabMetrics.todoBlockMaxHeight)
+                    let shape = RoundedRectangle(cornerRadius: container ? 30 : LabMetrics.blockRadius,
+                                                 style: .continuous)
+                    let root = TodoTabView()
+                        .frame(width: size.width, height: container ? nil : size.height,
+                               alignment: .top)
+                        .frame(width: size.width, height: size.height, alignment: .top)
+                        .background(container ? AnyView(Color.black) : AnyView(LinearGradient(
+                            stops: [.init(color: Color(hex: "#1B1F35"), location: 0),
+                                    .init(color: Color(hex: "#1E1D33"), location: 0.55),
+                                    .init(color: Color(hex: "#261F35"), location: 1)],
+                            startPoint: .top, endPoint: .bottom)))
+                        .clipShape(shape)
+                        .overlay(container ? nil : SpaceRim(tint: store.activeSpaceTint, shape: shape))
+                        .environmentObject(AppState.shared)
+                        .environment(\.colorScheme, .dark)
+                    let host = NSHostingView(rootView: root)
+                    host.frame = NSRect(origin: .zero, size: size)
+                    let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: size.width, height: size.height),
+                                          styleMask: [.borderless], backing: .buffered, defer: false)
+                    window.appearance = NSAppearance(named: .darkAqua)
+                    window.contentView = host
+                    window.orderBack(nil)
+                    @MainActor func snap(_ name: String) async {
+                        try? await Task.sleep(nanoseconds: 1_300_000_000)
+                        let view: NSView = host
+                        guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+                        view.cacheDisplay(in: view.bounds, to: rep)
+                        try? rep.representation(using: .png, properties: [:])?
+                            .write(to: directory.appendingPathComponent(name + ".png"))
+                    }
+                    @MainActor func list(_ name: String) -> TodoCollection? {
+                        store.collections.first { $0.name.lowercased() == name }
+                    }
+                    for name in ["work", "grocery", "personal"] {
+                        if let c = list(name) { notes.leaveSpace(); store.selectCollection(c.id) }
+                        await snap("space-" + name)
+                    }
+                    notes.enterSpace(); await snap("space-notes")
+                    notes.enterCalendarSpace(); await snap("space-calendar")
+                    notes.leaveSpace()
+                    if let work = list("work") {
+                        store.selectCollection(work.id)
+                        store.draftTitle = "Send deck to Roos"
+                        await snap("input-typing")
+                        store.draftTitle = ""
+                        if let first = store.openItems(in: work).first { store.debugMarkJustAdded(first.id) }
+                        try? await Task.sleep(nanoseconds: 100_000_000)
+                        await snap("input-saved")
+                    }
+                    if let original { store.selectCollection(original) }
+                    window.orderOut(nil)
+                    controller.forceCollapse()
+                    appendState("u5-snap done: \(directory.path) layout=\(AppState.shared.notchLayout)")
+                }
             } else if command == "place-test" {
                 // Close-and-reopen keeps the place: once in a note, once in a
                 // to-do section. Opens an existing note; writes nothing.

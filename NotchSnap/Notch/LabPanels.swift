@@ -29,7 +29,9 @@ enum LabMetrics {
     static let accent = Color(hex: "#10EFF2")
 
     static let blockWidth: CGFloat = 657
-    static let blockRadius: CGFloat = 40
+    /// 32 (Marcello, 2026-09-25 — was 40). The glow's clip and the U5 rim
+    /// read this too, so all three stay on one curve.
+    static let blockRadius: CGFloat = 32
     /// 16 top, nothing on the other sides — the children carry their own.
     static let panelTopPadding: CGFloat = 16
     /// Between the creation-bar block and the list block.
@@ -472,6 +474,7 @@ private struct LabJoinButton: View {
 
 struct LabPanelsView: View {
     @ObservedObject private var controller = NotchController.shared
+    @ObservedObject private var store = TodoStore.shared
     @ObservedObject private var calendar = CalendarStore.shared
     @EnvironmentObject private var appState: AppState
 
@@ -526,6 +529,11 @@ struct LabPanelsView: View {
                     // at 556 with the list stranded at the top of it.
                     .frame(height: LabMetrics.todoBlockMaxHeight, alignment: .top)
                     .labBlock()
+                    // U5 §2: a 1-pt rim in the active space's colour at 22%,
+                    // crossfading with the glow when the space changes.
+                    .overlay(SpaceRim(tint: store.activeSpaceTint,
+                                      shape: RoundedRectangle(cornerRadius: LabMetrics.blockRadius,
+                                                              style: .continuous)))
                     .transition(.opacity)
             }
         }

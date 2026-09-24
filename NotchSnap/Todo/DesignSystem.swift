@@ -336,7 +336,9 @@ extension Color {
 /// styling, it's a functional requirement.
 struct CategoryTabChip: View {
     let title: String
-    let categoryColor: Color
+    /// The space's tint: the selected fill is its LIGHT colour, the shadow its
+    /// base (U5 §5.1, §7).
+    let tint: SpaceTint
     let isActive: Bool
     /// How many to-dos are still OPEN in this category. nil = the category is
     /// empty (no indicator at all); 0 = everything done (checkmark).
@@ -344,8 +346,7 @@ struct CategoryTabChip: View {
     /// This replaces the circular progress ring: a 14pt arc couldn't tell you
     /// how much was left — "I don't understand from that view how much I am
     /// still missing" (Marcello, 2026-07-23). A remaining COUNT answers that
-    /// directly, the way Reminders/Things do. Supersedes drift-table item #3
-    /// in notchsnap_design_reference_prd.md §10.
+    /// directly, the way Reminders/Things do.
     let remaining: Int?
 
     /// Whether the pointer is on this chip. The lists had NO hover state at
@@ -354,62 +355,51 @@ struct CategoryTabChip: View {
     /// (Marcello, 2026-09-06).
     @State private var hover = false
 
+    /// U5: dark text on the light fill.
+    private static let onFill = Color(hex: "#161A24")
+
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 6) {
             Text(title)
-                .font(.system(size: 12, weight: .medium))
-                // Active sits on the category's own fill and is therefore
-                // always dark; inactive sits on the panel and follows it.
-                .foregroundColor(isActive ? DSColor.onAccentFill : DSColor.textPrimary)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(isActive ? Self.onFill : DSColor.textPrimary)
 
             if let remaining {
                 if remaining == 0 {
                     // Nothing left — a quiet "all clear", not a zero.
                     Image(systemName: "checkmark")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundColor(isActive ? DSColor.primaryText.opacity(0.55)
-                                                  : DSColor.textFaint)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(isActive ? Self.onFill : DSColor.textPrimary)
+                        .opacity(0.5)
                 } else {
                     Text("\(remaining)")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 13, weight: .semibold))
                         .monospacedDigit()
-                        .foregroundColor(isActive ? DSColor.onAccentFillMuted
-                                                  : DSColor.textSecondary)
+                        .foregroundColor(isActive ? Self.onFill : DSColor.textPrimary)
+                        .opacity(0.5)
                         .contentTransition(.numericText())
                 }
             }
         }
-        .padding(.horizontal, LabMetrics.tabPaddingH)
-        .padding(.vertical, LabMetrics.tabPaddingV)
-        // ONE shape, in every state. The fill is what changes.
-        //
-        // The radius used to interpolate between 48 active and 8 resting, so a
-        // hovered chip would have drawn as a rounded RECTANGLE and the same
-        // chip clicked snapped to a capsule — two different objects for one
-        // control (Marcello, 2026-09-06, on the Notes pill; the lists share
-        // the component and had the same latent split). A capsule throughout
-        // removes the question: selection is a fill, not a silhouette.
-        //
-        // Still not `matchedGeometryEffect`. A pill travelling between chips
-        // was the better-looking idea and it caused a real bug: matched
-        // geometry resolves its frame in the NAMESPACE's coordinate space —
-        // the whole tab row — while the chips live inside a horizontal
-        // ScrollView that clips at its own bounds. The first chip sits on that
-        // boundary, so its pill was drawn partly outside the scroller and cut
-        // (Marcello, 2026-09-05: "la prima section rimane sempre tagliata").
+        .padding(.horizontal, 12)
+        .frame(height: 28)
+        // ONE shape, in every state — a capsule; selection is a fill, not a
+        // silhouette (Marcello, 2026-09-06). Still no matchedGeometryEffect:
+        // it resolved frames outside the scroller and cut the first chip.
         .background(
             Capsule(style: .continuous)
-                .fill(isActive ? categoryColor
+                .fill(isActive ? tint.light.color
                       : (hover ? DSColor.fieldBackground : Color.clear))
         )
         .clipShape(Capsule(style: .continuous))
+        .shadow(color: isActive ? tint.base.color.opacity(0.35) : .clear, radius: 8, y: 4)
         .contentShape(Capsule(style: .continuous))
         .onHover { hover = $0 }
-        .animation(Motion.swap, value: isActive)
+        // The glow rises from under the selected pill.
+        .reportsActivePill(isActive)
+        // No implicit animation on selection: a click animates it (180 ms,
+        // at the call site), the keyboard switches instantly (U5 §5.1).
         .animation(Motion.hoverFade, value: hover)
-        // No ⌘-held index badge (Marcello, 2026-08-05). ⌘1-9 still jumps
-        // between categories; it is documented in the "?" shortcuts overlay
-        // like every other shortcut, rather than printed over the tabs.
     }
 }
 

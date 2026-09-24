@@ -1368,6 +1368,11 @@ class NotchController: ObservableObject {
     ///
     /// Pressing a global creation hotkey is an unambiguous request to type
     /// here, so taking focus is correct. Nothing calls this on plain hover.
+    #if DEBUG
+    /// The panel window, for the DEBUG render command only.
+    var debugPanelWindow: NSWindow? { panel }
+    #endif
+
     func focusPanel() {
         (panel as? NotchPanel)?.allowKey = true
         NSApp.activate(ignoringOtherApps: true)

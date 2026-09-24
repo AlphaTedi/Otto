@@ -575,6 +575,14 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             case 126:                           // ↑ — nothing above the field
                 return true
             case 53:                            // Esc — step out, keep the text
+                // U5 §4.2, floating panels: Esc CLEARS what is typed and
+                // keeps the caret; the next Esc, on an empty field, closes.
+                // The notch container keeps its own field's behaviour.
+                if AppState.shared.notchLayout == .panels,
+                   !store.draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    store.draftTitle = ""
+                    return true
+                }
                 notchWindow?.makeFirstResponder(nil)
                 store.blurDraft()
                 // Nothing typed → nothing to keep, so one Esc closes the

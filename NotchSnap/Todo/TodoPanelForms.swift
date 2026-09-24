@@ -42,9 +42,16 @@ struct HighlightingTitleField: NSViewRepresentable {
     /// Reports first-responder changes back to the store. Focus is what pins
     /// the panel open, so it has to be observed rather than assumed.
     var onFocusChange: (Bool) -> Void = { _ in }
+    /// 13 everywhere except U5's floating capture header, which is 18.
+    var fontSize: CGFloat = 13
 
     static let lineHeight: CGFloat = 17
     static let maxHeight: CGFloat = 102   // ~6 lines, then it scrolls
+
+    /// One line at `size`: the 13-pt field keeps its historical 17.
+    static func lineHeight(_ size: CGFloat) -> CGFloat {
+        size <= 13 ? lineHeight : ceil(NSFont.systemFont(ofSize: size).boundingRectForFont.height * 0.92)
+    }
 
     /// Stamped on the text view so the key monitor can ask "is the caret in
     /// the draft row?" rather than "is a draft open?". Those are different
@@ -71,7 +78,7 @@ struct HighlightingTitleField: NSViewRepresentable {
         view.delegate = context.coordinator
         view.drawsBackground = false
         view.isRichText = false
-        view.font = .systemFont(ofSize: 13)
+        view.font = .systemFont(ofSize: fontSize)
         view.textContainerInset = .zero
         view.textContainer?.lineFragmentPadding = 0
         view.isVerticallyResizable = true
@@ -117,12 +124,12 @@ struct HighlightingTitleField: NSViewRepresentable {
         let width = (proposal.width.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }) ?? 200
         let measured = NSAttributedString(
             string: text.isEmpty ? " " : text,
-            attributes: [.font: NSFont.systemFont(ofSize: 13)]
+            attributes: [.font: NSFont.systemFont(ofSize: fontSize)]
         ).boundingRect(
             with: NSSize(width: width, height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading]
         ).height
-        let clamped = max(Self.lineHeight, min(ceil(measured), Self.maxHeight))
+        let clamped = max(Self.lineHeight(fontSize), min(ceil(measured), Self.maxHeight))
         return CGSize(width: width, height: clamped)
     }
 
@@ -168,7 +175,7 @@ struct HighlightingTitleField: NSViewRepresentable {
             storage.beginEditing()
             storage.setAttributes([
                 .foregroundColor: NSColor(DSColor.textPrimaryBright),
-                .font: NSFont.systemFont(ofSize: 13),
+                .font: NSFont.systemFont(ofSize: parent.fontSize),
             ], range: full)
             if let highlight, NSMaxRange(highlight) <= full.length {
                 storage.addAttribute(.foregroundColor,
@@ -177,7 +184,7 @@ struct HighlightingTitleField: NSViewRepresentable {
             storage.endEditing()
             view.typingAttributes = [
                 .foregroundColor: NSColor(DSColor.textPrimaryBright),
-                .font: NSFont.systemFont(ofSize: 13),
+                .font: NSFont.systemFont(ofSize: parent.fontSize),
             ]
         }
     }

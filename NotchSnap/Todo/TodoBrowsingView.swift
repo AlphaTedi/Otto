@@ -315,6 +315,21 @@ private extension AnyTransition {
     /// the ZStack is the incoming list's height from the first frame, the
     /// change happens inside the withAnimation that switched sections, and
     /// the panel, the scroll region and the tabs all ride one spring.
+    /// U5 §6.2, floating panels: the list swaps with a 6-pt rise and a fade
+    /// over 200 ms, and never waits for the glow. Reduce Motion drops the
+    /// rise. Leaving still takes no layout height, for the reason above.
+    static func spaceSwap(reduceMotion: Bool) -> AnyTransition {
+        .asymmetric(
+            insertion: (reduceMotion ? AnyTransition.opacity
+                                     : AnyTransition.opacity.combined(with: .offset(y: 6)))
+                .animation(.easeOut(duration: 0.2)),
+            removal: AnyTransition.opacity.combined(with: .modifier(
+                active: ZeroLayoutHeight(active: true),
+                identity: ZeroLayoutHeight(active: false)))
+                .animation(.easeOut(duration: 0.2))
+        )
+    }
+
     static var sectionSwap: AnyTransition {
         .asymmetric(
             insertion: crossfadeBlur,
@@ -392,6 +407,9 @@ struct TodoTabView: View {
     // dissolves rather than ghosting over the incoming one mid-hug.
     private var modeTransition: AnyTransition { .sectionSwap }
 
+    /// The selected space pill's centre, reported by the pill (U5 §6.1).
+    @State private var activePillX: CGFloat?
+
     var body: some View {
         // §2.3: the shortcuts overlay sits ON TOP of the live content —
         // dismissing is instant, nothing re-renders underneath.
@@ -414,7 +432,9 @@ struct TodoTabView: View {
                 todoPanelContent
             }
         }
-        .padding(.top, LabMetrics.panelTopPadding)
+        // The floating panels' capture header starts at the very top edge
+        // (U5 §2: top padding 0); the container keeps its 16.
+        .padding(.top, isContainerLayout ? LabMetrics.panelTopPadding : 0)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         // Hugging height: the notch shape is a direct animated function of
         // this measurement.
@@ -431,6 +451,21 @@ struct TodoTabView: View {
         // not (Thomas, 2026-09-01, screenshot). The view is its content's
         // height, full stop; whoever draws around it hugs for free.
         .frame(maxWidth: .infinity, alignment: .top)
+        // U5: the space's ambient light, under everything and clipped to the
+        // panel. In the notch container it sits at the foot, so the top of
+        // the silhouette stays the black the physical notch disappears into.
+        .background(
+            SpaceAmbientGlow(tint: store.activeSpaceTint, pillX: activePillX,
+                             isContainer: isContainerLayout)
+                .clipShape(isContainerLayout
+                           ? AnyShape(Rectangle())
+                           : AnyShape(RoundedRectangle(cornerRadius: LabMetrics.blockRadius,
+                                                       style: .continuous)))
+        )
+        .coordinateSpace(name: SpaceChrome.panelSpace)
+        .onPreferenceChange(ActivePillXKey.self) { x in
+            if let x { activePillX = x }
+        }
         // Click anywhere the panel isn't otherwise using — the empty band
         // beside the tabs, the gaps between rows, the padding — and whatever
         // is being edited commits and gives up the caret.
@@ -493,7 +528,15 @@ struct TodoTabView: View {
                 // The draft row stays hoisted out of TodoBrowsingView, which
                 // also keeps it clear of the `.id(collection.id)` subtree that
                 // is rebuilt on every ⇥ — the reason its caret survives.
-                if store.panelMode == .browsing || store.panelMode == .voice {
+                // U5 capture header — FLOATING PANELS ONLY. The notch
+                // container keeps its own field exactly as it is (Marcello,
+                // 2026-09-25).
+                if !isContainerLayout, store.panelMode == .browsing || store.panelMode == .voice {
+                    TodoCaptureHeader()
+                        .notchEntry(index: 0)
+                        .measureHeight(DraftBlockKey.self)
+                }
+                if isContainerLayout, store.panelMode == .browsing || store.panelMode == .voice {
                     InlineDraftRow(accent: store.draftDestination?.color ?? LabMetrics.accent)
                         .padding(.horizontal, LabMetrics.barOuterInset)
                         .notchEntry(index: 0)
@@ -685,8 +728,11 @@ struct TodoTabRow: View {
         tabsViewportWidth > 0 && tabsContentWidth > tabsViewportWidth + 1
     }
 
+    @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
+    private var isContainerLayout: Bool { notchLayout == .container }
+
     var body: some View {
-        HStack(spacing: LabMetrics.tabsGap) {
+        HStack(spacing: 6) {
             // Notes is the ONLY permanent pill here now.
             //
             // Insights had one beside it, which made the two the same rank —
@@ -701,16 +747,18 @@ struct TodoTabRow: View {
             // space. Inside the scrolling strip it would leave the screen the
             // moment the lists overflowed — the same way the "+" once did —
             // and the one space that is always there must always be reachable.
-            NotesPill()
-            CalendarPill()
+            // First claim on the row's width: when the lists overflow, the
+            // scroller gives way, not these two (their ends were being cut).
+            NotesPill().layoutPriority(1)
+            CalendarPill().layoutPriority(1)
 
             // A rule, because the two sides of it are different kinds of
             // thing. Notes is one permanent space; the lists are many and they
             // scroll. Without it the bar read as one row of equals in which
             // the first item simply refused to move (Marcello, 2026-09-06).
             Rectangle()
-                .fill(DSColor.hairlineOnPanel)
-                .frame(width: 1, height: 20)
+                .fill(Color.white.opacity(0.12))
+                .frame(width: 1, height: 18)
                 .padding(.horizontal, 2)
 
             tabScroller
@@ -730,33 +778,38 @@ struct TodoTabRow: View {
             // If it ever loses the shortcut, it has to come back out here.
 
             Spacer(minLength: LabMetrics.tabsGap)
-            // Outside the scroller: the account is not a tab.
-            AccountButton()
+            // Outside the scroller: settings is not a tab. The gear replaced
+            // the avatar (U5 §5.2); it opens the same menu.
+            SettingsGearButton()
         }
         // Floating chrome, not a container divider — the Notes bottom bar set
         // this precedent (§9). No static strip behind the pills and no hairline
         // rule any more: the row is glass pills over the panel, grouped so the
         // material samples them together on macOS 26. What separates the
         // scrolling rows from the pills is the shared fade + frosted material.
-        .glassGroup(spacing: LabMetrics.tabsGap)
+        .glassGroup(spacing: 6)
         // No rule under the tab row (Marcello, 2026-07-26). The two paddings
         // stay: they were the breathing room either side of the line, and
         // together they are what now separates the tabs from the list.
-        .padding(.horizontal, LabMetrics.tabsInset)
+        // U5's footer in the floating panels: 16 at the sides, 12 above and
+        // 14 below, replacing the paddings further down.
+        .padding(.horizontal, isContainerLayout ? LabMetrics.tabsInset : 16)
+        .padding(.top, isContainerLayout ? 0 : 12)
+        .padding(.bottom, isContainerLayout ? 0 : 14)
         // The gap that used to hold the rule stays a gap — the pills still
         // need breathing room from the list, just with nothing drawn in it.
         // It is part of the row's own LAYOUT, not an overlay pushed out of
         // it: the old rule was once drawn 12pt above this row's top edge,
         // inside the area the list occupies, and the last row and the rule
         // painted over each other (Marcello, 2026-08-22).
-        .padding(.top, rulePosition == .above ? LabMetrics.tabsDividerPaddingV : 0)
-        .padding(.bottom, rulePosition == .below ? LabMetrics.tabsDividerPaddingV : 0)
+        .padding(.top, isContainerLayout && rulePosition == .above ? LabMetrics.tabsDividerPaddingV : 0)
+        .padding(.bottom, isContainerLayout && rulePosition == .below ? LabMetrics.tabsDividerPaddingV : 0)
         // The outer breathing room mirrors as well, so the row keeps the same
         // distance from the panel edge whichever end it sits at.
-        .padding(.top, rulePosition == .above ? LabMetrics.tabsTopPadding
-                                              : LabMetrics.tabsBottomPadding)
-        .padding(.bottom, rulePosition == .above ? LabMetrics.tabsBottomPadding
-                                                 : LabMetrics.tabsTopPadding)
+        .padding(.top, !isContainerLayout ? 0 : (rulePosition == .above ? LabMetrics.tabsTopPadding
+                                                                         : LabMetrics.tabsBottomPadding))
+        .padding(.bottom, !isContainerLayout ? 0 : (rulePosition == .above ? LabMetrics.tabsBottomPadding
+                                                                            : LabMetrics.tabsTopPadding))
 
         // No background here. A frosted band behind the pills was the second
         // of two surfaces in this panel, and its top edge was the hard line
@@ -775,7 +828,7 @@ struct TodoTabRow: View {
         // for its own rows.
         ScrollViewReader { proxy in
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: LabMetrics.tabsGap) {
+            HStack(spacing: 6) {
                 ForEach(Array(store.visibleCollections.enumerated()), id: \.element.id) { index, collection in
                     // NOT a Button, deliberately — and this is the whole
                     // reason tabs could not be dragged at all.
@@ -792,14 +845,18 @@ struct TodoTabRow: View {
                     // explicitly below so VoiceOver still calls it a button.
                     CategoryTabChip(
                         title: collection.name,
-                        categoryColor: collection.color,
+                        tint: collection.spaceTint,
                         isActive: store.panelMode == .browsing
                             && collection.id == store.activeCollectionID,
                         remaining: store.remainingCount(for: collection)
                     )
                     .id(collection.id)
                     .contentShape(RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous))
-                    .onTapGesture { store.selectCollection(collection.id) }
+                    // 180 ms on a click; the keyboard path switches instantly
+                    // (U5 §5.1).
+                    .onTapGesture {
+                        withAnimation(.easeOut(duration: 0.18)) { store.selectCollection(collection.id) }
+                    }
                     .accessibilityAddTraits(.isButton)
                     .accessibilityLabel(collection.name)
                     // Drag a tab onto another to change the order. Only
@@ -1145,64 +1202,12 @@ private struct NewSectionButton: View {
     }
 }
 
-// MARK: - SettingsButton — the visible way into Settings
-//
-// Until now the ONLY route was right-clicking the collapsed notch, which
-// testers simply never found: "people don't really understand that they have to
-// double-click on the notch" (Marcello, 2026-08-06). An app with no Dock icon
-// and no menu-bar item has no other affordance, so a hidden context menu was
-// the whole discovery story.
-//
-// It sits at the trailing edge of the tab row beside the overflow control, and
-// borrows that control's exact metrics — 12pt glyph in a 20x20 box, same two
-// foreground tones — so the two read as a pair of row-level actions rather than
-// one chip and one afterthought. The context menu stays for anyone who learned
-// it.
-private struct AccountButton: View {
-    @State private var hover = false
-    @ObservedObject private var store = TodoStore.shared
-
-    /// Read at render time rather than observed: sign-in state changes only
-    /// through onboarding or Settings, both of which rebuild this row.
-    /// Google is checked first only because it was wired first — nothing
-    /// stops both being signed in, the row just shows whichever exists.
-    private var account: String? { GoogleOAuth.shared.account ?? AppleSignIn.shared.account }
-
-    var body: some View {
-        Button {
-            if store.showsAvatarMenu { store.closeAvatarMenu() } else { store.openAvatarMenu() }
-        } label: {
-            AccountAvatar(email: account, diameter: 22)
-                .opacity(hover && !store.showsAvatarMenu ? 0.82 : 1)
-                // The ONE exception to "full accent fill means active space".
-                // The avatar is not a destination, it is a toggle — so it may
-                // be lit while open without competing with the active list.
-                .overlay(
-                    Circle().strokeBorder(LabMetrics.accent,
-                                          lineWidth: store.showsAvatarMenu ? 2 : 0)
-                )
-                .background(
-                    Circle()
-                        .fill(LabMetrics.accent.opacity(store.showsAvatarMenu ? 0.20 : 0))
-                        .padding(-3)
-                )
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            withAnimation(NotchAnimation.hintFade) { hover = hovering }
-        }
-        .animation(NotchAnimation.hintFade, value: store.showsAvatarMenu)
-        .help(account ?? L10n.t("settings.open"))
-        .accessibilityLabel(L10n.t("settings.open"))
-    }
-}
-
 // MARK: - TodoBrowsingView — the list + Completed (browsing mode content)
 
 struct TodoBrowsingView: View {
     @ObservedObject private var store = TodoStore.shared
     @ObservedObject private var archive = CompletedArchive.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
 
     /// The container is a hole in the hardware and keeps its black ground; the
@@ -1323,7 +1328,10 @@ struct TodoBrowsingView: View {
                     browsingBody(for: collection)
                         .id(collection.id)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .transition(.sectionSwap)   // FB2: same in-place crossfade
+                        // FB2's in-place crossfade in the container; U5's
+                        // 6-pt rise in the floating panels.
+                        .transition(isContainerLayout ? .sectionSwap
+                                                      : .spaceSwap(reduceMotion: reduceMotion))
                 }
             }
         }
@@ -1376,7 +1384,7 @@ struct TodoBrowsingView: View {
             }
             todoList(for: collection)
         }
-        .padding(.horizontal, LabMetrics.listInset)
+        .padding(.horizontal, isContainerLayout ? LabMetrics.listInset : 10)
         // A second catcher, INSIDE what will become the scroll region.
         //
         // The panel already had one at its root, but an NSScrollView is opaque
@@ -1503,7 +1511,7 @@ struct TodoBrowsingView: View {
                     if hasAnyCompleted(in: collection) {
                         ScrollView(.vertical, showsIndicators: false) {
                             completedSection(for: collection)
-                                .padding(.horizontal, LabMetrics.listInset)
+                                .padding(.horizontal, isContainerLayout ? LabMetrics.listInset : 10)
                                 .measureHeight(CompletedInsetKey.self)
                         }
                         // Hugs its content up to the cap, rather than taking
@@ -2330,6 +2338,14 @@ private struct TodoItemRow: View {
     @FocusState private var titleFieldFocused: Bool
     @FocusState private var noteFocused: Bool
     @ObservedObject private var store = TodoStore.shared
+    @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
+
+    /// The row the capture field just made (U5 §4.2): space-coloured for
+    /// 1.2 s so the eye finds where it landed.
+    private var justAdded: Bool { store.justAddedID == item.id }
+    private var rowTint: SpaceTint {
+        store.collection(id: item.collectionID)?.spaceTint ?? store.activeSpaceTint
+    }
 
     /// Whether the row draws anything under its title — the note editor, the
     /// inline steps, or the trailing step-draft row an expanded row always
@@ -2415,6 +2431,27 @@ private struct TodoItemRow: View {
                 .strokeBorder(isExpanded ? accent.opacity(0.38) : .clear,
                               lineWidth: 1)
         )
+        // U5 "just added": space colour at 14% with a 35% inner edge and a
+        // quiet label, fading after 1.2 s. Content is not tinted — only the
+        // slab behind it.
+        .background(
+            RoundedRectangle(cornerRadius: LabMetrics.rowRadius, style: .continuous)
+                .fill(rowTint.base.color.opacity(justAdded ? 0.14 : 0))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: LabMetrics.rowRadius, style: .continuous)
+                .strokeBorder(rowTint.base.color.opacity(justAdded ? 0.35 : 0), lineWidth: 1)
+        )
+        .overlay(alignment: .trailing) {
+            if justAdded {
+                Text(L10n.t("capture.justAdded"))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(rowTint.light.color)
+                    .padding(.trailing, LabMetrics.rowPaddingH)
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+            }
+        }
         .animation(Motion.hintFade, value: isFocused)
         // Was a bare assignment. The row's own background snapped, and so did
         // the hover half of the RowActions reveal — its condition includes
@@ -2469,7 +2506,9 @@ private struct TodoItemRow: View {
         // CENTER, per the export's `align-items: center`. Top-aligning while
         // the label carries its own 8pt box is what left every checkbox
         // sitting visibly above the text it belongs to.
-        HStack(alignment: .center, spacing: LabMetrics.rowInnerGap) {
+        // 13 in the floating panels so a title starts exactly under the
+        // capture field's text (U5 §3); the container keeps its 12.
+        HStack(alignment: .center, spacing: notchLayout == .container ? LabMetrics.rowInnerGap : 13) {
             // No grip handle. The row IS the drag handle now — see
             // EntityTextView.hitTest, which makes the title transparent to the
             // mouse everywhere except a link chip. The old six-dot grip had to
@@ -3120,6 +3159,7 @@ private struct ShortcutsOverlay: View {
         ("\u{21A9}", "todo.sc.editTitle"),
         ("\u{2192} \u{2190}", "todo.sc.expandRow"),
         ("\u{2318}N", "todo.sc.newTodo"),
+        ("Esc", "todo.sc.clearDraft"),
         ("\u{21E5}", "todo.switchSection"),
         ("\u{2318}1\u{2013}9 / \u{2318}", "todo.sc.switchCollection"),
         ("\u{2325}\u{2191}\u{2193}", "todo.sc.reorder"),

@@ -57,6 +57,13 @@ enum L10n {
     private static let en: [String: String] = [
         "lang.system": "System default",
         "time.now": "now",
+        // U5 capture header
+        "capture.placeholder": "Add a to-do\u{2026}",
+        "capture.notePlaceholder": "Write a note\u{2026}",
+        "capture.saveTo": "Save to %@",
+        "capture.tab": "tab",
+        "capture.justAdded": "just added",
+        "todo.sc.clearDraft": "Clear what you\u{2019}re typing, then close",
         // Onboarding (Direction B)
         "ob.welcome.tagline": "Your to-dos and today\u{2019}s meetings, always in reach of the notch.",
         "ob.start": "Start setup",
@@ -374,6 +381,13 @@ enum L10n {
     private static let it: [String: String] = [
         "lang.system": "Predefinita di sistema",
         "time.now": "ora",
+        // U5 capture header
+        "capture.placeholder": "Aggiungi un to-do\u{2026}",
+        "capture.notePlaceholder": "Scrivi una nota\u{2026}",
+        "capture.saveTo": "Salva in %@",
+        "capture.tab": "tab",
+        "capture.justAdded": "appena aggiunto",
+        "todo.sc.clearDraft": "Cancella ci\u{00F2} che scrivi, poi chiudi",
         // Onboarding (Direction B)
         "ob.welcome.tagline": "I tuoi to-do e le riunioni di oggi, sempre a portata di notch.",
         "ob.start": "Inizia",
