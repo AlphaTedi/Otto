@@ -536,6 +536,31 @@ final class TodoStore: ObservableObject {
         }
     }
 
+    /// The notch is closing: keep the space the user was in, end only what
+    /// is transient.
+    ///
+    /// The lists, Notes (with its open note), Calendar and Insights are
+    /// PLACES, and the notch reopens in them. Find, New section and voice are
+    /// passing states — a half-typed search is not somewhere to come back to.
+    func settleForClose() {
+        switch panelMode {
+        case .browsing, .notes, .calendar, .insights: break
+        case .find, .newCategory, .voice: setMode(.browsing)
+        }
+    }
+
+    /// The caret, into whichever field the current space shows.
+    func requestCaretForCurrentSpace() {
+        let notes = NotesStore.shared
+        switch panelMode {
+        case .browsing: draftWantsFocus = true
+        case .notes: notes.openNoteID != nil ? notes.focusBody() : notes.focusComposer()
+        case .calendar:
+            if notes.openNoteID != nil { notes.focusBody() } else { notes.meetingSearchFocus = true }
+        case .find, .newCategory, .voice, .insights: break
+        }
+    }
+
     /// QF-1: cross-category title search.
     var findMatches: [TodoItem] {
         let q = findQuery.trimmingCharacters(in: .whitespaces)

@@ -228,6 +228,54 @@ enum DebugDriver {
                 for line in CalendarStore.shared.probeWideWindow() { appendState(line) }
             } else if command == "cal-refresh" {
                 Task { @MainActor in await CalendarStore.shared.refresh() }
+            } else if command == "force-collapse" {
+                NotchController.shared.forceCollapse()
+            } else if command == "reopen-click" {
+                // The click path: open, then take the caret.
+                NotchController.shared.triggerExpand()
+                NotchController.shared.makeKeyForTyping()
+            } else if command == "place-test" {
+                // Close-and-reopen keeps the place: once in a note, once in a
+                // to-do section. Opens an existing note; writes nothing.
+                Task { @MainActor in
+                    let controller = NotchController.shared
+                    let notes = NotesStore.shared
+                    @MainActor func report(_ label: String) {
+                        appendState("\(label): state=\(controller.state) mode=\(store.panelMode) "
+                            + "section=\(store.activeCollection?.name ?? "nil") "
+                            + "openNote=\(notes.openNoteID != nil) draftWantsFocus=\(store.draftWantsFocus) "
+                            + "bodyFocus=\(notes.bodyFocusRequest)")
+                    }
+                    controller.triggerExpand()
+                    notes.enterSpace()
+                    if let first = notes.stream.first { notes.open(first.id) }
+                    try? await Task.sleep(nanoseconds: 400_000_000)
+                    report("notes before close")
+                    controller.forceCollapse()
+                    try? await Task.sleep(nanoseconds: 600_000_000)
+                    report("notes after close")
+                    controller.triggerExpand(); controller.makeKeyForTyping()
+                    try? await Task.sleep(nanoseconds: 400_000_000)
+                    report("notes after reopen")
+
+                    notes.leaveSpace()
+                    if let second = store.visibleCollections.dropFirst().first(where: { !$0.isSystemToday }) {
+                        store.selectCollection(second.id)
+                    }
+                    report("list before close")
+                    controller.forceCollapse()
+                    try? await Task.sleep(nanoseconds: 600_000_000)
+                    controller.triggerExpand(); controller.makeKeyForTyping()
+                    try? await Task.sleep(nanoseconds: 400_000_000)
+                    report("list after reopen")
+                    controller.forceCollapse()
+                }
+            } else if command == "place" {
+                let notes = NotesStore.shared
+                appendState("place: state=\(NotchController.shared.state) mode=\(store.panelMode) "
+                            + "section=\(store.activeCollection?.name ?? "nil") "
+                            + "openNote=\(notes.openNoteID.flatMap { notes.note(id: $0)?.title } ?? "nil") "
+                            + "draftWantsFocus=\(store.draftWantsFocus) bodyFocus=\(notes.bodyFocusRequest)")
             } else if command == "notes-enter" {
                 NotesStore.shared.enterSpace()
             } else if command == "notes-verification-create" {

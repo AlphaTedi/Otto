@@ -443,3 +443,16 @@ Traps met on the way, worth keeping:
 Verification: `onboarding-snap <dir> [steps]` (DEBUG) writes every step, dark
 and light, as PNGs via `cacheDisplay` — no Screen Recording needed — for
 side-by-side comparison with the handoff's PNGs.
+
+### 2026-09-24 the notch reopens where it was closed
+
+`forceCollapse` — outside click, Esc from the lists, another app taking focus —
+used to reset the panel to the lists, so stepping out to copy something for a
+note always came back on Work. It now calls `TodoStore.settleForClose()`: the
+lists, Notes (with its open note), Calendar and Insights are places and are
+kept; Find, New section and voice are passing states and still reset. The
+click-to-open caret follows the space on screen
+(`requestCaretForCurrentSpace()`): note body, Notes composer, meeting search,
+or the to-do draft row. ⌃⇧N still jumps to the default section on purpose.
+Verified with the DEBUG `place-test` command (opens an existing note, writes
+nothing).

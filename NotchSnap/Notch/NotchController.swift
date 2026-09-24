@@ -419,7 +419,12 @@ class NotchController: ObservableObject {
         // itself engaged forever and CalendarStore refuses to raise any later
         // alert, because it believes one is still up.
         CalendarStore.shared.alertLostAttention()
-        TodoStore.shared.setMode(.browsing)
+        // Keep the place, drop only the passing state: the notch reopens where
+        // it was closed — the note being written, the section being filled
+        // (Marcello, 2026-09-24). This used to reset to the lists, and it is
+        // the close that runs when you click away to copy something, so every
+        // trip out for a paste landed you back on Work.
+        TodoStore.shared.settleForClose()
         TodoStore.shared.showShortcuts = false
         // Actually relinquish key status, don't just announce it. resignKey()
         // is what AppKit CALLS on a window to tell it the status is gone; it
@@ -514,7 +519,11 @@ class NotchController: ObservableObject {
             // was not key yet; `makeKeyAndOrderFront` then resets the
             // responder to the window's initial one. The request was made and
             // thrown away, so the first character typed seeded Quick Find.
-            TodoStore.shared.draftWantsFocus = true
+            //
+            // And into the field of the space that is ON SCREEN: the notch
+            // reopens where it was closed, so a note left open gets its caret
+            // back rather than the to-do draft row it is not showing.
+            TodoStore.shared.requestCaretForCurrentSpace()
         }
     }
 
