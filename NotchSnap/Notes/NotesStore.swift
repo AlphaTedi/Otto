@@ -214,6 +214,41 @@ final class NotesStore: ObservableObject {
         }
         draft = (try? String(contentsOf: draftURL, encoding: .utf8)) ?? ""
         loadDismissals()
+        repairStoredNotesIfNeeded()
+    }
+
+    /// One-time repairs over every stored note (NoteRepair), so damage the app
+    /// did before a fix is undone in OLD notes too, not only avoided in new
+    /// ones. Runs once per `NoteRepair.version`, and only after the untouched
+    /// file has been copied aside to `notes.pre-repair-<version>.json`.
+    private func repairStoredNotesIfNeeded() {
+        let key = "notes.repairVersion"
+        guard storageOverride == nil, !recoveryBlocked,
+              UserDefaults.standard.integer(forKey: key) < NoteRepair.version else { return }
+        var changed = false
+        for index in notes.indices {
+            let repaired = NoteRepair.repairMarkdown(notes[index].content)
+            if repaired != notes[index].content {
+                notes[index].content = repaired
+                changed = true
+            }
+        }
+        if let pending = pendingMeetingNote {
+            let repaired = NoteRepair.repairMarkdown(pending.content)
+            if repaired != pending.content { pendingMeetingNote?.content = repaired; changed = true }
+        }
+        if changed {
+            let aside = notesDirectory.appendingPathComponent("notes.pre-repair-\(NoteRepair.version).json")
+            if !FileManager.default.fileExists(atPath: aside.path) {
+                do { try FileManager.default.copyItem(at: indexURL, to: aside) } catch {
+                    // No safety copy, no repair: leave the notes exactly as found.
+                    print("[NotesStore] repair skipped, backup failed: \(error)")
+                    return
+                }
+            }
+            guard saveNow() else { return }
+        }
+        UserDefaults.standard.set(NoteRepair.version, forKey: key)
     }
 
     // MARK: - Reading

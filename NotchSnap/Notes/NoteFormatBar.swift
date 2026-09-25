@@ -18,6 +18,8 @@ import SwiftUI
 // does not grow.
 
 struct NoteFormatBar: View {
+    @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
+
     @ObservedObject private var editor = NoteEditorController.shared
     @State private var showsBlockMenu = false
 
@@ -68,7 +70,10 @@ struct NoteFormatBar: View {
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 4)
-        .floatingGlass(in: Capsule())
+        // In the floating panel's corner it is concentric with the window
+        // (24 − 16 = 8); the container keeps its capsule.
+        .floatingGlass(in: RoundedRectangle(
+            cornerRadius: notchLayout == .container ? 20 : SpaceChrome.cornerRadius, style: .continuous))
         // The whole bar steps back when the body has no caret: the note is
         // being read, not edited, and tools that cannot act should not look
         // like they can.

@@ -1099,8 +1099,9 @@ private struct NoteDetailView: View {
                     .foregroundStyle(DSColor.textPrimaryBright)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 6)
-                    .contentShape(Capsule())
-                    .floatingGlass(in: Capsule())
+                    .contentShape(Rectangle())
+                    .floatingGlass(in: RoundedRectangle(
+                        cornerRadius: isContainer ? 20 : SpaceChrome.cornerRadius, style: .continuous))
             }
             .buttonStyle(.plain)
             // Rename is gone from this row — the bar needs the width. It is
@@ -1108,12 +1109,13 @@ private struct NoteDetailView: View {
             // context menu.
         }
         .glassGroup(spacing: 12)
-        .padding(.horizontal, 24)
-        // The row's 76pt budget is exact: 36pt of controls, 16pt above and
-        // 24pt below. The visible bottom and side insets are both 24pt, so
-        // the floating capsules follow the outer card's concentric corners.
-        .padding(.top, 16)
-        .padding(.bottom, 24)
+        // The row's 76pt budget is exact: 36pt of controls plus 40 of air.
+        // Floating panels: 16 from the side AND the bottom — the corner
+        // inset every corner of the window shares (SpaceChrome.cornerInset).
+        // The container keeps 24 / 16 / 24.
+        .padding(.horizontal, isContainer ? 24 : SpaceChrome.cornerInset)
+        .padding(.top, isContainer ? 16 : 24)
+        .padding(.bottom, isContainer ? 24 : SpaceChrome.cornerInset)
         .frame(height: NotesMetrics.bottomBarHeight, alignment: .top)
     }
 

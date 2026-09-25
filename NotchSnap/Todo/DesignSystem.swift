@@ -395,7 +395,8 @@ struct CategoryTabChip: View {
                       : (hover ? DSColor.fieldBackground : Color.clear))
         )
         .clipShape(Capsule(style: .continuous))
-        .shadow(color: isActive ? tint.base.color.opacity(0.35) : .clear, radius: 8, y: 4)
+        // No glow: the strip scrolls, and a scroller clips whatever reaches
+        // past it — the shadow was being cut off square (2026-09-25).
         .contentShape(Capsule(style: .continuous))
         .onHover { hover = $0 }
         // No implicit animation on selection: a click animates it (180 ms,

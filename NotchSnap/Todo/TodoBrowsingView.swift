@@ -516,6 +516,10 @@ struct TodoTabView: View {
                 if !isContainerLayout, store.panelMode == .browsing || store.panelMode == .voice {
                     TodoCaptureHeader()
                         .notchEntry(index: 0)
+                        // The first checkbox sits as far below the bar as it
+                        // sits from the window's left edge (22). The gap
+                        // measured 10.5 with nothing added (settled), so 11.5 more.
+                        .padding(.bottom, 11.5)
                         .measureHeight(DraftBlockKey.self)
                 }
                 if isContainerLayout, store.panelMode == .browsing || store.panelMode == .voice {
@@ -777,7 +781,9 @@ struct TodoTabRow: View {
         // 14 below, replacing the paddings further down.
         .padding(.horizontal, isContainerLayout ? LabMetrics.tabsInset : 16)
         .padding(.top, isContainerLayout ? 0 : 12)
-        .padding(.bottom, isContainerLayout ? 0 : 14)
+        // 16: the gear sits in the corner 16 from both edges, like every
+        // other corner element (SpaceChrome.cornerInset).
+        .padding(.bottom, isContainerLayout ? 0 : SpaceChrome.cornerInset)
         // The gap that used to hold the rule stays a gap — the pills still
         // need breathing room from the list, just with nothing drawn in it.
         // It is part of the row's own LAYOUT, not an overlay pushed out of

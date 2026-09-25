@@ -234,10 +234,10 @@ enum DebugDriver {
                 // The click path: open, then take the caret.
                 NotchController.shared.triggerExpand()
                 NotchController.shared.makeKeyForTyping()
-            } else if command.hasPrefix("u5-snap ") {
-                // u5-snap <dir> — renders the panel in every U5 state. Writes
+            } else if command.hasPrefix("panel-render ") {
+                // panel-render <dir> — renders the panel in every U5 state. Writes
                 // nothing: selection, a typed draft (cleared) and a highlight.
-                let directory = URL(fileURLWithPath: String(command.dropFirst(8)))
+                let directory = URL(fileURLWithPath: String(command.dropFirst(13)))
                 Task { @MainActor in
                     try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                     let controller = NotchController.shared
@@ -292,6 +292,12 @@ enum DebugDriver {
                     if let first = notes.stream.first {
                         notes.open(first.id); await snap("page-note"); await snap("page-note-late")
                         appendState("page-note path=\(store.panelPath.map(\.title))")
+                        if let storage = NoteEditorController.shared.textView?.textStorage {
+                            var done = 0, actions = 0
+                            storage.enumerateAttribute(.noteActionDone, in: NSRange(location: 0, length: storage.length)) { v, _, _ in if v != nil { done += 1 } }
+                            storage.enumerateAttribute(.noteAction, in: NSRange(location: 0, length: storage.length)) { v, _, _ in if v != nil { actions += 1 } }
+                            appendState("page-note actions=\(actions) linked=\(done) detected=\(NoteEditorController.shared.detectedCount)")
+                        }
                         store.goBack()
                     }
                     notes.enterCalendarSpace(); await snap("space-calendar")

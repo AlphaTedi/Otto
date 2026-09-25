@@ -34,6 +34,7 @@
 		B14600000000000000000001 /* MeetingNotes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B14600000000000000000002 /* MeetingNotes.swift */; };
 		B14600000000000000000003 /* MeetingNotesVerification.swift in Sources */ = {isa = PBXBuildFile; fileRef = B14600000000000000000004 /* MeetingNotesVerification.swift */; };
 		AA21BB22CC23DD24EE25FF26 /* NoteMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF26AA21BB22CC23DD24EE25 /* NoteMarkdown.swift */; };
+		6A6A6A6A6A6A6A6A6A6A6A01 /* NoteRepair.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F6F6F6F6F6F6F6F6F6F6F01 /* NoteRepair.swift */; };
 		AA11BB12CC13DD14EE15FF16 /* NoteTitler.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF16AA11BB12CC13DD14EE15 /* NoteTitler.swift */; };
 		AA01BB02CC03DD04EE05FF06 /* NotesSpaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF06AA01BB02CC03DD04EE05 /* NotesSpaceView.swift */; };
 		AA01BB02CC03DD04EE05F001 /* TodoModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F001AA01BB02CC03DD04EE05 /* TodoModels.swift */; };
@@ -182,6 +183,7 @@
 		B14600000000000000000002 /* MeetingNotes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MeetingNotes.swift; path = ../Notes/MeetingNotes.swift; sourceTree = "<group>"; };
 		B14600000000000000000004 /* MeetingNotesVerification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MeetingNotesVerification.swift; path = ../Notes/MeetingNotesVerification.swift; sourceTree = "<group>"; };
 		FF26AA21BB22CC23DD24EE25 /* NoteMarkdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NoteMarkdown.swift; path = ../Notes/NoteMarkdown.swift; sourceTree = "<group>"; };
+		6F6F6F6F6F6F6F6F6F6F6F01 /* NoteRepair.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NoteRepair.swift; path = ../Notes/NoteRepair.swift; sourceTree = "<group>"; };
 		FF16AA11BB12CC13DD14EE15 /* NoteTitler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NoteTitler.swift; path = ../Notes/NoteTitler.swift; sourceTree = "<group>"; };
 		FF06AA01BB02CC03DD04EE05 /* NotesSpaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NotesSpaceView.swift; path = ../Notes/NotesSpaceView.swift; sourceTree = "<group>"; };
 		F001AA01BB02CC03DD04EE05 /* TodoModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TodoModels.swift; path = ../Todo/TodoModels.swift; sourceTree = "<group>"; };
@@ -433,6 +435,7 @@
 				B14600000000000000000002 /* MeetingNotes.swift */,
 				B14600000000000000000004 /* MeetingNotesVerification.swift */,
 				FF26AA21BB22CC23DD24EE25 /* NoteMarkdown.swift */,
+				6F6F6F6F6F6F6F6F6F6F6F01 /* NoteRepair.swift */,
 				FF16AA11BB12CC13DD14EE15 /* NoteTitler.swift */,
 				FF06AA01BB02CC03DD04EE05 /* NotesSpaceView.swift */,
 				F001AA01BB02CC03DD04EE05 /* TodoModels.swift */,
@@ -643,6 +646,7 @@
 				B14600000000000000000001 /* MeetingNotes.swift in Sources */,
 				B14600000000000000000003 /* MeetingNotesVerification.swift in Sources */,
 				AA21BB22CC23DD24EE25FF26 /* NoteMarkdown.swift in Sources */,
+				6A6A6A6A6A6A6A6A6A6A6A01 /* NoteRepair.swift in Sources */,
 				AA11BB12CC13DD14EE15FF16 /* NoteTitler.swift in Sources */,
 				AA01BB02CC03DD04EE05FF06 /* NotesSpaceView.swift in Sources */,
 				AA01BB02CC03DD04EE05F001 /* TodoModels.swift in Sources */,

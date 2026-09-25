@@ -16,6 +16,21 @@ enum SpaceInk {
     static func a(_ alpha: Double) -> Color { Color.dynamicOverlay(light: alpha, dark: alpha) }
 }
 
+// MARK: Corner geometry
+
+enum SpaceChrome {
+    /// Everything in a corner — the Back key, the gear, the note's toolbar —
+    /// sits this far from BOTH edges it is near (Marcello, 2026-09-25).
+    static let cornerInset: CGFloat = 16
+    /// Radius for corner furniture: the window's minus the inset.
+    static var cornerRadius: CGFloat { LabMetrics.blockRadius - cornerInset }
+    /// The leading slot (dot or Back): 16 + 30 puts its centre on the
+    /// checkbox column (22 + 9) and, with the 7 gap, the text at 53 — where
+    /// every to-do title starts.
+    static let slotWidth: CGFloat = 30
+    static let slotGap: CGFloat = 7
+}
+
 // MARK: Capture header (U5 §4) — floating panels only
 
 /// The borderless, Raycast-style capture field: a space dot, the text, and a
@@ -44,7 +59,7 @@ struct CaptureHeader<Field: View>: View {
     static var height: CGFloat { 60 }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 13) {
+        HStack(alignment: .center, spacing: SpaceChrome.slotGap) {
             SpaceDot(tint: tint, action: onDot)
             ZStack(alignment: .leading) {
                 if showsPlaceholder {
@@ -59,7 +74,7 @@ struct CaptureHeader<Field: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             trailing
         }
-        .padding(.horizontal, 22)
+        .padding(.horizontal, SpaceChrome.cornerInset)
         .padding(.vertical, 8)
         .frame(minHeight: Self.height)
         .overlay(alignment: .bottom) {
@@ -104,7 +119,9 @@ private struct SpaceDot: View {
                 .fill(tint.sectionColor)
                 .frame(width: 9, height: 9)
                 .shadow(color: tint.base.color.opacity(0.6), radius: 4)
-                .frame(width: 18, height: 18)
+                // The same slot the Back key takes one level in, so the dot
+                // sits on the checkbox column and the bar does not move.
+                .frame(width: SpaceChrome.slotWidth, height: 28)
                 .contentShape(Rectangle())
                 .animation(.easeInOut(duration: 0.2), value: tint)
         }
@@ -181,14 +198,14 @@ struct ContextBar<Title: View, Trailing: View>: View {
     @ViewBuilder let trailing: Trailing
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: SpaceChrome.slotGap) {
             BackChip(parentTitle: parentTitle, action: onBack)
             title
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityAddTraits(.isHeader)
             trailing
         }
-        .padding(.horizontal, 22)
+        .padding(.horizontal, SpaceChrome.cornerInset)
         .padding(.vertical, 8)
         .frame(minHeight: CaptureHeader<EmptyView>.height)
         .overlay(alignment: .bottom) {
@@ -218,8 +235,9 @@ private struct BackChip: View {
             Image(systemName: "arrow.left")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(SpaceInk.a(0.85))
-                .frame(width: 30, height: 28)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .frame(width: SpaceChrome.slotWidth, height: 28)
+                // 24 − 16: concentric with the window's corner.
+                .background(RoundedRectangle(cornerRadius: SpaceChrome.cornerRadius, style: .continuous)
                     .fill(SpaceInk.a(hover ? 0.14 : 0.08)))
                 .contentShape(Rectangle())
         }
@@ -333,7 +351,7 @@ struct TodoCaptureHeader: View {
                 Text("\u{2192} \(parsed.display)")
                     .font(.system(size: 10))
                     .foregroundStyle(SpaceInk.a(0.45))
-                    .padding(.leading, 22 + 18 + 13)
+                    .padding(.leading, SpaceChrome.cornerInset + SpaceChrome.slotWidth + SpaceChrome.slotGap)
                     .padding(.bottom, 4)
                     .transition(.opacity)
                     .allowsHitTesting(false)

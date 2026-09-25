@@ -1084,6 +1084,19 @@ final class TodoStore: ObservableObject {
     /// The to-do a note's underlined phrase produced, if it still exists.
     /// Matched on the PHRASE rather than a character range: ranges do not
     /// survive editing the lines above them.
+    /// Repoints a note-made to-do at its phrase as it really stands in the
+    /// note (NoteRepair). The title follows only if it was never edited — a
+    /// title the user wrote is theirs.
+    func relinkNotePhrase(itemID: UUID, to phrase: String) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }),
+              let old = items[index].sourcePhrase, old != phrase else { return }
+        if items[index].title == ActionItemDetector.title(forPhrase: old) {
+            items[index].title = ActionItemDetector.title(forPhrase: phrase)
+        }
+        items[index].sourcePhrase = phrase
+        scheduleSave()
+    }
+
     func todo(forNote noteID: UUID, phrase: String) -> TodoItem? {
         items.first { $0.sourceNoteID == noteID && $0.sourcePhrase == phrase }
     }

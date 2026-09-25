@@ -29,9 +29,10 @@ enum LabMetrics {
     static let accent = Color(hex: "#10EFF2")
 
     static let blockWidth: CGFloat = 657
-    /// 32 (Marcello, 2026-09-25 — was 40). The glow's clip and the U5 rim
-    /// read this too, so all three stay on one curve.
-    static let blockRadius: CGFloat = 32
+    /// 24 (Marcello, 2026-09-25: 40, then 32, still too round). Corner
+    /// furniture sits 16 in from both edges, so its own radius is 24 − 16 = 8
+    /// and the curves are concentric (`SpaceChrome.cornerInset`).
+    static let blockRadius: CGFloat = 24
     /// 16 top, nothing on the other sides — the children carry their own.
     static let panelTopPadding: CGFloat = 16
     /// Between the creation-bar block and the list block.

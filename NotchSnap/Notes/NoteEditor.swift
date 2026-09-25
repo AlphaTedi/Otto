@@ -564,10 +564,19 @@ extension NoteEditorController {
                                         dueDate: ActionItemDetector.dueDate(in: phrase)))
         }
         for item in TodoStore.shared.items where item.sourceNoteID == noteID {
-            guard let phrase = item.sourcePhrase else { continue }
-            let range = (storage.string as NSString).range(of: phrase)
-            guard range.location != NSNotFound,
-                  !found.contains(where: { NSIntersectionRange($0.range, range).length > 0 }) else { continue }
+            guard let stored = item.sourcePhrase,
+                  let match = NoteRepair.phraseRange(of: stored, in: storage.string as NSString) else { continue }
+            // WHOLE WORDS only. A plain substring search found "co: chiamare…"
+            // inside "trasloco: chiamare…" and drew the link mid-word. A link
+            // that can only be found inside a word is widened to that word and
+            // stored that way — old notes heal the first time they are opened.
+            var phrase = stored
+            if match.snapped {
+                phrase = (storage.string as NSString).substring(with: match.range)
+                TodoStore.shared.relinkNotePhrase(itemID: item.id, to: phrase)
+            }
+            let range = match.range
+            guard !found.contains(where: { NSIntersectionRange($0.range, range).length > 0 }) else { continue }
             found.append(DetectedAction(range: range, phrase: phrase, dueDate: item.dueDate))
         }
 
@@ -591,6 +600,17 @@ extension NoteEditorController {
             }
             if let linked {
                 storage.addAttribute(.noteActionDone, value: linked.isCompleted, range: action.range)
+                // The linked checkbox is drawn just BEFORE the phrase. At the
+                // start of a line the container's inset holds it; mid-line it
+                // landed on the letters in front (the audit's "checkbox over
+                // the text"). Make the room with layout-only kerning on the
+                // preceding character — it never reaches the Markdown.
+                let text = storage.string as NSString
+                if action.range.location > 0,
+                   text.character(at: action.range.location - 1) != 0x0A {
+                    view.layoutManager?.addTemporaryAttribute(.kern, value: 24,
+                        forCharacterRange: NSRange(location: action.range.location - 1, length: 1))
+                }
                 if linked.isCompleted {
                     view.layoutManager?.addTemporaryAttributes([
                         .strikethroughStyle: NSUnderlineStyle.single.rawValue,
@@ -627,8 +647,11 @@ extension NoteEditorController {
         }
         let selection = view.selectedRange()
         if selection.length > 0 {
-            let phrase = (storage.string as NSString).substring(with: selection).trimmingCharacters(in: .whitespacesAndNewlines)
-            if !phrase.isEmpty { return (selection, phrase) }
+            // Whole words: a selection dragged from mid-word made a to-do
+            // titled "Co: chiamare…" out of "trasloco: chiamare…".
+            let snapped = NoteRepair.snapToWords(selection, in: storage.string as NSString)
+            let phrase = (storage.string as NSString).substring(with: snapped).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !phrase.isEmpty { return (snapped, phrase) }
         }
         let caret = min(selection.location, storage.length - 1)
         var range = NSRange(location: 0, length: 0)

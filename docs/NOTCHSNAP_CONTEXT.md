@@ -515,3 +515,35 @@ DEBUG render: `GlassDebug.forceOpaque` switches glass to its opaque fallback
 while `u5-snap` renders, because real Liquid Glass cannot be bitmap-cached
 (it rendered the note page solid white). Stroked capsules show flat ticks at
 their ends in those renders only — they are clean on screen.
+
+### 2026-09-25 notes audit, corner geometry
+
+Notes audit (Marcello's notes.json, round-trip tested in a standalone harness):
+- The serializer wrapped every styled RUN in markers, spaces included
+  ("mercoledi.*** ***rimandano", "ciao** mondo **fine"), and split one bold
+  word into "**a****b**". Re-parsed and edited, that left orphan "***" inside
+  words. Now: runs merged by style, markers around the words only, and a
+  typed `*` is written `\*` (the parser unescapes it).
+- Linked to-dos were found with a plain substring search, so "co: chiamare…"
+  matched inside "trasloco: chiamare…"; the underline began mid-word and the
+  linked checkbox — drawn 22 pt BEFORE the phrase, relying on the line-start
+  inset — landed on the letters in front. Now `NoteRepair.phraseRange` matches
+  whole words, a mid-word-only link is widened and re-stored on open
+  (`TodoStore.relinkNotePhrase`, title follows if never edited), mid-line
+  phrases get layout-only kerning for their checkbox, and a selection made
+  into a to-do is snapped to whole words.
+- Retroactive: `NotesStore.repairStoredNotesIfNeeded` runs `NoteRepair` once
+  per `NoteRepair.version` over every stored note (orphan markers stripped,
+  blank-line runs collapsed to one), after copying the file to
+  `notes.pre-repair-<n>.json`. TRAP met on the way: a second, older build
+  running at the same time saved its in-memory notes over the repair — the
+  flag had already been written, so it had to be reset.
+
+Corner geometry (floating panels): window radius 24 (was 32); everything in a
+corner sits 16 from both edges (`SpaceChrome.cornerInset`) with radius
+24 − 16 = 8 — the Back key, the gear, the note toolbar and Download. The
+leading slot is 30 wide so the dot / Back centre stays on the checkbox column
+and text still starts at 53. The first to-do sits 22 below the bar, as it
+sits 22 from the left edge. Pill glow removed (the scroller clipped it).
+The DEBUG render command is `panel-render` now: a running older Debug build
+also answered the old name.

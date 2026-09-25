@@ -156,8 +156,10 @@ enum NoteMarkdown {
             try! NSRegularExpression(pattern: p, options: [])
         }
         return [
-            (re("\\*\\*(.+?)\\*\\*"), .boldFontMask, false),
-            (re("(?<!\\*)\\*(?!\\*)(.+?)(?<!\\*)\\*(?!\\*)"), .italicFontMask, false),
+            // `\*` is a literal asterisk the user typed (see inlineMarkdown):
+            // never a delimiter.
+            (re("(?<!\\\\)\\*\\*(.+?)(?<!\\\\)\\*\\*"), .boldFontMask, false),
+            (re("(?<![\\\\*])\\*(?!\\*)(.+?)(?<![\\\\*])\\*(?!\\*)"), .italicFontMask, false),
             (re("<u>(.+?)</u>"), [], true),
         ]
     }()
@@ -322,6 +324,9 @@ enum NoteMarkdown {
                 paragraph.replaceCharacters(in: whole, with: replacement)
             }
         }
+        // The escapes have done their job once the delimiters are matched.
+        paragraph.mutableString.replaceOccurrences(of: "\\*", with: "*", options: [],
+                                                   range: NSRange(location: 0, length: paragraph.length))
     }
 
     // MARK: - Serialize: attributed → markdown
@@ -423,6 +428,10 @@ enum NoteMarkdown {
         for key: NSAttributedString.Key in [.noteAction, .noteActionDone, .ottoUnderlineMark] {
             clean.removeAttribute(key, range: NSRange(location: 0, length: clean.length))
         }
+        // Runs are MERGED by style first. The text system splits a styled
+        // span wherever any other attribute changes, and wrapping each piece
+        // separately wrote "**a****b**" for one bold word.
+        var segments: [(text: String, italic: Bool, bold: Bool, underline: Bool)] = []
         clean.enumerateAttributes(in: range, options: []) { attributes, runRange, _ in
             let text = (attributed.string as NSString).substring(with: runRange)
             guard !text.isEmpty else { return }
@@ -435,12 +444,32 @@ enum NoteMarkdown {
             let isDetection = attributes[.noteAction] != nil
             let underlined = !isDetection
                 && ((attributes[.underlineStyle] as? Int).map { $0 != 0 } ?? false)
-            var wrapped = text
+            let italic = traits.contains(.italicFontMask), bold = traits.contains(.boldFontMask)
+            if let last = segments.last, last.italic == italic, last.bold == bold,
+               last.underline == underlined {
+                segments[segments.count - 1].text += text
+            } else {
+                segments.append((text, italic, bold, underlined))
+            }
+        }
+        for segment in segments {
+            // A typed asterisk is text, not syntax.
+            let text = segment.text.replacingOccurrences(of: "*", with: "\\*")
+            guard segment.italic || segment.bold || segment.underline else { out += text; continue }
+            // Markers go around the WORDS only. Wrapping a styled space — or a
+            // span's edge spaces — wrote "mercoledi.*** ***rimandano", which
+            // re-parses with markers pairing across words and, after a few
+            // edits, left orphan "***" inside words (the 2026-09-25 audit).
+            let core = text.trimmingCharacters(in: .whitespaces)
+            guard !core.isEmpty else { out += text; continue }
+            let leading = String(text.prefix(while: { $0.isWhitespace }))
+            let trailing = String(text.reversed().prefix(while: { $0.isWhitespace }).reversed())
+            var wrapped = core
             // Innermost first, so `**_x_**` nests the way markdown expects.
-            if traits.contains(.italicFontMask) { wrapped = "*\(wrapped)*" }
-            if traits.contains(.boldFontMask)   { wrapped = "**\(wrapped)**" }
-            if underlined                       { wrapped = "<u>\(wrapped)</u>" }
-            out += wrapped
+            if segment.italic    { wrapped = "*\(wrapped)*" }
+            if segment.bold      { wrapped = "**\(wrapped)**" }
+            if segment.underline { wrapped = "<u>\(wrapped)</u>" }
+            out += leading + wrapped + trailing
         }
         return out
     }
@@ -451,6 +480,7 @@ enum NoteMarkdown {
         markdown.components(separatedBy: "\n").map { split($0).2 }
             .joined(separator: "\n")
             .replacingOccurrences(of: "**", with: "")
+            .replacingOccurrences(of: "\\*", with: "*")
             .replacingOccurrences(of: "<u>", with: "")
             .replacingOccurrences(of: "</u>", with: "")
     }
