@@ -2408,7 +2408,7 @@ private struct TodoItemRow: View {
             RoundedRectangle(cornerRadius: LabMetrics.rowRadius, style: .continuous)
                 .fill(isExpanded ? DSColor.fieldBackground
                                  : (isFocused ? DSColor.focusedRowBackground
-                                              : (hover ? Color.dynamicOverlay(light: 0.04, dark: 0.04)
+                                              : (hover ? DSColor.rowHover
                                                        : .clear)))
         )
         // Expanded rows borrow the section tint already used by their

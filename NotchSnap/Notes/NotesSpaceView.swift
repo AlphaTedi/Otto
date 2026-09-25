@@ -849,7 +849,7 @@ private struct NoteEntryRow: View {
             RoundedRectangle(cornerRadius: NotesMetrics.highlightRadius, style: .continuous)
                 .fill(isLanding ? NotesMetrics.pillStroke.opacity(0.12)
                       : (isSelected ? DSColor.focusedRowBackground
-                         : (hover ? DSColor.fieldBackground : Color.clear)))
+                         : (hover ? DSColor.rowHover : Color.clear)))
         )
         .overlay(
             RoundedRectangle(cornerRadius: NotesMetrics.highlightRadius, style: .continuous)

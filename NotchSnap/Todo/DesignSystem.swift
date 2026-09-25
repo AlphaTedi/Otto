@@ -52,6 +52,9 @@ extension Color {
 }
 
 enum DSColor {
+    /// THE row hover — to-dos and notes alike (Marcello, 2026-09-25: the
+    /// to-do's is the right one). A 4% wash; selection keeps its own fill.
+    static var rowHover: Color { .dynamicOverlay(light: 0.04, dark: 0.04) }
     // Panel & structure
     static let panelBackground = Color.dynamic(light: .white, dark: NSColor(white: 0.067, alpha: 1))
     static let outerBackground = Color.dynamic(light: .white, dark: .black)
