@@ -126,6 +126,7 @@ struct MeetingSelectionView: View {
 struct MeetingContextControls: View {
     let note: QuickNote
     @ObservedObject private var notes = NotesStore.shared
+    @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
     var body: some View {
         if let context = note.meetingContext {
             VStack(alignment: .leading, spacing: 6) {
@@ -141,7 +142,10 @@ struct MeetingContextControls: View {
                     Text("H · " + L10n.t("meeting.previous") + "   L · " + L10n.t("meeting.link") + "   A · " + L10n.t("meeting.openPrevious"))
                         .font(.system(size: 10)).foregroundStyle(DSColor.textSecondary)
                 }
-            }.padding(.horizontal, 22).padding(.top, 6)
+            // Floating panels: on the title's column (53), not an offset of
+            // its own (2026-09-25 spec).
+            }.padding(.leading, notchLayout == .container ? 22 : SpaceChrome.textColumn)
+                .padding(.trailing, 22).padding(.top, 6)
                 .background(notes.meetingFocus == 3 ? DSColor.fieldBackground : Color.clear)
         }
     }
@@ -182,6 +186,7 @@ struct MeetingHistoryView: View {
 
 struct MeetingTasksView: View {
     let note: QuickNote
+    @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
     @ObservedObject private var notes = NotesStore.shared
     @ObservedObject private var todos = TodoStore.shared
     @ObservedObject private var archive = CompletedArchive.shared
@@ -282,7 +287,10 @@ struct MeetingTasksView: View {
                 .onChange(of: notes.meetingTaskSelection) { proxy.scrollTo($0) }
             }
         }
-        .buttonStyle(.plain).padding(.horizontal, 22).padding(.vertical, 8)
+        .buttonStyle(.plain)
+        .padding(.leading, notchLayout == .container ? 22 : SpaceChrome.textColumn)
+        .padding(.trailing, notchLayout == .container ? 22 : SpaceChrome.cornerInset)
+        .padding(.vertical, 8)
         .onAppear { destination = todos.pickerSections().first?.id; archive.reloadIfNeeded() }
         .onChange(of: notes.meetingTaskSelection) { value in
             if value >= visible.count { notes.meetingTaskSelection = max(0, visible.count - 1) }

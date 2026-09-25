@@ -547,3 +547,29 @@ and text still starts at 53. The first to-do sits 22 below the bar, as it
 sits 22 from the left edge. Pill glow removed (the scroller clipped it).
 The DEBUG render command is `panel-render` now: a running older Debug build
 also answered the old name.
+
+### 2026-09-25 Notes polish and code formatting
+
+From `docs/NOTES_UI_POLISH_AND_CODE_FORMATTING_PROMPT.md`.
+
+- Code in notes: inline code is a structural attribute (`.noteCode`, written
+  `` `…` ``); a code block is a NoteBlock (`.code`, written as a ``` fence
+  around the run of code lines, verbatim inside). Code never takes bold,
+  italic or underline, and backslashes inside it are the user's. The block's
+  full-width ground is drawn by `ActionTextView.drawBackground`. Toolbar `</>`:
+  click = inline, hold or right-click = block; ⌘⇧C / ⌘⌥⇧C in an open note.
+  The monospace face exists for code only — dates, counts and the "1." glyph
+  are the system face.
+- Calendar is no longer a global space: the bottom bar holds Notes and the
+  lists; Notes carries a Notes · Meetings switch (⌥⇥), in the floating header
+  and, in the container, under the space bar. ⇥ no longer stops on Calendar.
+  The floating meeting-search header lost its calendar-picker icon.
+- One list column (`SpaceChrome.columnInset` 10, content at 22) for to-do and
+  note rows; one row radius (`LabMetrics.rowRadius` 8) for rows, the opened
+  card and note highlights. A note page's body, meeting metadata and session
+  to-dos sit on the title's column (`SpaceChrome.textColumn` 53) in the
+  floating panels; toolbar, count and Download on the 16 corner inset.
+- Download .md: `NSSavePanel` via `begin`, pinned into the notch's own space
+  (SpaceAnchor) one level above the panel, with the app activated and the
+  panel held open (`isPresentingDialog`); focus returns to the note after.
+- DEBUG: `panel-render-pid <pid> <dir>` — only that process renders.

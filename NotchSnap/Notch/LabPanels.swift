@@ -91,7 +91,11 @@ enum LabMetrics {
     /// the height fall out of the text instead is what left the checkbox
     /// touching top and bottom while it had 12pt of air left and right.
     static let rowMinHeight: CGFloat = 37
-    static let rowRadius: CGFloat = 12
+    /// THE row radius — rest, hover, focus, selection and the expanded card
+    /// alike. 12 read as too round on an opened card (2026-09-25 spec); 8 is
+    /// the corner-furniture radius (window 24 − inset 16), so every small
+    /// surface in the panel shares one curve.
+    static let rowRadius: CGFloat = 8
     /// ⏎ badge: 23x18, 1pt border, radius 6.
     static let enterBadgeWidth: CGFloat = 23
     static let enterBadgeHeight: CGFloat = 18

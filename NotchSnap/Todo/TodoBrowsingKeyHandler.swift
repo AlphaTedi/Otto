@@ -318,6 +318,13 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 }
             }
 
+            // Code in an open note: ⌘⇧C inline, ⌘⌥⇧C block (keyCode 8 = C,
+            // because ⌥ changes the character).
+            if cmd, shift, keyCode == 8, notes.openNoteID != nil {
+                if option { NoteEditorController.shared.toggleCodeBlock() }
+                else { NoteEditorController.shared.toggleInlineCode() }
+                return true
+            }
             if cmd, shift, !option {
                 switch lower {
                 case "r":
@@ -442,6 +449,12 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             // to the field and inserted a tab (Marcello, 2026-09-06). These
             // three keys are navigation between spaces and the field has no
             // use for any of them.
+            // ⌥⇥ — Notes ⇄ Meetings, the switch inside the Notes space.
+            if keyCode == 48, option, !cmd, !control {
+                if TodoStore.shared.panelMode == .calendar { notes.enterSpace() }
+                else { notes.enterCalendarSpace() }
+                return true
+            }
             if keyCode == 48, !cmd, !option, !control {          // ⇥
                 TodoStore.shared.cycleSpace(by: shift ? -1 : 1)
                 return true

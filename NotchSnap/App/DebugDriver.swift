@@ -234,6 +234,12 @@ enum DebugDriver {
                 // The click path: open, then take the caret.
                 NotchController.shared.triggerExpand()
                 NotchController.shared.makeKeyForTyping()
+            } else if command.hasPrefix("panel-render-pid ") {
+                // panel-render-pid <pid> <dir> — only the process with that pid
+                // answers, so a second Debug instance (Xcode's) stays still.
+                let parts = command.split(separator: " ", maxSplits: 2)
+                guard parts.count == 3, Int32(parts[1]) == ProcessInfo.processInfo.processIdentifier else { return }
+                handle("panel-render " + String(parts[2]))
             } else if command.hasPrefix("panel-render ") {
                 // panel-render <dir> — renders the panel in every U5 state. Writes
                 // nothing: selection, a typed draft (cleared) and a highlight.

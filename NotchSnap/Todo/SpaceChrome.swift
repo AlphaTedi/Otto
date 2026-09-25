@@ -29,6 +29,14 @@ enum SpaceChrome {
     /// every to-do title starts.
     static let slotWidth: CGFloat = 30
     static let slotGap: CGFloat = 7
+    /// THE list column: every row container — a to-do, a note — starts this
+    /// far from the window's edge, and its content 12 further in (22), on the
+    /// checkbox column. One token, so no list corrects itself with its own
+    /// offset (2026-09-25 spec).
+    static let columnInset: CGFloat = 10
+    /// Where text starts after the leading slot — the capture field's text,
+    /// a page title after Back, a note's body and meeting metadata: 53.
+    static var textColumn: CGFloat { cornerInset + slotWidth + slotGap }
 }
 
 // MARK: Capture header (U5 §4) — floating panels only
@@ -54,6 +62,8 @@ struct CaptureHeader<Field: View>: View {
     let onDot: () -> Void
     /// Where the ⇥ hint goes; nil hides it.
     var switchHint = true
+    /// A control that belongs to the space (Notes · Meetings), before the hint.
+    var accessory: AnyView? = nil
     @ViewBuilder let field: Field
 
     static var height: CGFloat { 60 }
@@ -72,6 +82,7 @@ struct CaptureHeader<Field: View>: View {
                 field
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            if let accessory { accessory }
             trailing
         }
         .padding(.horizontal, SpaceChrome.cornerInset)

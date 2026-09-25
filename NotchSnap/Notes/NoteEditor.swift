@@ -25,6 +25,8 @@ final class NoteEditorController: ObservableObject {
     @Published private(set) var bold = false
     @Published private(set) var italic = false
     @Published private(set) var underline = false
+    /// Inline code at the caret / selection.
+    @Published private(set) var code = false
     @Published var bodyFocused = false
     /// How many phrases the current note has underlined — the header's
     /// "3 impegni trovati". Zero means the header shows only the date, never
@@ -45,7 +47,7 @@ final class NoteEditorController: ObservableObject {
         let selection = view.selectedRange()
         let storage = view.textStorage
         guard let storage, storage.length > 0 else {
-            activeBlock = .body; bold = false; italic = false; underline = false
+            activeBlock = .body; bold = false; italic = false; underline = false; code = false
             return
         }
         // One before the caret when it sits at the very end of a run, so the
@@ -58,6 +60,62 @@ final class NoteEditorController: ObservableObject {
         bold = traits.contains(.boldFontMask)
         italic = traits.contains(.italicFontMask)
         underline = ((attributes[.underlineStyle] as? Int) ?? 0) != 0
+        code = attributes[.noteCode] != nil
+    }
+
+    // MARK: Code
+
+    /// Inline code on the selection — monospace, a faint ground, and nothing
+    /// else: bold, italic and underline come off, because code does not
+    /// carry them. With no selection it applies to what is typed next.
+    func toggleInlineCode() {
+        guard let view = textView, let storage = view.textStorage else { return }
+        guard activeBlock != .code else { return }
+        let range = view.selectedRange()
+        let turningOn = !code
+        let plain = NoteType.font(for: activeBlock)
+        guard range.length > 0 else {
+            if turningOn {
+                view.typingAttributes[.font] = NoteType.codeFont
+                view.typingAttributes[.noteCode] = true
+                view.typingAttributes[.backgroundColor] = NoteType.codeBackground
+                view.typingAttributes[.underlineStyle] = 0
+            } else {
+                view.typingAttributes[.font] = plain
+                view.typingAttributes.removeValue(forKey: .noteCode)
+                view.typingAttributes.removeValue(forKey: .backgroundColor)
+            }
+            code = turningOn
+            return
+        }
+        edit(view) {
+            if turningOn {
+                storage.addAttributes([.font: NoteType.codeFont, .noteCode: true,
+                                       .backgroundColor: NoteType.codeBackground,
+                                       .underlineStyle: 0], range: range)
+            } else {
+                storage.removeAttribute(.noteCode, range: range)
+                storage.removeAttribute(.backgroundColor, range: range)
+                storage.addAttribute(.font, value: plain, range: range)
+            }
+        }
+        refreshState()
+    }
+
+    /// The paragraph(s) at the caret become a code block, or stop being one.
+    func toggleCodeBlock() {
+        guard let view = textView, let storage = view.textStorage else { return }
+        let leaving = activeBlock == .code
+        setBlock(leaving ? .body : .code)
+        // A block is code through and through: inline code, bold and italic
+        // inside it are dropped (their font is already the block's).
+        for range in paragraphRanges(in: storage, covering: view.selectedRange()) {
+            storage.removeAttribute(.noteCode, range: range)
+            storage.removeAttribute(.backgroundColor, range: range)
+            if !leaving { storage.addAttribute(.underlineStyle, value: 0, range: range) }
+        }
+        view.needsDisplay = true
+        refreshState()
     }
 
     // MARK: Inline style
@@ -113,6 +171,8 @@ final class NoteEditorController: ObservableObject {
 
     private func toggleTrait(_ trait: NSFontTraitMask, isOn: Bool) {
         guard let view = textView, let storage = view.textStorage else { return }
+        // Code never takes bold or italic (spec: no unintended inheritance).
+        guard activeBlock != .code, !code else { return }
         let range = view.selectedRange()
         let manager = NSFontManager.shared
         guard range.length > 0 else {
@@ -375,6 +435,8 @@ final class NoteEditorController: ObservableObject {
         storage.enumerateAttribute(.font, in: full, options: []) { value, subrange, _ in
             var traits = (value as? NSFont).map { NSFontManager.shared.traits(of: $0) } ?? []
             if old == .h1 || old == .h2 { traits.remove(.boldFontMask) }
+            // Leaving code: the monospace face's own traits must not follow.
+            if old == .code { traits = [] }
             storage.addAttribute(.font, value: NoteType.font(for: block, traits: traits), range: subrange)
         }
         storage.addAttribute(.foregroundColor,

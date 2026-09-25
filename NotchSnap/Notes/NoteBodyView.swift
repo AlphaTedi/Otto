@@ -349,6 +349,26 @@ final class ActionTextView: NSTextView {
                       y: rect.midY - size / 2, width: size, height: size)
     }
 
+    /// Code blocks get one ground across the text's full width, behind the
+    /// glyphs — a per-glyph background would stop at each line's last word.
+    override func drawBackground(in rect: NSRect) {
+        super.drawBackground(in: rect)
+        guard let storage = textStorage, let layout = layoutManager,
+              let container = textContainer, storage.length > 0 else { return }
+        storage.enumerateAttribute(.noteBlock, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+            guard (value as? String) == NoteBlock.code.rawValue else { return }
+            let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            guard glyphs.length > 0 else { return }
+            var bounds = layout.boundingRect(forGlyphRange: glyphs, in: container)
+            bounds.origin.x = 0
+            bounds.size.width = container.size.width
+            let ground = bounds.offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
+                .insetBy(dx: 0, dy: -4)
+            NoteType.codeBackground.setFill()
+            NSBezierPath(roundedRect: ground, xRadius: 6, yRadius: 6).fill()
+        }
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         for control in linkedControls() {

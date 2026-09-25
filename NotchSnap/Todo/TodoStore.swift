@@ -423,22 +423,21 @@ final class TodoStore: ObservableObject {
     func cycleSpace(by offset: Int) {
         let row = visibleCollections
         guard !row.isEmpty else { return }
-        // Index 0 is Notes, 1 is Calendar; the lists follow.
+        // Index 0 is Notes — its meeting notes included: Calendar is no longer
+        // a space of its own but a view INSIDE Notes (2026-09-25 spec). The
+        // lists follow.
         let current: Int = {
-            if panelMode == .notes { return 0 }
-            if panelMode == .calendar { return 1 }
-            guard let index = row.firstIndex(where: { $0.id == activeCollectionID }) else { return 2 }
-            return index + 2
+            if panelMode == .notes || panelMode == .calendar { return 0 }
+            guard let index = row.firstIndex(where: { $0.id == activeCollectionID }) else { return 1 }
+            return index + 1
         }()
-        let count = row.count + 2
+        let count = row.count + 1
         let next = ((current + offset) % count + count) % count
         if next == 0 {
-            NotesStore.shared.enterSpace()
-        } else if next == 1 {
-            NotesStore.shared.enterCalendarSpace()
+            if panelMode != .notes { NotesStore.shared.enterSpace() }
         } else {
             if panelMode == .notes || panelMode == .calendar { NotesStore.shared.leaveSpace() }
-            withAnimation(Motion.contentHug) { activeCollectionID = row[next - 2].id }
+            withAnimation(Motion.contentHug) { activeCollectionID = row[next - 1].id }
             focusedItemID = nil
             expandedItemID = nil
             readyToType()

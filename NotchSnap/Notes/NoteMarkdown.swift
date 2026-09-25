@@ -19,6 +19,9 @@ import SwiftUI
 /// What a whole paragraph is. One per line, mutually exclusive.
 enum NoteBlock: String, Equatable {
     case h1, h2, body, bullet, numbered, checklistOpen, checklistDone
+    /// A line of a code block. Written as a ``` fence around the run of
+    /// such lines, never as a per-line marker.
+    case code
 
     var isList: Bool {
         switch self {
@@ -43,6 +46,7 @@ enum NoteBlock: String, Equatable {
         case .numbered:      return "\(index). "
         case .checklistOpen: return "- [ ] "
         case .checklistDone: return "- [x] "
+        case .code:          return ""
         }
     }
 }
@@ -74,6 +78,10 @@ extension NSAttributedString.Key {
     /// and inventing one would be a tenth format with no markdown to write it
     /// into, which is the line this file does not cross.
     static let noteIndent = NSAttributedString.Key("ottoNoteIndent")
+    /// Inline code (`…` in the file). Structural, not just a font: the
+    /// serializer reads THIS, so the monospace face can never be mistaken
+    /// for, or mixed with, bold and italic.
+    static let noteCode = NSAttributedString.Key("ottoNoteCode")
 }
 
 /// The nesting the editor allows. Four is Apple Notes' own limit and it is
@@ -108,15 +116,31 @@ enum NoteType {
         switch block {
         case .h1:   base = .systemFont(ofSize: h1Size, weight: .semibold)
         case .h2:   base = .systemFont(ofSize: h2Size, weight: .semibold)
+        // Code never takes bold or italic: the traits are ignored.
+        case .code: return codeFont
         default:    base = .systemFont(ofSize: bodySize, weight: .regular)
         }
         guard !traits.isEmpty else { return base }
         return manager.convert(base, toHaveTrait: traits)
     }
 
+    /// The ONE monospaced face in the app, and only for code (inline or block).
+    static var codeFont: NSFont { .monospacedSystemFont(ofSize: bodySize - 1, weight: .regular) }
+    /// The faint ground behind inline code; blocks draw a full-width one.
+    static var codeBackground: NSColor { NSColor.labelColor.withAlphaComponent(0.08) }
+
     static func paragraphStyle(for block: NoteBlock, indent: Int = 0) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         switch block {
+        case .code:
+            // Inset inside the block's drawn ground (ActionTextView), and no
+            // gap between its lines so the block reads as one surface.
+            style.lineHeightMultiple = 1.25
+            style.firstLineHeadIndent = 12
+            style.headIndent = 12
+            style.tailIndent = -12
+            style.paragraphSpacing = 0
+            style.lineBreakMode = .byWordWrapping
         case .h1:
             style.lineHeightMultiple = 1.15
             style.paragraphSpacingBefore = 16
@@ -178,11 +202,23 @@ enum NoteMarkdown {
         // `components` and not `enumerateLines`: a trailing newline has to
         // survive, or the caret cannot sit on the empty last line the user
         // just made.
-        let lines = markdown.isEmpty ? [""] : markdown.components(separatedBy: "\n")
+        let rawLines = markdown.isEmpty ? [""] : markdown.components(separatedBy: "\n")
+        // ``` fences open and close a code block; the fence lines themselves
+        // are not text. Everything between them is taken verbatim.
+        var lines: [(block: NoteBlock, indent: Int, content: String)] = []
+        var inFence = false
+        for raw in rawLines {
+            if raw.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+                inFence.toggle()
+                continue
+            }
+            lines.append(inFence ? (.code, 0, raw) : split(raw))
+        }
+        if lines.isEmpty { lines = [(.body, 0, "")] }
         var counters = NumberCounters()
 
-        for (i, raw) in lines.enumerated() {
-            let (block, indent, content) = split(raw)
+        for (i, line) in lines.enumerated() {
+            let (block, indent, content) = line
             let numberedIndex = counters.advance(block: block, indent: indent)
 
             let paragraph = NSMutableAttributedString(string: content, attributes: [
@@ -197,7 +233,7 @@ enum NoteMarkdown {
                                        value: NSUnderlineStyle.single.rawValue,
                                        range: NSRange(location: 0, length: paragraph.length))
             }
-            applyInline(to: paragraph, block: block, textColor: textColor)
+            if block != .code { applyInline(to: paragraph, block: block, textColor: textColor) }
 
             // The marker is drawn, not stored as part of the user's text: it
             // is prepended here and stripped again on the way out, so the
@@ -293,14 +329,36 @@ enum NoteMarkdown {
         }
     }
 
+    private static let inlineCode = try! NSRegularExpression(pattern: "(?<!`)`([^`\n]+?)`(?!`)")
+
     private static func applyInline(to paragraph: NSMutableAttributedString,
                                     block: NoteBlock, textColor: NSColor) {
+        // Code first: whatever is inside backticks is literal — no emphasis,
+        // no escapes.
+        for match in inlineCode.matches(in: paragraph.string, options: [],
+                                        range: NSRange(location: 0, length: paragraph.length)).reversed() {
+            let inner = (paragraph.string as NSString).substring(with: match.range(at: 1))
+            var attributes = paragraph.attributes(at: match.range.location, effectiveRange: nil)
+            attributes[.font] = NoteType.codeFont
+            attributes[.noteCode] = true
+            attributes[.backgroundColor] = NoteType.codeBackground
+            paragraph.replaceCharacters(in: match.range,
+                                        with: NSAttributedString(string: inner, attributes: attributes))
+        }
+        func insideCode(_ range: NSRange) -> Bool {
+            var hit = false
+            paragraph.enumerateAttribute(.noteCode, in: range, options: []) { value, _, stop in
+                if value != nil { hit = true; stop.pointee = true }
+            }
+            return hit
+        }
         for (regex, traits, isUnderline) in inlinePatterns {
             // Backwards, so replacing one match cannot shift the ranges of the
             // ones not yet handled.
             let matches = regex.matches(in: paragraph.string, options: [],
                                         range: NSRange(location: 0, length: paragraph.length))
             for match in matches.reversed() where match.numberOfRanges > 1 {
+                guard !insideCode(match.range(at: 0)) else { continue }
                 let inner = match.range(at: 1)
                 let whole = match.range(at: 0)
                 let text = (paragraph.string as NSString).substring(with: inner)
@@ -325,8 +383,12 @@ enum NoteMarkdown {
             }
         }
         // The escapes have done their job once the delimiters are matched.
-        paragraph.mutableString.replaceOccurrences(of: "\\*", with: "*", options: [],
-                                                   range: NSRange(location: 0, length: paragraph.length))
+        // (Outside code only: inside backticks a backslash is the user's.)
+        for escape in (try! NSRegularExpression(pattern: "\\\\\\*")).matches(
+            in: paragraph.string, range: NSRange(location: 0, length: paragraph.length)).reversed()
+            where !insideCode(escape.range) {
+            paragraph.replaceCharacters(in: NSRange(location: escape.range.location, length: 1), with: "")
+        }
     }
 
     // MARK: - Serialize: attributed → markdown
@@ -340,6 +402,7 @@ enum NoteMarkdown {
         var lines: [String] = []
         var counters = NumberCounters()
         var start = 0
+        var inFence = false
 
         while start <= string.length {
             let lineRange = string.paragraphRange(for: NSRange(location: min(start, string.length), length: 0))
@@ -380,8 +443,15 @@ enum NoteMarkdown {
                 }
             }
 
-            lines.append(block.marker(index: numberedIndex, indent: indent)
-                         + inlineMarkdown(attributed, in: textRange, block: block))
+            // A run of code lines is fenced; its text goes out verbatim.
+            if block == .code {
+                if !inFence { lines.append("```"); inFence = true }
+                lines.append(string.substring(with: textRange))
+            } else {
+                if inFence { lines.append("```"); inFence = false }
+                lines.append(block.marker(index: numberedIndex, indent: indent)
+                             + inlineMarkdown(attributed, in: textRange, block: block))
+            }
 
             if NSMaxRange(lineRange) >= string.length { break }
             start = NSMaxRange(lineRange)
@@ -397,8 +467,10 @@ enum NoteMarkdown {
         // to step out of a list, save, reopen: the line you made was gone.
         if string.length > 0,
            string.substring(with: NSRange(location: string.length - 1, length: 1)) == "\n" {
+            if inFence { lines.append("```"); inFence = false }
             lines.append("")
         }
+        if inFence { lines.append("```") }
         return lines.joined(separator: "\n")
     }
 
@@ -431,7 +503,7 @@ enum NoteMarkdown {
         // Runs are MERGED by style first. The text system splits a styled
         // span wherever any other attribute changes, and wrapping each piece
         // separately wrote "**a****b**" for one bold word.
-        var segments: [(text: String, italic: Bool, bold: Bool, underline: Bool)] = []
+        var segments: [(text: String, italic: Bool, bold: Bool, underline: Bool, code: Bool)] = []
         clean.enumerateAttributes(in: range, options: []) { attributes, runRange, _ in
             let text = (attributed.string as NSString).substring(with: runRange)
             guard !text.isEmpty else { return }
@@ -444,15 +516,28 @@ enum NoteMarkdown {
             let isDetection = attributes[.noteAction] != nil
             let underlined = !isDetection
                 && ((attributes[.underlineStyle] as? Int).map { $0 != 0 } ?? false)
-            let italic = traits.contains(.italicFontMask), bold = traits.contains(.boldFontMask)
+            // Code is its own thing: never bold, italic or underlined as well.
+            let code = attributes[.noteCode] != nil
+            let italic = !code && traits.contains(.italicFontMask)
+            let bold = !code && traits.contains(.boldFontMask)
+            let underline = !code && underlined
             if let last = segments.last, last.italic == italic, last.bold == bold,
-               last.underline == underlined {
+               last.underline == underline, last.code == code {
                 segments[segments.count - 1].text += text
             } else {
-                segments.append((text, italic, bold, underlined))
+                segments.append((text, italic, bold, underline, code))
             }
         }
         for segment in segments {
+            if segment.code {
+                // Verbatim between backticks; edge spaces stay outside.
+                let core = segment.text.trimmingCharacters(in: .whitespaces)
+                guard !core.isEmpty else { out += segment.text; continue }
+                let leading = String(segment.text.prefix(while: { $0.isWhitespace }))
+                let trailing = String(segment.text.reversed().prefix(while: { $0.isWhitespace }).reversed())
+                out += leading + "`" + core + "`" + trailing
+                continue
+            }
             // A typed asterisk is text, not syntax.
             let text = segment.text.replacingOccurrences(of: "*", with: "\\*")
             guard segment.italic || segment.bold || segment.underline else { out += text; continue }
@@ -477,11 +562,14 @@ enum NoteMarkdown {
     /// Plain text, for the stream's preview line and the word count — the
     /// markers are not words.
     static func plainText(_ markdown: String) -> String {
-        markdown.components(separatedBy: "\n").map { split($0).2 }
+        markdown.components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("```") }
+            .map { split($0).2 }
             .joined(separator: "\n")
             .replacingOccurrences(of: "**", with: "")
             .replacingOccurrences(of: "\\*", with: "*")
             .replacingOccurrences(of: "<u>", with: "")
             .replacingOccurrences(of: "</u>", with: "")
+            .replacingOccurrences(of: "`", with: "")
     }
 }

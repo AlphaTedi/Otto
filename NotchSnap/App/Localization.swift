@@ -57,6 +57,16 @@ enum L10n {
     private static let en: [String: String] = [
         "lang.system": "System default",
         "time.now": "now",
+        // Notes: code, Notes · Meetings
+        "notes.fmt.inlineCode": "Inline code",
+        "notes.fmt.codeBlock": "Code block",
+        "notes.fmt.codeHelp": "Code \u{2014} click for inline, hold or right-click for a block",
+        "notes.kind.notes": "Notes",
+        "notes.kind.meetings": "Meetings",
+        "notes.kind.help": "Notes or meeting notes (\u{2325}\u{21E5})",
+        "notes.sc.inlineCode": "Inline code in a note",
+        "notes.sc.codeBlock": "Code block in a note",
+        "notes.sc.kind": "Notes \u{21C4} meeting notes",
         // U5 capture header
         "capture.placeholder": "Add a to-do\u{2026}",
         "capture.notePlaceholder": "Write a note\u{2026}",
@@ -170,7 +180,7 @@ enum L10n {
         "notes.emptyTitle": "No notes yet",
         "notes.emptyBody": "Start typing above. Everything you write is saved to Notes.md as you go.",
         "calendar.emptyTitle": "No meeting notes yet",
-        "calendar.emptyBody": "Choose a meeting with the calendar button above to start its notes.",
+        "calendar.emptyBody": "Open notes from a meeting and they are kept here.",
         "notes.rename": "Rename",
         "notes.duplicate": "Duplicate",
         "notes.download": "Download .md",
@@ -382,6 +392,16 @@ enum L10n {
     private static let it: [String: String] = [
         "lang.system": "Predefinita di sistema",
         "time.now": "ora",
+        // Notes: code, Notes · Meetings
+        "notes.fmt.inlineCode": "Codice inline",
+        "notes.fmt.codeBlock": "Blocco di codice",
+        "notes.fmt.codeHelp": "Codice \u{2014} clic per inline, tieni premuto o clic destro per un blocco",
+        "notes.kind.notes": "Note",
+        "notes.kind.meetings": "Riunioni",
+        "notes.kind.help": "Note o note delle riunioni (\u{2325}\u{21E5})",
+        "notes.sc.inlineCode": "Codice inline in una nota",
+        "notes.sc.codeBlock": "Blocco di codice in una nota",
+        "notes.sc.kind": "Note \u{21C4} note delle riunioni",
         // U5 capture header
         "capture.placeholder": "Aggiungi un to-do\u{2026}",
         "capture.notePlaceholder": "Scrivi una nota\u{2026}",
@@ -490,7 +510,7 @@ enum L10n {
         "notes.emptyTitle": "Ancora nessuna nota",
         "notes.emptyBody": "Inizia a scrivere qui sopra. Tutto quello che scrivi finisce in Notes.md mentre lo scrivi.",
         "calendar.emptyTitle": "Ancora nessuna nota di riunione",
-        "calendar.emptyBody": "Scegli una riunione con il pulsante calendario qui sopra per iniziare a prendere appunti.",
+        "calendar.emptyBody": "Apri le note da una riunione: le ritrovi qui.",
         "notes.rename": "Rinomina",
         "notes.duplicate": "Duplica",
         "notes.download": "Scarica .md",

@@ -514,7 +514,8 @@ private struct LeftBehindRow: View {
             Spacer(minLength: 8)
 
             Text(LeftBehindRow.age(item.createdAt))
-                .font(.system(size: 10, design: .monospaced))
+                // The system face: monospace is for code only.
+                .font(.system(size: 10.5).monospacedDigit())
                 .foregroundStyle(DSColor.textFaint)
                 .fixedSize()
         }

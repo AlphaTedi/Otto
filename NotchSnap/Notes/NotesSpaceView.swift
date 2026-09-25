@@ -164,7 +164,8 @@ enum NotesMetrics {
     static let fieldPaddingV: CGFloat = 16
     static let entryGap: CGFloat = 18
     static let entryInset: CGFloat = 12
-    static let highlightRadius: CGFloat = 16
+    /// The row radius every list shares (was 16).
+    static var highlightRadius: CGFloat { LabMetrics.rowRadius }
     /// Includes the breathing room that keeps floating controls concentric
     /// with the lower corners of the expanded notch.
     static let bottomBarHeight: CGFloat = 76
@@ -338,6 +339,11 @@ private struct StreamView: View {
                 TodoTabRow(rulePosition: .below)
                     .notchEntry(index: 1)
                     .measureHeight(TabRowHeightKey.self)
+                // Notes · Meetings, under the space bar: the container's own
+                // field is left exactly as it is.
+                NotesKindSwitch()
+                    .padding(.horizontal, LabMetrics.listInset)
+                    .padding(.bottom, 8)
             }
 
             streamBody
@@ -397,8 +403,12 @@ private struct StreamView: View {
                             .id(note.id)
                         }
                     }
-                    .padding(.horizontal, LabMetrics.barOuterInset + 10)
-                    .padding(.top, 16)
+                    // Floating panels: the list column every row shares — the
+                    // note rows start where the to-do rows do, their text on
+                    // the checkbox column (22), and the first title sits 22
+                    // under the bar like the first to-do.
+                    .padding(.horizontal, isContainer ? LabMetrics.barOuterInset + 10 : SpaceChrome.columnInset)
+                    .padding(.top, isContainer ? 16 : 12.5)
                     .padding(.bottom, 8)
                 }
                 // The arrows moved a selection the list was not following, so
@@ -635,6 +645,45 @@ private struct CalendarComposer: View {
     }
 }
 
+// MARK: Notes · Meetings — the secondary switch inside Notes
+
+/// Ordinary notes or meeting notes: one space, two views of it. A mini
+/// segmented pill rather than a third global section (2026-09-25 spec).
+/// ⌥⇥ flips it from the keyboard.
+struct NotesKindSwitch: View {
+    @ObservedObject private var store = TodoStore.shared
+
+    private var meetings: Bool { store.panelMode == .calendar }
+
+    var body: some View {
+        HStack(spacing: 2) {
+            segment(L10n.t("notes.kind.notes"), active: !meetings) { NotesStore.shared.enterSpace() }
+            segment(L10n.t("notes.kind.meetings"), active: meetings) { NotesStore.shared.enterCalendarSpace() }
+        }
+        .padding(2)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(SpaceInk.a(0.06)))
+        .fixedSize()
+        .help(L10n.t("notes.kind.help"))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(L10n.t("notes.kind.help"))
+    }
+
+    private func segment(_ title: String, active: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: active ? .semibold : .regular))
+                .foregroundStyle(SpaceInk.a(active ? 0.95 : 0.55))
+                .padding(.horizontal, 9)
+                .frame(height: 22)
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(active ? SpaceInk.a(0.12) : Color.clear))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(active ? .isSelected : [])
+    }
+}
+
 // MARK: U5 capture headers (floating panels)
 
 private struct NotesCaptureHeader: View {
@@ -649,7 +698,8 @@ private struct NotesCaptureHeader: View {
             isTyping: !store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             saveLabel: String(format: L10n.t("capture.saveTo"), L10n.t("filter.notes")),
             onSave: { store.commitDraft() },
-            onDot: { TodoStore.shared.cycleCollection() }
+            onDot: { TodoStore.shared.cycleCollection() },
+            accessory: AnyView(NotesKindSwitch())
         ) {
             // The user's text is NEVER reformatted — lowercase, missing
             // punctuation and typos are preserved exactly.
@@ -678,24 +728,17 @@ private struct CalendarCaptureHeader: View {
             isTyping: false,
             saveLabel: nil,
             onSave: {},
-            onDot: { TodoStore.shared.cycleCollection() }
+            onDot: { TodoStore.shared.cycleCollection() },
+            accessory: AnyView(NotesKindSwitch())
         ) {
-            HStack(spacing: 8) {
-                TextField("", text: $store.meetingQuery)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 18))
-                    .foregroundStyle(SpaceInk.a(1))
-                    .focused($focused)
-                Button { store.beginMeetingPicker() } label: {
-                    Image(systemName: "calendar.badge.plus")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(DSColor.textSecondary)
-                        .frame(width: 30, height: 24)
-                        .background(Capsule().fill(DSColor.fieldBackground))
-                }
-                .buttonStyle(.plain)
-                .help(L10n.t("meeting.choose"))
-            }
+            // No calendar icon here any more: it opened a separate picker page
+            // with no clear meaning (2026-09-25 spec). Meetings still come from
+            // the calendar, listed below.
+            TextField("", text: $store.meetingQuery)
+                .textFieldStyle(.plain)
+                .font(.system(size: 18))
+                .foregroundStyle(SpaceInk.a(1))
+                .focused($focused)
         }
         .contentShape(Rectangle())
         .onTapGesture { focused = true }
@@ -774,7 +817,9 @@ private struct NoteEntryRow: View {
             // (Marcello, 2026-09-06).
             ZStack(alignment: .trailing) {
                 Text(Self.stamp(note.updatedAt))
-                    .font(.system(size: 11, design: .monospaced))
+                    // The system face, like every other date in the app
+                    // (2026-09-25 spec: monospace is for code only).
+                    .font(.system(size: 12))
                     .foregroundStyle(DSColor.textHint)
                     .fixedSize()
                     .opacity(showsActions ? 0 : 1)
@@ -936,7 +981,9 @@ private struct NoteDetailView: View {
                 // The text begins on the title's column. The old compound
                 // inset created decorative but unusable side bands and made
                 // the document visibly narrower than its own title field.
-                .padding(.horizontal, LabMetrics.blockPadding)
+                // Floating panels: 25 + the text view's 28 inset = 53, the
+                // title's column; the inset holds the linked checkboxes.
+                .padding(.horizontal, isContainer ? LabMetrics.blockPadding : SpaceChrome.textColumn - 28)
                 .padding(.top, 20)
                 .padding(.bottom, 8)
                 // A document editor owns the remaining room; it is not sized
@@ -1087,7 +1134,7 @@ private struct NoteDetailView: View {
             Spacer(minLength: 8)
 
             Text("\(note.wordCount) " + L10n.t("notes.wordsSuffix"))
-                .font(.system(size: 11, design: .monospaced))
+                .font(.system(size: 12).monospacedDigit())
                 .foregroundStyle(DSColor.textHint)
                 .fixedSize()
 
@@ -1240,7 +1287,8 @@ struct NotesPill: View {
     @ObservedObject private var notes = NotesStore.shared
     @State private var hover = false
 
-    private var isActive: Bool { store.panelMode == .notes }
+    /// Notes is lit for its meeting-notes view too — it is one space.
+    private var isActive: Bool { store.panelMode == .notes || store.panelMode == .calendar }
 
     var body: some View {
         HStack(spacing: 6) {

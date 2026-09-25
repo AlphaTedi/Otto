@@ -1282,6 +1282,8 @@ class NotchController: ObservableObject {
         // Snooze button itself now forces the collapse rather than being
         // vetoed by this very line.
         if CalendarStore.shared.activeAlert != nil { return true }
+        // A dialog Otto opened (Download .md) keeps the panel it belongs to.
+        if isPresentingDialog { return true }
         guard let panel else { return false }
         if panel.isKeyWindow { return true }
         if let key = NSApp.keyWindow, key.parent === panel { return true }
@@ -1368,6 +1370,12 @@ class NotchController: ObservableObject {
     ///
     /// Pressing a global creation hotkey is an unambiguous request to type
     /// here, so taking focus is correct. Nothing calls this on plain hover.
+    /// True while a dialog opened from the panel is on screen.
+    var isPresentingDialog = false
+
+    /// The window a dialog opened from the panel must stand in front of.
+    var dialogHostWindow: NSWindow? { panel }
+
     #if DEBUG
     /// The panel window, for the DEBUG render command only.
     var debugPanelWindow: NSWindow? { panel }

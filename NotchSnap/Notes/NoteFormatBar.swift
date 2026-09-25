@@ -22,6 +22,9 @@ struct NoteFormatBar: View {
 
     @ObservedObject private var editor = NoteEditorController.shared
     @State private var showsBlockMenu = false
+    /// Set by a long press on </>, so the release that ends it is not also
+    /// read as a click.
+    @State private var codeLongPressed = false
 
     var body: some View {
         HStack(spacing: 2) {
@@ -46,7 +49,8 @@ struct NoteFormatBar: View {
             Button { editor.toggleBlock(.bullet) } label: { BulletGlyph() }
                 .buttonStyle(FormatControlStyle(isActive: editor.activeBlock == .bullet))
             Button { editor.toggleBlock(.numbered) } label: {
-                Text("1.").font(.system(size: 11, design: .monospaced))
+                // The system face: monospace is for code only.
+                Text("1.").font(.system(size: 11.5, weight: .medium))
             }
             .buttonStyle(FormatControlStyle(isActive: editor.activeBlock == .numbered))
             Button { editor.toggleBlock(.checklistOpen) } label: { ChecklistGlyph() }
@@ -67,6 +71,29 @@ struct NoteFormatBar: View {
                 Text("U").font(.system(size: 12.5)).underline()
             }
             .buttonStyle(FormatControlStyle(isActive: editor.underline))
+
+            divider
+
+            // Group 4 — code. Click: inline code on the selection (⌘⇧C).
+            // Press and hold, or right-click: a code block (⌘⌥⇧C).
+            Button {
+                if codeLongPressed { codeLongPressed = false; return }
+                editor.toggleInlineCode()
+            } label: {
+                Text("</>").font(.system(size: 11, weight: .semibold))
+            }
+            .buttonStyle(FormatControlStyle(isActive: editor.code || editor.activeBlock == .code))
+            .simultaneousGesture(LongPressGesture(minimumDuration: 0.45).onEnded { _ in
+                codeLongPressed = true
+                editor.toggleCodeBlock()
+            })
+            .contextMenu {
+                Button(L10n.t("notes.fmt.inlineCode") + "  \u{2318}\u{21E7}C") { editor.toggleInlineCode() }
+                Button(L10n.t("notes.fmt.codeBlock") + "  \u{2318}\u{2325}\u{21E7}C") { editor.toggleCodeBlock() }
+            }
+            .help(L10n.t("notes.fmt.codeHelp"))
+            .accessibilityLabel(L10n.t("notes.fmt.inlineCode"))
+            .accessibilityHint(L10n.t("notes.fmt.codeHelp"))
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 4)
@@ -102,31 +129,28 @@ struct NoteFormatBar: View {
 /// apart. A 28×28 hit area under glyphs that are much smaller, so the row is
 /// dense to look at and not to use.
 ///
-/// CIRCLES, not rounded squares. At 28×28 a corner radius of 8 is a square
-/// with the corners taken off, and nine of them sitting inside a capsule read
-/// as badges pasted onto a pill rather than as controls belonging to it
-/// (Marcello, 2026-09-06, on the lit underline button). A circle is concentric
-/// with the capsule it lives in: same centre, same curvature at the ends, one
-/// object.
-///
-/// The frame is EXACT rather than a minimum, because a circle behind a frame
-/// that grows to its label is an ellipse — the wide glyphs ("1.", "H1") were
-/// exactly the ones that would have stretched.
+/// A compact ROUNDED RECTANGLE, concentric with the bar it sits in: the bar
+/// is an 8-pt rounded rectangle with 4 of padding, so each control is 8 − 4
+/// = 4, rounded to 5 for the eye (2026-09-25 spec, replacing the circles that
+/// matched the old capsule bar). Rest, hover, selected, pressed and disabled
+/// all read differently; the 28×28 frame is exact so no glyph stretches it.
 private struct FormatControlStyle: ButtonStyle {
     let isActive: Bool
     @State private var hover = false
+    @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
+        return configuration.label
             .foregroundStyle(isActive ? LabMetrics.accent : DSColor.textPrimary)
             .frame(width: 28, height: 28)
             .background(
-                Circle()
-                    .fill(configuration.isPressed ? LabMetrics.accent.opacity(0.28)
-                          : (isActive ? LabMetrics.accent.opacity(0.18)
-                             : (hover ? DSColor.fieldBackground : Color.clear)))
+                shape.fill(configuration.isPressed ? LabMetrics.accent.opacity(0.28)
+                           : (isActive ? LabMetrics.accent.opacity(0.18)
+                              : (hover ? DSColor.fieldBackground : Color.clear)))
             )
-            .contentShape(Circle())
+            .contentShape(shape)
+            .opacity(isEnabled ? 1 : 0.35)
             .onHover { hover = $0 }
             .animation(Motion.hoverFade, value: hover)
             .animation(Motion.hoverFade, value: isActive)

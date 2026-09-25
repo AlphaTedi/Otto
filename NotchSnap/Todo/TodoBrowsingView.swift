@@ -736,7 +736,8 @@ struct TodoTabRow: View {
             // First claim on the row's width: when the lists overflow, the
             // scroller gives way, not these two (their ends were being cut).
             NotesPill().layoutPriority(1)
-            CalendarPill().layoutPriority(1)
+            // No Calendar pill: meeting notes are a view inside Notes now
+            // (NotesKindSwitch), not a third global section.
 
             // A rule, because the two sides of it are different kinds of
             // thing. Notes is one permanent space; the lists are many and they
@@ -1372,7 +1373,7 @@ struct TodoBrowsingView: View {
             }
             todoList(for: collection)
         }
-        .padding(.horizontal, isContainerLayout ? LabMetrics.listInset : 10)
+        .padding(.horizontal, isContainerLayout ? LabMetrics.listInset : SpaceChrome.columnInset)
         // A second catcher, INSIDE what will become the scroll region.
         //
         // The panel already had one at its root, but an NSScrollView is opaque
@@ -1499,7 +1500,7 @@ struct TodoBrowsingView: View {
                     if hasAnyCompleted(in: collection) {
                         ScrollView(.vertical, showsIndicators: false) {
                             completedSection(for: collection)
-                                .padding(.horizontal, isContainerLayout ? LabMetrics.listInset : 10)
+                                .padding(.horizontal, isContainerLayout ? LabMetrics.listInset : SpaceChrome.columnInset)
                                 .measureHeight(CompletedInsetKey.self)
                         }
                         // Hugs its content up to the cap, rather than taking
@@ -1900,10 +1901,10 @@ private struct CompletedDayRow: View {
                 // channel per state, so it can never be mistaken for the
                 // keyboard selection, which owns border and inset bar.
                 .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    RoundedRectangle(cornerRadius: LabMetrics.rowRadius, style: .continuous)
                         .fill(hover ? Color.white.opacity(0.05) : Color.clear)
                 )
-                .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: LabMetrics.rowRadius, style: .continuous))
             }
             .buttonStyle(.plain)
             .onHover { hovering in
@@ -1958,7 +1959,8 @@ private struct CompletedEntryRow: View {
                 .truncationMode(.tail)
             Spacer(minLength: 8)
             Text(CompletedEntryRow.time(completion.completedAt))
-                .font(.system(size: 10, design: .monospaced))
+                // The system face: monospace is for code only.
+                .font(.system(size: 10.5).monospacedDigit())
                 .foregroundStyle(DSColor.textFaint)
                 .fixedSize()
         }
@@ -3155,6 +3157,9 @@ private struct ShortcutsOverlay: View {
         ("\u{2325}\u{2318}N", "todo.sc.quickEntry"),
         ("\u{2303}\u{21E7}E", "todo.sc.notes"),
         ("\u{2318}B / I / U", "todo.sc.format"),
+        ("\u{2318}\u{21E7}C", "notes.sc.inlineCode"),
+        ("\u{2318}\u{2325}\u{21E7}C", "notes.sc.codeBlock"),
+        ("\u{2325}\u{21E5}", "notes.sc.kind"),
         ("\u{21E7}\u{2318}C", "todo.sc.toggleCompleted"),
         ("\u{21E5} / \u{21E7}\u{21E5}", "todo.sc.nestList"),
         ("\u{2318}I", "todo.sc.insights"),

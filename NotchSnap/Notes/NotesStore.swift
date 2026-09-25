@@ -511,13 +511,30 @@ final class NotesStore: ObservableObject {
         panel.allowedContentTypes = [.init(filenameExtension: "md") ?? .plainText]
         panel.nameFieldStringValue = Self.fileName(for: note)
         panel.canCreateDirectories = true
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        let stamp = DateFormatter()
-        stamp.locale = Locale.current
-        stamp.dateStyle = .long
-        stamp.timeStyle = .short
         let document = MarkdownVault.shared.markdown(for: note)
-        try? document.write(to: url, atomically: true, encoding: .utf8)
+
+        // IN FRONT OF OTTO, with the focus. `runModal()` opened it at the
+        // normal level while the notch panel lives in a space of its own
+        // above the desktops (SpaceAnchor), so the dialog came up BEHIND the
+        // window that asked for it (2026-09-25 spec). It now joins that same
+        // space one level above the panel, the app takes focus, the panel is
+        // held open while it is up, and Esc / Cancel hand the caret back to
+        // the note. Path and file content are unchanged.
+        let controller = NotchController.shared
+        let host = controller.dialogHostWindow
+        panel.level = NSWindow.Level(rawValue: (host?.level.rawValue ?? NSWindow.Level.modalPanel.rawValue) + 1)
+        controller.isPresentingDialog = true
+        NSApp.activate(ignoringOtherApps: true)
+        panel.begin { [weak self] response in
+            controller.isPresentingDialog = false
+            if response == .OK, let url = panel.url {
+                try? document.write(to: url, atomically: true, encoding: .utf8)
+            }
+            controller.focusPanel()
+            self?.focusBody()
+        }
+        if host != nil { SpaceAnchor.pin(panel) }
+        panel.makeKeyAndOrderFront(nil)
     }
 
     private static func fileName(for note: QuickNote) -> String {
