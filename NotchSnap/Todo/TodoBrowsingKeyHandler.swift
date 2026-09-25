@@ -239,12 +239,10 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 store.leaveInsights()
                 return true
             }
-            // ⇥ belongs to the LISTS, here as everywhere. It leaves Insights
-            // rather than doing nothing, because a key that is inert on one
-            // page and not on another is a key you stop trusting.
+            // ⇥ switches space at the ROOT level only (top-navigation spec).
+            // Insights is a page one level in: Esc / Back leave it, ⇥ does
+            // nothing rather than jumping two levels at once.
             if keyCode == 48, !cmd, !option, !control {
-                store.leaveInsights()
-                store.cycleSpace(by: shift ? -1 : 1)
                 return true
             }
             if keyCode == 123 || keyCode == 124, !cmd, !option, !control {

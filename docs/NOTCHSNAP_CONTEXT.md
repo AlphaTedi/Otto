@@ -487,3 +487,31 @@ use `RoundedRectangle(cornerRadius: 14, style: .circular)`.
 Verification: DEBUG `u5-snap <dir>` renders every state off screen (the live
 glass cannot be captured). Launch the Debug binary with `-notchLayout container`
 to render the container without touching the user's saved setting.
+
+### 2026-09-25 top navigation and one section colour
+
+From `docs/TOP_NAVIGATION_ARCHITECTURE_PROMPT.md` (Marcello).
+
+- ONE section colour: `TodoCollection.color` now returns
+  `spaceTint.sectionColor` (light tone on dark, the hue deepened to OKLCH
+  L ≤ 0.52 on light). Pill fill, checkboxes, capture circle, caret, selection
+  and "just added" all read it; `colorHex` survives only for old files. The New
+  section swatches are the tints themselves.
+- U5's ambient glow and tinted rim are REMOVED: the spec keeps material,
+  surface and border neutral in every section.
+- Path model: `TodoStore.panelPath` (root space, then any page: an open note,
+  Insights, New section) is DERIVED from panelMode + NotesStore.openNoteID —
+  never stored — and `goBack()` walks it through the existing verbs.
+- Floating panels: inside a page the top bar is `ContextBar` — Back + title on
+  the capture header's exact geometry. The note page's old well-shaped title
+  bar is not drawn there; Insights and New section use it too. ⇥ switches
+  space at the root only (inert in Insights now).
+- Floating panels: the meeting card is hidden while a page is open, and the
+  to-do panel is centred in the screen's visible area (never nearer the notch
+  than the old 72; the meeting card sits above it without moving it).
+- The notch container keeps its own field and page headers.
+
+DEBUG render: `GlassDebug.forceOpaque` switches glass to its opaque fallback
+while `u5-snap` renders, because real Liquid Glass cannot be bitmap-cached
+(it rendered the note page solid white). Stroked capsules show flat ticks at
+their ends in those renders only — they are clean on screen.

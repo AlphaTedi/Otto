@@ -355,8 +355,11 @@ struct CategoryTabChip: View {
     /// (Marcello, 2026-09-06).
     @State private var hover = false
 
-    /// U5: dark text on the light fill.
-    private static let onFill = Color(hex: "#161A24")
+    /// Text on the section-coloured fill: dark on the light tone (dark mode),
+    /// white on the deepened one (light mode).
+    private static let onFill = Color.dynamic(light: .white,
+                                              dark: NSColor(srgbRed: 0x16 / 255, green: 0x1A / 255,
+                                                            blue: 0x24 / 255, alpha: 1))
 
     var body: some View {
         HStack(spacing: 6) {
@@ -388,15 +391,13 @@ struct CategoryTabChip: View {
         // it resolved frames outside the scroller and cut the first chip.
         .background(
             Capsule(style: .continuous)
-                .fill(isActive ? tint.light.color
+                .fill(isActive ? tint.sectionColor
                       : (hover ? DSColor.fieldBackground : Color.clear))
         )
         .clipShape(Capsule(style: .continuous))
         .shadow(color: isActive ? tint.base.color.opacity(0.35) : .clear, radius: 8, y: 4)
         .contentShape(Capsule(style: .continuous))
         .onHover { hover = $0 }
-        // The glow rises from under the selected pill.
-        .reportsActivePill(isActive)
         // No implicit animation on selection: a click animates it (180 ms,
         // at the call site), the keyboard switches instantly (U5 §5.1).
         .animation(Motion.hoverFade, value: hover)

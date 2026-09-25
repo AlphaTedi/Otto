@@ -197,12 +197,13 @@ struct CategoryFormView: View {
     @State private var name = ""
     @State private var colorHex = Self.paletteHex[0]
     @FocusState private var nameFocused: Bool
+    @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
 
-    /// Hex strings behind DSColor.CategoryPalette (TodoCollection persists
-    /// hex, the DS palette only exposes Color values).
-    private static let paletteHex = ["#7FB8E0", "#C99EE0", "#E8C15A", "#8FBF7A", "#E07A5F"]
+    /// The section tints a new list can take — the same palette the pill,
+    /// checkboxes and capture circle read, so the swatch IS the colour.
+    private static let paletteHex = SpaceTint.palette.map(\.key)
 
-    private var chosen: Color { Color(hex: colorHex) }
+    private var chosen: Color { (SpaceTint.named(colorHex) ?? .work).sectionColor }
     private var canCreate: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
 
     // Rebuilt in the panel's own vocabulary rather than the old form's.
@@ -216,10 +217,18 @@ struct CategoryFormView: View {
     // pill for the primary action, and it hugs its content.
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(L10n.t("todo.newCollection").uppercased())
-                .font(.system(size: 10, weight: .medium))
-                .tracking(0.4)
-                .foregroundStyle(DSColor.textFaint)
+            if notchLayout == .container {
+                Text(L10n.t("todo.newCollection").uppercased())
+                    .font(.system(size: 10, weight: .medium))
+                    .tracking(0.4)
+                    .foregroundStyle(DSColor.textFaint)
+            } else {
+                // Floating panels: the one top bar, one level in.
+                ContextBar(parentTitle: store.panelPath.first?.title ?? "",
+                           title: L10n.t("todo.newSection"),
+                           onBack: { store.goBack() })
+                    .padding(.horizontal, -LabMetrics.listInset)
+            }
 
             // The name field IS the creation bar, one radius step smaller for
             // sitting inside the panel's inset.
@@ -254,7 +263,7 @@ struct CategoryFormView: View {
                     } label: {
                         RoundedRectangle(cornerRadius: LabMetrics.checkboxRadius,
                                          style: .continuous)
-                            .fill(Color(hex: hex))
+                            .fill((SpaceTint.named(hex) ?? .work).sectionColor)
                             .frame(width: 26, height: 26)
                             .overlay(
                                 RoundedRectangle(cornerRadius: LabMetrics.checkboxRadius,
@@ -321,7 +330,7 @@ struct CategoryFormView: View {
     private func create() {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
-        let collection = store.addCollection(name: trimmed, colorHex: colorHex)
+        let collection = store.addCollection(name: trimmed, colorHex: "#9CC0FF", tint: colorHex)
         store.selectCollection(collection.id)
     }
 }

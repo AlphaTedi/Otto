@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-// MARK: - Space chrome — U5's ambient colour, capture header and gear
+// MARK: - Space chrome — the capture header, the context bar and the gear
 //
 // Everything in here is FURNITURE around the list: the light behind it, the
 // field above it, the rim and the settings button. Rows, checkboxes and steps
@@ -14,189 +14,6 @@ import SwiftUI
 /// taken from black in light mode — otherwise the field would go invisible.
 enum SpaceInk {
     static func a(_ alpha: Double) -> Color { Color.dynamicOverlay(light: alpha, dark: alpha) }
-}
-
-// MARK: Tint crossfade
-
-/// The three tint colours at one point of a switch.
-struct MixedTint {
-    let base: SpaceTint.RGB
-    let light: SpaceTint.RGB
-    let neighbour: SpaceTint.RGB
-}
-
-/// Crossfades a tint over 350 ms, interpolating in OKLCH (U5 §6.2).
-///
-/// A plain `Color` animation would blend in sRGB, and green → blue through
-/// sRGB goes through a muddy grey-teal. The progress is what animates; the
-/// colours are computed from it on every frame.
-struct TintTransition<Content: View>: View {
-    let target: SpaceTint
-    @ViewBuilder let content: (MixedTint) -> Content
-
-    @State private var from: SpaceTint?
-    @State private var to: SpaceTint?
-    @State private var progress: Double = 1
-
-    var body: some View {
-        TintMixer(from: from ?? target, to: to ?? target, progress: progress, content: content)
-            .onChange(of: target) { next in
-                let start = to ?? next
-                var instant = Transaction()
-                instant.disablesAnimations = true
-                withTransaction(instant) {
-                    from = start
-                    to = next
-                    progress = 0
-                }
-                DispatchQueue.main.async {
-                    withAnimation(.easeInOut(duration: 0.35)) { progress = 1 }
-                }
-            }
-    }
-}
-
-private struct TintMixer<Content: View>: View, @preconcurrency Animatable {
-    let from: SpaceTint
-    let to: SpaceTint
-    var progress: Double
-    let content: (MixedTint) -> Content
-
-    var animatableData: Double {
-        get { progress }
-        set { progress = newValue }
-    }
-
-    var body: some View {
-        content(MixedTint(base: SpaceTint.mix(from.base, to.base, progress),
-                          light: SpaceTint.mix(from.light, to.light, progress),
-                          neighbour: SpaceTint.mix(from.neighbour, to.neighbour, progress)))
-    }
-}
-
-// MARK: Ambient glow (U5 §6)
-
-/// Where the selected space pill's centre is, in the panel's coordinates — the
-/// glow rises from under it.
-struct ActivePillXKey: PreferenceKey {
-    static let defaultValue: CGFloat? = nil
-    static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) {
-        value = nextValue() ?? value
-    }
-}
-
-enum SpaceChrome {
-    /// The coordinate space the glow and the pills agree on.
-    static let panelSpace = "otto.panel"
-}
-
-extension View {
-    /// Reports this pill's centre as the glow's anchor, when it is the
-    /// selected one.
-    func reportsActivePill(_ active: Bool) -> some View {
-        background(
-            GeometryReader { proxy in
-                Color.clear.preference(
-                    key: ActivePillXKey.self,
-                    value: active ? proxy.frame(in: .named(SpaceChrome.panelSpace)).midX : nil)
-            }
-        )
-    }
-}
-
-/// Two soft radial lights behind the content: A in the space's base colour
-/// under the selected pill, B in its neighbour hue drifting at the right.
-struct SpaceAmbientGlow: View {
-    let tint: SpaceTint
-    /// The selected pill's centre; nil falls back to the middle.
-    let pillX: CGFloat?
-    /// The notch container keeps its top black and puts B lower (U5 §2, §6.1).
-    let isContainer: Bool
-
-    @ObservedObject private var controller = NotchController.shared
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var driftA = false
-    @State private var driftB = false
-
-    /// Drift only while the panel is actually open (U5 §6.2, performance).
-    private var drifting: Bool { controller.state == .expanded && !reduceMotion }
-
-    var body: some View {
-        GeometryReader { proxy in
-            let w = proxy.size.width, h = proxy.size.height
-            // The reference draws both layers in a box 40 pt larger than the
-            // panel on every side, and places them by percentage of THAT box.
-            let boxW = w + 80, boxH = h + 80
-            let alphaScale = (colorScheme == .dark || isContainer) ? 1.0 : 0.6
-            TintTransition(target: tint) { mixed in
-                ZStack(alignment: .topLeading) {
-                    GlowEllipse(color: mixed.base, rx: 400, ry: 250, peak: 0.36 * alphaScale)
-                        .scaleEffect(driftA ? 1.06 : 1)
-                        .offset(x: driftA ? 18 : 0, y: driftA ? -10 : 0)
-                        .position(x: pillX ?? w / 2, y: -40 + boxH * 0.96)
-                        .animation(reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.9),
-                                   value: pillX)
-                    GlowEllipse(color: mixed.neighbour, rx: 320, ry: 230, peak: 0.18 * alphaScale)
-                        .offset(x: driftB ? -22 : 0, y: driftB ? 8 : 0)
-                        .position(x: -40 + boxW * 0.88, y: -40 + boxH * (isContainer ? 0.95 : 0.70))
-                }
-            }
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-        .onAppear { setDrift(drifting) }
-        .onChange(of: drifting) { setDrift($0) }
-    }
-
-    private func setDrift(_ on: Bool) {
-        if on {
-            withAnimation(.easeInOut(duration: 4.5).repeatForever(autoreverses: true)) { driftA = true }
-            withAnimation(.easeInOut(duration: 5.5).repeatForever(autoreverses: true)) { driftB = true }
-        } else {
-            var still = Transaction()
-            still.disablesAnimations = true
-            withTransaction(still) { driftA = false; driftB = false }
-        }
-    }
-}
-
-/// One elliptical light, `peak × (1 − t)^2.2` over 11 stops — no visible edge.
-private struct GlowEllipse: View {
-    let color: SpaceTint.RGB
-    let rx: CGFloat
-    let ry: CGFloat
-    let peak: Double
-
-    var body: some View {
-        Canvas { context, size in
-            let stops = (0...10).map { i -> Gradient.Stop in
-                let t = Double(i) / 10
-                return .init(color: color.color.opacity(peak * pow(1 - t, 2.2)), location: t)
-            }
-            var layer = context
-            layer.translateBy(x: size.width / 2, y: size.height / 2)
-            layer.scaleBy(x: 1, y: ry / rx)
-            layer.fill(Path(ellipseIn: CGRect(x: -rx, y: -rx, width: rx * 2, height: rx * 2)),
-                       with: .radialGradient(Gradient(stops: stops), center: .zero,
-                                             startRadius: 0, endRadius: rx))
-        }
-        .frame(width: rx * 2, height: ry * 2)
-    }
-}
-
-/// The floating panel's 1-pt rim in the active space's colour at 22%,
-/// crossfading with the glow.
-struct SpaceRim<S: InsettableShape>: View {
-    let tint: SpaceTint
-    let shape: S
-
-    var body: some View {
-        TintTransition(target: tint) { mixed in
-            shape.strokeBorder(mixed.base.color.opacity(0.22), lineWidth: 1)
-        }
-        .allowsHitTesting(false)
-    }
 }
 
 // MARK: Capture header (U5 §4) — floating panels only
@@ -281,14 +98,15 @@ private struct SpaceDot: View {
 
     var body: some View {
         Button(action: action) {
-            TintTransition(target: tint) { mixed in
-                Circle()
-                    .fill(mixed.light.color)
-                    .frame(width: 9, height: 9)
-                    .shadow(color: mixed.base.color.opacity(0.9), radius: 5)
-            }
-            .frame(width: 18, height: 18)
-            .contentShape(Rectangle())
+            // The destination, in the section colour — the same colour as the
+            // active pill and this section's checkboxes.
+            Circle()
+                .fill(tint.sectionColor)
+                .frame(width: 9, height: 9)
+                .shadow(color: tint.base.color.opacity(0.6), radius: 4)
+                .frame(width: 18, height: 18)
+                .contentShape(Rectangle())
+                .animation(.easeInOut(duration: 0.2), value: tint)
         }
         .buttonStyle(.plain)
         .help(L10n.t("todo.switchSpace"))
@@ -347,6 +165,77 @@ private struct SaveButton: View {
         .buttonStyle(.plain)
         .onHover { hovering in withAnimation(.easeOut(duration: 0.2)) { hover = hovering } }
         .accessibilityLabel(label + ", Return")
+    }
+}
+
+// MARK: Context bar — the same bar, one level in (top-navigation spec)
+
+/// The top bar inside a page: Back where the destination circle was, then the
+/// page's title, on the capture header's exact geometry (60 pt, 22 at the
+/// sides, hairline under it) so moving between levels never moves the bar.
+struct ContextBar<Title: View, Trailing: View>: View {
+    /// Where Back goes — spoken, since the button itself is an arrow.
+    let parentTitle: String
+    let onBack: () -> Void
+    @ViewBuilder let title: Title
+    @ViewBuilder let trailing: Trailing
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            BackChip(parentTitle: parentTitle, action: onBack)
+            title
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.isHeader)
+            trailing
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 8)
+        .frame(minHeight: CaptureHeader<EmptyView>.height)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(SpaceInk.a(0.08)).frame(height: 1)
+        }
+    }
+}
+
+extension ContextBar where Title == Text, Trailing == EmptyView {
+    /// A read-only page title.
+    init(parentTitle: String, title: String, onBack: @escaping () -> Void) {
+        self.init(parentTitle: parentTitle, onBack: onBack,
+                  title: { Text(title).font(.system(size: 18, weight: .medium))
+                                .foregroundColor(SpaceInk.a(1)) },
+                  trailing: { EmptyView() })
+    }
+}
+
+/// Raycast's back control: a small rounded key with an arrow.
+private struct BackChip: View {
+    let parentTitle: String
+    let action: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "arrow.left")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(SpaceInk.a(0.85))
+                .frame(width: 30, height: 28)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(SpaceInk.a(hover ? 0.14 : 0.08)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in withAnimation(Motion.hoverFade) { hover = hovering } }
+        .help(String(format: L10n.t("nav.backTo"), parentTitle) + "  (Esc)")
+        .accessibilityLabel(String(format: L10n.t("nav.backTo"), parentTitle))
+    }
+}
+
+/// The page title as the bar shows it.
+extension Text {
+    func contextTitleStyle() -> some View {
+        font(.system(size: 18, weight: .medium))
+            .foregroundStyle(SpaceInk.a(1))
+            .lineLimit(1)
     }
 }
 
@@ -422,7 +311,8 @@ struct TodoCaptureHeader: View {
             HighlightingTitleField(
                 text: $store.draftTitle,
                 highlightRange: parsed?.nsRange,
-                accent: SpaceInk.a(1),
+                // Caret and selection in the destination's section colour.
+                accent: store.draftSpaceTint.sectionColor,
                 wantsFocus: store.draftWantsFocus,
                 onFocusChange: { focused in
                     store.draftFocused = focused

@@ -56,7 +56,18 @@ struct InsightsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            header
+            if isContainer {
+                header
+            } else {
+                // Floating panels: the one top bar, one level in.
+                ContextBar(parentTitle: store.panelPath.dropLast().last?.title ?? "",
+                           onBack: { store.goBack() }) {
+                    Text(L10n.t("insights.title")).contextTitleStyle()
+                } trailing: {
+                    weekStepper
+                }
+                .padding(.horizontal, -LabMetrics.barOuterInset)
+            }
 
             // The space bar, under the header — the same rule the lists and the
             // Notes stream follow: FIELD FIRST, SECTIONS UNDER IT. It is also
@@ -179,6 +190,21 @@ struct InsightsView: View {
 
             Spacer(minLength: 8)
 
+            weekStepper
+        }
+        .padding(.horizontal, 20)
+        .frame(minHeight: LabMetrics.barHeight)
+        .background(
+            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+                .fill(Color.black.opacity(0.18))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+                .strokeBorder(DSColor.panelBorder, lineWidth: 1)
+        )
+    }
+
+    private var weekStepper: some View {
             HStack(spacing: 10) {
                 stepButton(systemName: "chevron.left", enabled: true) { state.step(-1) }
                 Text(state.weekLabel)
@@ -193,18 +219,10 @@ struct InsightsView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 4)
-            .overlay(Capsule().strokeBorder(DSColor.panelBorder, lineWidth: 1))
-        }
-        .padding(.horizontal, 20)
-        .frame(minHeight: LabMetrics.barHeight)
-        .background(
-            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
-                .fill(Color.black.opacity(0.18))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
-                .strokeBorder(DSColor.panelBorder, lineWidth: 1)
-        )
+            // Not a stroked Capsule: at this size it drew flat ticks at the
+            // ends (the same artefact the space pills had).
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .circular)
+                .strokeBorder(DSColor.panelBorder, lineWidth: 1))
     }
 
     private func stepButton(systemName: String, enabled: Bool, action: @escaping () -> Void) -> some View {
@@ -478,8 +496,10 @@ private struct LeftBehindRow: View {
             Button {
                 withAnimation(NotchAnimation.contentHug) { store.toggleComplete(item.id) }
             } label: {
+                // The to-do's own section colour, as everywhere else.
                 RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .strokeBorder(LabMetrics.accent, lineWidth: 1.6)
+                    .strokeBorder(store.collection(id: item.collectionID)?.color ?? LabMetrics.accent,
+                                  lineWidth: 1.6)
                     .frame(width: 16, height: 16)
                     .contentShape(Rectangle())
             }

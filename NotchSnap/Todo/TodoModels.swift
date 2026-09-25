@@ -22,9 +22,10 @@ struct TodoCollection: Identifiable, Codable, Equatable {
     /// so files written before it decode — the store fills it in on load.
     var tint: String? = nil
 
-    var color: Color {
-        Color(nsColor: NSColor.fromHex(colorHex) ?? .systemBlue)
-    }
+    /// The section colour — ONE source for the pill, the checkboxes, the
+    /// capture circle, the caret and the selection. It comes from the tint;
+    /// `colorHex` is kept only so files written before tints still decode.
+    var color: Color { spaceTint.sectionColor }
 }
 
 /// NC-3: a step inside a to-do's checklist — a sub-detail, never a peer of

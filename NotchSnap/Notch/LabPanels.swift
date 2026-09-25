@@ -476,11 +476,40 @@ struct LabPanelsView: View {
     @ObservedObject private var controller = NotchController.shared
     @ObservedObject private var store = TodoStore.shared
     @ObservedObject private var calendar = CalendarStore.shared
+    @ObservedObject private var notes = NotesStore.shared
     @EnvironmentObject private var appState: AppState
+    @State private var meetingHeight: CGFloat = 0
+
+    /// Inside a page (a note, Insights, a new section) the meeting card does
+    /// not stay up above it as a second live panel — the page is the one
+    /// surface (top-navigation spec, "Meeting e notes").
+    private var showsMeetingCard: Bool {
+        store.panelPath.count == 1 && !calendar.upcomingToday.isEmpty
+    }
+
+    /// The to-do panel is centred in the screen's usable area rather than
+    /// hanging just under the notch (top-navigation spec, "Materiale e
+    /// layout"). The meeting card, when there is one, sits above it without
+    /// moving it. Never closer to the notch than the old 72.
+    private var topGap: CGFloat {
+        guard let screen = controller.notchScreen else { return LabMetrics.notchGap }
+        let visible = screen.visibleFrame
+        let menuBar = screen.frame.maxY - visible.maxY
+        let centred = menuBar + (visible.height - LabMetrics.todoBlockMaxHeight) / 2
+        let meeting = showsMeetingCard && meetingHeight > 0 ? meetingHeight + LabMetrics.blockGap : 0
+        return max(LabMetrics.notchGap, centred - meeting)
+    }
 
     var body: some View {
         VStack(spacing: LabMetrics.blockGap) {
-            LabMeetingBlock()
+            if showsMeetingCard {
+                LabMeetingBlock()
+                    .background(GeometryReader { proxy in
+                        Color.clear.preference(key: MeetingCardHeightKey.self, value: proxy.size.height)
+                    })
+                    .onPreferenceChange(MeetingCardHeightKey.self) { meetingHeight = $0 }
+                    .transition(.opacity)
+            }
 
             // No padding here: TodoTabView carries its own, to the same
             // number. Applying both is what made the panel's insets read as
@@ -529,11 +558,6 @@ struct LabPanelsView: View {
                     // at 556 with the list stranded at the top of it.
                     .frame(height: LabMetrics.todoBlockMaxHeight, alignment: .top)
                     .labBlock()
-                    // U5 §2: a 1-pt rim in the active space's colour at 22%,
-                    // crossfading with the glow when the space changes.
-                    .overlay(SpaceRim(tint: store.activeSpaceTint,
-                                      shape: RoundedRectangle(cornerRadius: LabMetrics.blockRadius,
-                                                              style: .continuous)))
                     .transition(.opacity)
             }
         }
@@ -546,7 +570,8 @@ struct LabPanelsView: View {
         // spacing matches the gap between them so the container knows how near
         // "near" is.
         .glassGroup(spacing: LabMetrics.blockGap)
-        .padding(.top, LabMetrics.notchGap)
+        .padding(.top, topGap)
+        .animation(NotchAnimation.contentHug, value: showsMeetingCard)
         .padding(.bottom, LabMetrics.shadowMargin)
         .padding(.horizontal, LabMetrics.shadowMargin)
         .frame(maxWidth: .infinity, alignment: .center)
@@ -563,6 +588,11 @@ struct LabPanelsView: View {
             appState.labColumnHeight = height
         }
     }
+}
+
+private struct MeetingCardHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
 struct LabColumnHeightKey: PreferenceKey {

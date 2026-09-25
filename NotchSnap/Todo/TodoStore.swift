@@ -488,6 +488,53 @@ final class TodoStore: ObservableObject {
         }
     }
 
+    // MARK: - Navigation path (top-navigation spec)
+    //
+    // The top bar reads WHERE the user is from here: the root space, then any
+    // page opened inside it. DERIVED from the state that already exists —
+    // panelMode, NotesStore's open note — never stored beside it, so there is
+    // no second flag that could leave two navigation bars on screen at once.
+
+    struct PanelStop: Equatable {
+        let title: String
+    }
+
+    var panelPath: [PanelStop] {
+        let notes = NotesStore.shared
+        let root: String
+        switch panelMode {
+        case .notes: root = L10n.t("filter.notes")
+        case .calendar: root = L10n.t("filter.calendar")
+        default: root = activeCollection?.name ?? ""
+        }
+        var path = [PanelStop(title: root)]
+        switch panelMode {
+        case .insights: path.append(PanelStop(title: L10n.t("insights.title")))
+        case .newCategory: path.append(PanelStop(title: L10n.t("todo.newSection")))
+        case .notes, .calendar:
+            if let id = notes.openNoteID {
+                let title = notes.note(id: id)?.title ?? notes.pendingMeetingNote?.title ?? ""
+                path.append(PanelStop(title: title))
+            }
+        default: break
+        }
+        return path
+    }
+
+    /// Back — exactly one level, through the same verbs Esc already uses.
+    func goBack() {
+        let notes = NotesStore.shared
+        if (panelMode == .notes || panelMode == .calendar), notes.openNoteID != nil {
+            notes.closeNote()
+            return
+        }
+        switch panelMode {
+        case .insights: leaveInsights()
+        case .newCategory: setMode(.browsing)
+        default: break
+        }
+    }
+
     /// Whether the space bar is drawn.
     ///
     /// It is up in the Notes space as well as in a list — the Notes pill LIVES
@@ -845,14 +892,14 @@ final class TodoStore: ObservableObject {
     // MARK: - Collections
 
     @discardableResult
-    func addCollection(name: String, colorHex: String) -> TodoCollection {
+    func addCollection(name: String, colorHex: String, tint: String? = nil) -> TodoCollection {
         let next = (collections.map(\.sortOrder).max() ?? -1) + 1
         let shortcut = next < 9 ? String(next + 1) : nil
         let taken = Set(collections.compactMap(\.tint))
         let collection = TodoCollection(
             id: UUID(), name: name, colorHex: colorHex,
             sortOrder: next, shortcutKey: shortcut,
-            tint: SpaceTint.assign(name: name, isToday: false, taken: taken).key
+            tint: tint ?? SpaceTint.assign(name: name, isToday: false, taken: taken).key
         )
         withAnimation(Motion.contentHug) { collections.append(collection) }
         scheduleSave()

@@ -407,9 +407,6 @@ struct TodoTabView: View {
     // dissolves rather than ghosting over the incoming one mid-hug.
     private var modeTransition: AnyTransition { .sectionSwap }
 
-    /// The selected space pill's centre, reported by the pill (U5 §6.1).
-    @State private var activePillX: CGFloat?
-
     var body: some View {
         // §2.3: the shortcuts overlay sits ON TOP of the live content —
         // dismissing is instant, nothing re-renders underneath.
@@ -451,21 +448,6 @@ struct TodoTabView: View {
         // not (Thomas, 2026-09-01, screenshot). The view is its content's
         // height, full stop; whoever draws around it hugs for free.
         .frame(maxWidth: .infinity, alignment: .top)
-        // U5: the space's ambient light, under everything and clipped to the
-        // panel. In the notch container it sits at the foot, so the top of
-        // the silhouette stays the black the physical notch disappears into.
-        .background(
-            SpaceAmbientGlow(tint: store.activeSpaceTint, pillX: activePillX,
-                             isContainer: isContainerLayout)
-                .clipShape(isContainerLayout
-                           ? AnyShape(Rectangle())
-                           : AnyShape(RoundedRectangle(cornerRadius: LabMetrics.blockRadius,
-                                                       style: .continuous)))
-        )
-        .coordinateSpace(name: SpaceChrome.panelSpace)
-        .onPreferenceChange(ActivePillXKey.self) { x in
-            if let x { activePillX = x }
-        }
         // Click anywhere the panel isn't otherwise using — the empty band
         // beside the tabs, the gaps between rows, the padding — and whatever
         // is being edited commits and gives up the caret.
@@ -2446,7 +2428,7 @@ private struct TodoItemRow: View {
             if justAdded {
                 Text(L10n.t("capture.justAdded"))
                     .font(.system(size: 11.5))
-                    .foregroundStyle(rowTint.light.color)
+                    .foregroundStyle(rowTint.sectionColor)
                     .padding(.trailing, LabMetrics.rowPaddingH)
                     .transition(.opacity)
                     .allowsHitTesting(false)

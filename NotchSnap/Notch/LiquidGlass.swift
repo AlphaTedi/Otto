@@ -105,7 +105,7 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     func body(content: Content) -> some View {
-        if reduceTransparency {
+        if reduceTransparency || GlassDebug.forceOpaque {
             // No blur, no refraction, no scrim over a sample: an opaque fill
             // and a defined edge. Apple's own escape hatch for this is
             // `Glass.identity`, but that still leaves the surface to the
@@ -307,7 +307,7 @@ struct FloatingGlassSurface<S: InsettableShape>: ViewModifier {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     func body(content: Content) -> some View {
-        if reduceTransparency {
+        if reduceTransparency || GlassDebug.forceOpaque {
             content.background(shape.fill(Color(hex: "#1C1C1E")))
                    .overlay(shape.strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
         } else if #available(macOS 26.0, *) {
@@ -336,7 +336,7 @@ struct PillGlassSurface<S: InsettableShape>: ViewModifier {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     func body(content: Content) -> some View {
-        if reduceTransparency {
+        if reduceTransparency || GlassDebug.forceOpaque {
             content.background(shape.fill(Color(hex: "#1C1C1E")))
                    .overlay(shape.strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
         } else if #available(macOS 26.0, *) {
@@ -469,4 +469,16 @@ extension View {
     func darkGroundSurface() -> some View {
         environment(\.colorScheme, .dark)
     }
+}
+
+/// DEBUG renders only: real Liquid Glass cannot be drawn into a bitmap cache,
+/// so the off-screen render command switches every glass surface to its
+/// opaque fallback — the one Reduce Transparency already uses. Always false
+/// in Release.
+enum GlassDebug {
+    #if DEBUG
+    nonisolated(unsafe) static var forceOpaque = false
+    #else
+    static let forceOpaque = false
+    #endif
 }

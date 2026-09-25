@@ -63,7 +63,8 @@ enum L10n {
         "capture.saveTo": "Save to %@",
         "capture.tab": "tab",
         "capture.justAdded": "just added",
-        "todo.sc.clearDraft": "Clear what you\u{2019}re typing, then close",
+        "nav.backTo": "Back to %@",
+        "todo.sc.clearDraft": "Clear the field \u{00B7} back one level \u{00B7} close",
         // Onboarding (Direction B)
         "ob.welcome.tagline": "Your to-dos and today\u{2019}s meetings, always in reach of the notch.",
         "ob.start": "Start setup",
@@ -387,7 +388,8 @@ enum L10n {
         "capture.saveTo": "Salva in %@",
         "capture.tab": "tab",
         "capture.justAdded": "appena aggiunto",
-        "todo.sc.clearDraft": "Cancella ci\u{00F2} che scrivi, poi chiudi",
+        "nav.backTo": "Torna a %@",
+        "todo.sc.clearDraft": "Svuota il campo \u{00B7} indietro di un livello \u{00B7} chiudi",
         // Onboarding (Direction B)
         "ob.welcome.tagline": "I tuoi to-do e le riunioni di oggi, sempre a portata di notch.",
         "ob.start": "Inizia",

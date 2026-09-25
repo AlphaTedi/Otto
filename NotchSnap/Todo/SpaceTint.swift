@@ -55,6 +55,25 @@ struct SpaceTint: Equatable {
     /// Every tint a list can hold, in the order new lists receive them.
     static let palette: [SpaceTint] = [grocery, work, personal, violet, coral, sky, lime]
 
+    /// THE section colour (top-navigation spec): the active pill, the
+    /// section's checkboxes, the capture circle, the caret and the selection
+    /// all read this, and nothing else. Light tone on dark; in light mode the
+    /// same hue darkened until it holds contrast on a pale panel.
+    var sectionColor: Color {
+        let dark = light, lightMode = SpaceTint.deepened(base)
+        return Color(nsColor: NSColor(name: nil) { appearance in
+            let rgb = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : lightMode
+            return NSColor(srgbRed: rgb.r / 255, green: rgb.g / 255, blue: rgb.b / 255, alpha: 1)
+        })
+    }
+
+    /// The same hue with its OKLCH lightness held at 0.52 at most.
+    static func deepened(_ rgb: RGB) -> RGB {
+        var lch = OKLCH(rgb)
+        lch.l = min(lch.l, 0.52)
+        return lch.rgb
+    }
+
     static func named(_ key: String?) -> SpaceTint? {
         guard let key else { return nil }
         return (palette + [notes, calendar]).first { $0.key == key }
@@ -70,24 +89,9 @@ struct SpaceTint: Equatable {
         return palette.first { !taken.contains($0.key) } ?? palette[taken.count % palette.count]
     }
 
-    // MARK: Mixing in OKLCH (U5 §6.2)
-    //
-    // An sRGB blend from green to blue passes through a muddy grey-teal; OKLCH
-    // keeps lightness and chroma steady and turns the hue, so the midpoint of
-    // a switch is still a colour.
+    // MARK: OKLCH — for `deepened`
 
-    static func mix(_ a: RGB, _ b: RGB, _ t: Double) -> RGB {
-        if t <= 0 { return a }
-        if t >= 1 { return b }
-        let la = OKLCH(a), lb = OKLCH(b)
-        var dh = lb.h - la.h
-        if dh > .pi { dh -= 2 * .pi } else if dh < -.pi { dh += 2 * .pi }
-        return OKLCH(l: la.l + (lb.l - la.l) * t,
-                     c: la.c + (lb.c - la.c) * t,
-                     h: la.h + dh * t).rgb
-    }
-
-    private struct OKLCH {
+    fileprivate struct OKLCH {
         var l: Double, c: Double, h: Double
 
         init(l: Double, c: Double, h: Double) { self.l = l; self.c = c; self.h = h }

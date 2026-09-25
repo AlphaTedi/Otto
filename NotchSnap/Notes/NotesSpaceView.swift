@@ -906,8 +906,15 @@ private struct NoteDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
-                .padding(.horizontal, LabMetrics.barOuterInset)
+            if isContainer {
+                header
+                    .padding(.horizontal, LabMetrics.barOuterInset)
+            } else {
+                // Floating panels: THE top bar, one level in — Back and the
+                // note's title where the capture field stands at the root. The
+                // old well-shaped title bar is not drawn as well.
+                contextBar
+            }
             if note.meetingContext != nil { MeetingContextControls(note: note) }
             if vault.mirrorError {
                 Text(L10n.t("meeting.mirrorFailed")).font(DSFont.checklistItem).foregroundStyle(DSColor.textSecondary).padding(.horizontal, 22)
@@ -1042,6 +1049,31 @@ private struct NoteDetailView: View {
                               lineWidth: 1)
         )
         .animation(Motion.hintFade, value: titleFocused)
+    }
+
+    private var contextBar: some View {
+        ContextBar(
+            parentTitle: TodoStore.shared.panelPath.dropLast().last?.title ?? "",
+            onBack: { TodoStore.shared.goBack() }
+        ) {
+            // Still the title field: clicking it renames, as it always did.
+            TextField("", text: $titleDraft)
+                .textFieldStyle(.plain)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(SpaceInk.a(1))
+                .focused($titleFocused)
+                .onSubmit { commitTitle(); store.focusBody() }
+                .onChange(of: titleFocused) { if !$0 { commitTitle() } }
+        } trailing: {
+            HStack(spacing: 10) {
+                Text(store.saveError != nil ? L10n.t("meeting.saveFailed")
+                     : (store.isWriting ? L10n.t("notes.saving") : L10n.t("notes.saved")))
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(SpaceInk.a(0.45))
+                    .fixedSize()
+                CaptureKeyHint(label: "esc")
+            }
+        }
     }
 
     private var bottomBar: some View {
@@ -1242,7 +1274,6 @@ struct NotesPill: View {
         .contentShape(Capsule(style: .continuous))
         .onTapGesture { NotesStore.shared.enterSpace() }
         .onHover { hover = $0 }
-        .reportsActivePill(isActive)
         .animation(Motion.hoverFade, value: hover)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(L10n.t("filter.notes"))
@@ -1286,7 +1317,6 @@ struct CalendarPill: View {
         .contentShape(Capsule(style: .continuous))
         .onTapGesture { NotesStore.shared.enterCalendarSpace() }
         .onHover { hover = $0 }
-        .reportsActivePill(isActive)
         .animation(Motion.hoverFade, value: hover)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(L10n.t("filter.calendar"))

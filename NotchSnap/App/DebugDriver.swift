@@ -244,6 +244,7 @@ enum DebugDriver {
                     let notes = NotesStore.shared
                     let original = store.activeCollectionID
                     controller.triggerExpand()
+                    GlassDebug.forceOpaque = true
                     // The live panel draws inside system glass, which a
                     // bitmap cache cannot capture — so the same view is hosted
                     // off screen on the spec's own panel background instead.
@@ -262,7 +263,6 @@ enum DebugDriver {
                                     .init(color: Color(hex: "#261F35"), location: 1)],
                             startPoint: .top, endPoint: .bottom)))
                         .clipShape(shape)
-                        .overlay(container ? nil : SpaceRim(tint: store.activeSpaceTint, shape: shape))
                         .environmentObject(AppState.shared)
                         .environment(\.colorScheme, .dark)
                     let host = NSHostingView(rootView: root)
@@ -288,8 +288,19 @@ enum DebugDriver {
                         await snap("space-" + name)
                     }
                     notes.enterSpace(); await snap("space-notes")
+                    // Inner pages: the context bar replaces the capture field.
+                    if let first = notes.stream.first {
+                        notes.open(first.id); await snap("page-note"); await snap("page-note-late")
+                        appendState("page-note path=\(store.panelPath.map(\.title))")
+                        store.goBack()
+                    }
                     notes.enterCalendarSpace(); await snap("space-calendar")
                     notes.leaveSpace()
+                    store.enterInsights(); await snap("page-insights")
+                    store.goBack()
+                    store.setMode(.newCategory); await snap("page-newsection")
+                    store.goBack()
+                    appendState("after back: mode=\(store.panelMode) path=\(store.panelPath.map(\.title))")
                     if let work = list("work") {
                         store.selectCollection(work.id)
                         store.draftTitle = "Send deck to Roos"
@@ -301,6 +312,7 @@ enum DebugDriver {
                     }
                     if let original { store.selectCollection(original) }
                     window.orderOut(nil)
+                    GlassDebug.forceOpaque = false
                     controller.forceCollapse()
                     appendState("u5-snap done: \(directory.path) layout=\(AppState.shared.notchLayout)")
                 }
