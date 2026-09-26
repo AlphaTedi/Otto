@@ -655,3 +655,33 @@ card, the gap between cards, and the shadow margin close the panel on one click.
 Clicks delivered to another app or another Otto window close it regardless of
 screen coordinates; the note's own Save dialog remains attached. The Debug
 driver's `panel-hit-regions` command reports the measured screen rectangles.
+
+### 2026-09-26 Empty state B, "the list is napping"
+
+From `Empty state B — spec per Claude Code.md` (Marcello). `EmptyListView`
+(`Todo/EmptyListView.swift`) replaces the top-left "Nothing here yet." in every
+user list and the old "No notes yet" in the Notes stream: a sleeping page drawn
+from the approved SVG (stroke = the section colour; Notes uses its amber), the
+title "This list is napping" and one line. Floating panels 120×96; the notch
+container 80×64, subtitle dropped under 180pt of budget. z's rise and the page
+breathes on a TimelineView; nothing moves under Reduce Motion. In on the
+project spring (fade + 0.96 scale), out in 150ms when the first row lands.
+One VoiceOver element; not hit-testable, so the caret never leaves the field.
+
+Deliberate departures: the spec's `maxHeight: .infinity` centring is NOT used —
+it would break the hug (principle 2). The block's natural height plus 32pt
+padding is the area between field and bar, which centres it by construction.
+Follow-up the same day (Marcello): in the FLOATING panels the block is a fixed
+556 with the pills pushed down by a Spacer, so the hugging page sat high with
+all the slack under it. There it takes `minHeight` = the list budget (not a
+proposal, so no loop; natural == budget, so nothing scrolls) plus a 5pt nudge
+down (8 would be the geometric centre of the real gap; 5 is the optical one).
+The container still hugs, with 29 above and 59 below the block.
+Today keeps saying nothing when empty (07-26 decision), and Meetings keeps its
+own empty state (out of scope). Strings live in `L10n` (EN+IT) — the project has
+no Localizable.strings. Empty section `.md` files now read "*This list is
+napping.*".
+
+DEBUG: `panel-render` also snaps `space-empty` (first user list with nothing
+open). `open -n Otto.app --args -debugCommand "<command>"` runs a driver command
+3s after launch, for shells whose distributed notifications never arrive.

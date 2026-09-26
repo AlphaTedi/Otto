@@ -107,6 +107,11 @@ through the bottom edge, which no probe reports directly.
 open/completed/settling counts, ring progress, find query/matches, draft,
 todoContentHeight, notchExtraHeight) to `/tmp/notchsnap-debug-state.txt`.
 
+If posted commands never arrive (no `dump` lines appear), launch with
+`open -n Otto.app --args -debugCommand "<command>"` instead — it runs 3s after
+launch. A Debug build from a new DerivedData path is a new signing identity:
+its first Keychain read (Google OAuth) blocks launch on a system prompt.
+
 App stdout is block-buffered when redirected — don't rely on prints; use `dump`.
 
 ## Gotchas
