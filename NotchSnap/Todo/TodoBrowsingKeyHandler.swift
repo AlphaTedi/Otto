@@ -442,6 +442,9 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                     case "b": editor.toggleBold();      return true
                     case "i": editor.toggleItalic();    return true
                     case "u": editor.toggleUnderline(); return true
+                    // ⌘' — Apple Notes' block quote. By character, so it
+                    // follows the apostrophe wherever the layout puts it.
+                    case "'": editor.toggleQuote();     return true
                     default: break
                     }
                 }

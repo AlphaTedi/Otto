@@ -76,7 +76,10 @@ Commands: `expand`, `collapse`, `add <title>`, `complete-first`,
 `notes-select <n>` / `notes-open-selected` / `notes-close` / `notes-status`,
 `notes-body` (what the note's NSTextView is actually holding vs what the store
 has — the only headless way to catch a note that opens blank),
-`notes-roundtrip` (markdown → attributed → markdown over 21 documents),
+`notes-roundtrip` (markdown → attributed → markdown over 31 documents),
+`notes-editor-tests` (list/quote/code commands, undo, paste — on an off-screen
+text view), `notes-format-snap <dir>` (PNG of a sample note with inline code,
+quote and code block, dark and light — no Screen Recording needed),
 `archive-status` (the completion archive as the Completed section sees it:
 total entries, live rows, the scoped/deduped history), `delete-first` (take a
 test to-do back out of the real store),

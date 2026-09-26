@@ -494,8 +494,8 @@ From `docs/TOP_NAVIGATION_ARCHITECTURE_PROMPT.md` (Marcello).
 
 - ONE section colour: `TodoCollection.color` now returns
   `spaceTint.sectionColor` (light tone on dark, the hue deepened to OKLCH
-  L ≤ 0.52 on light). Pill fill, checkboxes, capture circle, caret, selection
-  and "just added" all read it; `colorHex` survives only for old files. The New
+  L ≤ 0.52 on light). Pill fill, checkboxes, capture circle, caret, and selection
+  all read it; `colorHex` survives only for old files. The New
   section swatches are the tints themselves.
 - U5's ambient glow and tinted rim are REMOVED: the spec keeps material,
   surface and border neutral in every section.
@@ -556,8 +556,8 @@ From `docs/NOTES_UI_POLISH_AND_CODE_FORMATTING_PROMPT.md`.
   `` `…` ``); a code block is a NoteBlock (`.code`, written as a ``` fence
   around the run of code lines, verbatim inside). Code never takes bold,
   italic or underline, and backslashes inside it are the user's. The block's
-  full-width ground is drawn by `ActionTextView.drawBackground`. Toolbar `</>`:
-  click = inline, hold or right-click = block; ⌘⇧C / ⌘⌥⇧C in an open note.
+  full-width ground is drawn by `ActionTextView.drawBackground`. ⌘⇧C / ⌘⌥⇧C
+  in an open note. (Toolbar superseded 2026-09-26, see below.)
   The monospace face exists for code only — dates, counts and the "1." glyph
   are the system face.
 - Calendar is no longer a global space: the bottom bar holds Notes and the
@@ -626,3 +626,54 @@ Follow-up the same day: the blur reaches 64pt above the pills
 stream gets the same floating footer — its floating budget no longer subtracts
 the space bar, it runs under the pills with a 95pt end spacer (outside its
 height measurement) and reports `FootBlurVisibleKey` like a list.
+
+### 2026-09-26 Notes rich text: Code, Block quote, Code block
+
+From `NOTES_RICH_TEXT_FORMATTING_SPEC.md` (Slack's three formatting verbs, Notes
+only — no other surface shares `NoteEditorController`).
+
+- The model stays the note's markdown string: inline code `` `…` ``, a code
+  block is a ``` fence, and the new `NoteBlock.quote` is `> ` per line (an
+  empty quote line is a bare `>`). No schema change, no migration: old notes
+  have none of these markers and load as before, and Notes.md mirrors them.
+- Typed literals stay literal: a backtick outside code is written `` \` ``
+  and a body line starting with `>` is written `\>`, so neither can come
+  back as code or a quote.
+- Toolbar: `</>` inline code, a rule glyph for Block quote, a boxed `</>` for
+  Code block — three buttons, replacing the click/hold/right-click `</>`.
+  Also in the Aa menu. Keys: ⌘⇧C, ⌘' (Apple Notes' quote), ⌘⌥⇧C.
+- Rules: toggling off only when the whole selection/every touched paragraph
+  already has the format, otherwise it applies to all. Inline code covers
+  exactly the selection per line (never a list marker or line break) and
+  clears B/I/U; B/I/U over a selection skip code; B/I/U and inline code are
+  disabled in a code block. Quote ↔ code converts in place. ⏎ on an empty
+  quote line, or an empty LAST code line, leaves the block; ⌫ at a quote
+  line's start (or a code block's first line) takes the block off. `> ` and
+  ```` ``` ```` + space convert as you type.
+- Rendering (all drawn, none stored): inline code is a bordered chip in
+  `NoteType.codeInk` (orange, deepened on light for 4.5:1); the old stored
+  `.backgroundColor` read as a stuck selection. Quote: a 3pt leading rule.
+  Code block: ground + hairline, long lines wrap.
+- Copy/paste inside notes writes the selection's markdown under
+  `com.notchsnap.note-markdown`; a paste into an empty line keeps blocks, a
+  paste mid-line joins that line's type, a paste into code is literal.
+- Fixed on the way: a blank line inside a code block closed the fence and
+  split the block (the serializer read an empty line as body).
+- TRAP: `NSLayoutManager` temporary `.kern` does not move glyphs in TextKit 1.
+  Chip padding is real `.kern` in the storage, rebuilt after every edit by
+  `ActionTextView.applyCodeSpacing` (the serializer ignores `.kern`). The
+  detection code's temporary kerning (linked checkbox room) has the same
+  limitation and was left alone.
+
+DEBUG: `notes-format-snap <dir>` renders a sample note dark and light;
+`notes-roundtrip` and `notes-editor-tests` cover the formats.
+
+### 2026-09-26 Floating panel outside clicks
+
+The floating cards now publish their actual frames in the hosting view's
+coordinate space. Outside-click and hit testing use those separate frames,
+including the meeting card when present. The empty area above the to-do/notes
+card, the gap between cards, and the shadow margin close the panel on one click.
+Clicks delivered to another app or another Otto window close it regardless of
+screen coordinates; the note's own Save dialog remains attached. The Debug
+driver's `panel-hit-regions` command reports the measured screen rectangles.

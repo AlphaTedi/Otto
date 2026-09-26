@@ -27,9 +27,13 @@ class NotchController: ObservableObject {
     @Published var notificationWide: Bool = false
 
     private var panel: NSPanel?
+    /// The drawn floating cards in the hosting view's top-left coordinate space.
+    /// The gaps and shadow margins are deliberately absent.
+    private var panelContentFrames: [CGRect] = []
     #if DEBUG
     /// Read-only, for the runtime probes in DebugDriver. Never in Release.
     var panelForDebug: NSPanel? { panel }
+    var panelContentFramesForDebug: [CGRect] { panelContentFrames }
     #endif
     private var mouseMonitor: Any?
     private var localMouseMonitor: Any?
@@ -363,34 +367,29 @@ class NotchController: ObservableObject {
     /// Policy rule 2: a real click outside the panel closes it no matter
     /// which mode is up. Unpins first so the collapse guards can't veto it.
     private func handleOutsideClick(_ location: NSPoint) {
-        guard state == .expanded, let screen = notchScreen else { return }
-        guard !contentScreenRect(screen: screen).insetBy(dx: -8, dy: -8).contains(location) else { return }
+        guard state == .expanded else { return }
+        guard !isInsidePanelContent(location) else { return }
         forceCollapse()
     }
 
-    /// What is actually DRAWN, as opposed to the window it is drawn in.
-    ///
-    /// Outside-click used to test `expandedPanelRect` — the WINDOW — and the
-    /// window carries 62pt of shadow margin on every side plus the gap under
-    /// the notch. A wide invisible border therefore counted as "inside", so
-    /// clicks near the panel did nothing at all. Summoning with ⌃⇧N made it
-    /// most obvious, because that is when someone clicks closest to the thing
-    /// they just opened.
-    ///
-    /// This is the column itself: the panels' own width, from the top of the
-    /// notch down to the last thing drawn.
-    private func contentScreenRect(screen: NSScreen) -> NSRect {
-        // In the container layout the drawn thing IS the grown silhouette,
-        // and that rect is already computed in one place.
-        guard AppState.shared.notchLayout == .panels else {
-            return visibleShapeScreenRect()
+    func setPanelContentFrames(_ frames: [CGRect]) {
+        panelContentFrames = frames.filter { !$0.isEmpty }
+    }
+
+    /// Convert each measured card from the hosting view's top-left origin to
+    /// screen coordinates. The detached cards are separate hit regions: the
+    /// area above them, the meeting gap, and the shadow all count as outside.
+    func isInsidePanelContent(_ location: NSPoint) -> Bool {
+        guard state == .expanded, AppState.shared.notchLayout == .panels else {
+            return visibleShapeScreenRect().contains(location)
         }
-        let notchRect = calculateNotchRect(screen: screen)
-        let height = notchSize.height + AppState.shared.labColumnHeight
-        return NSRect(x: notchRect.midX - LabMetrics.blockWidth / 2,
-                      y: screen.frame.maxY - height,
-                      width: LabMetrics.blockWidth,
-                      height: height)
+        guard let panel else { return false }
+        return panelContentFrames.contains { frame in
+            let screenFrame = NSRect(x: panel.frame.minX + frame.minX,
+                                     y: panel.frame.maxY - frame.maxY,
+                                     width: frame.width, height: frame.height)
+            return screenFrame.contains(location)
+        }
     }
 
     /// Pins the panel window to the dark appearance in the container layout.
@@ -816,17 +815,18 @@ class NotchController: ObservableObject {
         //    the creation draft survives (KB-11), nothing is lost.
         // 3. Esc backs out one level: modal surface → browsing → closed.
         // There is always a way out: one outside click, or Esc (twice at most).
-        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .leftMouseUp, .leftMouseDown]) { [weak self] event in
+        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .leftMouseUp, .leftMouseDown, .rightMouseDown]) { [weak self] event in
             let isDrag = event.type == .leftMouseDragged
             let isUp = event.type == .leftMouseUp
-            let isDown = event.type == .leftMouseDown
+            let isDown = event.type == .leftMouseDown || event.type == .rightMouseDown
+            let location = NSEvent.mouseLocation
             Task { @MainActor in
                 guard let self else { return }
                 if isDown {
                     // Global monitor = the click landed in ANOTHER app or the
-                    // desktop (our own panel's clicks arrive via the local
-                    // monitor) → policy rule 2.
-                    self.handleOutsideClick(NSEvent.mouseLocation)
+                    // desktop. Even if that window overlaps the card's screen
+                    // coordinates, the click did not land in Otto's panel.
+                    if self.state == .expanded { self.forceCollapse() }
                     return
                 }
                 if isUp {
@@ -845,7 +845,7 @@ class NotchController: ObservableObject {
                     // over (drag sessions can swallow the final mouse-up).
                     self.isDragSessionActive = false
                 }
-                self.handleMouseMoved(NSEvent.mouseLocation, timestamp: event.timestamp)
+                self.handleMouseMoved(location, timestamp: event.timestamp)
             }
         }
 
@@ -887,13 +887,17 @@ class NotchController: ObservableObject {
             let type = event.type
             // Snapshot before hopping actors — NSEvent isn't Sendable.
             let inNotchWindow = event.window is NotchPanel
+            let location = NSEvent.mouseLocation
+            let eventLocation = event.locationInWindow
+            let timestamp = event.timestamp
             Task { @MainActor in
                 guard let self else { return }
                 switch type {
                 case .leftMouseDown:
-                    self.handleClick(inNotchWindow: inNotchWindow)
+                    self.handleClick(at: location, inNotchWindow: inNotchWindow)
                 case .rightMouseDown:
-                    self.handleRightClick(event)
+                    self.handleRightClick(at: location, eventLocation: eventLocation,
+                                          inNotchWindow: inNotchWindow)
                 case .leftMouseDragged:
                     // Drag-out from a tray card: our own app's drag events are
                     // local-only, so track them here to keep the notch open
@@ -904,7 +908,7 @@ class NotchController: ObservableObject {
                 case .leftMouseUp:
                     self.isDragSessionActive = false
                 default:
-                    self.handleMouseMoved(NSEvent.mouseLocation, timestamp: event.timestamp)
+                    self.handleMouseMoved(location, timestamp: timestamp)
                 }
             }
             return event
@@ -1024,12 +1028,12 @@ class NotchController: ObservableObject {
         return true
     }
 
-    private func handleClick(inNotchWindow: Bool) {
+    private func handleClick(at location: NSPoint, inNotchWindow: Bool) {
         // Tested against the DRAWN shape, not the trigger zone: the trigger
         // zone is a deliberately forgiving hover target, and "I was near it"
         // must not mean "I clicked it". Opening the notch requires landing on
         // the notch (Marcello, 2026-08-05).
-        let onNotch = visibleShapeScreenRect().contains(NSEvent.mouseLocation)
+        let onNotch = visibleShapeScreenRect().contains(location)
         // Our own window is far larger than what it draws, and not every
         // click outside the drawn content falls through to the app beneath:
         // where the glass shadow leaves the pixels faintly non-transparent
@@ -1038,10 +1042,16 @@ class NotchController: ObservableObject {
         // nothing, while the same click a little further out (reaching the
         // global monitor) closed it. A click outside the content is outside,
         // whichever window it arrived through; it means what Escape means
-        // (Thomas, 2026-09-01). Only for the notch's own window: a click in
-        // Settings or the Move picker is not a click outside the notch.
-        if state == .expanded, inNotchWindow {
-            handleOutsideClick(NSEvent.mouseLocation)
+        // (Thomas, 2026-09-01). The save dialog remains attached to its note.
+        if state == .expanded {
+            // The save dialog is a separate Otto window that belongs to the
+            // open note. Its clicks must not dismiss the note behind it.
+            if isPresentingDialog && !inNotchWindow { return }
+            if !inNotchWindow {
+                forceCollapse()
+                return
+            }
+            handleOutsideClick(location)
             return
         }
         switch state {
@@ -1072,9 +1082,20 @@ class NotchController: ObservableObject {
         }
     }
 
-    private func handleRightClick(_ event: NSEvent) {
-        guard visibleShapeScreenRect().contains(NSEvent.mouseLocation) else { return }
-        showContextMenu(at: event.locationInWindow)
+    private func handleRightClick(at location: NSPoint, eventLocation: NSPoint,
+                                  inNotchWindow: Bool) {
+        if state == .expanded {
+            if isPresentingDialog && !inNotchWindow { return }
+            if !inNotchWindow {
+                forceCollapse()
+                return
+            }
+            handleOutsideClick(location)
+            guard isInsidePanelContent(location) else { return }
+        } else {
+            guard visibleShapeScreenRect().contains(location) else { return }
+        }
+        showContextMenu(at: eventLocation)
     }
 
     private func scheduleCollapseIfOutsidePanel(_ point: NSPoint, screen: NSScreen) {
@@ -1438,7 +1459,8 @@ class NotchPanel: NSPanel {
 //
 // Returning nil from hitTest is the AppKit way to say "not mine" — the event
 // falls through to whatever is underneath, exactly as if the panel were not
-// there. Only points inside the drawn shape reach SwiftUI.
+// there. In the floating layout only the measured cards reach SwiftUI; the
+// air between the notch and cards is no longer part of their hit region.
 final class NotchHostingView: NSHostingView<AnyView> {
     weak var controller: NotchController?
 
@@ -1448,8 +1470,13 @@ final class NotchHostingView: NSHostingView<AnyView> {
         // coordinates, which share the window's bottom-left origin.
         let screenPoint = NSPoint(x: window.frame.minX + point.x,
                                   y: window.frame.minY + point.y)
-        let shape = MainActor.assumeIsolated { controller.visibleShapeScreenRect() }
-        guard shape.contains(screenPoint) else { return nil }
+        let acceptsClick = MainActor.assumeIsolated { () -> Bool in
+            if controller.state == .expanded && AppState.shared.notchLayout == .panels {
+                return controller.isInsidePanelContent(screenPoint)
+            }
+            return controller.visibleShapeScreenRect().contains(screenPoint)
+        }
+        guard acceptsClick else { return nil }
         return super.hitTest(point)
     }
 }
