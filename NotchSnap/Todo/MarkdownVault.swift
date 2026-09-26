@@ -47,6 +47,14 @@ final class MarkdownVault: ObservableObject {
     /// nonisolated: AppSettings reads this for its default value from
     /// nonisolated decode paths.
     nonisolated static var defaultDirectory: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("\(AppBuild.supportRoot)/Vault", isDirectory: true)
+    }
+
+    /// The old implicit default. Redirect it during settings decoding so an
+    /// upgrade stops touching Documents on launch; leave its Markdown files
+    /// intact for the user.
+    nonisolated static var legacyDefaultDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Documents/\(AppBuild.vaultFolderName)", isDirectory: true)
     }

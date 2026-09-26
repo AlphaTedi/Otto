@@ -42,10 +42,8 @@ enum AppBuild {
         isLab ? "com.notchsnap.app.lab.google" : "com.notchsnap.app.google"
     }
 
-    /// Default folder name for the user-visible Markdown storage folder
-    /// (Settings › Storage, under ~/Documents). Separate for the lab for the
-    /// same reason supportRoot is: the lab must never rewrite the Markdown
-    /// mirror of the to-dos you actually live by.
+    /// Previous default folder name for the Markdown storage folder under
+    /// ~/Documents, retained to recognize that implicit default on upgrade.
     static var vaultFolderName: String { isLab ? "Otto Lab" : "Otto" }
 
     /// Sparkle is OFF in the lab, and this is the single most important line
