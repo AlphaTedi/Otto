@@ -154,6 +154,7 @@ struct NoteBodyView: NSViewRepresentable {
                 mutedColor: .tertiaryLabelColor
             )
             view.textStorage?.setAttributedString(attributed)
+            (view as? ActionTextView)?.applyCodeSpacing()
             loadedNoteID = parent.noteID
             loading = false
             MainActor.assumeIsolated { NoteEditorController.shared.refreshState() }
@@ -361,24 +362,191 @@ final class ActionTextView: NSTextView {
                       y: rect.midY - size / 2, width: size, height: size)
     }
 
-    /// Code blocks get one ground across the text's full width, behind the
-    /// glyphs — a per-glyph background would stop at each line's last word.
+    /// The block grounds and marks, all drawn behind the glyphs and none of
+    /// them stored: a code block's full-width ground and hairline (a
+    /// per-glyph background would stop at each line's last word), a quote's
+    /// leading rule, and inline code's chip.
     override func drawBackground(in rect: NSRect) {
         super.drawBackground(in: rect)
         guard let storage = textStorage, let layout = layoutManager,
-              let container = textContainer, storage.length > 0 else { return }
-        storage.enumerateAttribute(.noteBlock, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
-            guard (value as? String) == NoteBlock.code.rawValue else { return }
+              let container = textContainer else { return }
+        let origin = textContainerOrigin
+        let full = NSRange(location: 0, length: storage.length)
+
+        // One rect per run of code or quote lines. The empty line the caret
+        // sits on at the very end has no character to carry the block, so its
+        // type is the typing attributes' and its rect the extra fragment.
+        var runs: [(block: NoteBlock, rect: NSRect, endsDocument: Bool)] = []
+        storage.enumerateAttribute(.noteBlock, in: full) { value, range, _ in
+            guard let block = (value as? String).flatMap(NoteBlock.init(rawValue:)),
+                  block == .code || block == .quote else { return }
             let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
             guard glyphs.length > 0 else { return }
-            var bounds = layout.boundingRect(forGlyphRange: glyphs, in: container)
-            bounds.origin.x = 0
-            bounds.size.width = container.size.width
-            let ground = bounds.offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
-                .insetBy(dx: 0, dy: -4)
-            NoteType.codeBackground.setFill()
-            NSBezierPath(roundedRect: ground, xRadius: 6, yRadius: 6).fill()
+            // Used rects, not line fragments: the fragments include the
+            // paragraph spacing around the block, which is air, not block.
+            var used = NSRect.null
+            layout.enumerateLineFragments(forGlyphRange: glyphs) { _, usedRect, _, _, _ in
+                used = used.union(usedRect)
+            }
+            runs.append((block, used, NSMaxRange(range) == storage.length))
         }
+        let extra = layout.extraLineFragmentUsedRect
+        if !extra.isEmpty, selectedRange().location == storage.length,
+           let block = (typingAttributes[.noteBlock] as? String).flatMap(NoteBlock.init(rawValue:)),
+           block == .code || block == .quote {
+            if let last = runs.last, last.block == block, last.endsDocument {
+                runs[runs.count - 1].rect = last.rect.union(extra)
+            } else {
+                runs.append((block, extra, true))
+            }
+        }
+        for run in runs {
+            let bounds = run.rect.offsetBy(dx: origin.x, dy: origin.y)
+            if run.block == .code {
+                let ground = NSRect(x: origin.x, y: bounds.minY - 6,
+                                    width: container.size.width, height: bounds.height + 12)
+                let path = NSBezierPath(roundedRect: ground.insetBy(dx: 0.5, dy: 0.5), xRadius: 6, yRadius: 6)
+                NoteType.codeBackground.setFill()
+                path.fill()
+                NoteType.codeBorder.setStroke()
+                path.lineWidth = 1
+                path.stroke()
+            } else {
+                let rule = NSRect(x: origin.x + 1, y: bounds.minY + 2, width: 3,
+                                  height: max(bounds.height - 2, 8))
+                NoteType.quoteRule.setFill()
+                NSBezierPath(roundedRect: rule, xRadius: 1.5, yRadius: 1.5).fill()
+            }
+        }
+
+        // Inline code: a compact chip per line the span wraps across, sized
+        // from the code face's own ascender and descender — the line fragment
+        // is 1.35 lines tall and a chip that tall read as a selection.
+        let font = NoteType.codeFont
+        storage.enumerateAttribute(.noteCode, in: full) { value, range, _ in
+            guard value != nil else { return }
+            let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            guard glyphs.length > 0 else { return }
+            layout.enumerateLineFragments(forGlyphRange: glyphs) { line, _, _, lineGlyphs, _ in
+                let piece = NSIntersectionRange(glyphs, lineGlyphs)
+                guard piece.length > 0 else { return }
+                let box = layout.boundingRect(forGlyphRange: piece, in: container)
+                let baseline = line.minY + layout.location(forGlyphAt: piece.location).y
+                // The span's last glyph carries the padding as kerning
+                // (applyCodeSpacing), and the glyph box already includes it.
+                let right = NSMaxRange(piece) == NSMaxRange(glyphs)
+                    ? box.maxX : box.maxX + Self.codePadding
+                let chip = NSRect(x: box.minX - Self.codePadding,
+                                  y: baseline - font.ascender - 2,
+                                  width: right - box.minX + Self.codePadding,
+                                  height: font.ascender - font.descender + 4)
+                    .offsetBy(dx: origin.x, dy: origin.y)
+                let path = NSBezierPath(roundedRect: chip.insetBy(dx: 0.5, dy: 0.5), xRadius: 4, yRadius: 4)
+                NoteType.codeBackground.setFill()
+                path.fill()
+                NoteType.codeBorder.setStroke()
+                path.lineWidth = 1
+                path.stroke()
+            }
+        }
+    }
+
+    /// The air inside an inline-code chip, each side.
+    static let codePadding: CGFloat = 4
+    /// The air above and below a code block, outside its ground.
+    static let codeBlockMargin: CGFloat = 10
+
+    /// Layout the code formats need and the markdown never sees, re-derived
+    /// from the text after every edit:
+    ///  - kerning that makes room for each inline chip's padding, on the
+    ///    character in front of the span and on its last character. REAL
+    ///    kerning, in the storage: a layout manager's temporary `.kern` only
+    ///    draws, it does not move a glyph, and the chip cut into the letters.
+    ///    The serializer ignores `.kern`, and every run is rebuilt here, so a
+    ///    character typed after a chip cannot carry its spacing along.
+    ///  - space above a code block's first line and below its last. Per line
+    ///    would open gaps inside the block, so it follows the lines' position.
+    func applyCodeSpacing() {
+        guard let storage = textStorage, !hasMarkedText() else { return }
+        let text = storage.string as NSString
+        let full = NSRange(location: 0, length: storage.length)
+        var wanted: [(NSRange, CGFloat)] = []
+        storage.enumerateAttribute(.noteCode, in: full) { value, range, _ in
+            guard value != nil, range.length > 0 else { return }
+            if range.location > 0, text.character(at: range.location - 1) != 0x0A {
+                wanted.append((NSRange(location: range.location - 1, length: 1), Self.codePadding))
+            }
+            wanted.append((NSRange(location: NSMaxRange(range) - 1, length: 1), Self.codePadding))
+        }
+        var stale: [NSRange] = []
+        storage.enumerateAttribute(.kern, in: full) { value, range, _ in
+            if value != nil { stale.append(range) }
+        }
+        let blocks = paragraphBlocks(in: storage)
+        storage.beginEditing()
+        for range in stale { storage.removeAttribute(.kern, range: range) }
+        for (range, kern) in wanted { storage.addAttribute(.kern, value: kern, range: range) }
+        for (index, line) in blocks.enumerated() where line.block == .code && line.range.length > 0 {
+            let before: CGFloat = index > 0 && blocks[index - 1].block == .code ? 0 : Self.codeBlockMargin
+            let after: CGFloat = index + 1 < blocks.count && blocks[index + 1].block == .code ? 0 : Self.codeBlockMargin
+            let current = storage.attribute(.paragraphStyle, at: line.range.location, effectiveRange: nil) as? NSParagraphStyle
+            guard current?.paragraphSpacingBefore != before || current?.paragraphSpacing != after,
+                  let style = (current ?? NoteType.paragraphStyle(for: .code)).mutableCopy() as? NSMutableParagraphStyle
+            else { continue }
+            style.paragraphSpacingBefore = before
+            style.paragraphSpacing = after
+            storage.addAttribute(.paragraphStyle, value: style, range: line.range)
+        }
+        storage.endEditing()
+    }
+
+    /// Each paragraph with its type, line break included in its range.
+    private func paragraphBlocks(in storage: NSTextStorage) -> [(range: NSRange, block: NoteBlock)] {
+        let text = storage.string as NSString
+        var lines: [(range: NSRange, block: NoteBlock)] = []
+        var location = 0
+        while location < text.length {
+            let range = text.paragraphRange(for: NSRange(location: location, length: 0))
+            let block = (storage.attribute(.noteBlock, at: range.location, effectiveRange: nil) as? String)
+                .flatMap(NoteBlock.init(rawValue:)) ?? .body
+            lines.append((range, block))
+            location = NSMaxRange(range)
+        }
+        return lines
+    }
+
+    // MARK: Copy and paste keep the note's formatting (NoteEditorController.paste)
+
+    override var writablePasteboardTypes: [NSPasteboard.PasteboardType] {
+        [NoteEditorController.markdownPasteboardType] + super.writablePasteboardTypes
+    }
+
+    override func writeSelection(to pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
+        guard type == NoteEditorController.markdownPasteboardType else {
+            return super.writeSelection(to: pboard, type: type)
+        }
+        guard let storage = textStorage, selectedRange().length > 0 else { return false }
+        let markdown = NoteMarkdown.markdown(from: storage.attributedSubstring(from: selectedRange()))
+        return pboard.setString(markdown, forType: type)
+    }
+
+    override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
+        [NoteEditorController.markdownPasteboardType] + super.readablePasteboardTypes
+    }
+
+    /// Drags keep the text system's own path: our paste inserts at the
+    /// selection, which is not where a drop lands.
+    override var acceptableDragTypes: [NSPasteboard.PasteboardType] {
+        super.acceptableDragTypes.filter { $0 != NoteEditorController.markdownPasteboardType }
+    }
+
+    override func readSelection(from pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
+        guard type == NoteEditorController.markdownPasteboardType,
+              let markdown = pboard.string(forType: type) else {
+            return super.readSelection(from: pboard, type: type)
+        }
+        MainActor.assumeIsolated { NoteEditorController.shared.paste(markdown: markdown) }
+        return true
     }
 
     override func draw(_ dirtyRect: NSRect) {

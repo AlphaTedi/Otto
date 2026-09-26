@@ -518,6 +518,36 @@ enum DebugDriver {
                 }
             } else if command == "meeting-notes-tests" {
                 for line in MeetingNotesVerification.run() { appendState(line) }
+            } else if command.hasPrefix("notes-format-snap ") {
+                // notes-format-snap <dir> — the note body with inline code, a
+                // quote and a code block, dark and light, as PNGs. Off screen:
+                // no note is opened or written.
+                let directory = URL(fileURLWithPath: String(command.dropFirst(18)))
+                try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                let sample = "## Deploy\nRun `make build` then check the `dist/` folder, **bold** too.\n"
+                    + "> Slack-style quote with `code` inside, long enough to wrap onto a second line of the note body.\n> second quote line\n"
+                    + "```\nfunc hello() {\n    print(\"hi\")\n\n}\nlong_unbroken_" + String(repeating: "x", count: 90) + "\n```\n- a list row after"
+                for dark in [true, false] {
+                    let scroll = ActionTextView.scrollableTextView()
+                    let view = scroll.documentView as! ActionTextView
+                    view.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                    view.drawsBackground = true
+                    view.backgroundColor = dark ? NSColor(white: 0.11, alpha: 1) : .white
+                    view.textContainerInset = NSSize(width: 28, height: 16)
+                    view.textContainer?.lineFragmentPadding = 0
+                    scroll.frame = NSRect(x: 0, y: 0, width: 560, height: 420)
+                    view.textStorage!.setAttributedString(NoteMarkdown.attributed(from: sample,
+                        textColor: .labelColor, accent: .labelColor, mutedColor: .tertiaryLabelColor))
+                    view.applyCodeSpacing()
+                    view.layoutManager!.ensureLayout(for: view.textContainer!)
+                    view.setSelectedRange(NSRange(location: 0, length: 0))
+                    scroll.appearance = view.appearance
+                    guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
+                    view.cacheDisplay(in: view.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?
+                        .write(to: directory.appendingPathComponent(dark ? "format-dark.png" : "format-light.png"))
+                }
+                appendState("notes-format-snap: wrote \(directory.path)")
             } else if command == "notes-editor-tests" {
                 let editor = NoteEditorController.shared
                 let previousView = editor.textView
@@ -594,6 +624,83 @@ enum DebugDriver {
                 _ = editor.handleReturn()
                 view.insertText("dieci", replacementRange: view.selectedRange())
                 check("numbered caret 9 to 10", (1...9).map { "\($0). riga" }.joined(separator: "\n") + "\n10. dieci")
+                // Code and quote (NOTES_RICH_TEXT_FORMATTING_SPEC).
+                func select(_ location: Int, _ length: Int) {
+                    view.setSelectedRange(NSRange(location: location, length: length))
+                    editor.refreshState()
+                }
+                load("riga")
+                select(0, 4)
+                editor.toggleQuote()
+                check("quote on", "> riga")
+                editor.toggleQuote()
+                check("quote off", "riga")
+                load("uno\n  due")
+                select(0, 9)
+                editor.toggleCodeBlock()
+                check("code block over lines", "```\nuno\n  due\n```")
+                select(0, 9)
+                editor.toggleQuote()
+                check("code block to quote", "> uno\n>   due")
+                load("> citata\nnormale")
+                select(0, 12)
+                editor.toggleQuote()
+                check("mixed quote applies to all", "> citata\n> normale")
+                load("ciao mondo")
+                select(5, 5)
+                editor.toggleInlineCode()
+                check("inline code on selection", "ciao `mondo`")
+                editor.toggleInlineCode()
+                check("inline code off", "ciao mondo")
+                load("ciao `mondo`")
+                select(0, 10)
+                editor.toggleInlineCode()
+                check("mixed inline code applies to all", "`ciao mondo`")
+                load("a `b` c")
+                select(0, 5)
+                editor.toggleBold()
+                check("bold skips code", "**a** `b` **c**")
+                load("- punto")
+                select(0, (view.textStorage!.string as NSString).length)
+                editor.toggleInlineCode()
+                check("inline code skips list marker", "- `punto`")
+                load("ciao")
+                view.undoManager?.removeAllActions()
+                select(0, 4)
+                view.undoManager?.beginUndoGrouping()
+                editor.toggleCodeBlock()
+                view.undoManager?.endUndoGrouping()
+                view.undoManager?.undo()
+                check("code block undo", "ciao")
+                if view.selectedRange() != NSRange(location: 0, length: 4) {
+                    failures += 1
+                    appendState("EDITOR FAIL code block undo selection: \(view.selectedRange())")
+                }
+                view.undoManager?.redo()
+                check("code block redo", "```\nciao\n```")
+                load("> q")
+                _ = editor.handleReturn()
+                view.insertNewline(nil)
+                editor.refreshState()
+                _ = editor.handleReturn()
+                check("return on empty quote line leaves", "> q\n")
+                load("```\nc\n```")
+                view.insertNewline(nil)
+                editor.refreshState()
+                _ = editor.handleReturn()
+                view.insertText("fuori", replacementRange: view.selectedRange())
+                check("return on empty last code line leaves", "```\nc\n```\nfuori")
+                load("> q")
+                select(0, 0)
+                _ = editor.handleBackspace()
+                check("backspace at quote start", "q")
+                load("")
+                editor.paste(markdown: "> q `x`\n```\n  c\n```")
+                check("paste keeps blocks", "> q `x`\n```\n  c\n```")
+                load("abc")
+                select(1, 0)
+                editor.paste(markdown: "> `q`")
+                check("paste mid-line joins the line", "a`q`bc")
                 appendState("editor-tests: \(checks - failures)/\(checks) passed")
             } else if command == "notes-roundtrip" {
                 // markdown -> attributed -> markdown. Anything that does not
@@ -623,6 +730,16 @@ enum DebugDriver {
                     "\n",
                     "1. a\n2. b\n- un punto interrompe\n1. riparte",
                     "corpo\n  rientrato a mano, non un elenco\ncorpo di nuovo",
+                    "> citazione",
+                    "> uno\n> due\ncorpo",
+                    "> con `code` dentro e **grassetto**",
+                    "> a\n>\n> b",
+                    "codice `inline` qui",
+                    "```\n  indentato\n\tcon tab\n\nriga lunghissima_senza_spazi_" + String(repeating: "x", count: 200) + "\n```",
+                    "```\nc\n```\n> q",
+                    "\\> non una citazione",
+                    "backtick letterale \\` qui",
+                    "> 👩🏽‍💻 ciao · «virgolette» — ok",
                 ]
                 var failures = 0
                 for source in cases {
