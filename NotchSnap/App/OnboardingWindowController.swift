@@ -3,7 +3,7 @@ import SwiftUI
 
 // MARK: - OnboardingWindowController — the one regular window Otto shows (SPEC §3)
 //
-// 860×460, fixed, 36-pt continuous corners, transparent titlebar with only the
+// 860×500, fixed, 36-pt continuous corners, transparent titlebar with only the
 // close button. `.normal` level: it must never float above the macOS
 // permission prompts the permissions step raises.
 
@@ -165,8 +165,10 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    /// `Open Otto ↵`: completed, closed, and the notch opened once so the
-    /// user sees where Otto lives (SPEC §7.6).
+    /// `Open Otto ↵`: completed, closed, and Otto opened once in the display
+    /// mode the style step chose, so the user sees where it lives (v3 §4.6).
+    /// `finish()` has already written that mode; the same expand opens the
+    /// notch or the floating panel accordingly.
     private func complete() {
         model.finish()
         window?.close()
@@ -181,26 +183,89 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     /// Every step, dark and light, written as PNGs — the only way to look at
     /// this window on a machine where screen capture is not permitted.
     static func debugSnapshots(to directory: URL, steps: [OnboardingStep] = OnboardingStep.allCases) async {
+        // Every screen and state of the v3 handoff, named after its PNG.
+        let states: [(String, OnboardingStep, DiscoverItem, DisplayMode?, Bool)] = [
+            ("01-welcome", .welcome, .tasks, nil, false),
+            ("02a-discover-tasks", .discover, .tasks, nil, false),
+            ("02b-discover-notes", .discover, .notes, nil, false),
+            ("02c-discover-meetings", .discover, .meetings, nil, false),
+            ("03a-style-notch", .style, .tasks, .notch, false),
+            ("03b-style-floating", .style, .tasks, .floating, false),
+            ("04a-shortcut-waiting", .shortcut, .tasks, nil, false),
+            ("04b-shortcut-success", .shortcut, .tasks, nil, true),
+            ("05-permissions", .permissions, .tasks, nil, false),
+            ("06-done", .done, .tasks, nil, false),
+        ].filter { steps.contains($0.1) }
         show()
         guard let controller = sharedController, let window = controller.window,
               let view = window.contentView else { return }
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         for (name, appearance) in [("dark", NSAppearance.Name.darkAqua), ("light", .aqua)] {
             window.appearance = NSAppearance(named: appearance)
-            for step in steps {
-                controller.model.debugJump(to: step)
-                try? await Task.sleep(nanoseconds: 1_200_000_000)
+            for (label, step, item, mode, detected) in states {
+                controller.model.debugJump(to: .welcome)
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                controller.model.debugJump(to: step, item: item, mode: mode, detected: detected)
+                // Long enough for the entrances and the confetti to land.
+                try? await Task.sleep(nanoseconds: 2_200_000_000)
                 DebugDriver.note("onboarding window frame=\(window.frame) content=\(view.frame) "
                     + "closeHidden=\(window.standardWindowButton(.closeButton)?.isHidden ?? true) "
                     + "closable=\(window.styleMask.contains(.closable))")
                 guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
                 view.cacheDisplay(in: view.bounds, to: rep)
-                let file = directory.appendingPathComponent(
-                    String(format: "%@-%02d-%@.png", name, step.rawValue + 1, "\(step)"))
+                let file = directory.appendingPathComponent("\(name)-\(label).png")
                 try? rep.representation(using: .png, properties: [:])?.write(to: file)
             }
         }
         window.appearance = nil
+        // The jumps wrote the resume point; a snapshot run is not a real flow.
+        UserDefaults.standard.set(0, forKey: OnboardingModel.Keys.lastStep)
+    }
+    /// Walks the flow through the model and the key handler, logging what
+    /// each press did — the navigation rules of v3 §2 checked headlessly.
+    static func debugFlowTest() async -> [String] {
+        show()
+        guard let controller = sharedController, let window = controller.window else { return ["no window"] }
+        let model = controller.model
+        var log: [String] = []
+        func note(_ label: String) {
+            log.append("\(label): step=\(model.step) item=\(model.discoverItem) mode=\(model.displayMode) "
+                       + "canAdvance=\(model.canAdvance) detected=\(model.shortcutDetected)")
+        }
+        func key(_ code: UInt16, _ chars: String, _ flags: NSEvent.ModifierFlags = []) {
+            guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags,
+                                               timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                                               characters: chars, charactersIgnoringModifiers: chars,
+                                               isARepeat: false, keyCode: code) else { return }
+            _ = controller.handle(event, in: window)
+        }
+        let savedLayout = UserDefaults.standard.string(forKey: "notchLayout")
+        model.debugJump(to: .welcome); note("start")
+        key(36, "\r"); note("↵ welcome")
+        key(36, "\r"); note("↵ tasks")
+        key(36, "\r"); note("↵ notes")
+        key(123, ""); note("← meetings")
+        model.show(.meetings); note("click meetings")
+        key(36, "\r"); note("↵ meetings")
+        key(125, ""); note("↓ style")
+        key(49, "1"); note("1 style")
+        key(36, "\r"); note("↵ style")
+        key(36, "\r"); note("↵ shortcut (blocked)")
+        NotificationCenter.default.post(name: .quickEntryFired, object: nil)
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        note("hotkey fired")
+        key(36, "\r"); note("↵ shortcut")
+        key(123, ""); note("← permissions")
+        key(36, "\r"); key(36, "\r"); note("↵↵ → done")
+        key(123, ""); key(123, ""); key(123, ""); key(123, ""); note("←×4")
+        key(123, ""); note("← discover 1/3")
+        log.append("registered=\(HotkeyManager.shared.quickEntryRegistered)")
+        // Put everything back: layout, resume point, window.
+        if let savedLayout { UserDefaults.standard.set(savedLayout, forKey: "notchLayout") }
+        else { UserDefaults.standard.removeObject(forKey: "notchLayout") }
+        UserDefaults.standard.set(0, forKey: OnboardingModel.Keys.lastStep)
+        window.orderOut(nil)
+        return log
     }
     #endif
 
@@ -219,7 +284,7 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     /// True when the event was consumed.
-    private func handle(_ event: NSEvent, in window: NSWindow) -> Bool {
+    fileprivate func handle(_ event: NSEvent, in window: NSWindow) -> Bool {
         if event.type == .flagsChanged {
             if model.step == .shortcut { model.modifiersChanged(event.modifierFlags) }
             return false
@@ -234,7 +299,18 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         // and letting it through would only beep.
         if command && chars == "w" { return true }
         if command && chars == "[" { model.back(); return true }
-        // A focused text field keeps its own keys — ↵ saves the to-do there.
+        // ⌘→: the step-4 way past a shortcut another app owns (v3 §4.4).
+        if command && event.keyCode == 124, model.step == .shortcut,
+           !HotkeyManager.shared.quickEntryRegistered {
+            model.skipShortcut(); return true
+        }
+        // ⌃⇧N reaching this window at all means Carbon did not take it — the
+        // hotkey is someone else's. Count the press anyway while the window
+        // is key (v3 §4.4's local fallback).
+        if model.step == .shortcut, event.keyCode == 45,
+           flags.contains(.control), flags.contains(.shift), !command {
+            model.shortcutFired(); return true
+        }
         if typing { return false }
         if command || flags.contains(.control) || flags.contains(.option) { return false }
 
@@ -243,19 +319,19 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
             primaryAction(); return true
         case 123:                          // ←
             model.back(); return true
-        case 126 where model.step == .focus:   // ↑
-            model.moveFocus(by: -1); return true
-        case 125 where model.step == .focus:   // ↓
-            model.moveFocus(by: 1); return true
+        case 126 where model.step == .style:   // ↑
+            model.select(.notch); return true
+        case 125 where model.step == .style:   // ↓
+            model.select(.floating); return true
         default:
             break
         }
 
         switch (model.step, chars) {
-        case (.focus, "1"): model.selectFocus(.tasks); return true
-        case (.focus, "2"): model.selectFocus(.meetings); return true
-        case (.focus, "3"): model.selectFocus(.both); return true
-        case (.permissions, "c"): model.permissions.grantCalendar(); return true
+        case (.style, "1"): model.select(.notch); return true
+        case (.style, "2"): model.select(.floating); return true
+        // G grants the first row still waiting for a grant (v3 §4.5).
+        case (.permissions, "g"): model.permissions.grantCalendar(); return true
         case (.permissions, "l"): model.permissions.setLogin(!model.permissions.loginEnabled); return true
         default: return false
         }

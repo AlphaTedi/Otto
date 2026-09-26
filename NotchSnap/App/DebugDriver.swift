@@ -156,6 +156,11 @@ enum DebugDriver {
                 if let target = store.lastUsedCollectionID ?? store.firstUserCollection?.id {
                     store.addItem(title: title, collectionID: target)
                 }
+            } else if command == "onboarding-flow-test" {
+                Task { @MainActor in
+                    for line in await OnboardingWindowController.debugFlowTest() { appendState("flow " + line) }
+                    appendState("onboarding-flow-test done")
+                }
             } else if command.hasPrefix("onboarding-snap ") {
                 // onboarding-snap <dir> [step,step…] — PNGs of the real window.
                 let parts = command.dropFirst(16).split(separator: " ")

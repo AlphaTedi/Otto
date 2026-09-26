@@ -64,6 +64,27 @@ class AppState: ObservableObject {
             ?? .panels
     }
 
+    /// The one way to switch layouts — Settings and the onboarding's style
+    /// step both come through here.
+    ///
+    /// The two layouts measure themselves differently, and the height one of
+    /// them published is meaningless to the other. Close first, drop the stale
+    /// measurements, and let the new layout measure itself on the next open —
+    /// otherwise the silhouette animates to a size nothing on screen asked for.
+    /// Both measurements, not just the column's: a panels-era
+    /// todoContentHeight surviving into the container sized the silhouette to
+    /// a panel that was no longer on screen.
+    func setNotchLayout(_ layout: NotchLayout) {
+        let defaults = UserDefaults.standard
+        guard defaults.string(forKey: "notchLayout") != layout.rawValue else { return }
+        defaults.set(layout.rawValue, forKey: "notchLayout")
+        NotchController.shared.forceCollapse()
+        NotchController.shared.applyNotchAppearance()
+        labColumnHeight = 0
+        todoContentHeight = 0
+        objectWillChange.send()
+    }
+
     /// Hugging height (pivot PRD §3): the to-do view MEASURES its natural
     /// content height and publishes it here; the panel is a direct animated
     /// function of this value — never a fixed container that scrolls.

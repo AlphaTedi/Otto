@@ -415,6 +415,43 @@ an already-visible row keeps the current viewport, while a row that is above or
 below it scrolls to the nearest edge. After expansion, one delayed geometry
 check reveals the new overflow only if the complete opened row no longer fits.
 
+### 2026-09-26 onboarding v3
+
+From Marcello's `otto-onboarding-v3` handoff (SPEC.md + PNGs + reference HTML),
+over Direction B. Window 860×500, panel 490×480. Steps keep their raw values
+(`welcome, discover, style, shortcut, permissions, done`), so a B flow
+interrupted on focus/notch resumes on discover/style without migration;
+`onboarding.focus` is deleted on sight.
+
+- Discover: a three-stop tour (Tasks, Notes, Meetings) with a stepper and page
+  dots; Next/Back walk the stops, nothing is saved. Previews and confetti live
+  in `OnboardingPreviews.swift`; the Google Meet mark is the `GoogleMeet`
+  imageset.
+- Style: "In the notch" = `NotchLayout.container`, "Floating panel" =
+  `.panels` — the same `notchLayout` key Settings shows, written through
+  `AppState.setNotchLayout`, now the only path that switches layouts (Settings
+  uses it too). Default notch unless a layout was already set. "Open Otto"
+  writes the shown mode, then expands it.
+- Shortcut: Continue is disabled until `.quickEntryFired`; the panel crossfades
+  to green. The keycaps' ⌃ and ⇧ are not in Host Grotesk: ⌃ is the system face
+  small and heavy, ⇧ is Arial Unicode MS — the two that match the PNGs.
+- Content sits 48 pt under the body PLUS the column's 10 of spacing: the spec
+  says 48, but its HTML (10-pt gap + 48-pt margin) and PNGs draw 58, and the
+  PNGs win on visuals.
+
+Deliberate departures, as in B: still no Accessibility row or bolt chip (the
+Carbon hotkey needs no grant), so `G` grants Calendar, the first row with a
+Grant button. The spec's "grant Accessibility" escape hatch on step 4 becomes
+"Shortcut taken by another app? Continue anyway" (⌘→), shown only when
+registering ⌃⇧N failed (`HotkeyManager.quickEntryRegistered`), with a local
+monitor counting the press meanwhile. Preview copy is localised (EN/IT); the
+design's "Roos" became "Simon" (generic names only).
+
+DEBUG: `onboarding-snap <dir>` writes every v3 screen/state (dark and light)
+named after its PNG; `onboarding-flow-test` walks the keyboard flow through
+the real key handler and logs each step. Both open the onboarding window on
+screen and reset `onboarding.lastStep` / `notchLayout` afterwards.
+
 ### 2026-09-24 onboarding Direction B
 
 The onboarding was rebuilt from Marcello's handoff (`otto-onboarding` SPEC.md +

@@ -497,23 +497,7 @@ struct NotchSettingsView: View {
                         get: { notchLayout },
                         set: { newValue in
                             guard newValue != notchLayout else { return }
-                            notchLayout = newValue
-                            // The two layouts measure themselves differently,
-                            // and the height one of them published is
-                            // meaningless to the other. Close first, drop the
-                            // stale measurement, and let the new layout
-                            // measure itself on the next open — otherwise the
-                            // silhouette animates to a size nothing on screen
-                            // asked for.
-                            NotchController.shared.forceCollapse()
-                            NotchController.shared.applyNotchAppearance()
-                            appState.labColumnHeight = 0
-                            // Both measurements, not just the column's: a
-                            // panels-era todoContentHeight surviving into the
-                            // container sized the silhouette to a panel that
-                            // was no longer on screen.
-                            appState.todoContentHeight = 0
-                            appState.objectWillChange.send()
+                            appState.setNotchLayout(newValue)
                         }
                     )) {
                         ForEach(NotchLayout.allCases, id: \.self) { layout in

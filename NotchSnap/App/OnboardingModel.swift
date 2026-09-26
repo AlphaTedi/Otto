@@ -4,72 +4,73 @@ import EventKit
 import ServiceManagement
 import SwiftUI
 
-// MARK: - Onboarding state (SPEC §10)
+// MARK: - Onboarding state (v3 SPEC §5)
 
+/// Raw values are persisted in `onboarding.lastStep`. The v3 steps sit where
+/// the Direction B ones did, so an interrupted B flow resumes sensibly with
+/// no migration: focus (1) comes back as discover, notch (2) as style.
 enum OnboardingStep: Int, CaseIterable {
-    case welcome, focus, notch, shortcut, permissions, done
+    case welcome, discover, style, shortcut, permissions, done
 }
 
-enum OnboardingFocus: String, CaseIterable {
-    case tasks, meetings, both
+/// The Discover tour's three stops. A tour, not a choice: nothing is saved.
+enum DiscoverItem: Int, CaseIterable {
+    case tasks, notes, meetings
 }
 
-/// The flow's one source of truth: where we are, what was chosen, and what the
-/// practice steps have seen happen. The window controller owns one per window.
+/// Where Otto lives, chosen on the style step. Not a value of its own: it is
+/// the same `notchLayout` setting Settings shows (v3 §4.3).
+enum DisplayMode: String {
+    case notch, floating
+
+    var layout: NotchLayout { self == .notch ? .container : .panels }
+    init(_ layout: NotchLayout) { self = layout == .container ? .notch : .floating }
+}
+
+/// The flow's one source of truth: where we are, what was chosen, and whether
+/// the shortcut step has seen the shortcut. The window controller owns one.
 @MainActor
 final class OnboardingModel: ObservableObject {
     @Published private(set) var step: OnboardingStep
     /// +1 going forward, −1 going back — which way the left column slides.
     @Published private(set) var direction: CGFloat = 1
-    @Published var focus: OnboardingFocus {
-        didSet { UserDefaults.standard.set(focus.rawValue, forKey: Keys.focus) }
-    }
-
-    // Notch step
-    @Published private(set) var notchArmed = false
-    @Published private(set) var notchTried = false
+    @Published private(set) var discoverItem: DiscoverItem = .tasks
+    @Published private(set) var displayMode: DisplayMode
 
     // Shortcut step
+    /// ⌃ and ⇧ physically down: their caps brighten while held.
     @Published private(set) var controlHeld = false
     @Published private(set) var shiftHeld = false
-    @Published private(set) var nHeld = false
+    /// The cap popping right now, in the 40-ms stagger after a detection.
+    @Published private(set) var heldKey: Int?
     @Published private(set) var shortcutDetected = false
-    /// Bumped whenever the field should take the caret.
-    @Published var fieldFocusRequest = 0
-    /// Bumped once per saved to-do — the Continue button pulses on it.
-    @Published private(set) var continuePulse = 0
 
     let permissions = PermissionsModel()
 
     enum Keys {
         static let completed = "onboarding.completed"
-        static let focus = "onboarding.focus"
         static let lastStep = "onboarding.lastStep"
+        /// Direction B's focus choice. v3 has none; an old value is ignored.
+        static let legacyFocus = "onboarding.focus"
     }
 
     private var bag = Set<AnyCancellable>()
-    private var nRelease: Task<Void, Never>?
+    private var release: Task<Void, Never>?
 
     init() {
         let defaults = UserDefaults.standard
-        focus = OnboardingFocus(rawValue: defaults.string(forKey: Keys.focus) ?? "") ?? .both
-        // Resume where a quit left off — closing the window resets this, so
-        // only an interrupted flow ever comes back mid-way.
+        defaults.removeObject(forKey: Keys.legacyFocus)
+        // Resume where a quit left off — finishing resets this, so only an
+        // interrupted flow ever comes back mid-way.
         step = OnboardingStep(rawValue: defaults.integer(forKey: Keys.lastStep)) ?? .welcome
+        // The notch unless someone already picked a layout (a re-run from
+        // Settings shows what is set, not the default).
+        displayMode = defaults.string(forKey: "notchLayout") == nil
+            ? .notch : DisplayMode(AppState.shared.notchLayout)
 
-        // The real notch, hovered or opened while the listener is armed.
-        NotchController.shared.$state
-            .receive(on: RunLoop.main)
-            .sink { [weak self] state in
-                guard let self, self.notchArmed, !self.notchTried else { return }
-                if state == .hovering || state == .expanded {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { self.notchTried = true }
-                }
-            }
-            .store(in: &bag)
-
-        // ⌃⇧N itself. Carbon swallows the key-down before any window sees it,
-        // so the hotkey's own notification is how N is known to be pressed.
+        // ⌃⇧N itself — the real global hotkey, so the step proves it works
+        // from any app. Carbon swallows the key-down before any window sees
+        // it; its notification is how the press is known.
         NotificationCenter.default.publisher(for: .quickEntryFired)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.shortcutFired() }
@@ -78,116 +79,130 @@ final class OnboardingModel: ObservableObject {
 
     // MARK: Navigation
 
-    var progress: CGFloat { CGFloat(step.rawValue + 1) / CGFloat(OnboardingStep.allCases.count) }
+    /// v3 §2: one third for all of Discover, then halves, thirds and sixths.
+    var progress: CGFloat {
+        switch step {
+        case .welcome: return 0
+        case .discover: return 0.33
+        case .style: return 0.5
+        case .shortcut: return 0.66
+        case .permissions: return 0.83
+        case .done: return 1
+        }
+    }
+
+    /// Whether the primary action can run — false only while step 4 waits.
+    var canAdvance: Bool { step != .shortcut || shortcutDetected }
 
     func advance() {
+        guard canAdvance else { return }
+        if step == .discover, let next = DiscoverItem(rawValue: discoverItem.rawValue + 1) {
+            show(next); return
+        }
         guard let next = OnboardingStep(rawValue: step.rawValue + 1) else { return }
         go(to: next, direction: 1)
     }
 
+    /// The step-4 escape hatch: past the shortcut without pressing it, for a
+    /// Mac where another app owns ⌃⇧N (v3 §4.4).
+    func skipShortcut() {
+        guard step == .shortcut else { return }
+        go(to: .permissions, direction: 1)
+    }
+
     func back() {
-        guard step.rawValue > OnboardingStep.focus.rawValue,
-              let previous = OnboardingStep(rawValue: step.rawValue - 1) else { return }
+        if step == .discover, let previous = DiscoverItem(rawValue: discoverItem.rawValue - 1) {
+            show(previous); return
+        }
+        guard let previous = OnboardingStep(rawValue: step.rawValue - 1) else { return }
+        if previous == .discover { discoverItem = .meetings }
         go(to: previous, direction: -1)
     }
 
     private func go(to next: OnboardingStep, direction: CGFloat) {
         self.direction = direction
+        if next == .discover, step == .welcome { discoverItem = .tasks }
         withAnimation(.spring(response: 0.45, dampingFraction: 0.9)) { step = next }
         UserDefaults.standard.set(next.rawValue, forKey: Keys.lastStep)
         if next == .permissions { permissions.startWatching() } else { permissions.stopWatching() }
-        if next != .shortcut { releaseKeys() }
+        if next != .shortcut { controlHeld = false; shiftHeld = false }
     }
 
     #if DEBUG
-    func debugJump(to target: OnboardingStep) {
+    func debugJump(to target: OnboardingStep, item: DiscoverItem = .tasks,
+                   mode: DisplayMode? = nil, detected: Bool = false) {
         go(to: target, direction: 1)
+        discoverItem = item
+        if let mode { displayMode = mode }
+        shortcutDetected = detected
     }
     #endif
 
-    // MARK: Focus step
+    // MARK: Discover
 
-    func selectFocus(_ choice: OnboardingFocus) {
-        withAnimation(.easeInOut(duration: 0.25)) { focus = choice }
+    /// Next, Back and a click on the stepper all land here.
+    func show(_ item: DiscoverItem) {
+        guard step == .discover, item != discoverItem else { return }
+        withAnimation(.easeInOut(duration: 0.25)) { discoverItem = item }
     }
 
-    func moveFocus(by delta: Int) {
-        let all = OnboardingFocus.allCases
-        let index = all.firstIndex(of: focus) ?? 0
-        selectFocus(all[max(0, min(all.count - 1, index + delta))])
+    // MARK: Style
+
+    /// Written straight through to the setting Settings shows, with the same
+    /// reset a switch there does (`AppState.setNotchLayout`).
+    func select(_ mode: DisplayMode) {
+        guard mode != displayMode else { return }
+        withAnimation(.easeInOut(duration: 0.2)) { displayMode = mode }
+        AppState.shared.setNotchLayout(mode.layout)
     }
 
-    // MARK: Notch step
-
-    func armNotch() {
-        withAnimation(.easeOut(duration: 0.2)) { notchArmed = true }
-    }
-
-    // MARK: Shortcut step
+    // MARK: Shortcut
 
     func modifiersChanged(_ flags: NSEvent.ModifierFlags) {
         let control = flags.contains(.control), shift = flags.contains(.shift)
         guard control != controlHeld || shift != shiftHeld else { return }
-        withAnimation(.easeOut(duration: 0.12)) {
-            controlHeld = control
-            shiftHeld = shift
-            if !control || !shift { nHeld = false }
-        }
+        withAnimation(.easeOut(duration: 0.12)) { controlHeld = control; shiftHeld = shift }
     }
 
-    private func shortcutFired() {
+    /// The hotkey, whichever path reported it.
+    func shortcutFired() {
         guard step == .shortcut else { return }
-        withAnimation(.easeOut(duration: 0.12)) {
-            controlHeld = true; shiftHeld = true; nHeld = true
-        }
         if !shortcutDetected {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { shortcutDetected = true }
+            withAnimation(.easeInOut(duration: 0.4)) { shortcutDetected = true }
         }
-        fieldFocusRequest += 1
-        // The key-up never reaches us either, so N lets go on its own; ⌃ and
-        // ⇧ follow the real modifier state through flagsChanged.
-        nRelease?.cancel()
-        nRelease = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 450_000_000)
+        // Each key pops in turn, 40 ms apart (v3 §4.4); the key-up never
+        // reaches us, so the highlight lets go on its own.
+        release?.cancel()
+        release = Task { @MainActor [weak self] in
+            for index in 0..<3 {
+                guard !Task.isCancelled else { return }
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.55)) { self?.heldKey = index }
+                try? await Task.sleep(nanoseconds: 40_000_000)
+            }
+            try? await Task.sleep(nanoseconds: 220_000_000)
             guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.2)) { self?.nHeld = false }
+            withAnimation(.easeOut(duration: 0.2)) { self?.heldKey = nil }
         }
-    }
-
-    private func releaseKeys() {
-        controlHeld = false; shiftHeld = false; nHeld = false
-    }
-
-    /// ↵ in the practice field: a real to-do, filed where the focus choice
-    /// says the day starts.
-    @discardableResult
-    func saveFirstTodo(_ title: String) -> Bool {
-        let store = TodoStore.shared
-        guard let target = store.firstUserCollection?.id ?? store.collections.first?.id,
-              store.addItem(title: title, collectionID: target) != nil else { return false }
-        continuePulse += 1
-        return true
     }
 
     // MARK: Done
 
-    /// `onboarding.completed` is written only here — closing the window early
-    /// counts as seen (the launch gate), not as completed (SPEC §2).
+    /// `onboarding.completed` is written only here — quitting early resumes
+    /// the flow next launch, it does not complete it.
     func finish() {
         let defaults = UserDefaults.standard
         defaults.set(true, forKey: Keys.completed)
         defaults.set(0, forKey: Keys.lastStep)
-        // Focus decides which list is selected first (SPEC §2).
-        let store = TodoStore.shared
-        if focus == .meetings, let today = store.collections.first(where: { $0.isSystemToday }) {
-            store.selectCollection(today.id)
-        } else if let first = store.firstUserCollection {
-            store.selectCollection(first.id)
+        // Whatever the style step showed is what opens, even if it was never
+        // touched (the notch default is not written until then).
+        AppState.shared.setNotchLayout(displayMode.layout)
+        if let first = TodoStore.shared.firstUserCollection {
+            TodoStore.shared.selectCollection(first.id)
         }
     }
 
-    /// Whether ⌃⇧N should be left to this window instead of opening the notch
-    /// — only while the shortcut step is on screen and this window has focus.
+    /// Whether ⌃⇧N should be left to this window instead of opening Otto —
+    /// only while the shortcut step is on screen and this window has focus.
     var capturesQuickEntry: Bool { step == .shortcut }
 }
 

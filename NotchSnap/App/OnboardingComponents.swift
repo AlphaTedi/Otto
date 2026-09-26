@@ -2,129 +2,197 @@ import SwiftUI
 
 // MARK: - Onboarding components (SPEC §6)
 
-// MARK: KeyHint (§6.2)
+// MARK: KeyCap (v3 §3.1) — replaces the outlined KeyHint
 
-struct KeyHint: View {
-    enum Context { case window, inButton, inButtonHover }
+/// A filled keycap: 20 pt tall, a 20×20 square for one glyph, 6 of padding
+/// for more. Return is always drawn as an icon, never the `↵` character.
+struct KeyCap: View {
+    enum Label: Equatable {
+        case returnKey
+        case text(String)
+    }
 
-    let label: String
+    enum Context { case window, inButton, inButtonDisabled, small, smallDisabled }
+
+    let label: Label
     var context: Context = .window
+
+    init(_ label: Label, context: Context = .window) {
+        self.label = label
+        self.context = context
+    }
+
+    init(text: String, context: Context = .window) {
+        self.init(.text(text), context: context)
+    }
+
+    private var isSmall: Bool { context == .small || context == .smallDisabled }
+    private var inButton: Bool { context != .window }
+    private var side: CGFloat { isSmall ? 18 : 20 }
+    private var radius: CGFloat { isSmall ? 4 : 6 }
 
     var body: some View {
         withPalette { p in
-            let (border, text) = colors(p)
-            // CSS content-box, as the PNGs were rendered: a 16×16 minimum
-            // content, 4 pt of padding each side, then the 1-pt border —
-            // 26×18 for a single glyph.
-            Text(label)
-                .obFont(10, 500)
-                .foregroundStyle(text)
-                .frame(minWidth: 16, minHeight: 16)
-                .padding(.horizontal, 4)
-                .padding(1)
-                .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .strokeBorder(border, lineWidth: 1))
+            let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+            let (fill, ink) = colors(p)
+            content
+                .foregroundStyle(ink)
+                .frame(minWidth: side, minHeight: side)
+                .padding(.horizontal, singleGlyph || inButton ? 0 : 6)
+                .frame(height: side)
+                .background(shape.fill(fill))
+                // inset 0 −1 0 black @ 40%: the cap's bottom lip, on the
+                // window only (v3 §3.1).
+                .overlay(context == .window ? AnyView(BottomLip(shape: shape, depth: 1, alpha: p.dark ? 0.4 : 0.12))
+                                            : AnyView(EmptyView()))
                 .fixedSize()
                 .accessibilityHidden(true)
         }
     }
 
+    @ViewBuilder
+    private var content: some View {
+        switch label {
+        case .returnKey:
+            ReturnGlyph()
+                .stroke(style: StrokeStyle(lineWidth: 2.4 * 12 / 24, lineCap: .round, lineJoin: .round))
+                .frame(width: 12, height: 12)
+        case .text(let text):
+            Text(text).obFont(isSmall ? 10.5 : 11, 600)
+        }
+    }
+
+    private var singleGlyph: Bool {
+        if case .text(let text) = label { return text.count <= 1 }
+        return true
+    }
+
     private func colors(_ p: OBPalette) -> (Color, Color) {
         switch context {
         case .window:
-            return (p.textPrimary.opacity(0.20), p.textPrimary.opacity(0.65))
-        case .inButtonHover:
-            return (Color.black.opacity(0.22), Color.black.opacity(0.55))
-        case .inButton:
-            return p.dark ? (Color.black.opacity(0.22), Color.black.opacity(0.55))
-                          : (Color.white.opacity(0.30), Color.white.opacity(0.75))
+            return p.dark ? (Color.white.opacity(0.10), Color.white.opacity(0.78))
+                          : (p.ink(0.07), p.ink(0.70))
+        case .inButton, .small:
+            return p.dark ? (Color.black.opacity(0.08), Color.black.opacity(0.60))
+                          : (Color.white.opacity(0.18), Color.white.opacity(0.85))
+        case .inButtonDisabled, .smallDisabled:
+            return (p.ink(0.06), p.ink(0.30))
         }
     }
 }
 
-// MARK: OttoButton (§6.1)
+/// `M19 5v6a3 3 0 0 1-3 3H6` and `M10 10l-4 4 4 4`, on a 24 grid.
+struct ReturnGlyph: Shape {
+    func path(in rect: CGRect) -> Path {
+        let s = min(rect.width, rect.height) / 24
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + x * s, y: rect.minY + y * s) }
+        var path = Path()
+        path.move(to: p(19, 5)); path.addLine(to: p(19, 11))
+        path.addArc(center: p(16, 11), radius: 3 * s, startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
+        path.addLine(to: p(6, 14))
+        path.move(to: p(10, 10)); path.addLine(to: p(6, 14)); path.addLine(to: p(10, 18))
+        return path
+    }
+}
+
+/// CSS `inset 0 −depth 0 black`: a dark band along the shape's bottom edge.
+struct BottomLip<S: Shape>: View {
+    let shape: S
+    let depth: CGFloat
+    let alpha: Double
+    var body: some View {
+        shape.fill(Color.black.opacity(alpha))
+            .mask(
+                ZStack {
+                    shape
+                    shape.offset(y: -depth).blendMode(.destinationOut)
+                }
+                .compositingGroup()
+            )
+            .allowsHitTesting(false)
+    }
+}
+
+// MARK: OttoButton (v3 §3.2)
 
 struct OttoButton: View {
     enum Size { case regular, small }
-    enum Kind { case primary, secondary }
 
     let title: String
-    var key: String? = "\u{21B5}"
+    var key: KeyCap.Label = .returnKey
     var size: Size = .regular
-    var kind: Kind = .primary
+    var isEnabled = true
     var isLoading = false
-    /// Bumped from outside to pulse the button once (a saved to-do, §7.4).
-    var pulse = 0
-    /// Spoken with the label, since the key hint itself is hidden (§8).
+    /// Spoken with the label, since the keycap itself is hidden (§8).
     var shortcutDescription: String? = nil
     let action: () -> Void
 
     @State private var hover = false
-    @State private var pulsing = false
+    @State private var cursorPushed = false
+
+    /// Not-allowed over a disabled button — pushed once, popped once.
+    private func setBlockedCursor(_ blocked: Bool) {
+        guard blocked != cursorPushed else { return }
+        if blocked { NSCursor.operationNotAllowed.push() } else { NSCursor.pop() }
+        cursorPushed = blocked
+    }
 
     var body: some View {
         withPalette { p in
             Button(action: action) { label(p) }
                 .buttonStyle(OttoPressStyle())
+                .disabled(!isEnabled)
                 .onHover { hovering in
-                    withAnimation(.easeOut(duration: 0.35)) { hover = hovering }
+                    withAnimation(.easeOut(duration: 0.35)) { hover = hovering && isEnabled }
+                    setBlockedCursor(hovering && !isEnabled)
                 }
-                .scaleEffect(pulsing ? 1.06 : 1)
-                .onChange(of: pulse) { _ in
-                    withAnimation(.spring(response: 0.22, dampingFraction: 0.5)) { pulsing = true }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) { pulsing = false }
-                    }
+                .onChange(of: isEnabled) { enabled in
+                    if !enabled { hover = false }
+                    if enabled { setBlockedCursor(false) }
                 }
+                .onDisappear { setBlockedCursor(false) }
+                .animation(.easeInOut(duration: 0.2), value: isEnabled)
                 .accessibilityLabel(shortcutDescription.map { "\(title), \($0)" } ?? title)
         }
     }
 
-    private var height: CGFloat { size == .regular ? 30 : 24 }
-    private var radius: CGFloat { size == .regular ? 8 : 6 }
+    private var regular: Bool { size == .regular }
+    private var height: CGFloat { regular ? 30 : 24 }
+    private var radius: CGFloat { regular ? 8 : 6 }
 
     @ViewBuilder
     private func label(_ p: OBPalette) -> some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        HStack(spacing: 8) {
+        HStack(spacing: regular ? 8 : 7) {
             ZStack {
                 // Loading keeps the width: the label stays, invisibly.
                 Text(title).opacity(isLoading ? 0 : 1)
                 if isLoading { ProgressView().controlSize(.small).scaleEffect(0.7) }
             }
-            .obFont(size == .regular ? 13 : 11.5, 600)
+            .obFont(regular ? 13 : 11.5, 600)
             .foregroundStyle(foreground(p))
-            if let key {
-                KeyHint(label: key,
-                        context: hover ? .inButtonHover : (kind == .primary ? .inButton : .window))
-            }
+            KeyCap(key, context: regular ? (isEnabled ? .inButton : .inButtonDisabled)
+                                         : (isEnabled ? .small : .smallDisabled))
         }
-        .padding(.leading, size == .regular ? 14 : 9)
-        // 7 trailing even without a key hint: the reference's `.btn` keeps its
-        // padding when the hint is absent ("Try it now").
-        .padding(.trailing, size == .regular ? 7 : 5)
+        // 14 / 5: the gap around the keycap is the same on every side.
+        .padding(.leading, regular ? 14 : 10)
+        .padding(.trailing, regular ? 5 : 3)
         .frame(height: height)
         .background(
             ZStack {
-                shape.fill(fill(p))
+                shape.fill(isEnabled ? p.buttonBG : p.ink(0.08))
                 shape.fill(OBGradient.hover).opacity(hover ? 1 : 0)
             }
         )
-        .overlay(kind == .secondary && !hover
-                 ? shape.strokeBorder(p.ink(0.12), lineWidth: 1) : nil)
         .contentShape(shape)
         .shadow(color: hover ? OBGradient.hoverGlow
-                             : (kind == .primary && !p.dark ? Color(obHex: 0x6B4CF6, alpha: 0.3) : .clear),
+                             : (isEnabled && !p.dark ? Color(obHex: 0x6B4CF6, alpha: 0.3) : .clear),
                 radius: hover ? 11 : 7, x: 0, y: hover ? 0 : 4)
     }
 
-    private func fill(_ p: OBPalette) -> Color {
-        kind == .primary ? p.buttonBG : p.ink(0.08)
-    }
-
     private func foreground(_ p: OBPalette) -> Color {
+        if !isEnabled { return p.ink(0.35) }
         if hover { return Color(obHex: 0x111111) }
-        if kind == .secondary { return p.dark ? .white : p.textPrimary }
         return p.buttonFG
     }
 }
@@ -177,116 +245,172 @@ struct OBPill<Leading: View>: View {
     }
 }
 
-/// The green-check success pill ("Shortcut detected", "Nice, that's it").
-struct OBSuccessPill: View {
-    let text: String
-    @State private var pop = false
-    var body: some View {
-        withPalette { p in
-            OBPill(text: text, foreground: p.success,
-                   background: Color(obHex: 0x8FE3B0, alpha: 0.1)) {
-                OBIconView(icon: .check, size: 12, color: p.success)
-                    .scaleEffect(pop ? 1 : 0.4)
-            }
-            .onAppear {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.55).delay(0.05)) { pop = true }
-            }
-        }
-    }
-}
+// MARK: RadioCard (v3 §3.3) — replaces the checkbox option card
 
-// MARK: OptionCard (§6.3)
-
-struct OBOptionCard: View {
+/// Transparent in both states: the selected card only gets a white stroke.
+struct OBRadioCard: View {
     let title: String
     let caption: String
     let isSelected: Bool
     let keyNumber: Int
     let action: () -> Void
 
-    @State private var hover = false
-
     var body: some View {
         withPalette { p in
             let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
             Button(action: action) {
                 HStack(alignment: .top, spacing: 10) {
-                    checkbox(p).padding(.top, 1)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(title).obFont(13, 600).foregroundStyle(p.textPrimary)
-                        OBText(text: caption, size: 12, color: p.ink(0.5))
+                    Circle()
+                        .strokeBorder(isSelected ? p.textPrimary : p.ink(0.3),
+                                      lineWidth: isSelected ? 5 : 1.5)
+                        .frame(width: 16, height: 16)
+                        .padding(.top, 2)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(title).obFont(13.5, 600).foregroundStyle(p.textPrimary)
+                        OBText(text: caption, size: 12, lineHeight: 16.8, color: p.ink(0.5))
                     }
                     Spacer(minLength: 0)
                 }
                 .padding(.vertical, 10)
                 .padding(.horizontal, 12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(shape.fill(p.ink(isSelected ? 0.06 : (hover ? 0.05 : 0.025))))
-                .overlay(shape.strokeBorder(p.ink(isSelected ? 0.22 : 0.07), lineWidth: 1))
+                .overlay(shape.strokeBorder(p.ink(isSelected ? 0.78 : 0.07), lineWidth: 1))
                 .contentShape(shape)
             }
             .buttonStyle(.plain)
-            .onHover { hovering in withAnimation(.easeOut(duration: 0.15)) { hover = hovering } }
             .accessibilityLabel("\(title), \(caption), \(keyNumber)")
             .accessibilityAddTraits(isSelected ? .isSelected : [])
         }
     }
-
-    private func checkbox(_ p: OBPalette) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
-        return ZStack {
-            shape.fill(isSelected ? p.textPrimary : .clear)
-            shape.strokeBorder(isSelected ? p.textPrimary : p.ink(0.3), lineWidth: 1.5)
-            if isSelected {
-                OBIconView(icon: .check, size: 11, color: p.window)
-            }
-        }
-        // 16 of content inside a 1.5 border (CSS content-box).
-        .frame(width: 19, height: 19)
-    }
 }
 
-// MARK: Keycap (§6.6)
+// MARK: Discover stepper (v3 §4.2)
 
-struct OBKeycap: View {
-    let symbol: String
-    let active: Bool
+struct OBDiscoverStepper: View {
+    let current: DiscoverItem
+    let select: (DiscoverItem) -> Void
 
     var body: some View {
         withPalette { p in
-            let shape = RoundedRectangle(cornerRadius: 13, style: .continuous)
-            Text(symbol)
-                .obFont(22, 600)
-                .foregroundStyle(active ? Color(obHex: p.dark ? 0xFFFFFF : 0x2A2145)
-                                        : p.textPrimary.opacity(0.6))
-                // 58 of content plus the 1-pt border (CSS content-box).
-                .frame(width: 60, height: 60)
-                .background(
-                    ZStack {
-                        shape.fill(p.keycapIdle)
-                        shape.fill(LinearGradient(
-                            colors: p.dark ? [Color(obHex: 0x2C2540), Color(obHex: 0x1A1627)]
-                                           : [.white, Color(obHex: 0xF0ECFF)],
-                            startPoint: .top, endPoint: .bottom))
-                            .opacity(active ? 1 : 0)
-                    }
-                )
-                // inset 0 −3 0 black @ 45%: the cap's bottom lip.
-                .overlay(
-                    shape.fill(Color.black.opacity(0.45))
-                        .mask(
-                            ZStack {
-                                shape
-                                shape.offset(y: -3).blendMode(.destinationOut)
-                            }
-                            .compositingGroup()
-                        )
-                        .opacity(active ? 1 : 0)
-                )
-                .overlay(shape.strokeBorder(active ? Color(obHex: 0xC6B4FF, alpha: 0.65) : p.divider,
-                                            lineWidth: 1))
-                .shadow(color: active ? Color(obHex: 0xC6B4FF, alpha: 0.4) : .clear, radius: 11)
-                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(DiscoverItem.allCases, id: \.self) { item in
+                    Button { select(item) } label: { row(item, p) }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(L10n.t("ob.discover.\(item)"))
+                        .accessibilityAddTraits(item == current ? .isSelected : [])
+                }
+            }
+        }
+    }
+
+    private func row(_ item: DiscoverItem, _ p: OBPalette) -> some View {
+        let isCurrent = item == current
+        let isDone = item.rawValue <= current.rawValue
+        return HStack(alignment: isCurrent ? .top : .center, spacing: 12) {
+            ZStack {
+                if isDone {
+                    Circle().fill(Color(obHex: 0x34C77B))
+                    OBIconView(icon: .check, size: 10, color: Color(obHex: 0x06140C), lineWidth: 3.2)
+                } else {
+                    Circle().strokeBorder(p.ink(0.25), lineWidth: 1.5)
+                }
+            }
+            .frame(width: 20, height: 20)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(L10n.t("ob.discover.\(item)"))
+                    .obFont(14.5, isCurrent ? 600 : 500)
+                    .foregroundStyle(isCurrent ? p.textPrimary : p.ink(isDone ? 0.55 : 0.4))
+                if isCurrent {
+                    OBText(text: L10n.t("ob.discover.\(item).caption"), size: 12.5,
+                           lineHeight: 18.1, color: p.ink(0.55))
+                        .transition(.opacity)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+    }
+}
+
+// MARK: Page dots (v3 §4.2)
+
+struct OBPageDots: View {
+    let count: Int
+    let current: Int
+
+    var body: some View {
+        withPalette { p in
+            HStack(spacing: 6) {
+                ForEach(0..<count, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(p.ink(index == current ? 0.85 : 0.25))
+                        .frame(width: index == current ? 18 : 5, height: 5)
+                }
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: current)
+        .accessibilityHidden(true)
+    }
+}
+
+// MARK: Big keycap (v3 §4.4)
+
+/// One of the three 62-pt caps on the shortcut step. Violet while waiting,
+/// green once the shortcut has been seen; a held modifier brightens its cap.
+struct OBKeycap: View {
+    let symbol: String
+    var success = false
+    var held = false
+    var popping = false
+
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let dark = scheme == .dark
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        // Dark: the v3 values. Light: Direction B's light keycap, tinted green
+        // on success.
+        let top = dark ? Color(obHex: success ? 0x1F3A2C : 0x2C2540) : .white
+        let bottom = dark ? Color(obHex: success ? 0x13251C : 0x1A1627)
+                          : Color(obHex: success ? 0xE3F7EB : 0xF0ECFF)
+        let edge = success ? Color(obHex: dark ? 0x7FE3A8 : 0x1F9D5A, alpha: 0.7)
+                           : Color(obHex: dark ? 0xC6B4FF : 0x7B6BFF, alpha: 0.7)
+        let glow = success ? Color(obHex: 0x7FE3A8, alpha: 0.4) : Color(obHex: 0xC6B4FF, alpha: 0.4)
+        return glyph
+            .foregroundStyle(dark ? Color.white : Color(obHex: 0x2A2145))
+            .frame(width: 62, height: 62)
+            .background(shape.fill(LinearGradient(colors: [top, bottom], startPoint: .top, endPoint: .bottom)))
+            .overlay(shape.fill(Color.white.opacity(held ? 0.07 : 0)))
+            // inset 0 −3 0 black @ 45%: the cap's bottom lip.
+            .overlay(BottomLip(shape: shape, depth: 3, alpha: dark ? 0.45 : 0.08))
+            .overlay(shape.strokeBorder(edge, lineWidth: 1))
+            .shadow(color: glow, radius: 11)
+            .scaleEffect(popping ? 1.06 : 1)
+            .accessibilityHidden(true)
+    }
+
+    /// Host Grotesk has no ⌃ or ⇧. The reference PNGs drew them with the
+    /// browser's fallback — a small caret and a tall-stemmed arrow — and of
+    /// the faces macOS ships, Arial Unicode MS is the one that matches
+    /// (compared side by side, 2026-09-26). The system face if it is absent.
+    @ViewBuilder
+    private var glyph: some View {
+        if symbol.unicodeScalars.allSatisfy({ CharacterSet.letters.contains($0) }) {
+            Text(symbol).obFont(23, 600)
+        } else if symbol == "\u{2303}" {
+            // The caret alone is drawn small, heavy and high in the reference.
+            Text(symbol).font(.system(size: 15, weight: .heavy)).offset(y: -3)
+        } else if NSFont(name: "Arial Unicode MS", size: 23) != nil {
+            // The face has one weight; two copies half a point apart give
+            // the stroke the reference's heft.
+            ZStack {
+                Text(symbol).offset(x: -0.35)
+                Text(symbol).offset(x: 0.35)
+            }
+            .font(.custom("Arial Unicode MS", size: 25))
+        } else {
+            Text(symbol).font(.system(size: 23, weight: .semibold))
         }
     }
 }
@@ -333,8 +457,12 @@ struct OBPermissionRow<Trailing: View>: View {
                     OBIconView(icon: icon, size: 16, color: tint)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(title).obFont(13, 600).foregroundStyle(p.textPrimary)
+                        // One line, always: the captions are short, and a
+                        // wide trailing control ("Open Settings ↗") was
+                        // breaking "Heads-up before meetings" in two.
                         Text(caption).obFont(11.5).foregroundStyle(p.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
+                            .lineLimit(1)
+                            .fixedSize()
                     }
                     Spacer(minLength: 8)
                     trailing

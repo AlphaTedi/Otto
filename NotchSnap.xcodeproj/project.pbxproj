@@ -17,6 +17,7 @@
 		0B0B0B0B0B0B0B0B0B0B0B02 /* OnboardingModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F02 /* OnboardingModel.swift */; };
 		0B0B0B0B0B0B0B0B0B0B0B03 /* OnboardingComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F03 /* OnboardingComponents.swift */; };
 		0B0B0B0B0B0B0B0B0B0B0B04 /* OnboardingSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F04 /* OnboardingSteps.swift */; };
+		0B0B0B0B0B0B0B0B0B0B0B07 /* OnboardingPreviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F07 /* OnboardingPreviews.swift */; };
 		0B0B0B0B0B0B0B0B0B0B0B05 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F05 /* OnboardingFlow.swift */; };
 		EE01AA02BB03CC04DD05FF06 /* ShelfItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF06EE01AA02BB03CC04DD05 /* ShelfItem.swift */; };
 		0F663776CDD3D605C249FA70 /* AnnotationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53C8C36D1B4598D827B5BD40 /* AnnotationModel.swift */; };
@@ -237,6 +238,7 @@
 		0F0F0F0F0F0F0F0F0F0F0F02 /* OnboardingModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingModel.swift; sourceTree = "<group>"; };
 		0F0F0F0F0F0F0F0F0F0F0F03 /* OnboardingComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingComponents.swift; sourceTree = "<group>"; };
 		0F0F0F0F0F0F0F0F0F0F0F04 /* OnboardingSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingSteps.swift; sourceTree = "<group>"; };
+		0F0F0F0F0F0F0F0F0F0F0F07 /* OnboardingPreviews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPreviews.swift; sourceTree = "<group>"; };
 		0F0F0F0F0F0F0F0F0F0F0F05 /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
 		A54EE6536F83A25DC71266E2 /* AreaSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AreaSelector.swift; sourceTree = "<group>"; };
 		AA00BB11CC22DD33EE44FE01 /* Local.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Local.xcconfig; path = Config/Local.xcconfig; sourceTree = "<group>"; };
@@ -490,6 +492,7 @@
 				0F0F0F0F0F0F0F0F0F0F0F02 /* OnboardingModel.swift */,
 				0F0F0F0F0F0F0F0F0F0F0F03 /* OnboardingComponents.swift */,
 				0F0F0F0F0F0F0F0F0F0F0F04 /* OnboardingSteps.swift */,
+				0F0F0F0F0F0F0F0F0F0F0F07 /* OnboardingPreviews.swift */,
 				0F0F0F0F0F0F0F0F0F0F0F05 /* OnboardingFlow.swift */,
 				FF46EE41AA42BB43CC44DD45 /* Localization.swift */,
 				F1A2B3C4D5E6F7A8B9C0D1E2 /* HapticManager.swift */,
@@ -702,6 +705,7 @@
 				0B0B0B0B0B0B0B0B0B0B0B02 /* OnboardingModel.swift in Sources */,
 				0B0B0B0B0B0B0B0B0B0B0B03 /* OnboardingComponents.swift in Sources */,
 				0B0B0B0B0B0B0B0B0B0B0B04 /* OnboardingSteps.swift in Sources */,
+				0B0B0B0B0B0B0B0B0B0B0B07 /* OnboardingPreviews.swift in Sources */,
 				0B0B0B0B0B0B0B0B0B0B0B05 /* OnboardingFlow.swift in Sources */,
 				C1D718E235EFE1AEDF61E840 /* AppSettings.swift in Sources */,
 				EE01AA02BB03CC04DD05FF06 /* ShelfItem.swift in Sources */,

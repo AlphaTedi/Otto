@@ -1,10 +1,11 @@
 import SwiftUI
 
-// MARK: - Onboarding steps (SPEC §7)
+// MARK: - Onboarding steps (v3 SPEC §4)
 //
 // Each step is two pieces: the left column's content (under the title and
 // body the flow draws) and the right-hand visual panel. The flow owns layout,
-// transitions and the footer; these own only what differs per step.
+// transitions and the footer; these own only what differs per step. The
+// panels' mock product UI lives in OnboardingPreviews.swift.
 
 // MARK: Copy
 
@@ -12,8 +13,8 @@ extension OnboardingStep {
     var title: String {
         switch self {
         case .welcome: return ""
-        case .focus: return L10n.t("ob.focus.title")
-        case .notch: return L10n.t("ob.notch.title")
+        case .discover: return L10n.t("ob.discover.title")
+        case .style: return L10n.t("ob.style.title")
         case .shortcut: return L10n.t("ob.shortcut.title")
         case .permissions: return L10n.t("ob.perm.title")
         case .done: return L10n.t("ob.done.title")
@@ -23,8 +24,8 @@ extension OnboardingStep {
     var body: String {
         switch self {
         case .welcome: return L10n.t("ob.welcome.tagline")
-        case .focus: return L10n.t("ob.focus.body")
-        case .notch: return L10n.t("ob.notch.body")
+        case .discover: return L10n.t("ob.discover.body")
+        case .style: return L10n.t("ob.style.body")
         case .shortcut: return L10n.t("ob.shortcut.body")
         case .permissions: return L10n.t("ob.perm.body")
         case .done: return L10n.t("ob.done.body")
@@ -34,35 +35,43 @@ extension OnboardingStep {
     var primaryTitle: String {
         switch self {
         case .welcome: return L10n.t("ob.start")
+        case .discover: return L10n.t("ob.next")
         case .done: return L10n.t("ob.openOtto")
         default: return L10n.t("ob.continue")
         }
     }
+}
 
-    /// §5.2 — the panel's (or, for welcome, the window's) glows.
-    var glows: [OBGlow] {
-        switch self {
-        case .welcome:
-            return [OBGlow(hue: .violet, x: 0.50, y: 1.15, rx: 620, ry: 420, alpha: 0.55),
-                    OBGlow(hue: .pink, x: 0.30, y: 1.20, rx: 420, ry: 300, alpha: 0.22),
-                    OBGlow(hue: .amber, x: 0.72, y: 1.25, rx: 380, ry: 260, alpha: 0.16)]
-        case .focus:
-            return [OBGlow(hue: .violet, x: 0.50, y: 1.00, rx: 520, ry: 380, alpha: 0.60),
-                    OBGlow(hue: .pink, x: 0.85, y: 1.10, rx: 300, ry: 240, alpha: 0.28)]
-        case .notch:
-            return [OBGlow(hue: .violet, x: 0.50, y: 0.00, rx: 460, ry: 320, alpha: 0.55),
-                    OBGlow(hue: .amber, x: 0.50, y: 1.10, rx: 500, ry: 260, alpha: 0.14)]
-        case .shortcut:
-            return [OBGlow(hue: .violet, x: 0.50, y: 0.45, rx: 420, ry: 300, alpha: 0.50),
-                    OBGlow(hue: .pink, x: 0.50, y: 1.10, rx: 400, ry: 220, alpha: 0.20)]
-        case .permissions:
-            return [OBGlow(hue: .violet, x: 0.50, y: 0.50, rx: 380, ry: 300, alpha: 0.45),
-                    OBGlow(hue: .amber, x: 0.50, y: 1.15, rx: 420, ry: 240, alpha: 0.20)]
-        case .done:
-            return [OBGlow(hue: .violet, x: 0.50, y: 0.60, rx: 420, ry: 340, alpha: 0.60),
-                    OBGlow(hue: .pink, x: 0.35, y: 1.10, rx: 300, ry: 220, alpha: 0.30),
-                    OBGlow(hue: .amber, x: 0.70, y: 1.15, rx: 300, ry: 220, alpha: 0.22)]
-        }
+/// The panel's glows (Direction B §5.2, v3 values from the reference HTML).
+@MainActor
+func onboardingGlows(_ model: OnboardingModel) -> [OBGlow] {
+    let faintViolet = OBGlow(hue: .violet, x: 0.50, y: 1.15, rx: 420, ry: 220, alpha: 0.15)
+    switch model.step {
+    case .welcome:
+        return [OBGlow(hue: .violet, x: 0.50, y: 1.15, rx: 620, ry: 420, alpha: 0.55),
+                OBGlow(hue: .pink, x: 0.30, y: 1.20, rx: 420, ry: 300, alpha: 0.22),
+                OBGlow(hue: .amber, x: 0.72, y: 1.25, rx: 380, ry: 260, alpha: 0.16)]
+    case .discover:
+        // Amber on Meetings only (v3 §4.2).
+        return [OBGlow(hue: model.discoverItem == .meetings ? .amber : .violet,
+                       x: 0.50, y: 0.00, rx: 460, ry: 320, alpha: 0.50),
+                faintViolet]
+    case .style:
+        return [OBGlow(hue: .violet, x: 0.50, y: model.displayMode == .notch ? 0.00 : 0.50,
+                       rx: 460, ry: 320, alpha: 0.50)]
+    case .shortcut:
+        return model.shortcutDetected
+            ? [OBGlow(hue: .green, x: 0.50, y: 0.45, rx: 460, ry: 320, alpha: 0.50),
+               OBGlow(hue: .teal, x: 0.50, y: 1.15, rx: 420, ry: 220, alpha: 0.25)]
+            : [OBGlow(hue: .violet, x: 0.50, y: 0.45, rx: 420, ry: 300, alpha: 0.50),
+               OBGlow(hue: .pink, x: 0.50, y: 1.10, rx: 400, ry: 220, alpha: 0.20)]
+    case .permissions:
+        return [OBGlow(hue: .violet, x: 0.50, y: 0.50, rx: 380, ry: 300, alpha: 0.45),
+                OBGlow(hue: .amber, x: 0.50, y: 1.15, rx: 420, ry: 240, alpha: 0.20)]
+    case .done:
+        return [OBGlow(hue: .violet, x: 0.50, y: 0.60, rx: 420, ry: 340, alpha: 0.60),
+                OBGlow(hue: .pink, x: 0.35, y: 1.10, rx: 300, ry: 220, alpha: 0.30),
+                OBGlow(hue: .amber, x: 0.70, y: 1.15, rx: 300, ry: 220, alpha: 0.22)]
     }
 }
 
@@ -78,7 +87,7 @@ struct WelcomeStepView: View {
     var body: some View {
         withPalette { p in
             ZStack {
-                OBGlowBackground(glows: OnboardingStep.welcome.glows)
+                OBGlowBackground(glows: onboardingGlows(model))
                 VStack(spacing: 22) {
                     OttoLogo(width: 190, color: p.logo)
                         .scaleEffect(shown[0] || reduceMotion ? 1 : 0.96)
@@ -105,234 +114,98 @@ struct WelcomeStepView: View {
     }
 }
 
-// MARK: 2 · Focus (§7.2)
+// MARK: 2 · Discover (v3 §4.2)
 
-struct FocusStepContent: View {
+struct DiscoverStepContent: View {
     @ObservedObject var model: OnboardingModel
 
     var body: some View {
-        VStack(spacing: 8) {
-            ForEach(Array(OnboardingFocus.allCases.enumerated()), id: \.element) { index, choice in
-                OBOptionCard(title: L10n.t("ob.focus.\(choice.rawValue)"),
-                             caption: L10n.t("ob.focus.\(choice.rawValue).caption"),
-                             isSelected: model.focus == choice,
-                             keyNumber: index + 1) {
-                    model.selectFocus(choice)
-                }
-            }
-        }
+        OBDiscoverStepper(current: model.discoverItem) { model.show($0) }
     }
 }
 
-/// A black notch panel that shows what the chosen focus puts in it.
-struct FocusPanel: View {
+struct DiscoverPanel: View {
     @ObservedObject var model: OnboardingModel
-    @ObservedObject private var store = TodoStore.shared
-    @ObservedObject private var calendar = CalendarStore.shared
 
     var body: some View {
-        withPalette { p in
-            VStack(alignment: .leading, spacing: 9) {
-                if model.focus != .tasks {
-                    ForEach(meetings.prefix(model.focus == .meetings ? 3 : 1)) { meeting in
-                        MeetingChip(title: meeting.title, time: meeting.time)
-                            .transition(.opacity)
-                    }
-                }
-                if model.focus != .meetings {
-                    ForEach(todos, id: \.self) { title in
-                        HStack(spacing: 9) {
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.35), lineWidth: 1.5)
-                                .frame(width: 16, height: 16)
-                            Text(title).obFont(12.5).lineLimit(1)
-                        }
-                        .transition(.opacity)
-                    }
+        ZStack(alignment: .top) {
+            Group {
+                switch model.discoverItem {
+                case .tasks: NotchTasksPreview()
+                case .notes: NotePreview()
+                case .meetings: MeetingPreview()
                 }
             }
-            .foregroundStyle(Color(obHex: 0xF2F1F5))
-            .padding(.top, 14)
-            .padding(.horizontal, 14)
-            .padding(.bottom, 16)
-            .frame(width: 300, alignment: .leading)
-            .background(UnevenRoundedRect(topLeading: 0, bottomLeading: 20,
-                                          bottomTrailing: 20, topTrailing: 0).fill(.black))
-            .overlay(UnevenRoundedRect(topLeading: 0, bottomLeading: 20,
-                                       bottomTrailing: 20, topTrailing: 0)
-                .stroke(p.ink(0.06), lineWidth: 1))
-            .shadow(color: .black.opacity(0.6), radius: 30, y: 30)
+            .id(model.discoverItem)
+            .transition(.opacity.animation(.easeInOut(duration: 0.25)))
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .animation(.easeInOut(duration: 0.25), value: model.focus)
-        }
-    }
 
-    /// Real data where there is some; neutral examples otherwise (§12).
-    private var todos: [String] {
-        let real = store.items.filter { !$0.isCompleted }
-            .sorted { $0.sortOrder < $1.sortOrder }
-            .prefix(3).map(\.title)
-        return real.isEmpty ? ["ob.sample.todo1", "ob.sample.todo2", "ob.sample.todo3"].map(L10n.t) : Array(real)
-    }
-
-    private struct Meeting: Identifiable {
-        let id: String
-        let title: String
-        let time: String
-    }
-
-    private var meetings: [Meeting] {
-        let real = calendar.upcomingToday.prefix(3).map {
-            Meeting(id: $0.id, title: $0.title,
-                    time: $0.start.formatted(date: .omitted, time: .shortened))
-        }
-        return real.isEmpty
-            ? [Meeting(id: "a", title: L10n.t("ob.sample.meeting1"), time: "14:00"),
-               Meeting(id: "b", title: L10n.t("ob.sample.meeting2"), time: "16:30")]
-            : Array(real)
-    }
-}
-
-private struct MeetingChip: View {
-    let title: String
-    let time: String
-
-    var body: some View {
-        withPalette { p in
-            HStack(spacing: 8) {
-                OBIconView(icon: .calendar, size: 13, color: p.amber)
-                Text(title).lineLimit(1)
-                Spacer(minLength: 6)
-                Text(time)
+            VStack {
+                Spacer()
+                OBPageDots(count: DiscoverItem.allCases.count, current: model.discoverItem.rawValue)
+                    .padding(.bottom, 26)
             }
-            .obFont(12)
-            .foregroundStyle(Color(obHex: 0xFFD9AD))
-            .padding(.vertical, 7)
-            .padding(.horizontal, 9)
-            .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(Color(obHex: 0xFFBE78, alpha: p.dark ? 0.13 : 0.078)))
         }
+        .frame(width: OBMetric.panelSize.width, height: OBMetric.panelSize.height)
     }
 }
 
-// MARK: 3 · Notch (§7.3)
+// MARK: 3 · Style (v3 §4.3)
 
-struct NotchStepContent: View {
+struct StyleStepContent: View {
     @ObservedObject var model: OnboardingModel
 
     var body: some View {
         withPalette { p in
-            VStack(alignment: .leading, spacing: 7) {
-                hint("hover", L10n.t("ob.notch.hover"))
-                hint("click", L10n.t("ob.notch.click"))
-                hint("?", L10n.t("ob.notch.shortcuts"))
-                if model.notchTried {
-                    OBSuccessPill(text: L10n.t("ob.notch.success"))
-                        .padding(.top, 7)
-                        .transition(.opacity.combined(with: .offset(y: 4)))
-                }
+            VStack(alignment: .leading, spacing: 8) {
+                OBRadioCard(title: L10n.t("ob.style.notch"), caption: L10n.t("ob.style.notch.caption"),
+                            isSelected: model.displayMode == .notch, keyNumber: 1) { model.select(.notch) }
+                OBRadioCard(title: L10n.t("ob.style.floating"), caption: L10n.t("ob.style.floating.caption"),
+                            isSelected: model.displayMode == .floating, keyNumber: 2) { model.select(.floating) }
+                Text(L10n.t("ob.style.footnote"))
+                    .obFont(11.5)
+                    .foregroundStyle(p.ink(0.4))
+                    .padding(.top, 4)
             }
-            .obFont(12)
-            .foregroundStyle(p.ink(0.55))
         }
-    }
-
-    private func hint(_ key: String, _ text: String) -> some View {
-        HStack(spacing: 4) {
-            KeyHint(label: key)
-            Text(text)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(key) \(text)")
     }
 }
 
-struct NotchDemoPanel: View {
+struct StylePanel: View {
     @ObservedObject var model: OnboardingModel
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        withPalette { p in
-            ZStack(alignment: .top) {
-                if reduceMotion {
-                    scene(p, t: nil)
-                } else {
-                    TimelineView(.animation) { context in
-                        let seconds = context.date.timeIntervalSinceReferenceDate
-                        scene(p, t: seconds.truncatingRemainder(dividingBy: 3) / 3)
-                    }
-                }
-                VStack {
-                    Spacer()
-                    OttoButton(title: model.notchArmed ? L10n.t("ob.notch.armed") : L10n.t("ob.notch.try"),
-                               key: nil, kind: .secondary) { model.armNotch() }
-                        .padding(.bottom, 28)
-                }
+        ZStack {
+            // Cross-fade and re-play the newcomer's entrance (v3 §4.3).
+            Group {
+                if model.displayMode == .notch { NotchStylePreview() } else { FloatingStylePreview() }
             }
-        }
-    }
-
-    /// One frame of the 3 s loop: the cursor climbs into the notch and the
-    /// notch opens around it. `t == nil` is the still frame of the PNG.
-    private func scene(_ p: OBPalette, t: Double?) -> some View {
-        func ease(_ x: Double) -> Double { let c = min(max(x, 0), 1); return c * c * (3 - 2 * c) }
-        let climb = t.map { ease(($0 - 0.05) / 0.45) } ?? 0
-        let open = t.map { ease(($0 - 0.5) / 0.12) - ease(($0 - 0.84) / 0.12) } ?? 0
-        let cursorOpacity = t.map { $0 < 0.05 ? $0 / 0.05 : ($0 > 0.86 ? max(0, (0.96 - $0) / 0.1) : 1) } ?? 1
-        let width = 170 + 60 * open
-        let height = 30 + 16 * open
-
-        return ZStack(alignment: .topLeading) {
-            Color.clear
-            UnevenRoundedRect(topLeading: 0, bottomLeading: 14, bottomTrailing: 14, topTrailing: 0)
-                .fill(.black)
-                .overlay(UnevenRoundedRect(topLeading: 0, bottomLeading: 14, bottomTrailing: 14, topTrailing: 0)
-                    .stroke(p.ink(0.08), lineWidth: 1))
-                .frame(width: width, height: height)
-                .shadow(color: Color(obHex: 0xC6B4FF, alpha: 0.45), radius: 20)
-                .position(x: 245, y: height / 2)
-            VStack(spacing: 4) {
-                ForEach([0.2, 0.35, 0.55, 0.8], id: \.self) { alpha in
-                    Circle().fill(p.ink(alpha)).frame(width: 4, height: 4)
-                }
-            }
-            .opacity(1 - open)
-            .position(x: 245, y: 44 + 14)
-            CursorShape()
-                .fill(.white)
-                .overlay(CursorShape().stroke(.black, lineWidth: 1.2 * 22 / 24))
-                .frame(width: 22, height: 22)
-                .opacity(cursorOpacity)
-                .position(x: 246 + 11, y: 84 + 11 + (t == nil ? 0 : 60 - 110 * climb))
+            .id(model.displayMode)
+            .transition(.opacity.animation(.easeInOut(duration: 0.2)))
         }
         .frame(width: OBMetric.panelSize.width, height: OBMetric.panelSize.height)
         .accessibilityHidden(true)
     }
 }
 
-private struct CursorShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        let s = rect.width / 24
-        var path = Path()
-        path.move(to: CGPoint(x: 5 * s, y: 3 * s))
-        path.addLine(to: CGPoint(x: 19 * s, y: 11 * s))
-        path.addLine(to: CGPoint(x: 13 * s, y: 13 * s))
-        path.addLine(to: CGPoint(x: 10 * s, y: 19 * s))
-        path.closeSubpath()
-        return path.offsetBy(dx: rect.minX, dy: rect.minY)
-    }
-}
+// MARK: 4 · Shortcut (v3 §4.4)
 
-// MARK: 4 · Shortcut (§7.4)
-
+/// No content under the body any more; the one exception is the way past a
+/// shortcut this Mac cannot deliver.
 struct ShortcutStepContent: View {
     @ObservedObject var model: OnboardingModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if model.shortcutDetected {
-                OBSuccessPill(text: L10n.t("ob.shortcut.detected"))
-                    .transition(.opacity.combined(with: .offset(y: 4)))
+        withPalette { p in
+            if !model.shortcutDetected && !HotkeyManager.shared.quickEntryRegistered {
+                Button { model.skipShortcut() } label: {
+                    Text(L10n.t("ob.shortcut.fallback"))
+                        .obFont(12, 500)
+                        .foregroundStyle(p.ink(0.55))
+                        .underline()
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L10n.t("ob.shortcut.fallback") + ", \u{2318}\u{2192}")
             }
         }
     }
@@ -340,57 +213,46 @@ struct ShortcutStepContent: View {
 
 struct ShortcutPanel: View {
     @ObservedObject var model: OnboardingModel
-    @State private var text = ""
-    @FocusState private var fieldFocused: Bool
+
+    private var symbols: [String] { HotkeyManager.quickEntryDisplay.map(String.init) }
 
     var body: some View {
-        withPalette { p in
-            VStack(spacing: 26) {
-                HStack(spacing: 10) {
-                    OBKeycap(symbol: "\u{2303}", active: model.controlHeld)
-                    OBKeycap(symbol: "\u{21E7}", active: model.shiftHeld)
-                    OBKeycap(symbol: "N", active: model.nHeld)
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(L10n.t("ob.shortcut.keysLabel"))
-
-                HStack(spacing: 9) {
-                    OBIconView(icon: .circle, size: 14, color: Color(obHex: 0x777777))
-                    TextField("", text: $text,
-                              prompt: Text(L10n.t("ob.shortcut.placeholder"))
-                                .foregroundColor(p.textPrimary.opacity(0.4)))
-                        .textFieldStyle(.plain)
-                        .obFont(13)
-                        .foregroundStyle(p.textPrimary)
-                        .focused($fieldFocused)
-                        .onSubmit(submit)
-                    KeyHint(label: "\u{21B5}")
-                }
-                .frame(width: 300)
-                .padding(.vertical, 10)
-                .padding(.horizontal, 12)
-                .padding(1)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(p.dark ? Color.black : Color.white))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(p.dark ? Color(obHex: 0xC6B4FF, alpha: 0.4)
-                                         : Color(obHex: 0x7B6BFF, alpha: 0.45), lineWidth: 1))
-                .shadow(color: p.dark ? .clear : Color(obHex: 0x503CA0, alpha: 0.12), radius: 12, y: 8)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .onChange(of: model.fieldFocusRequest) { _ in fieldFocused = true }
-        }
+        withPalette { p in content(p) }
     }
 
-    private func submit() {
-        let title = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        // An empty ↵ is the step's own ↵: carry on.
-        guard !title.isEmpty else { fieldFocused = false; model.advance(); return }
-        if model.saveFirstTodo(title) {
-            text = ""
-            // Give ↵ back to the window, so the next press continues.
-            fieldFocused = false
+    private func content(_ p: OBPalette) -> some View {
+        VStack(spacing: 26) {
+            HStack(spacing: 10) {
+                ForEach(Array(symbols.enumerated()), id: \.offset) { index, symbol in
+                    OBKeycap(symbol: symbol,
+                             success: model.shortcutDetected,
+                             held: (index == 0 && model.controlHeld) || (index == 1 && model.shiftHeld),
+                             popping: model.heldKey == index)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(L10n.t("ob.shortcut.keysLabel"))
+
+            ZStack {
+                if model.shortcutDetected {
+                    HStack(spacing: 8) {
+                        OBIconView(icon: .check, size: 15, color: p.dark ? Color(obHex: 0x7FE3A8) : p.success,
+                                   lineWidth: 2.4)
+                        Text(L10n.t("ob.shortcut.gotIt")).obFont(13.5, 600)
+                            .foregroundStyle(p.dark ? Color(obHex: 0x9BF0BF) : p.success)
+                    }
+                    .transition(.opacity)
+                } else {
+                    Text(L10n.t("ob.shortcut.press"))
+                        .obFont(13.5)
+                        .tracking(0.135)
+                        .foregroundStyle(p.ink(0.5))
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.3), value: model.shortcutDetected)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -399,7 +261,6 @@ struct ShortcutPanel: View {
 struct PermissionsStepContent: View {
     @ObservedObject var model: OnboardingModel
     @ObservedObject var permissions: PermissionsModel
-    @ObservedObject private var calendarStore = CalendarStore.shared
 
     var body: some View {
         withPalette { p in
@@ -423,17 +284,16 @@ struct PermissionsStepContent: View {
     private func calendarRow(_ p: OBPalette) -> some View {
         OBPermissionRow(icon: .calendar, tint: p.amber,
                         title: L10n.t("ob.perm.calendar"),
-                        caption: String(format: L10n.t("ob.perm.calendar.caption"),
-                                        calendarStore.alertLeadMinutes),
-                        highlighted: model.focus == .meetings) {
+                        caption: L10n.t("ob.perm.calendar.caption")) {
             switch permissions.calendar {
             case .granted:
                 OBGrantedPill().transition(.opacity)
             case .denied:
                 OBOpenSettingsPill { permissions.openSettings() }.transition(.opacity)
             case .notDetermined:
-                OttoButton(title: L10n.t("ob.perm.grant"), key: "C", size: .small,
-                           isLoading: permissions.calendarBusy, shortcutDescription: "C") {
+                // G grants the first row still waiting for a grant (v3 §4.5).
+                OttoButton(title: L10n.t("ob.perm.grant"), key: .text("G"), size: .small,
+                           isLoading: permissions.calendarBusy, shortcutDescription: "G") {
                     permissions.grantCalendar()
                 }
                 .transition(.opacity)
@@ -513,7 +373,7 @@ private struct PermissionChip: View {
     }
 }
 
-// MARK: 6 · Done (§7.6)
+// MARK: 6 · Done (v3 §4.6)
 
 struct DoneStepContent: View {
     var body: some View {
@@ -531,7 +391,7 @@ struct DoneStepContent: View {
             HStack {
                 Text(text).obFont(12.5).foregroundStyle(p.ink(0.75))
                 Spacer()
-                KeyHint(label: key)
+                KeyCap(text: key)
             }
             .padding(.vertical, 7)
             Rectangle().fill(p.divider).frame(height: 1)
@@ -544,8 +404,11 @@ struct DoneStepContent: View {
 struct DonePanel: View {
     var body: some View {
         withPalette { p in
-            OttoLogo(width: 170, color: p.logo)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ZStack {
+                OBConfetti()
+                OttoLogo(width: 170, color: p.logo)
+            }
+            .frame(width: OBMetric.panelSize.width, height: OBMetric.panelSize.height)
         }
     }
 }

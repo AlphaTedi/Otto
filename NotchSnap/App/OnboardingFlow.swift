@@ -1,10 +1,10 @@
 import SwiftUI
 
-// MARK: - OnboardingFlowView — router, progress, footer (SPEC §4, §9)
+// MARK: - OnboardingFlowView — router, progress, footer (v3 SPEC §2, §3.4)
 //
 // Welcome is a single centred stack over a full-window glow. Steps 2–6 are a
 // split: a 360-pt left column (progress, title, body, content, footer) and a
-// 490×440 visual panel inset 10 pt from the top, right and bottom. The window
+// 490×480 visual panel inset 10 pt from the top, right and bottom. The window
 // never moves or resizes; only the content changes.
 
 struct OnboardingFlowView: View {
@@ -57,8 +57,12 @@ struct OnboardingFlowView: View {
                            tracking: -0.22, color: p.textPrimary)
                         .accessibilityAddTraits(.isHeader)
                     OBText(text: model.step.body, size: 13, lineHeight: 19.5, color: p.textSecondary)
+                    // 48 below the body on every split screen (v3 §3.4) — on
+                    // top of the column's 10 of spacing, which is what the
+                    // reference HTML (a 10-pt flex gap plus a 48-pt margin)
+                    // and its PNGs actually draw.
                     stepContent
-                        .padding(.top, 10)
+                        .padding(.top, 48)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .id(model.step)
@@ -80,8 +84,8 @@ struct OnboardingFlowView: View {
     private var stepContent: some View {
         switch model.step {
         case .welcome: EmptyView()
-        case .focus: FocusStepContent(model: model)
-        case .notch: NotchStepContent(model: model)
+        case .discover: DiscoverStepContent(model: model)
+        case .style: StyleStepContent(model: model)
         case .shortcut: ShortcutStepContent(model: model)
         case .permissions: PermissionsStepContent(model: model, permissions: model.permissions)
         case .done: DoneStepContent()
@@ -93,7 +97,7 @@ struct OnboardingFlowView: View {
             OBBackButton { model.back() }
             Spacer()
             OttoButton(title: model.step.primaryTitle,
-                       pulse: model.continuePulse,
+                       isEnabled: model.canAdvance,
                        shortcutDescription: "Return",
                        action: primary)
         }
@@ -127,7 +131,11 @@ struct OnboardingFlowView: View {
         ZStack {
             p.panel
             ZStack {
-                OBGlowBackground(glows: model.step.glows)
+                // Its own identity, so a change of glow inside a step — the
+                // amber Meetings stop, the green success — cross-fades too.
+                OBGlowBackground(glows: onboardingGlows(model))
+                    .id(glowIdentity)
+                    .transition(.opacity.animation(.easeInOut(duration: 0.4)))
                 panelContent
             }
             .id(model.step)
@@ -137,12 +145,16 @@ struct OnboardingFlowView: View {
         .clipShape(OBMetric.panelShape)
     }
 
+    private var glowIdentity: String {
+        "\(model.discoverItem == .meetings)-\(model.displayMode)-\(model.shortcutDetected)"
+    }
+
     @ViewBuilder
     private var panelContent: some View {
         switch model.step {
         case .welcome: EmptyView()
-        case .focus: FocusPanel(model: model)
-        case .notch: NotchDemoPanel(model: model)
+        case .discover: DiscoverPanel(model: model)
+        case .style: StylePanel(model: model)
         case .shortcut: ShortcutPanel(model: model)
         case .permissions: PermissionsPanel(permissions: model.permissions)
         case .done: DonePanel()

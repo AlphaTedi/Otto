@@ -22,6 +22,10 @@ class HotkeyManager {
     /// never the binding.
     static let quickEntryDisplay = "\u{2303}\u{21E7}N"
 
+    /// False when another app already owns ⌃⇧N and the registration failed —
+    /// the onboarding then offers a way past its shortcut step (v3 §4.4).
+    private(set) var quickEntryRegistered = false
+
     private var hotKeyRefs: [EventHotKeyRef?] = []
     private var eventHandler: EventHandlerRef?
 
@@ -99,6 +103,7 @@ class HotkeyManager {
         let status = RegisterEventHotKey(keyCode, modifiers, hotKeyID, GetApplicationEventTarget(), 0, &ref)
         if status == noErr {
             hotKeyRefs.append(ref)
+            if id == .openNotes { quickEntryRegistered = true }
         } else {
             print("[HotkeyManager] Failed to register hotkey \(id): \(status)")
         }

@@ -2,7 +2,7 @@ import AppKit
 import CoreText
 import SwiftUI
 
-// MARK: - Onboarding theme — Direction B (docs: otto-onboarding/SPEC.md §5)
+// MARK: - Onboarding theme — Direction B tokens, v3 layout (otto-onboarding-v3 SPEC)
 //
 // Every token the onboarding draws with, in one place. The values are the
 // handoff's reference HTML read literally — 1 CSS px = 1 pt — because the PNGs
@@ -156,12 +156,14 @@ enum OBGradient {
 
 struct OBGlow {
     enum Hue {
-        case violet, pink, amber
+        case violet, pink, amber, green, teal
         var rgb: (Double, Double, Double) {
             switch self {
             case .violet: return (150, 110, 255)
             case .pink: return (255, 130, 190)
             case .amber: return (255, 190, 120)
+            case .green: return (127, 227, 168)
+            case .teal: return (143, 217, 208)
             }
         }
     }
@@ -329,11 +331,11 @@ private struct OBIconShape: Shape {
 // MARK: Metrics
 
 enum OBMetric {
-    static let windowSize = CGSize(width: 860, height: 460)
+    static let windowSize = CGSize(width: 860, height: 500)
     static let windowRadius: CGFloat = 36
     static let columnWidth: CGFloat = 360
     static let progressWidth: CGFloat = 300
-    static let panelSize = CGSize(width: 490, height: 440)
+    static let panelSize = CGSize(width: 490, height: 480)
     static let panelShape = UnevenRoundedRect(topLeading: 14, bottomLeading: 14,
                                               bottomTrailing: 26, topTrailing: 26)
 }
