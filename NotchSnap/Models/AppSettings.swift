@@ -135,9 +135,8 @@ struct AppSettings: Codable {
     var showInDock: Bool = false
     var appTheme: AppTheme = .system
 
-    // Storage — the user-visible Markdown home of every to-do and note.
-    // A plain URL, no security-scoped bookmark: the app is not sandboxed,
-    // same as saveDirectory above. See MarkdownVault.
+    // Storage — Markdown defaults to Application Support. Users can choose a
+    // more visible folder in Settings; see MarkdownVault.
     var vaultDirectory: URL = MarkdownVault.defaultDirectory
 
     init() {}
@@ -172,7 +171,13 @@ struct AppSettings: Codable {
         launchAtLogin = (try? c.decodeIfPresent(Bool.self, forKey: .launchAtLogin)) ?? defaults.launchAtLogin
         showInDock = (try? c.decodeIfPresent(Bool.self, forKey: .showInDock)) ?? defaults.showInDock
         appTheme = (try? c.decodeIfPresent(AppTheme.self, forKey: .appTheme)) ?? defaults.appTheme
-        vaultDirectory = (try? c.decodeIfPresent(URL.self, forKey: .vaultDirectory)) ?? defaults.vaultDirectory
+        let savedVaultDirectory = (try? c.decodeIfPresent(URL.self, forKey: .vaultDirectory)) ?? nil
+        // Older versions used ~/Documents/Otto implicitly, prompting for
+        // Documents access during startup exports. Redirect only that default;
+        // preserve any folder the user explicitly selected.
+        vaultDirectory = savedVaultDirectory == MarkdownVault.legacyDefaultDirectory
+            ? defaults.vaultDirectory
+            : (savedVaultDirectory ?? defaults.vaultDirectory)
     }
 
     // MARK: Persistence
