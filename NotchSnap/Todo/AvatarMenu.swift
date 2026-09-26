@@ -82,14 +82,9 @@ struct AvatarMenu: View {
                 }
             }
         }
-        .padding(10)
+        .padding(OttoMenuStyle.padding)
         .frame(width: 276)
-        .floatingGlass(in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.20), lineWidth: 1)
-        )
-        .shadow(color: DSColor.shadowSoft, radius: 18, x: 0, y: 8)
+        .ottoMenuSurface()
     }
 
     /// One implementation per verb, reachable from the click and from ↩.
@@ -140,7 +135,7 @@ private struct AvatarMenuRowView: View {
         Button(action: action) {
             HStack(spacing: 13) {
                 Text(row.label)
-                    .font(.system(size: 13.5, weight: row.isDestination ? .medium : .regular))
+                    .font(.system(size: OttoMenuStyle.rowFont, weight: row.isDestination ? .medium : .regular))
                     .foregroundStyle(row.isDestination ? DSColor.textPrimaryBright
                                                        : DSColor.textPrimary)
                 Spacer(minLength: 8)
@@ -161,10 +156,10 @@ private struct AvatarMenuRowView: View {
                         .fixedSize()
                 }
             }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 11)
+            .padding(.horizontal, OttoMenuStyle.rowPaddingH)
+            .padding(.vertical, OttoMenuStyle.rowPaddingV)
             .background(
-                RoundedRectangle(cornerRadius: 11, style: .continuous).fill(background)
+                RoundedRectangle(cornerRadius: OttoMenuStyle.rowRadius, style: .continuous).fill(background)
             )
             .overlay(
                 // Pressed sits ON TOP as one more wash rather than replacing
@@ -188,10 +183,7 @@ private struct AvatarMenuRowView: View {
     /// the formatting popover. Hover and keyboard focus extend that treatment
     /// to any row without changing the menu's hierarchy.
     private var background: Color {
-        if row.isDestination {
-            return LabMetrics.accent.opacity(hover || isHighlighted ? 0.20 : 0.14)
-        }
-        return LabMetrics.accent.opacity(hover || isHighlighted ? 0.18 : 0)
+        OttoMenuStyle.rowFill(highlighted: hover || isHighlighted, current: row.isDestination)
     }
 
     @Environment(\.menuRowPressed) private var isPressed
@@ -219,6 +211,47 @@ extension EnvironmentValues {
     fileprivate var menuRowPressed: Bool {
         get { self[MenuRowPressedKey.self] }
         set { self[MenuRowPressedKey.self] = newValue }
+    }
+}
+
+// MARK: - One look for every menu in the panel
+//
+// The gear menu, the Notes · Meetings dropdown and the Aa block menu had
+// three looks — the dropdown's see-through ground among them (Marcello,
+// 2026-09-26: "il background è troppo trasparente", pointing at this menu as
+// the reference). One surface and one row treatment now.
+
+enum OttoMenuStyle {
+    static let radius: CGFloat = 20
+    static let padding: CGFloat = 10
+    static let rowRadius: CGFloat = 11
+    static let rowFont: CGFloat = 13.5
+    static let rowPaddingH: CGFloat = 13
+    static let rowPaddingV: CGFloat = 11
+    static let shortcutFont: CGFloat = 11
+
+    /// Under the glass: enough body that rows behind the menu do not read
+    /// through it, whatever the glass tier.
+    static let ground = Color.dynamic(light: NSColor(white: 1, alpha: 0.6),
+                                      dark: NSColor(srgbRed: 0.105, green: 0.105, blue: 0.12, alpha: 0.78))
+
+    /// The current item carries a standing cyan cast; hover and keyboard
+    /// highlight deepen it, on any row.
+    static func rowFill(highlighted: Bool, current: Bool) -> Color {
+        if current { return LabMetrics.accent.opacity(highlighted ? 0.20 : 0.14) }
+        return LabMetrics.accent.opacity(highlighted ? 0.18 : 0)
+    }
+}
+
+extension View {
+    /// The menu surface: ground, glass, hairline and shadow.
+    func ottoMenuSurface() -> some View {
+        let shape = RoundedRectangle(cornerRadius: OttoMenuStyle.radius, style: .continuous)
+        return self
+            .background(shape.fill(OttoMenuStyle.ground))
+            .floatingGlass(in: shape)
+            .overlay(shape.strokeBorder(Color.white.opacity(0.20), lineWidth: 1))
+            .shadow(color: DSColor.shadowSoft, radius: 18, x: 0, y: 8)
     }
 }
 

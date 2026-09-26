@@ -433,6 +433,34 @@ enum DebugDriver {
                     }
                     walk(root, 0)
                 }
+            } else if command.hasPrefix("kind-hit-pid ") {
+                // kind-hit-pid <pid> — what a click over the Notes · Meetings
+                // menu's column reaches, with the menu closed and open.
+                guard Int32(command.dropFirst(13)) == ProcessInfo.processInfo.processIdentifier else { return }
+                Task { @MainActor in
+                    let notes = NotesStore.shared
+                    NotchController.shared.triggerExpand()
+                    notes.enterSpace()
+                    try? await Task.sleep(nanoseconds: 1_200_000_000)
+                    guard let window = NSApp.windows.first(where: { $0 is NotchPanel }),
+                          let content = window.contentView else { return }
+                    @MainActor func sample(_ label: String) {
+                        let x = content.bounds.midX + LabMetrics.blockWidth / 2 - 90
+                        var line = label + ":"
+                        for fromTop in stride(from: 100, through: 400, by: 15) {
+                            let y = content.isFlipped ? CGFloat(fromTop) : content.bounds.maxY - CGFloat(fromTop)
+                            let hit = content.hitTest(NSPoint(x: x, y: y))
+                            line += " \(fromTop)=\(hit.map { String(reflecting: type(of: $0)).components(separatedBy: ".").suffix(2).joined(separator: ".") } ?? "nil")"
+                        }
+                        appendState(line)
+                    }
+                    sample("closed")
+                    notes.openKindMenu()
+                    try? await Task.sleep(nanoseconds: 800_000_000)
+                    sample("open")
+                    notes.closeKindMenu()
+                    NotchController.shared.forceCollapse()
+                }
             } else if command.hasPrefix("hittest ") {
                 // Ask the panel what it would hand a click at this SCREEN
                 // point. No synthetic input needed, and it tests the exact

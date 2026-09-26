@@ -61,7 +61,7 @@ private struct ScrollOffsetKey: PreferenceKey {
 /// 96 covered too much of the list and read as a haze over the to-dos rather
 /// than as the bar's own edge (Marcello, 2026-09-20). Localised to just above
 /// the pills: enough for the ramp to be gradual, not enough to be a mood.
-private let sectionBarFrostDepth: CGFloat = 52
+let sectionBarFrostDepth: CGFloat = 52
 
 /// Softens both edges of the scrolling region, where content passes under
 /// the draft row and into the frosted section bar.
@@ -71,7 +71,7 @@ private let sectionBarFrostDepth: CGFloat = 52
 /// to read, and it disappears at the end so a fully-scrolled list still
 /// terminates cleanly.
 ///
-private struct ScrollEdgeFade: ViewModifier {
+struct ScrollEdgeFade: ViewModifier {
     let scrollOffset: CGFloat
     let hasBelow: Bool
 
@@ -124,7 +124,7 @@ private struct ScrollEdgeFade: ViewModifier {
 ///
 /// Both halves are gated on `hasBelow`, so a short list and a list scrolled to
 /// its end show neither — no haze over content that does not continue.
-private struct TodoScrollEdgeEffect: ViewModifier {
+struct TodoScrollEdgeEffect: ViewModifier {
     let isScrollable: Bool
     let scrollOffset: CGFloat
     let hasBelow: Bool
@@ -166,8 +166,22 @@ private struct TodoScrollEdgeEffect: ViewModifier {
         // one. Until then: no material, a soft dissolve, no line — by
         // construction, because there is only one surface for a line to be the
         // edge of.
+        //
+        // 2026-09-26: the blur is back, and it is a real one this time — a
+        // VARIABLE radius (ProgressiveBlur), sharp at the top of the band and
+        // strongest at the pills, over the rows themselves. No material, so
+        // no ground and no second surface: the line problem above cannot
+        // come back. The fade stays under it as the floor.
         content
             .modifier(ScrollEdgeFade(scrollOffset: scrollOffset, hasBelow: hasBelow))
+            .overlay(alignment: .bottom) {
+                ProgressiveBlur(edge: .bottom, maxRadius: 8)
+                    .frame(height: sectionBarFrostDepth)
+                    .opacity(hasBelow ? 1 : 0)
+                    .animation(NotchAnimation.hintFade, value: hasBelow)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
     }
 }
 

@@ -184,6 +184,7 @@ private struct ChecklistGlyph: View {
 private struct BlockMenu: View {
     let apply: (NoteBlock) -> Void
     @ObservedObject private var editor = NoteEditorController.shared
+    @State private var hovered: NoteBlock?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -195,8 +196,8 @@ private struct BlockMenu: View {
             row(.numbered, glyph: "1.", glyphSize: 12, label: L10n.t("notes.fmt.numbered"))
             row(.checklistOpen, glyph: "\u{2610}", glyphSize: 13, label: L10n.t("notes.fmt.checklist"))
         }
-        .padding(6)
-        .frame(width: 214)
+        .padding(OttoMenuStyle.padding - 4)
+        .frame(width: 220)
     }
 
     private func row(_ block: NoteBlock, glyph: String, glyphSize: CGFloat, label: String) -> some View {
@@ -209,18 +210,21 @@ private struct BlockMenu: View {
                     .foregroundStyle(isCurrent ? LabMetrics.accent : DSColor.textPrimaryBright)
                     .frame(width: 22, alignment: .leading)
                 Text(label)
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(isCurrent ? DSColor.textPrimaryBright : DSColor.textSecondary)
+                    .font(.system(size: OttoMenuStyle.rowFont, weight: isCurrent ? .medium : .regular))
+                    .foregroundStyle(isCurrent ? DSColor.textPrimaryBright : DSColor.textPrimary)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 11)
-            .padding(.vertical, 8)
+            // The panel menus' row: same radius, type and cyan treatment,
+            // hover included (2026-09-26).
+            .padding(.horizontal, OttoMenuStyle.rowPaddingH)
+            .padding(.vertical, 9)
             .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(isCurrent ? LabMetrics.accent.opacity(0.14) : Color.clear)
+                RoundedRectangle(cornerRadius: OttoMenuStyle.rowRadius, style: .continuous)
+                    .fill(OttoMenuStyle.rowFill(highlighted: hovered == block, current: isCurrent))
             )
-            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: OttoMenuStyle.rowRadius, style: .continuous))
         }
         .buttonStyle(.plain)
+        .onHover { hovered = $0 ? block : (hovered == block ? nil : hovered) }
     }
 }

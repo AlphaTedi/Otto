@@ -112,6 +112,7 @@
 		AA00BB11CC22DD33EE44FF07 /* onboarding_complete.aiff in Resources */ = {isa = PBXBuildFile; fileRef = AA00BB11CC22DD33EE44FF17 /* onboarding_complete.aiff */; };
 		AA00BB11CC22DD33EE44FF08 /* item_delete.aiff in Resources */ = {isa = PBXBuildFile; fileRef = AA00BB11CC22DD33EE44FF18 /* item_delete.aiff */; };
 		AA11BB22CC33DD44EE55FF66 /* NotchAnimation.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB22CC33DD44EE55FF660011 /* NotchAnimation.swift */; };
+		7A7A7A7A7A7A7A7A7A7A7A03 /* ProgressiveBlur.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F7F7F7F7F7F7F7F7F7F7F03 /* ProgressiveBlur.swift */; };
 		AA5CA730912737A5ABBADA14 /* NotchRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96E1B1ED1D889C06D708A9E8 /* NotchRootView.swift */; };
 		B2A1D418A62187C8E8EF5FB8 /* AreaSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A54EE6536F83A25DC71266E2 /* AreaSelector.swift */; };
 		B2C3D4E5F6A10001C3D4E5F6 /* ClipboardItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001A2B3C4D5 /* ClipboardItem.swift */; };
@@ -250,6 +251,7 @@
 		B0C1D2E3F4051627384A5B6C /* NotchNotificationContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchNotificationContent.swift; sourceTree = "<group>"; };
 		B2D3E4F5061728394A5B6C7D /* CaptureActionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureActionBar.swift; sourceTree = "<group>"; };
 		BB22CC33DD44EE55FF660011 /* NotchAnimation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchAnimation.swift; sourceTree = "<group>"; };
+		7F7F7F7F7F7F7F7F7F7F7F03 /* ProgressiveBlur.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressiveBlur.swift; sourceTree = "<group>"; };
 		C3E4F506172839A4B5C6D7E8 /* InlineAnnotationCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineAnnotationCanvas.swift; sourceTree = "<group>"; };
 		C6E67ED17F10F5551120B071 /* ExportManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportManager.swift; sourceTree = "<group>"; };
 		CDE65A9C4E12466ED5903603 /* NotchController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchController.swift; sourceTree = "<group>"; };
@@ -502,6 +504,7 @@
 			isa = PBXGroup;
 			children = (
 				BB22CC33DD44EE55FF660011 /* NotchAnimation.swift */,
+				7F7F7F7F7F7F7F7F7F7F7F03 /* ProgressiveBlur.swift */,
 				CDE65A9C4E12466ED5903603 /* NotchController.swift */,
 				D7942B954C2418CDD5041B8A /* NotchShapeView.swift */,
 				D7942B954C2418CDD5041B8E /* LiquidGlass.swift */,
@@ -731,6 +734,7 @@
 				EE41AA42BB43CC44DD45FF46 /* Localization.swift in Sources */,
 				A1B2C3D4E5F6A7B8C9D0E1F2 /* HapticManager.swift in Sources */,
 				AA11BB22CC33DD44EE55FF66 /* NotchAnimation.swift in Sources */,
+				7A7A7A7A7A7A7A7A7A7A7A03 /* ProgressiveBlur.swift in Sources */,
 				CC33DD44EE55FF66AA11BB22 /* NotchLivePreview.swift in Sources */,
 				11223344556677889900AABB /* OnboardingWindowController.swift in Sources */,
 				AABBCCDD11223344EEFF5566 /* SettingsWindowController.swift in Sources */,

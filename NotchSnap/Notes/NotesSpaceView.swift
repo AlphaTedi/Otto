@@ -108,6 +108,12 @@ private struct RowClickCatcher: NSViewRepresentable {
         /// first click into it would otherwise be spent activating rather than
         /// acting — the "why does it take two clicks" family of bug.
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+        /// AppKit views win every hit test against SwiftUI, so with the
+        /// Notes · Meetings menu open over this row the row took the click
+        /// meant for the menu (Marcello, 2026-09-26). Stand aside while it is.
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            NotesStore.shared.kindMenuOpen ? nil : super.hitTest(point)
+        }
         /// Let the scroll wheel through to the ScrollView underneath: this
         /// view is here for clicks, and swallowing scrolls would trade one
         /// broken interaction for another.
@@ -249,6 +255,10 @@ private struct StreamView: View {
     @State private var dropBeforeID: UUID?
     @State private var dropAtEnd = false
     @State private var dragOffset: CGFloat = 0
+    /// The stream's scroll position and drawn height, for the same soft,
+    /// blurred foot a list has.
+    @State private var streamOffset: CGFloat = 0
+    @State private var streamNatural: CGFloat = 0
 
 
     /// What is left of the panel once the composer and the space bar have
@@ -274,9 +284,14 @@ private struct StreamView: View {
         // spaces in one container drawn to two different rulers (Marcello,
         // 2026-09-09). `min(natural, budget)` still applies at the call site,
         // so a stream of three notes hugs exactly as before.
+        //
+        // The floating header is measured whole (`composerHeight`), so the
+        // container's 36 of field gap is not taken again there: it was, and
+        // the stream stopped ~36pt short of the pills and cut its last note
+        // on a hard line no list has (Marcello, 2026-09-26).
         return max(120, LabMetrics.todoBlockMaxHeight
                    - LabMetrics.panelTopPadding
-                   - composerHeight - 36
+                   - composerHeight - (isContainer ? 36 : 0)
                    - chrome.tabRow)
     }
 
@@ -414,7 +429,16 @@ private struct StreamView: View {
                     .padding(.horizontal, isContainer ? LabMetrics.barOuterInset + 10 : SpaceChrome.columnInset)
                     .padding(.top, isContainer ? 16 : 12.5)
                     .padding(.bottom, 8)
+                    .background(GeometryReader { geo in
+                        Color.clear
+                            .preference(key: NotesStreamOffsetKey.self,
+                                        value: -geo.frame(in: .named(NotesStreamOffsetKey.space)).minY)
+                            .preference(key: NotesStreamHeightKey.self, value: geo.size.height)
+                    })
                 }
+                .coordinateSpace(name: NotesStreamOffsetKey.space)
+                .onPreferenceChange(NotesStreamOffsetKey.self) { streamOffset = $0 }
+                .onPreferenceChange(NotesStreamHeightKey.self) { streamNatural = $0 }
                 // The arrows moved a selection the list was not following, so
                 // past the sixth note you were selecting rows you could not
                 // see — still moving, still invisible. The same fault the
@@ -426,11 +450,32 @@ private struct StreamView: View {
                     }
                 }
             }
-            .frame(height: min(naturalHeight(of: entries), streamBudget), alignment: .top)
+            .frame(height: streamViewport(entries), alignment: .top)
             // The stream ENDS at its own bottom edge. Without this a run of
             // notes taller than the budget kept drawing into the space bar and
-            // past the panel, which is how they became unclickable.
-            .clipped()
+            // past the panel, which is how they became unclickable. The edge
+            // is the lists' own — a fade under a progressive blur — rather
+            // than `.clipped()`, which cut the last note on a straight line.
+            .modifier(TodoScrollEdgeEffect(
+                isScrollable: natural(entries) > streamBudget,
+                scrollOffset: streamOffset,
+                hasBelow: natural(entries) > streamViewport(entries) + max(streamOffset, 0) + 2,
+                isContainer: isContainer))
+            // While the Notes · Meetings menu is open it sits over these rows,
+            // and their click catchers are AppKit views, which win every hit
+            // test against SwiftUI — the click went to the note underneath.
+            .allowsHitTesting(!store.kindMenuOpen)
+            // A click anywhere on the stream closes the menu instead. SwiftUI,
+            // not MenuDismissCatcher: an AppKit catcher here outranks the
+            // menu's own SwiftUI rows, which sit over this same area.
+            .overlay {
+                if store.kindMenuOpen {
+                    Color.white.opacity(0.001)
+                        .contentShape(Rectangle())
+                        .onTapGesture { store.closeKindMenu() }
+                        .accessibilityHidden(true)
+                }
+            }
         }
     }
 
@@ -485,6 +530,26 @@ private struct StreamView: View {
     private func naturalHeight(of entries: [QuickNote]) -> CGFloat {
         24 + CGFloat(entries.count) * 62
     }
+
+    /// Measured once drawn; the estimate covers the first frame.
+    private func natural(_ entries: [QuickNote]) -> CGFloat {
+        streamNatural > 0 ? streamNatural : naturalHeight(of: entries)
+    }
+
+    private func streamViewport(_ entries: [QuickNote]) -> CGFloat {
+        min(natural(entries), streamBudget)
+    }
+}
+
+private struct NotesStreamOffsetKey: PreferenceKey {
+    static let space = "otto.notesStream"
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+private struct NotesStreamHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
 // MARK: The composer
@@ -711,52 +776,41 @@ private struct NotesKindMenuList: View {
     @ObservedObject private var notes = NotesStore.shared
 
     var body: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 1) {
             row(0, L10n.t("notes.kind.notes"), shortcut: "\u{2318}1", active: !meetings)
             row(1, L10n.t("notes.kind.meetings"), shortcut: "\u{2318}2", active: meetings)
         }
-        .padding(6)
+        .padding(OttoMenuStyle.padding)
         .frame(width: 220)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(Color.dynamic(light: .white, dark: NSColor(srgbRed: 0x26 / 255, green: 0x29 / 255,
-                                                              blue: 0x3B / 255, alpha: 1))))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .strokeBorder(SpaceInk.a(0.10), lineWidth: 1))
-        .shadow(color: .black.opacity(0.5), radius: 18, y: 14)
-        // A click anywhere else closes it. Hit testing is not clipped to the
-        // menu's frame, so this catcher reaches the rest of the panel; drawn
-        // behind the menu so its own rows still get their clicks.
-        .background(
-            Color.white.opacity(0.001)
-                .frame(width: 3000, height: 3000)
-                .onTapGesture { notes.closeKindMenu() }
-                .accessibilityHidden(true)
-        )
+        // The gear menu's surface, so the two menus are one kind of thing.
+        .ottoMenuSurface()
         .accessibilityElement(children: .contain)
     }
 
     private func row(_ index: Int, _ title: String, shortcut: String, active: Bool) -> some View {
-        Button { notes.chooseKind(meetings: index == 1) } label: {
+        let shape = RoundedRectangle(cornerRadius: OttoMenuStyle.rowRadius, style: .continuous)
+        return Button { notes.chooseKind(meetings: index == 1) } label: {
             HStack(spacing: 8) {
                 Image(systemName: "checkmark")
                     .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(LabMetrics.accent)
                     .opacity(active ? 1 : 0)
                     .frame(width: 14)
                 Text(title)
-                    .font(.system(size: 14))
-                    .foregroundStyle(SpaceInk.a(0.95))
+                    .font(.system(size: OttoMenuStyle.rowFont, weight: active ? .medium : .regular))
+                    .foregroundStyle(active ? DSColor.textPrimaryBright : DSColor.textPrimary)
                 Spacer(minLength: 8)
                 Text(shortcut)
-                    .font(.system(size: 12))
-                    .foregroundStyle(SpaceInk.a(0.45))
+                    .font(.system(size: OttoMenuStyle.shortcutFont))
+                    .foregroundStyle(DSColor.textHint)
+                    .fixedSize()
             }
-            .foregroundStyle(SpaceInk.a(0.95))
-            .padding(.vertical, 8)
-            .padding(.horizontal, 10)
-            .frame(height: 34)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(SpaceInk.a(notes.kindMenuSelection == index ? 0.08 : 0)))
-            .contentShape(Rectangle())
+            .padding(.leading, 10)
+            .padding(.trailing, OttoMenuStyle.rowPaddingH)
+            .padding(.vertical, OttoMenuStyle.rowPaddingV)
+            .background(shape.fill(OttoMenuStyle.rowFill(highlighted: notes.kindMenuSelection == index,
+                                                          current: active)))
+            .contentShape(shape)
         }
         .buttonStyle(.plain)
         .onHover { if $0 { notes.kindMenuSelection = index } }

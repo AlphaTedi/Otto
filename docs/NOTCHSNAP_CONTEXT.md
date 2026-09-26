@@ -588,3 +588,15 @@ From `otto-notes-mode-dropdown-prd.md` (Raycast-style accessory).
 - "Switch space ⇥" is no longer shown in any capture header; ⇥ is unchanged.
 - The Meetings field keeps "Search meeting notes": it searches, so the PRD's
   "Start meeting notes…" placeholder would have described a different action.
+- Follow-up the same day: menu rows were unclickable — the note rows' AppKit
+  click catchers outrank SwiftUI, so the click opened the note under the
+  menu. While the menu is open the stream is hit-test-disabled, the catchers
+  return nil, and outside clicks close it through a SwiftUI layer (an AppKit
+  MenuDismissCatcher there would outrank the menu too). DEBUG `kind-hit-pid`.
+- One menu look (`OttoMenuStyle` / `ottoMenuSurface`, AvatarMenu.swift): gear
+  menu, Notes · Meetings and the Aa block menu share radius, ground, rows and
+  the cyan current/hover fill. The Aa menu keeps its system popover chrome.
+- Scroll foot: `ProgressiveBlur` (private `CABackdropLayer` + `variableBlur`,
+  looked up by name, draws nothing if absent) over the list's gradient fade —
+  radius ramps to 8 at the pills. The Notes stream now uses the lists' edge
+  effect and budget (it subtracted a container-only 36 and hard-clipped).
