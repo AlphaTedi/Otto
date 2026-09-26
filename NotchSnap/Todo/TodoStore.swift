@@ -308,9 +308,6 @@ final class TodoStore: ObservableObject {
 
     /// What is being typed into the draft row.
     @Published var draftTitle = ""
-    /// The to-do the capture field just filed, highlighted for 1.2 s (U5).
-    @Published private(set) var justAddedID: UUID?
-    private var justAddedClear: Task<Void, Never>?
     /// True while the caret is actually in the draft row.
     ///
     /// Distinct from "the row exists", which is now always. Only the caret
@@ -461,30 +458,13 @@ final class TodoStore: ObservableObject {
         let title = parsed?.cleanedTitle ?? draftTitle
         guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let target = draftDestination?.id,
-              let added = addItem(title: title, collectionID: target,
-                                  dueDate: parsed?.date) else { return false }
+              addItem(title: title, collectionID: target,
+                      dueDate: parsed?.date) != nil else { return false }
         draftTitle = ""
-        markJustAdded(added.id)
         // Re-assert rather than assume: the field reports its own focus, and
         // the list re-rendering underneath must not be able to take it.
         draftWantsFocus = true
         return true
-    }
-
-    #if DEBUG
-    func debugMarkJustAdded(_ id: UUID) { markJustAdded(id) }
-    #endif
-
-    /// U5 §4.2: the new row wears its space's colour for 1.2 s, then fades
-    /// over 400 ms.
-    private func markJustAdded(_ id: UUID) {
-        justAddedID = id
-        justAddedClear?.cancel()
-        justAddedClear = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 1_200_000_000)
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.4)) { self?.justAddedID = nil }
-        }
     }
 
     // MARK: - Navigation path (top-navigation spec)

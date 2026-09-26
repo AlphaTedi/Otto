@@ -74,7 +74,6 @@ enum L10n {
         "capture.notePlaceholder": "Write a note\u{2026}",
         "capture.saveTo": "Save to %@",
         "capture.tab": "tab",
-        "capture.justAdded": "just added",
         "nav.backTo": "Back to %@",
         "todo.sc.clearDraft": "Clear the field \u{00B7} back one level \u{00B7} close",
         // Onboarding (Direction B)
@@ -411,7 +410,6 @@ enum L10n {
         "capture.notePlaceholder": "Scrivi una nota\u{2026}",
         "capture.saveTo": "Salva in %@",
         "capture.tab": "tab",
-        "capture.justAdded": "appena aggiunto",
         "nav.backTo": "Torna a %@",
         "todo.sc.clearDraft": "Svuota il campo \u{00B7} indietro di un livello \u{00B7} chiudi",
         // Onboarding (Direction B)
