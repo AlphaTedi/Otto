@@ -184,10 +184,21 @@ struct AppSettings: Codable {
 
     private static let storageKey = "notchsnap.settings"
 
+    private struct StoredVaultLocation: Decodable {
+        let vaultDirectory: URL?
+    }
+
     static func load() -> AppSettings {
         guard let data = UserDefaults.standard.data(forKey: storageKey),
               let settings = try? JSONDecoder().decode(AppSettings.self, from: data)
         else { return AppSettings() }
+        // Persist the redirected default. Debug builds from other workspaces
+        // share this preference domain; without saving it, an older build
+        // would continue opening Documents and blocking at the TCC prompt.
+        if (try? JSONDecoder().decode(StoredVaultLocation.self, from: data))?.vaultDirectory
+            == MarkdownVault.legacyDefaultDirectory {
+            settings.save()
+        }
         return settings
     }
 
