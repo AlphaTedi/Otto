@@ -1078,6 +1078,7 @@ private struct NoteDetailView: View {
     @State private var titleDraft: String
     @State private var body_: String
     @ObservedObject private var vault = MarkdownVault.shared
+    @Environment(\.colorScheme) private var colorScheme
 
     /// Seeded HERE and not in `onAppear`, and that ordering is the whole of
     /// the "I open a note and it is blank" bug.
@@ -1125,7 +1126,7 @@ private struct NoteDetailView: View {
             // Editable in place — no separate edit mode, no Save button. The
             // note is the editor, and now a rich one: NoteBodyView is an
             // NSTextView over the same markdown string that was there before.
-            NoteBodyView(noteID: note.id, markdown: $body_) { range, phrase in
+            NoteBodyView(noteID: note.id, markdown: $body_, colorScheme: colorScheme) { range, phrase in
                 NoteEditorController.shared.pickerTarget = (range, phrase)
             }
                 .onChange(of: body_) { store.setBody($0, for: note.id) }

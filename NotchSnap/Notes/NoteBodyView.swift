@@ -12,6 +12,11 @@ import SwiftUI
 struct NoteBodyView: NSViewRepresentable {
     let noteID: UUID
     @Binding var markdown: String
+    /// NSTextView otherwise inherits the hosting window's appearance, which
+    /// can differ from the SwiftUI surface (the note panels draw their own
+    /// dark/light treatment). Dynamic AppKit colors then resolve to the wrong
+    /// ink when a user starts a fresh typing run.
+    let colorScheme: ColorScheme
     /// A click landed on an underlined phrase — the picker's cue.
     var onActionTapped: ((NSRange, String) -> Void)?
 
@@ -20,6 +25,8 @@ struct NoteBodyView: NSViewRepresentable {
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = ActionTextView.scrollableTextView()
         guard let view = scroll.documentView as? ActionTextView else { return scroll }
+
+        applyAppearance(to: view)
 
         view.delegate = context.coordinator
         view.isRichText = true
@@ -70,6 +77,7 @@ struct NoteBodyView: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let view = scroll.documentView as? ActionTextView else { return }
+        applyAppearance(to: view)
         context.coordinator.parent = self
         view.noteID = noteID
         NoteEditorController.shared.textView = view
@@ -84,6 +92,10 @@ struct NoteBodyView: NSViewRepresentable {
             context.coordinator.load(markdown, into: view)
             context.coordinator.scheduleDetection(noteID: noteID, delay: 0)
         }
+    }
+
+    private func applyAppearance(to view: NSView) {
+        view.appearance = NSAppearance(named: colorScheme == .dark ? .darkAqua : .aqua)
     }
 
     static func dismantleNSView(_ scroll: NSScrollView, coordinator: Coordinator) {
