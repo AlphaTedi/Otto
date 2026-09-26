@@ -33,6 +33,11 @@ enum LabMetrics {
     /// furniture sits 16 in from both edges, so its own radius is 24 − 16 = 8
     /// and the curves are concentric (`SpaceChrome.cornerInset`).
     static let blockRadius: CGFloat = 24
+    /// Figma's fixed footer material; the pills sit above its blurred sample.
+    static let floatingFooterDepth: CGFloat = 95
+    /// The progressive blur's reach: the footer plus 64pt above the pills'
+    /// top edge (Marcello, 2026-09-26: 40 sat too close to the pills).
+    static let floatingFooterBlurDepth: CGFloat = floatingFooterDepth + 24
     /// 16 top, nothing on the other sides — the children carry their own.
     static let panelTopPadding: CGFloat = 16
     /// Between the creation-bar block and the list block.
@@ -186,12 +191,16 @@ enum LabMetrics {
 private extension View {
     /// The shared surface both panels sit on.
     func labBlock(radius: CGFloat = LabMetrics.blockRadius) -> some View {
-        self
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        return self
             .frame(width: LabMetrics.blockWidth, alignment: .leading)
+            // The glass background was rounded, but its content could still
+            // composite past that silhouette. Clip the complete panel too.
+            .clipShape(shape)
             // Glass, not a black fill. A black panel on a dark desktop has no
             // edge to find; what separates glass from what is behind it is the
             // blur and the lit rim, which work at any background brightness.
-            .liquidGlass(in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .liquidGlass(in: shape)
             // The shadow stays and matters MORE on glass: a translucent panel
             // needs the ground shadow to sit above the desktop rather than
             // dissolve into it.
