@@ -1387,13 +1387,18 @@ struct TodoBrowsingView: View {
         }
         let visibleRows = openCount + stepCount + (store.completedExpanded ? completedCount : 0)
 
+        let completedInset = hasAnyCompleted(in: collection)
+            ? min(completedInsetHeight, LabMetrics.completedExpandedMaxHeight)
+            : 0
+        let budget = Self.maxRegion(chrome: chrome, completedInset: completedInset)
+
         let content = VStack(alignment: .leading, spacing: 0) {
             // CT-1/CT-6: meetings (or the connect nudge) sit above the
             // to-dos, in the Today tab only.
             if collection.isSystemToday {
                 UpNextSection()
             }
-            todoList(for: collection)
+            todoList(for: collection, room: budget)
         }
         .padding(.horizontal, isContainerLayout ? LabMetrics.listInset : SpaceChrome.columnInset)
         // A second catcher, INSIDE what will become the scroll region.
@@ -1419,10 +1424,6 @@ struct TodoBrowsingView: View {
             // budgeting for a section it is not showing, or showing one it has
             // not budgeted for — and the second is the one you can see,
             // because the tab row goes out through the bottom edge.
-            let completedInset = hasAnyCompleted(in: collection)
-                ? min(completedInsetHeight, LabMetrics.completedExpandedMaxHeight)
-                : 0
-            let budget = Self.maxRegion(chrome: chrome, completedInset: completedInset)
             // min(natural, budget): the region hugs its content again.
             //
             // This was the full budget for a while — the export pinned the
@@ -1570,20 +1571,23 @@ struct TodoBrowsingView: View {
 
     // MARK: Open list
 
+    /// `room` is the scroll region's budget: the container drops the empty
+    /// state's subtitle when it has less than 180pt to give.
     @ViewBuilder
-    private func todoList(for collection: TodoCollection) -> some View {
+    private func todoList(for collection: TodoCollection, room: CGFloat) -> some View {
         let rows = store.openItems(in: collection)
         if rows.isEmpty {
             // Today says nothing when it is empty — an empty Today already
             // means "you're done", and a sentence restating that is one more
-            // thing to read (Marcello, 2026-07-26). A user category still gets
-            // a line, because an empty one there looks broken rather than done.
+            // thing to read (Marcello, 2026-07-26). A user list gets the
+            // sleeping page (empty state B, 2026-09-26), because an empty one
+            // there looks broken rather than done.
             if !collection.isSystemToday {
-                Text(L10n.t("todo.empty"))
-                    .font(DSFont.checklistItem)
-                    .foregroundStyle(DSColor.textHint)
-                    .padding(.vertical, 6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                EmptyListView(tint: collection.color,
+                              compact: isContainerLayout,
+                              showsSubtitle: !isContainerLayout || room >= 180,
+                              fillHeight: isContainerLayout ? nil : room)
+                    .transition(EmptyListView.transition)
             }
         } else {
             openRows(rows)

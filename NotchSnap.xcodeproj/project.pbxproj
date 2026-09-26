@@ -39,6 +39,7 @@
 		AA01BB02CC03DD04EE05FF06 /* NotesSpaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF06AA01BB02CC03DD04EE05 /* NotesSpaceView.swift */; };
 		AA01BB02CC03DD04EE05F001 /* TodoModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F001AA01BB02CC03DD04EE05 /* TodoModels.swift */; };
 		5A5A5A5A5A5A5A5A5A5A5A02 /* SpaceChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F5F5F5F5F5F5F5F5F5F5F02 /* SpaceChrome.swift */; };
+		5A5A5A5A5A5A5A5A5A5A5E01 /* EmptyListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F5F5F5F5F5F5F5F5F5F5E01 /* EmptyListView.swift */; };
 		5A5A5A5A5A5A5A5A5A5A5A01 /* SpaceTint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F5F5F5F5F5F5F5F5F5F5F01 /* SpaceTint.swift */; };
 		AA01BB02CC03DD04EE05F002 /* TodoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F002AA01BB02CC03DD04EE05 /* TodoStore.swift */; };
 		AA01BB02CC03DD04EE05F010 /* MarkdownVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = F010AA01BB02CC03DD04EE05 /* MarkdownVault.swift */; };
@@ -189,6 +190,7 @@
 		FF06AA01BB02CC03DD04EE05 /* NotesSpaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NotesSpaceView.swift; path = ../Notes/NotesSpaceView.swift; sourceTree = "<group>"; };
 		F001AA01BB02CC03DD04EE05 /* TodoModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TodoModels.swift; path = ../Todo/TodoModels.swift; sourceTree = "<group>"; };
 		5F5F5F5F5F5F5F5F5F5F5F02 /* SpaceChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SpaceChrome.swift; path = ../Todo/SpaceChrome.swift; sourceTree = "<group>"; };
+		5F5F5F5F5F5F5F5F5F5F5E01 /* EmptyListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EmptyListView.swift; path = ../Todo/EmptyListView.swift; sourceTree = "<group>"; };
 		5F5F5F5F5F5F5F5F5F5F5F01 /* SpaceTint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SpaceTint.swift; path = ../Todo/SpaceTint.swift; sourceTree = "<group>"; };
 		F002AA01BB02CC03DD04EE05 /* TodoStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TodoStore.swift; path = ../Todo/TodoStore.swift; sourceTree = "<group>"; };
 		F010AA01BB02CC03DD04EE05 /* MarkdownVault.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MarkdownVault.swift; path = ../Todo/MarkdownVault.swift; sourceTree = "<group>"; };
@@ -442,6 +444,7 @@
 				FF06AA01BB02CC03DD04EE05 /* NotesSpaceView.swift */,
 				F001AA01BB02CC03DD04EE05 /* TodoModels.swift */,
 				5F5F5F5F5F5F5F5F5F5F5F02 /* SpaceChrome.swift */,
+				5F5F5F5F5F5F5F5F5F5F5E01 /* EmptyListView.swift */,
 				5F5F5F5F5F5F5F5F5F5F5F01 /* SpaceTint.swift */,
 				F002AA01BB02CC03DD04EE05 /* TodoStore.swift */,
 				F010AA01BB02CC03DD04EE05 /* MarkdownVault.swift */,
@@ -654,6 +657,7 @@
 				AA01BB02CC03DD04EE05FF06 /* NotesSpaceView.swift in Sources */,
 				AA01BB02CC03DD04EE05F001 /* TodoModels.swift in Sources */,
 				5A5A5A5A5A5A5A5A5A5A5A02 /* SpaceChrome.swift in Sources */,
+				5A5A5A5A5A5A5A5A5A5A5E01 /* EmptyListView.swift in Sources */,
 				5A5A5A5A5A5A5A5A5A5A5A01 /* SpaceTint.swift in Sources */,
 				AA01BB02CC03DD04EE05F002 /* TodoStore.swift in Sources */,
 				AA01BB02CC03DD04EE05F010 /* MarkdownVault.swift in Sources */,

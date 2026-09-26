@@ -408,8 +408,16 @@ private struct StreamView: View {
     @ViewBuilder
     private var streamBody: some View {
         let entries = store.stream
-        if entries.isEmpty {
-            EmptyStreamState(isCalendarSpace: isCalendarSpace)
+        if entries.isEmpty, !isCalendarSpace {
+            // The lists' sleeping page (empty state B); Meetings keeps its own.
+            EmptyListView(tint: SpaceTint.notes.sectionColor,
+                          compact: isContainer,
+                          showsSubtitle: !isContainer || streamBudget >= 180,
+                          subtitleKey: "notes.emptySubtitle",
+                          fillHeight: isContainer ? nil : streamBudget)
+                .transition(EmptyListView.transition)
+        } else if entries.isEmpty {
+            EmptyStreamState()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.top, 28)
         } else {
@@ -1045,19 +1053,17 @@ private struct NoteEntryRow: View {
     }
 }
 
-// MARK: Empty state
+// MARK: Empty state (Meetings)
 
 private struct EmptyStreamState: View {
-    let isCalendarSpace: Bool
-
     var body: some View {
         VStack(spacing: 12) {
-            Text(L10n.t(isCalendarSpace ? "calendar.emptyTitle" : "notes.emptyTitle"))
+            Text(L10n.t("calendar.emptyTitle"))
                 .font(.system(size: 16))
                 .foregroundStyle(DSColor.textSecondary)
             // No illustration, no icon, no button: the composer above IS the
             // call to action, and anything here would compete with it.
-            Text(L10n.t(isCalendarSpace ? "calendar.emptyBody" : "notes.emptyBody"))
+            Text(L10n.t("calendar.emptyBody"))
                 .font(.system(size: 13.5))
                 .foregroundStyle(DSColor.textHint)
                 .multilineTextAlignment(.center)

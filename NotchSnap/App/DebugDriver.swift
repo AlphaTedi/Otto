@@ -32,6 +32,13 @@ enum DebugDriver {
             let command = note.object as? String ?? ""
             MainActor.assumeIsolated { handle(command) }
         }
+        // `open -n Otto.app --args -debugCommand "<command>"`: for shells
+        // whose distributed notifications never reach the app.
+        if let command = UserDefaults.standard.string(forKey: "debugCommand") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                MainActor.assumeIsolated { handle(command) }
+            }
+        }
     }
 
     private static func handle(_ command: String) {
@@ -292,6 +299,13 @@ enum DebugDriver {
                     for name in ["work", "grocery", "personal"] {
                         if let c = list(name) { notes.leaveSpace(); store.selectCollection(c.id) }
                         await snap("space-" + name)
+                    }
+                    // Empty state B: the first user list with nothing open.
+                    if let empty = store.collections.first(where: {
+                        !$0.isSystemToday && store.openItems(in: $0).isEmpty
+                    }) {
+                        notes.leaveSpace(); store.selectCollection(empty.id)
+                        await snap("space-empty")
                     }
                     notes.enterSpace(); await snap("space-notes")
                     // Inner pages: the context bar replaces the capture field.
