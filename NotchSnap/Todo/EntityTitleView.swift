@@ -23,6 +23,10 @@ struct EntityTitleView: NSViewRepresentable {
         view.isEditable = false
         view.isSelectable = false
         view.drawsBackground = false
+        // The URL lives on an image attachment and clicks are handled below.
+        // AppKit's default link decoration underlines the attachment glyph,
+        // leaving blue fragments visible below the chip's rounded corners.
+        view.linkTextAttributes = [:]
         view.textContainerInset = .zero
         view.textContainer?.lineFragmentPadding = 0
         // Wrap the DISPLAYED text to the view's width so a long title flows

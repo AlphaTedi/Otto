@@ -65,18 +65,18 @@ private struct RowClickCatcher: NSViewRepresentable {
             reportFrame()
         }
 
-        /// Swapping the tracking area drops its pending exit: a row scrolled
-        /// out from under a still pointer got its mouseEntered, then had the
-        /// area replaced before the mouseExited, and stayed lit — every row
-        /// the list scrolled past ended up hovered (Marcello, 2026-09-26). So
-        /// after every swap, ask where the pointer actually is.
+        /// Swapping the tracking area can drop its pending exit while the
+        /// list scrolls. Recheck the current screen pointer after each swap
+        /// and on enter/exit; the window's last event location can be stale
+        /// when this nonactivating panel opens beneath a stationary pointer.
         private func syncHover() {
             // Next turn of the loop: this can run inside SwiftUI's layout
             // pass, where writing the row's @State is not allowed.
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 guard let window = self.window else { return self.onHover(false) }
-                let point = self.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+                let windowPoint = window.convertFromScreen(NSRect(origin: NSEvent.mouseLocation, size: .zero)).origin
+                let point = self.convert(windowPoint, from: nil)
                 self.onHover(self.visibleRect.contains(point))
             }
         }
@@ -84,6 +84,7 @@ private struct RowClickCatcher: NSViewRepresentable {
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             reportFrame()
+            syncHover()
         }
 
         private func reportFrame() {
@@ -91,8 +92,8 @@ private struct RowClickCatcher: NSViewRepresentable {
             onFrame(window.convertToScreen(convert(bounds, to: nil)))
         }
 
-        override func mouseEntered(with event: NSEvent) { onHover(true) }
-        override func mouseExited(with event: NSEvent) { onHover(false) }
+        override func mouseEntered(with event: NSEvent) { syncHover() }
+        override func mouseExited(with event: NSEvent) { syncHover() }
 
         // Click and drag live in the SAME view, and they have to.
         //
@@ -268,6 +269,9 @@ private struct StreamView: View {
     // for the same reason: `.onDrag` rides the system pasteboard, which was
     // never really meant for a non-activating panel and never moved a row.
     @State private var rowFrames: [UUID: CGRect] = [:]
+    // The stream has one pointer. A per-row hover flag let missed exit events
+    // leave multiple rows highlighted at once.
+    @State private var hoveredNoteID: UUID?
     @State private var draggedNoteID: UUID?
     @State private var dropBeforeID: UUID?
     @State private var dropAtEnd = false
@@ -434,6 +438,14 @@ private struct StreamView: View {
                         ForEach(entries) { note in
                             NoteEntryRow(
                                 note: note,
+                                isHovered: hoveredNoteID == note.id,
+                                onHover: { hovering in
+                                    if hovering {
+                                        hoveredNoteID = note.id
+                                    } else if hoveredNoteID == note.id {
+                                        hoveredNoteID = nil
+                                    }
+                                },
                                 isDragged: draggedNoteID == note.id,
                                 showsDropIndicator: dropBeforeID == note.id,
                                 dragOffset: draggedNoteID == note.id ? dragOffset : 0,
@@ -926,6 +938,8 @@ private struct CalendarCaptureHeader: View {
 
 private struct NoteEntryRow: View {
     let note: QuickNote
+    let isHovered: Bool
+    let onHover: (Bool) -> Void
     /// Where the drop indicator goes, and whether this row is the one moving.
     let isDragged: Bool
     let showsDropIndicator: Bool
@@ -935,8 +949,6 @@ private struct NoteEntryRow: View {
     let onFrame: (CGRect) -> Void
 
     @ObservedObject private var store = NotesStore.shared
-    @State private var hover = false
-
     private var isLanding: Bool { store.landingNoteID == note.id }
     private var isSelected: Bool { store.selectedNoteID == note.id }
 
@@ -946,7 +958,7 @@ private struct NoteEntryRow: View {
             // first, and behind the content it would never be reached.
             .overlay(RowClickCatcher(
                 onClick: { store.open(note.id) },
-                onHover: { hover = $0 },
+                onHover: onHover,
                 onDrag: onDrag,
                 onDragEnd: onDragEnd,
                 onFrame: onFrame
@@ -1000,7 +1012,7 @@ private struct NoteEntryRow: View {
                     .fixedSize()
                     .opacity(showsActions ? 0 : 1)
 
-                RowActions(showEnter: isSelected, showGrip: hover)
+                RowActions(showEnter: isSelected, showGrip: isHovered)
                     .opacity(showsActions ? 1 : 0)
             }
             // A floor, not a fixed width: the affordances are 52 and a long
@@ -1025,7 +1037,7 @@ private struct NoteEntryRow: View {
             RoundedRectangle(cornerRadius: NotesMetrics.highlightRadius, style: .continuous)
                 .fill(isLanding ? NotesMetrics.pillStroke.opacity(0.12)
                       : (isSelected ? DSColor.focusedRowBackground
-                         : (hover ? DSColor.rowHover : Color.clear)))
+                         : (isHovered ? DSColor.rowHover : Color.clear)))
         )
         .overlay(
             RoundedRectangle(cornerRadius: NotesMetrics.highlightRadius, style: .continuous)
@@ -1049,12 +1061,12 @@ private struct NoteEntryRow: View {
             Divider()
             Button(L10n.t("action.delete"), role: .destructive) { store.delete(note.id) }
         }
-        .animation(Motion.hoverFade, value: hover)
+        .animation(Motion.hoverFade, value: isHovered)
         .animation(Motion.hoverFade, value: isSelected)
         .animation(Motion.contentHug, value: isLanding)
     }
 
-    private var showsActions: Bool { hover || isSelected }
+    private var showsActions: Bool { isHovered || isSelected }
 
     /// Relative while it still means something, absolute once it does not.
     private static func stamp(_ date: Date) -> String {
