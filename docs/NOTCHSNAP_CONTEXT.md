@@ -646,3 +646,12 @@ only — no other surface shares `NoteEditorController`).
 DEBUG: `notes-format-snap <dir>` renders a sample note dark and light;
 `notes-roundtrip` and `notes-editor-tests` cover the formats.
 
+### 2026-09-26 Floating panel outside clicks
+
+The floating cards now publish their actual frames in the hosting view's
+coordinate space. Outside-click and hit testing use those separate frames,
+including the meeting card when present. The empty area above the to-do/notes
+card, the gap between cards, and the shadow margin close the panel on one click.
+Clicks delivered to another app or another Otto window close it regardless of
+screen coordinates; the note's own Save dialog remains attached. The Debug
+driver's `panel-hit-regions` command reports the measured screen rectangles.

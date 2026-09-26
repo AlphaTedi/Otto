@@ -509,6 +509,7 @@ struct LabPanelsView: View {
         VStack(spacing: LabMetrics.blockGap) {
             if showsMeetingCard {
                 LabMeetingBlock()
+                    .background(interactiveFrame)
                     .background(GeometryReader { proxy in
                         Color.clear.preference(key: MeetingCardHeightKey.self, value: proxy.size.height)
                     })
@@ -563,6 +564,7 @@ struct LabPanelsView: View {
                     // at 556 with the list stranded at the top of it.
                     .frame(height: LabMetrics.todoBlockMaxHeight, alignment: .top)
                     .labBlock()
+                    .background(interactiveFrame)
                     .transition(.opacity)
             }
         }
@@ -592,6 +594,26 @@ struct LabPanelsView: View {
         .onPreferenceChange(LabColumnHeightKey.self) { height in
             appState.labColumnHeight = height
         }
+        .onPreferenceChange(LabInteractiveFramesKey.self) { frames in
+            controller.setPanelContentFrames(frames)
+        }
+        .onDisappear {
+            controller.setPanelContentFrames([])
+        }
+    }
+
+    private var interactiveFrame: some View {
+        GeometryReader { proxy in
+            Color.clear.preference(key: LabInteractiveFramesKey.self,
+                                   value: [proxy.frame(in: .named("notchPanelContent"))])
+        }
+    }
+}
+
+private struct LabInteractiveFramesKey: PreferenceKey {
+    static let defaultValue: [CGRect] = []
+    static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) {
+        value.append(contentsOf: nextValue())
     }
 }
 
