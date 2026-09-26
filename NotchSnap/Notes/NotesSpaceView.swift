@@ -61,7 +61,24 @@ private struct RowClickCatcher: NSViewRepresentable {
                                       owner: self)
             addTrackingArea(area)
             tracking = area
+            syncHover()
             reportFrame()
+        }
+
+        /// Swapping the tracking area drops its pending exit: a row scrolled
+        /// out from under a still pointer got its mouseEntered, then had the
+        /// area replaced before the mouseExited, and stayed lit — every row
+        /// the list scrolled past ended up hovered (Marcello, 2026-09-26). So
+        /// after every swap, ask where the pointer actually is.
+        private func syncHover() {
+            // Next turn of the loop: this can run inside SwiftUI's layout
+            // pass, where writing the row's @State is not allowed.
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                guard let window = self.window else { return self.onHover(false) }
+                let point = self.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+                self.onHover(self.visibleRect.contains(point))
+            }
         }
 
         override func viewDidMoveToWindow() {
