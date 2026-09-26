@@ -53,6 +53,13 @@ private struct ScrollOffsetKey: PreferenceKey {
     }
 }
 
+struct FootBlurVisibleKey: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) {
+        value = value || nextValue()
+    }
+}
+
 /// Depth shared by the native Tahoe edge bar and the pre-Tahoe fallback.
 /// Keeping one value makes the transition meet the section row at the same
 /// point on every supported macOS release.
@@ -101,79 +108,18 @@ struct ScrollEdgeFade: ViewModifier {
     }
 }
 
-/// The soft bottom edge, and the frosted blur behind it.
-///
-/// WHY THIS IS NOT `.scrollEdgeEffectStyle(.soft)` ANY MORE. Tahoe's own edge
-/// effect renders INSIDE the scroll view — and the region is cropped OUTSIDE
-/// it, by a `.frame(height:)` and a `.clipped()` that exist so a long row
-/// cannot draw into the band the pills live in. The crop happened after the
-/// effect and cut on a straight line regardless, which is the hard edge the
-/// last row was sliced by (Marcello, 2026-09-20, screenshot). Two systems, one
-/// of them with the last word.
-///
-/// So the CROP ITSELF is what softens. A mask sized to the frame clips exactly
-/// as `.clipped()` did — nothing draws past the edge — but its bottom is a
-/// gradient, so a row dissolves instead of being guillotined.
-///
-/// On top of that, a real frosted blur: `SectionBarFrost` is an
-/// NSVisualEffectView, so it blurs what is BEHIND it in the window, which is
-/// the rows themselves. Its own gradient mask ramps that blur from nothing at
-/// the top to full at the bottom. Public API throughout — there is no public
-/// variable-radius blur on macOS, and a stack of one masked effect view is the
-/// honest approximation: the radius is constant, the AMOUNT of it ramps.
-///
-/// Both halves are gated on `hasBelow`, so a short list and a list scrolled to
-/// its end show neither — no haze over content that does not continue.
+/// The floating to-do list keeps its scroll content visible at the foot so
+/// the material overlay can sample it. Other scroll regions retain the fade.
 struct TodoScrollEdgeEffect: ViewModifier {
     let isScrollable: Bool
     let scrollOffset: CGFloat
     let hasBelow: Bool
-    /// The container gets the mask but no material — see the bar's background.
-    /// The soft mask stays either way: it is what stops a row being cut in
-    /// half, which was the original complaint and is not what was objected to.
     let isContainer: Bool
+    var showsFootBlur = false
 
     func body(content: Content) -> some View {
-        // THE BLUR HAS TO BE ABOVE THE LIST, or it blurs nothing.
-        //
-        // `NSVisualEffectView` in `.withinWindow` mode blurs what is BEHIND it
-        // in the window. Mounted as the section bar's `.background` it sat
-        // behind the bar and behind nothing else, so it contributed a tint and
-        // no blur at all — a gradient, which is exactly what it looked like
-        // (Marcello, 2026-09-20: "il blur non c'è").
-        //
-        // As an overlay on the scroll region it is above the rows, so the rows
-        // are what it blurs. The edge problem that sent it to `.background` in
-        // the first place is answered by geometry instead: it is flush with the
-        // bottom of the region, which is where the bar begins, so its lower
-        // edge lands inside the bar's own material and there is no boundary to
-        // see. Only the top ramps.
-        // ONE BACKGROUND. The list dissolves into the panel's own ground, and
-        // the pills sit on that same ground — Raycast's answer (Marcello,
-        // 2026-09-21, reference screenshot).
-        //
-        // Four attempts put a material here, and every one produced a line,
-        // for a reason that only became clear against a working reference
-        // (github.com/martinhoeller/swiftui-progressive-blur-example): that
-        // example uses ONE effect view with the bar's content drawn directly
-        // on it. This panel had two — a band behind the pills and a ramp above
-        // it — and two surfaces always have an edge between them.
-        //
-        // The one-material version is not available here without restructuring:
-        // the list and the bar are STACKED, not layered, so the list never
-        // passes behind the pills and a blur there has nothing to blur. That is
-        // the real progressive blur, and it is a layout change, not a styling
-        // one. Until then: no material, a soft dissolve, no line — by
-        // construction, because there is only one surface for a line to be the
-        // edge of.
-        //
-        // 2026-09-26: the blur is back, and it is a real one this time — a
-        // VARIABLE radius (ProgressiveBlur). It is NOT drawn here: at the foot
-        // of this region it sat above the Completed header, far from the
-        // pills, and read as a haze in the middle of the panel (Marcello,
-        // 2026-09-26, screenshot). It belongs to the bar — see TodoTabRow.
-        content
-            .modifier(ScrollEdgeFade(scrollOffset: scrollOffset, hasBelow: hasBelow))
+        content.modifier(ScrollEdgeFade(scrollOffset: scrollOffset,
+                                        hasBelow: !showsFootBlur && hasBelow))
     }
 }
 
@@ -400,10 +346,16 @@ struct TodoTabView: View {
     /// is a value this view will not redraw for.
     @ObservedObject private var notes = NotesStore.shared
     @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
+    @State private var footBlurVisible = false
 
     /// The notch silhouette hugs its content, so its height moves with the
     /// section; the floating panels are a fixed 556 and do not.
     private var isContainerLayout: Bool { notchLayout == .container }
+    /// Spaces whose scroll runs UNDER the floating pills, with the
+    /// progressive blur between them. Lists and the Notes/Meetings stream.
+    private var hasFloatingFooter: Bool {
+        [.browsing, .notes, .calendar].contains(store.panelMode)
+    }
 
     // FB2: one transition, every direction. A pure in-place crossfade —
     // no y-offset, no edge-move — so switching tabs or modes never "slides
@@ -637,7 +589,7 @@ struct TodoTabView: View {
                     Spacer(minLength: 0)
                 }
 
-                if !isContainerLayout, store.showsSpaceBar {
+                if !isContainerLayout, store.showsSpaceBar, !hasFloatingFooter {
                     TodoTabRow(rulePosition: .above)
                         .notchEntry(index: 1)
                         .measureHeight(TabRowHeightKey.self)
@@ -652,6 +604,23 @@ struct TodoTabView: View {
             }
             .onPreferenceChange(TabRowHeightKey.self) { h in
                 if h > 0 { PanelChrome.shared.tabRow = h }
+            }
+            .onPreferenceChange(FootBlurVisibleKey.self) { footBlurVisible = $0 }
+            .overlay(alignment: .bottom) {
+                if !isContainerLayout, store.showsSpaceBar, hasFloatingFooter {
+                    ZStack(alignment: .bottom) {
+                        if footBlurVisible {
+                            ProgressiveBlur(cornerRadius: LabMetrics.blockRadius)
+                                .frame(height: LabMetrics.floatingFooterBlurDepth)
+                                .allowsHitTesting(false)
+                                .accessibilityHidden(true)
+                        }
+                        TodoTabRow(rulePosition: .above)
+                            .notchEntry(index: 1)
+                            .measureHeight(TabRowHeightKey.self)
+                    }
+                    .zIndex(10)
+                }
             }
 
             if store.showShortcuts {
@@ -723,9 +692,6 @@ struct TodoTabRow: View {
     @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
     private var isContainerLayout: Bool { notchLayout == .container }
 
-    /// How far the foot blur reaches above the pills' top edge.
-    private static let footBlurReach: CGFloat = 40
-
     var body: some View {
         HStack(spacing: 6) {
             // Notes is the ONLY permanent pill here now.
@@ -784,19 +750,6 @@ struct TodoTabRow: View {
         // material samples them together on macOS 26. What separates the
         // scrolling rows from the pills is the shared fade + frosted material.
         .glassGroup(spacing: 6)
-        // The progressive blur, from the window's bottom edge to 40pt above
-        // the pills (Marcello's Figma, 2026-09-26). Behind the row so the
-        // pills stay sharp, above the list so the list is what it blurs.
-        .background {
-            if rulePosition == .above, !isContainerLayout {
-                ProgressiveBlur(edge: .bottom, maxRadius: 8)
-                    .padding(.top, -Self.footBlurReach)
-                    .padding(.bottom, -SpaceChrome.cornerInset)
-                    .padding(.horizontal, -16)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
-        }
         // No rule under the tab row (Marcello, 2026-07-26). The two paddings
         // stay: they were the breathing room either side of the line, and
         // together they are what now separates the tabs from the list.
@@ -1252,13 +1205,14 @@ struct TodoBrowsingView: View {
     /// that ignored any of them would lay out rows in the strip that thing is
     /// standing on — which is precisely what it did, three times, each time
     /// with a different piece of furniture (see `PanelChrome`).
-    private static func maxRegion(chrome: PanelChrome, completedInset: CGFloat) -> CGFloat {
+    private static func maxRegion(chrome: PanelChrome, completedInset: CGFloat,
+                                  isContainer: Bool) -> CGFloat {
         // The panel's ceiling, 556, minus its furniture — MEASURED, so
         // restyling any of it carries through here without a second edit.
         LabMetrics.todoBlockMaxHeight
-            - LabMetrics.panelTopPadding
+            - (isContainer ? LabMetrics.panelTopPadding : 0)
             - chrome.draftBlock
-            - chrome.tabRow
+            - (isContainer ? chrome.tabRow : 0)
             // The pinned Completed section, which sits BELOW the scroll
             // region — MEASURED, not assumed.
             //
@@ -1275,7 +1229,7 @@ struct TodoBrowsingView: View {
             //
             // No feedback loop: what Completed draws does not depend on the
             // viewport it is shrinking, so this settles in one pass.
-            - completedInset
+            - (isContainer ? completedInset : 0)
     }
 
     /// One line of draft plus its padding and the gap under it. An estimate,
@@ -1394,6 +1348,9 @@ struct TodoBrowsingView: View {
                 UpNextSection()
             }
             todoList(for: collection)
+            if !isContainerLayout, hasAnyCompleted(in: collection) {
+                completedSection(for: collection)
+            }
         }
         .padding(.horizontal, isContainerLayout ? LabMetrics.listInset : SpaceChrome.columnInset)
         // A second catcher, INSIDE what will become the scroll region.
@@ -1422,7 +1379,8 @@ struct TodoBrowsingView: View {
             let completedInset = hasAnyCompleted(in: collection)
                 ? min(completedInsetHeight, LabMetrics.completedExpandedMaxHeight)
                 : 0
-            let budget = Self.maxRegion(chrome: chrome, completedInset: completedInset)
+            let budget = Self.maxRegion(chrome: chrome, completedInset: completedInset,
+                                        isContainer: isContainerLayout)
             // min(natural, budget): the region hugs its content again.
             //
             // This was the full budget for a while — the export pinned the
@@ -1439,6 +1397,11 @@ struct TodoBrowsingView: View {
             // budget for that frame rather than collapsing to nothing.
             let natural = regionNaturalHeights[collection.id] ?? lastRegionNaturalHeight
             let viewport = natural > 0 ? min(natural, budget) : budget
+            // The footer overlays the bottom of the panel. Rows can reach it
+            // before they exceed the panel's full budget, as in Work with nine
+            // items. Start the material and add scroll travel at that point.
+            let overlapsFooter = !isContainerLayout &&
+                natural > budget - LabMetrics.floatingFooterBlurDepth
             let hasBelow = natural > viewport + max(scrollOffset, 0) + 2
             // Indicators ON. They were hidden, so a capped region gave the eye
             // nothing at all to say "there is more" — rows below the fold and
@@ -1456,6 +1419,12 @@ struct TodoBrowsingView: View {
                                 )
                             }
                         )
+                    // The footer overlays this scroll view. Leave one footer
+                    // of travel at the end so the last row can move fully
+                    // above the pills instead of remaining hidden behind it.
+                    if overlapsFooter {
+                        Color.clear.frame(height: LabMetrics.floatingFooterDepth)
+                    }
                     // Anchor for the "more below" pill to jump to.
                     Color.clear.frame(height: 1).id(Self.bottomAnchor)
                 }
@@ -1467,7 +1436,9 @@ struct TodoBrowsingView: View {
                 // to-dos made the whole list appear to jump at random.
                 .onChange(of: store.focusedItemID) { focused in
                     guard let focused else { return }
-                    revealRowIfNeeded(focused, viewport: viewport, proxy: proxy)
+                    revealRowIfNeeded(focused,
+                                      viewport: viewport - (isContainerLayout ? 0 : LabMetrics.floatingFooterDepth),
+                                      proxy: proxy)
                 }
                 // Expanding changes the row's height after the click. Wait for
                 // that layout to settle, then reveal only the overflow. A row
@@ -1476,7 +1447,9 @@ struct TodoBrowsingView: View {
                     guard let expanded else { return }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                         guard store.expandedItemID == expanded else { return }
-                        revealRowIfNeeded(expanded, viewport: viewport, proxy: proxy)
+                        revealRowIfNeeded(expanded,
+                                          viewport: viewport - (isContainerLayout ? 0 : LabMetrics.floatingFooterDepth),
+                                          proxy: proxy)
                     }
                 }
                 .onPreferenceChange(SectionHeightKey.self) { height in
@@ -1494,7 +1467,8 @@ struct TodoBrowsingView: View {
                 .modifier(TodoScrollEdgeEffect(isScrollable: natural > budget,
                                                scrollOffset: scrollOffset,
                                                hasBelow: hasBelow,
-                                               isContainer: isContainerLayout))
+                                               isContainer: isContainerLayout,
+                                               showsFootBlur: !isContainerLayout))
                 // Completed sits BELOW the scroll region, not inside it.
                 //
                 // It was the last thing in the scrolling content, so on any
@@ -1519,7 +1493,7 @@ struct TodoBrowsingView: View {
                     // (Marcello, 2026-09-07) — because completions leave the
                     // store for Archive/<day>.md and the section then had
                     // nothing to draw.
-                    if hasAnyCompleted(in: collection) {
+                    if isContainerLayout, hasAnyCompleted(in: collection) {
                         ScrollView(.vertical, showsIndicators: false) {
                             completedSection(for: collection)
                                 .padding(.horizontal, isContainerLayout ? LabMetrics.listInset : SpaceChrome.columnInset)
@@ -1540,6 +1514,8 @@ struct TodoBrowsingView: View {
             // the hug snaps instead of growing. Keyed on the viewport itself
             // so any route into a new height takes the same spring.
             .animation(NotchAnimation.contentHug, value: viewport)
+            .preference(key: FootBlurVisibleKey.self,
+                        value: overlapsFooter)
         }
     }
 

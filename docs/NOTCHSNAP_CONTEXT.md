@@ -604,3 +604,25 @@ From `otto-notes-mode-dropdown-prd.md` (Raycast-style accessory).
   the floating `TodoTabRow`, from the block's bottom edge to 40pt above the
   pills (657×90). At the list's foot it sat above Completed and read as a haze
   mid-panel. The list keeps only its fade.
+
+### 2026-09-26 floating footer blur correction
+
+The bar-background blur above compiled but sampled empty space: the scrolling
+region ended before the pills. In floating browsing, the 95pt footer now overlays
+the scroll view, and the list (including Completed) runs underneath it. A 95pt
+end spacer lets the last row scroll clear of the pills. The footer is
+`ProgressiveBlur`: a private `CABackdropLayer` + `variableBlur` whose RADIUS
+ramps (t², 0 → 14pt) to the window edge, plus a faint ground-colour tint. A
+`.withinWindow` `NSVisualEffectView` with an alpha mask was tried first and
+rejected: its radius is constant, so a half-transparent material over sharp
+rows reads as a fade, not a blur ("c'è solo una sfumatura"). It remains only
+as the fallback if the private classes disappear. The AppKit host and the
+whole block clip to the same 24pt lower corners. It appears as soon as the list reaches the footer, before it exceeds
+the panel's full height; the prior full-height check left rows visible through
+the pills on lists that were one footer-height short of the cap. Container
+browsing and the Notes stream retain their prior height and edge handling.
+Follow-up the same day: the blur reaches 64pt above the pills
+(`floatingFooterBlurDepth` = 95 + 24; 40 sat too close), and the Notes/Meetings
+stream gets the same floating footer — its floating budget no longer subtracts
+the space bar, it runs under the pills with a 95pt end spacer (outside its
+height measurement) and reports `FootBlurVisibleKey` like a list.

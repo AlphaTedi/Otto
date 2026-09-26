@@ -289,9 +289,16 @@ private struct StreamView: View {
         // container's 36 of field gap is not taken again there: it was, and
         // the stream stopped ~36pt short of the pills and cut its last note
         // on a hard line no list has (Marcello, 2026-09-26).
+        //
+        // Floating: the stream runs under the pills to the panel's foot, as a
+        // list does, so the progressive blur has rows to blur. The space bar
+        // is not subtracted there; an end spacer gives the last note travel.
+        guard isContainer else {
+            return max(120, LabMetrics.todoBlockMaxHeight - composerHeight)
+        }
         return max(120, LabMetrics.todoBlockMaxHeight
                    - LabMetrics.panelTopPadding
-                   - composerHeight - (isContainer ? 36 : 0)
+                   - composerHeight - 36
                    - chrome.tabRow)
     }
 
@@ -435,6 +442,9 @@ private struct StreamView: View {
                                         value: -geo.frame(in: .named(NotesStreamOffsetKey.space)).minY)
                             .preference(key: NotesStreamHeightKey.self, value: geo.size.height)
                     })
+                    // Travel for the last note to clear the floating pills.
+                    // Outside the measurement, so it cannot feed its own test.
+                    .padding(.bottom, overlapsFooter(entries) ? LabMetrics.floatingFooterDepth : 0)
                 }
                 .coordinateSpace(name: NotesStreamOffsetKey.space)
                 .onPreferenceChange(NotesStreamOffsetKey.self) { streamOffset = $0 }
@@ -460,7 +470,9 @@ private struct StreamView: View {
                 isScrollable: natural(entries) > streamBudget,
                 scrollOffset: streamOffset,
                 hasBelow: natural(entries) > streamViewport(entries) + max(streamOffset, 0) + 2,
-                isContainer: isContainer))
+                isContainer: isContainer,
+                showsFootBlur: !isContainer))
+            .preference(key: FootBlurVisibleKey.self, value: overlapsFooter(entries))
             // While the Notes · Meetings menu is open it sits over these rows,
             // and their click catchers are AppKit views, which win every hit
             // test against SwiftUI — the click went to the note underneath.
@@ -534,6 +546,11 @@ private struct StreamView: View {
     /// Measured once drawn; the estimate covers the first frame.
     private func natural(_ entries: [QuickNote]) -> CGFloat {
         streamNatural > 0 ? streamNatural : naturalHeight(of: entries)
+    }
+
+    /// Notes reach the floating footer's blur band.
+    private func overlapsFooter(_ entries: [QuickNote]) -> Bool {
+        !isContainer && natural(entries) > streamBudget - LabMetrics.floatingFooterBlurDepth
     }
 
     private func streamViewport(_ entries: [QuickNote]) -> CGFloat {
