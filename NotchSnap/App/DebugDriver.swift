@@ -307,6 +307,9 @@ enum DebugDriver {
                         store.goBack()
                     }
                     notes.enterCalendarSpace(); await snap("space-calendar")
+                    notes.openKindMenu(); await snap("space-calendar-menu")
+                    notes.chooseKind(meetings: false); await snap("space-notes-after-menu")
+                    appendState("kind menu: open=\(notes.kindMenuOpen) mode=\(store.panelMode)")
                     notes.leaveSpace()
                     store.enterInsights(); await snap("page-insights")
                     store.goBack()

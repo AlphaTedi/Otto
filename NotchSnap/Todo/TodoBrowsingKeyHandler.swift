@@ -83,6 +83,25 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 return true
             }
             if store.panelMode == .notes || store.panelMode == .calendar {
+                // The Notes · Meetings dropdown is modal while open.
+                if notes.kindMenuOpen {
+                    switch keyCode {
+                    case 53: notes.closeKindMenu(); return true
+                    case 125, 126:
+                        notes.kindMenuSelection = keyCode == 125 ? 1 : 0; return true
+                    case 36, 76:
+                        notes.chooseKind(meetings: notes.kindMenuSelection == 1); return true
+                    case 48 where !cmd && !option && !control:
+                        // ⇥ closes it and still changes space.
+                        notes.closeKindMenu()
+                        store.cycleSpace(by: shift ? -1 : 1); return true
+                    default: break
+                    }
+                }
+                // ⌘1 Notes, ⌘2 Meetings — on the stream, menu open or not.
+                if cmd, !option, !control, !shift, notes.openNoteID == nil, chars == "1" || chars == "2" {
+                    notes.chooseKind(meetings: chars == "2"); return true
+                }
                 if let _ = NoteEditorController.shared.pickerTarget, keyCode == 53 {
                     NoteEditorController.shared.pickerTarget = nil; return true
                 }
@@ -451,8 +470,7 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             // use for any of them.
             // ⌥⇥ — Notes ⇄ Meetings, the switch inside the Notes space.
             if keyCode == 48, option, !cmd, !control {
-                if TodoStore.shared.panelMode == .calendar { notes.enterSpace() }
-                else { notes.enterCalendarSpace() }
+                notes.chooseKind(meetings: TodoStore.shared.panelMode != .calendar)
                 return true
             }
             if keyCode == 48, !cmd, !option, !control {          // ⇥

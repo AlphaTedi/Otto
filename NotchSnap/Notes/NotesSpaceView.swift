@@ -297,6 +297,8 @@ private struct StreamView: View {
                     Color.clear.preference(key: ComposerHeightKey.self, value: geo.size.height)
                 })
                 .onPreferenceChange(ComposerHeightKey.self) { composerHeight = $0 }
+                // Over the stream, so the open dropdown is drawn above it.
+                .zIndex(1)
             } else if isCalendarSpace {
                 CalendarComposer(focused: $composerFocused)
                     .padding(.horizontal, LabMetrics.barOuterInset)
@@ -341,9 +343,11 @@ private struct StreamView: View {
                     .measureHeight(TabRowHeightKey.self)
                 // Notes · Meetings, under the space bar: the container's own
                 // field is left exactly as it is.
-                NotesKindSwitch()
+                NotesKindMenu()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
                     .padding(.horizontal, LabMetrics.listInset)
                     .padding(.bottom, 8)
+                    .zIndex(1)
             }
 
             streamBody
@@ -645,41 +649,117 @@ private struct CalendarComposer: View {
     }
 }
 
-// MARK: Notes · Meetings — the secondary switch inside Notes
+// MARK: Notes · Meetings — the dropdown accessory inside Notes
 
-/// Ordinary notes or meeting notes: one space, two views of it. A mini
-/// segmented pill rather than a third global section (2026-09-25 spec).
-/// ⌥⇥ flips it from the keyboard.
-struct NotesKindSwitch: View {
+/// Ordinary notes or meeting notes: one space, two views of it. A Raycast-style
+/// dropdown trailing the field — "Notes ⌄" — replaced the segmented pill,
+/// the one container-inside-a-container in the UI (2026-09-26 PRD). ⌘1 / ⌘2
+/// switch with it closed; while open it takes ↑↓ ⏎ Esc (key handler).
+struct NotesKindMenu: View {
     @ObservedObject private var store = TodoStore.shared
+    @ObservedObject private var notes = NotesStore.shared
+    @State private var hover = false
 
     private var meetings: Bool { store.panelMode == .calendar }
+    private var title: String { L10n.t(meetings ? "notes.kind.meetings" : "notes.kind.notes") }
 
     var body: some View {
-        HStack(spacing: 2) {
-            segment(L10n.t("notes.kind.notes"), active: !meetings) { NotesStore.shared.enterSpace() }
-            segment(L10n.t("notes.kind.meetings"), active: meetings) { NotesStore.shared.enterCalendarSpace() }
-        }
-        .padding(2)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(SpaceInk.a(0.06)))
-        .fixedSize()
-        .help(L10n.t("notes.kind.help"))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(L10n.t("notes.kind.help"))
-    }
-
-    private func segment(_ title: String, active: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 12, weight: active ? .semibold : .regular))
-                .foregroundStyle(SpaceInk.a(active ? 0.95 : 0.55))
-                .padding(.horizontal, 9)
-                .frame(height: 22)
-                .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(active ? SpaceInk.a(0.12) : Color.clear))
-                .contentShape(Rectangle())
+        Button {
+            if notes.kindMenuOpen { notes.closeKindMenu() } else { notes.openKindMenu() }
+        } label: {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.system(size: 15, weight: .medium))
+                    .lineLimit(1)
+                // Static, as in Raycast: the chevron never rotates.
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .foregroundStyle(SpaceInk.a(0.70))
+            .padding(.vertical, 6)
+            .padding(.leading, 10)
+            .padding(.trailing, 8)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(SpaceInk.a(notes.kindMenuOpen ? 0.08 : hover ? 0.06 : 0)))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .fixedSize()
+        .onHover { hovering in withAnimation(Motion.hoverFade) { hover = hovering } }
+        .help(L10n.t("notes.kind.help"))
+        .accessibilityLabel(String(format: L10n.t("notes.kind.a11y"), title))
+        .accessibilityAddTraits(.isButton)
+        .overlay(alignment: .topTrailing) {
+            if notes.kindMenuOpen {
+                NotesKindMenuList(meetings: meetings)
+                    // Under the trigger, flush with its trailing edge.
+                    .offset(y: 30 + 6)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.96, anchor: .topTrailing)),
+                        removal: .opacity))
+            }
+        }
+        .animation(notes.kindMenuOpen ? .spring(response: 0.45, dampingFraction: 0.80)
+                                      : .easeOut(duration: 0.12),
+                   value: notes.kindMenuOpen)
+        .onDisappear { notes.closeKindMenu() }
+    }
+}
+
+private struct NotesKindMenuList: View {
+    let meetings: Bool
+    @ObservedObject private var notes = NotesStore.shared
+
+    var body: some View {
+        VStack(spacing: 2) {
+            row(0, L10n.t("notes.kind.notes"), shortcut: "\u{2318}1", active: !meetings)
+            row(1, L10n.t("notes.kind.meetings"), shortcut: "\u{2318}2", active: meetings)
+        }
+        .padding(6)
+        .frame(width: 220)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color.dynamic(light: .white, dark: NSColor(srgbRed: 0x26 / 255, green: 0x29 / 255,
+                                                              blue: 0x3B / 255, alpha: 1))))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .strokeBorder(SpaceInk.a(0.10), lineWidth: 1))
+        .shadow(color: .black.opacity(0.5), radius: 18, y: 14)
+        // A click anywhere else closes it. Hit testing is not clipped to the
+        // menu's frame, so this catcher reaches the rest of the panel; drawn
+        // behind the menu so its own rows still get their clicks.
+        .background(
+            Color.white.opacity(0.001)
+                .frame(width: 3000, height: 3000)
+                .onTapGesture { notes.closeKindMenu() }
+                .accessibilityHidden(true)
+        )
+        .accessibilityElement(children: .contain)
+    }
+
+    private func row(_ index: Int, _ title: String, shortcut: String, active: Bool) -> some View {
+        Button { notes.chooseKind(meetings: index == 1) } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .semibold))
+                    .opacity(active ? 1 : 0)
+                    .frame(width: 14)
+                Text(title)
+                    .font(.system(size: 14))
+                    .foregroundStyle(SpaceInk.a(0.95))
+                Spacer(minLength: 8)
+                Text(shortcut)
+                    .font(.system(size: 12))
+                    .foregroundStyle(SpaceInk.a(0.45))
+            }
+            .foregroundStyle(SpaceInk.a(0.95))
+            .padding(.vertical, 8)
+            .padding(.horizontal, 10)
+            .frame(height: 34)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(SpaceInk.a(notes.kindMenuSelection == index ? 0.08 : 0)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { if $0 { notes.kindMenuSelection = index } }
         .accessibilityAddTraits(active ? .isSelected : [])
     }
 }
@@ -699,7 +779,7 @@ private struct NotesCaptureHeader: View {
             saveLabel: String(format: L10n.t("capture.saveTo"), L10n.t("filter.notes")),
             onSave: { store.commitDraft() },
             onDot: { TodoStore.shared.cycleCollection() },
-            accessory: AnyView(NotesKindSwitch())
+            accessory: AnyView(NotesKindMenu())
         ) {
             // The user's text is NEVER reformatted — lowercase, missing
             // punctuation and typos are preserved exactly.
@@ -729,7 +809,7 @@ private struct CalendarCaptureHeader: View {
             saveLabel: nil,
             onSave: {},
             onDot: { TodoStore.shared.cycleCollection() },
-            accessory: AnyView(NotesKindSwitch())
+            accessory: AnyView(NotesKindMenu())
         ) {
             // No calendar icon here any more: it opened a separate picker page
             // with no clear meaning (2026-09-25 spec). Meetings still come from

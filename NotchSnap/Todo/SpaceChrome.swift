@@ -42,8 +42,9 @@ enum SpaceChrome {
 // MARK: Capture header (U5 §4) — floating panels only
 
 /// The borderless, Raycast-style capture field: a space dot, the text, and a
-/// trailing hint that is "Switch space ⇥" while empty and "Save to <Space> ↵"
-/// once something is typed. 60 pt tall whatever state it is in, with a
+/// trailing "Save to <Space> ↵" once something is typed. Nothing trails the
+/// empty field any more: ⇥ still switches space, it just is not spelled out
+/// (Notes/Meetings dropdown PRD, 2026-09-26). 60 pt tall whatever state it is in, with a
 /// hairline under it across the whole panel.
 ///
 /// Shared by the to-do field and the Notes composer; each brings its own text
@@ -54,15 +55,14 @@ struct CaptureHeader<Field: View>: View {
     let placeholder: String
     /// Nothing at all in the field — the placeholder shows.
     let showsPlaceholder: Bool
-    /// Something other than whitespace — "Save to …" replaces "Switch space".
+    /// Something other than whitespace — "Save to …" appears.
     let isTyping: Bool
     /// "Save to Work" — nil when the space has nothing to save (Calendar).
     let saveLabel: String?
     let onSave: () -> Void
     let onDot: () -> Void
-    /// Where the ⇥ hint goes; nil hides it.
-    var switchHint = true
-    /// A control that belongs to the space (Notes · Meetings), before the hint.
+    /// A control that belongs to the space (the Notes · Meetings dropdown),
+    /// trailing the field.
     var accessory: AnyView? = nil
     @ViewBuilder let field: Field
 
@@ -96,18 +96,7 @@ struct CaptureHeader<Field: View>: View {
     @ViewBuilder
     private var trailing: some View {
         ZStack(alignment: .trailing) {
-            if !isTyping || saveLabel == nil {
-                if switchHint {
-                    HStack(spacing: 10) {
-                        Text(L10n.t("todo.switchSpace"))
-                            .font(.system(size: 12.5))
-                            .foregroundStyle(SpaceInk.a(0.45))
-                            .fixedSize()
-                        CaptureKeyHint(label: L10n.t("capture.tab"))
-                    }
-                    .transition(.opacity)
-                }
-            } else if let saveLabel {
+            if isTyping, let saveLabel {
                 SaveButton(label: saveLabel, action: onSave)
                     .transition(.opacity)
             }

@@ -737,7 +737,7 @@ struct TodoTabRow: View {
             // scroller gives way, not these two (their ends were being cut).
             NotesPill().layoutPriority(1)
             // No Calendar pill: meeting notes are a view inside Notes now
-            // (NotesKindSwitch), not a third global section.
+            // (NotesKindMenu), not a third global section.
 
             // A rule, because the two sides of it are different kinds of
             // thing. Notes is one permanent space; the lists are many and they
@@ -3159,7 +3159,7 @@ private struct ShortcutsOverlay: View {
         ("\u{2318}B / I / U", "todo.sc.format"),
         ("\u{2318}\u{21E7}C", "notes.sc.inlineCode"),
         ("\u{2318}\u{2325}\u{21E7}C", "notes.sc.codeBlock"),
-        ("\u{2325}\u{21E5}", "notes.sc.kind"),
+        ("\u{2318}1 \u{2318}2", "notes.sc.kind"),
         ("\u{21E7}\u{2318}C", "todo.sc.toggleCompleted"),
         ("\u{21E5} / \u{21E7}\u{21E5}", "todo.sc.nestList"),
         ("\u{2318}I", "todo.sc.insights"),

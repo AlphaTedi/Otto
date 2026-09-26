@@ -573,3 +573,18 @@ From `docs/NOTES_UI_POLISH_AND_CODE_FORMATTING_PROMPT.md`.
   (SpaceAnchor) one level above the panel, with the app activated and the
   panel held open (`isPresentingDialog`); focus returns to the note after.
 - DEBUG: `panel-render-pid <pid> <dir>` — only that process renders.
+
+### 2026-09-26 Notes · Meetings as a dropdown accessory
+
+From `otto-notes-mode-dropdown-prd.md` (Raycast-style accessory).
+
+- The segmented Notes · Meetings pill is gone: `NotesKindMenu` ("Notes ⌄")
+  trails the capture field; in the container it sits right-aligned under the
+  space bar (the container's field itself untouched). Its menu is a custom
+  overlay (220 pt, check + label + shortcut), not a SwiftUI `Menu`, for the
+  styling. While open it owns ↑↓ ⏎ Esc; ⇥ closes it and still changes space;
+  a click outside closes it. ⌘1 Notes / ⌘2 Meetings on the stream, open or
+  closed; ⌥⇥ still flips. All go through `NotesStore.chooseKind`.
+- "Switch space ⇥" is no longer shown in any capture header; ⇥ is unchanged.
+- The Meetings field keeps "Search meeting notes": it searches, so the PRD's
+  "Start meeting notes…" placeholder would have described a different action.

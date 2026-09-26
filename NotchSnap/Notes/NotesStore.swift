@@ -152,6 +152,11 @@ final class NotesStore: ObservableObject {
     @Published var meetingQuery = ""
     @Published var meetingLinkQuery = ""
     @Published var meetingSearchFocus = false
+    /// The Notes · Meetings dropdown in the header is open; while it is, it
+    /// owns ↑↓ ⏎ Esc (TodoBrowsingKeyHandler).
+    @Published var kindMenuOpen = false
+    /// The highlighted row in that menu: 0 Notes, 1 Meetings.
+    @Published var kindMenuSelection = 0
     @Published var meetingPicker = false
     @Published var meetingSelection = 0
     @Published var meetingHistory = false
@@ -408,6 +413,22 @@ final class NotesStore: ObservableObject {
         closeNoteState()
         TodoStore.shared.setMode(.calendar)
         meetingSearchFocus = true
+    }
+
+    /// Opens the dropdown with the active view highlighted.
+    func openKindMenu() {
+        kindMenuSelection = TodoStore.shared.panelMode == .calendar ? 1 : 0
+        kindMenuOpen = true
+    }
+
+    func closeKindMenu() { kindMenuOpen = false }
+
+    /// Notes or meeting notes — from the menu, ⌘1/⌘2 or ⌥⇥. The two fields
+    /// keep their own text, so a draft survives the switch, and the caret
+    /// goes back to the field of the view chosen.
+    func chooseKind(meetings: Bool) {
+        kindMenuOpen = false
+        if meetings { enterCalendarSpace() } else { enterSpace() }
     }
 
     /// Leave Notes and go back to the list that was on screen.
