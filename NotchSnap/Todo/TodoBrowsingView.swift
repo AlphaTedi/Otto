@@ -3181,6 +3181,7 @@ private struct ShortcutsOverlay: View {
         ("\u{2318}B / I / U", "todo.sc.format"),
         ("\u{2318}\u{21E7}C", "notes.sc.inlineCode"),
         ("\u{2318}\u{2325}\u{21E7}C", "notes.sc.codeBlock"),
+        ("\u{2318}'", "notes.sc.quote"),
         ("\u{2318}1 \u{2318}2", "notes.sc.kind"),
         ("\u{21E7}\u{2318}C", "todo.sc.toggleCompleted"),
         ("\u{21E5} / \u{21E7}\u{21E5}", "todo.sc.nestList"),

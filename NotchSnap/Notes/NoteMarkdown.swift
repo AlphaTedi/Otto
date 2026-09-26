@@ -1,13 +1,14 @@
 import AppKit
 import SwiftUI
 
-// MARK: - Note formatting — nine formats, all of them markdown
+// MARK: - Note formatting — a closed set, all of it markdown
 //
 // The governing rule comes from the handoff and it is the reason this file is
 // short: IF IT CANNOT BE WRITTEN INTO Notes.md AS MARKDOWN, IT DOES NOT ENTER
-// THE EDITOR. No colour, no highlight, no tables, no code blocks, no quotes,
-// no images, no font size. Nine formats, each with an exact markdown
-// equivalent, and a closed set is what makes the round-trip safe: a note is
+// THE EDITOR. No colour, no highlight, no tables, no images, no font size.
+// Code (inline and block) and the block quote joined later (2026-09-25/26)
+// because each has an exact markdown form — `…`, a ``` fence, `> `. Every
+// format has an exact markdown equivalent, and a closed set is what makes the round-trip safe: a note is
 // still a `String` of markdown in notes.json, the mirror still has one writer,
 // and nothing about persistence changes.
 //
@@ -22,6 +23,10 @@ enum NoteBlock: String, Equatable {
     /// A line of a code block. Written as a ``` fence around the run of
     /// such lines, never as a per-line marker.
     case code
+    /// A line of a block quote, `> ` in the file. A run of them draws one
+    /// leading rule (ActionTextView). Not a list, so it does not nest, and a
+    /// list row made a quote becomes a quote at the margin.
+    case quote
 
     var isList: Bool {
         switch self {
@@ -47,6 +52,7 @@ enum NoteBlock: String, Equatable {
         case .checklistOpen: return "- [ ] "
         case .checklistDone: return "- [x] "
         case .code:          return ""
+        case .quote:         return "> "
         }
     }
 }
@@ -118,6 +124,7 @@ enum NoteType {
         case .h2:   base = .systemFont(ofSize: h2Size, weight: .semibold)
         // Code never takes bold or italic: the traits are ignored.
         case .code: return codeFont
+        // Quote text keeps the body face; the rule and the inset mark it.
         default:    base = .systemFont(ofSize: bodySize, weight: .regular)
         }
         guard !traits.isEmpty else { return base }
@@ -126,12 +133,32 @@ enum NoteType {
 
     /// The ONE monospaced face in the app, and only for code (inline or block).
     static var codeFont: NSFont { .monospacedSystemFont(ofSize: bodySize - 1, weight: .regular) }
-    /// The faint ground behind inline code; blocks draw a full-width one.
-    static var codeBackground: NSColor { NSColor.labelColor.withAlphaComponent(0.08) }
+    /// The ground and hairline of a code chip or block. Both are drawn by
+    /// ActionTextView, never stored: a `.backgroundColor` run is a flat
+    /// rectangle the height of the line, and read as a stuck selection.
+    static var codeBackground: NSColor { NSColor.labelColor.withAlphaComponent(0.07) }
+    static var codeBorder: NSColor { NSColor.labelColor.withAlphaComponent(0.14) }
+    /// Inline code's ink: the warm orange of the title chips
+    /// (`DSEntityChip`), deepened on light so it keeps 4.5:1 on white.
+    static let codeInk = NSColor(name: "ottoNoteCodeInk") { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(srgbRed: 0xE8 / 255, green: 0x90 / 255, blue: 0x5C / 255, alpha: 1)
+            : NSColor(srgbRed: 0xB8 / 255, green: 0x44 / 255, blue: 0x1C / 255, alpha: 1)
+    }
+    /// The quote's leading rule: a shape, so it reads without colour.
+    static var quoteRule: NSColor { NSColor.labelColor.withAlphaComponent(0.32) }
+    static let quoteInset: CGFloat = 16
 
     static func paragraphStyle(for block: NoteBlock, indent: Int = 0) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         switch block {
+        case .quote:
+            style.lineHeightMultiple = 1.35
+            style.firstLineHeadIndent = quoteInset
+            style.headIndent = quoteInset
+            // Quote lines sit close so a run reads as one block; the rule
+            // is drawn through the gaps (ActionTextView).
+            style.paragraphSpacing = 4
         case .code:
             // Inset inside the block's drawn ground (ActionTextView), and no
             // gap between its lines so the block reads as one surface.
@@ -300,6 +327,11 @@ enum NoteMarkdown {
         // back whole.
         if line.hasPrefix("## ")      { return (.h2, 0, String(line.dropFirst(3))) }
         if line.hasPrefix("# ")       { return (.h1, 0, String(line.dropFirst(2))) }
+        if line.hasPrefix("> ")       { return (.quote, 0, String(line.dropFirst(2))) }
+        if line == ">"                { return (.quote, 0, "") }
+        // A paragraph the user began with ">" is written `\>` so it cannot
+        // come back as a quote.
+        if line.hasPrefix("\\>")      { return (.body, 0, String(line.dropFirst())) }
         return (.body, 0, line)
     }
 
@@ -329,7 +361,8 @@ enum NoteMarkdown {
         }
     }
 
-    private static let inlineCode = try! NSRegularExpression(pattern: "(?<!`)`([^`\n]+?)`(?!`)")
+    /// A backtick the user TYPED is written `\``, so it can never open code.
+    private static let inlineCode = try! NSRegularExpression(pattern: "(?<![`\\\\])`([^`\n]+?)`(?!`)")
 
     private static func applyInline(to paragraph: NSMutableAttributedString,
                                     block: NoteBlock, textColor: NSColor) {
@@ -341,7 +374,7 @@ enum NoteMarkdown {
             var attributes = paragraph.attributes(at: match.range.location, effectiveRange: nil)
             attributes[.font] = NoteType.codeFont
             attributes[.noteCode] = true
-            attributes[.backgroundColor] = NoteType.codeBackground
+            attributes[.foregroundColor] = NoteType.codeInk
             paragraph.replaceCharacters(in: match.range,
                                         with: NSAttributedString(string: inner, attributes: attributes))
         }
@@ -384,7 +417,7 @@ enum NoteMarkdown {
         }
         // The escapes have done their job once the delimiters are matched.
         // (Outside code only: inside backticks a backslash is the user's.)
-        for escape in (try! NSRegularExpression(pattern: "\\\\\\*")).matches(
+        for escape in (try! NSRegularExpression(pattern: "\\\\[*`]")).matches(
             in: paragraph.string, range: NSRange(location: 0, length: paragraph.length)).reversed()
             where !insideCode(escape.range) {
             paragraph.replaceCharacters(in: NSRange(location: escape.range.location, length: 1), with: "")
@@ -413,10 +446,20 @@ enum NoteMarkdown {
                 contentRange.length -= 1
             }
 
-            let block: NoteBlock = contentRange.length > 0
+            var block: NoteBlock = contentRange.length > 0
                 ? (attributed.attribute(.noteBlock, at: contentRange.location, effectiveRange: nil)
                     as? String).flatMap(NoteBlock.init(rawValue:)) ?? .body
                 : .body
+            // An EMPTY line inside a code block or a quote is still part of
+            // it — its line break carries the type. Without this a blank line
+            // in code closed the fence and split the block in two. (Lists
+            // keep the old rule: an empty row is where a list ends.)
+            if contentRange.length == 0, lineRange.length > 0,
+               let carried = (attributed.attribute(.noteBlock, at: lineRange.location, effectiveRange: nil)
+                    as? String).flatMap(NoteBlock.init(rawValue:)),
+               carried == .code || carried == .quote {
+                block = carried
+            }
             let indent: Int = contentRange.length > 0
                 ? (attributed.attribute(.noteIndent, at: contentRange.location, effectiveRange: nil)
                     as? Int) ?? 0
@@ -449,8 +492,11 @@ enum NoteMarkdown {
                 lines.append(string.substring(with: textRange))
             } else {
                 if inFence { lines.append("```"); inFence = false }
-                lines.append(block.marker(index: numberedIndex, indent: indent)
-                             + inlineMarkdown(attributed, in: textRange, block: block))
+                var inline = inlineMarkdown(attributed, in: textRange, block: block)
+                if block == .body, inline.hasPrefix(">") { inline = "\\" + inline }
+                // An empty quote line is a bare ">" — no trailing space.
+                lines.append(block == .quote && inline.isEmpty
+                             ? ">" : block.marker(index: numberedIndex, indent: indent) + inline)
             }
 
             if NSMaxRange(lineRange) >= string.length { break }
@@ -538,8 +584,9 @@ enum NoteMarkdown {
                 out += leading + "`" + core + "`" + trailing
                 continue
             }
-            // A typed asterisk is text, not syntax.
+            // A typed asterisk or backtick is text, not syntax.
             let text = segment.text.replacingOccurrences(of: "*", with: "\\*")
+                .replacingOccurrences(of: "`", with: "\\`")
             guard segment.italic || segment.bold || segment.underline else { out += text; continue }
             // Markers go around the WORDS only. Wrapping a styled space — or a
             // span's edge spaces — wrote "mercoledi.*** ***rimandano", which
@@ -570,6 +617,7 @@ enum NoteMarkdown {
             .replacingOccurrences(of: "\\*", with: "*")
             .replacingOccurrences(of: "<u>", with: "")
             .replacingOccurrences(of: "</u>", with: "")
-            .replacingOccurrences(of: "`", with: "")
+            .replacingOccurrences(of: "(?<!\\\\)`", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\`", with: "`")
     }
 }

@@ -60,13 +60,14 @@ enum L10n {
         // Notes: code, Notes · Meetings
         "notes.fmt.inlineCode": "Inline code",
         "notes.fmt.codeBlock": "Code block",
-        "notes.fmt.codeHelp": "Code \u{2014} click for inline, hold or right-click for a block",
+        "notes.fmt.quote": "Block quote",
         "notes.kind.notes": "Notes",
         "notes.kind.meetings": "Meetings",
         "notes.kind.help": "Notes or meeting notes (\u{2318}1 / \u{2318}2)",
         "notes.kind.a11y": "Note type: %@",
         "notes.sc.inlineCode": "Inline code in a note",
         "notes.sc.codeBlock": "Code block in a note",
+        "notes.sc.quote": "Block quote in a note",
         "notes.sc.kind": "Notes \u{21C4} meeting notes",
         // U5 capture header
         "capture.placeholder": "Add a to-do\u{2026}",
@@ -396,13 +397,14 @@ enum L10n {
         // Notes: code, Notes · Meetings
         "notes.fmt.inlineCode": "Codice inline",
         "notes.fmt.codeBlock": "Blocco di codice",
-        "notes.fmt.codeHelp": "Codice \u{2014} clic per inline, tieni premuto o clic destro per un blocco",
+        "notes.fmt.quote": "Citazione",
         "notes.kind.notes": "Note",
         "notes.kind.meetings": "Riunioni",
         "notes.kind.help": "Note o note delle riunioni (\u{2318}1 / \u{2318}2)",
         "notes.kind.a11y": "Tipo di nota: %@",
         "notes.sc.inlineCode": "Codice inline in una nota",
         "notes.sc.codeBlock": "Blocco di codice in una nota",
+        "notes.sc.quote": "Citazione in una nota",
         "notes.sc.kind": "Note \u{21C4} note delle riunioni",
         // U5 capture header
         "capture.placeholder": "Aggiungi un to-do\u{2026}",

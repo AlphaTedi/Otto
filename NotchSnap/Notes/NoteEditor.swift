@@ -63,59 +63,130 @@ final class NoteEditorController: ObservableObject {
         code = attributes[.noteCode] != nil
     }
 
-    // MARK: Code
+    // MARK: Code and quote
+    //
+    // Three separate verbs, the way Slack's toolbar has them: inline code is
+    // a mark on characters, a code block and a quote are what a paragraph IS.
+    // All three are markdown (`…`, a ``` fence, `> `), so persistence is the
+    // note's string exactly as before.
 
-    /// Inline code on the selection — monospace, a faint ground, and nothing
-    /// else: bold, italic and underline come off, because code does not
-    /// carry them. With no selection it applies to what is typed next.
+    /// Inline code on EXACTLY the selected characters — per line, never a
+    /// list marker or a line break, never inside a code block (which is code
+    /// already). Monospace and nothing else: bold, italic and underline come
+    /// off. Toggles off only when all of it is code already; a mixed
+    /// selection becomes code throughout. With no selection it is a typing
+    /// mark for what is typed next.
     func toggleInlineCode() {
         guard let view = textView, let storage = view.textStorage else { return }
         guard activeBlock != .code else { return }
         let range = view.selectedRange()
-        let turningOn = !code
-        let plain = NoteType.font(for: activeBlock)
         guard range.length > 0 else {
-            if turningOn {
+            if !code {
                 view.typingAttributes[.font] = NoteType.codeFont
                 view.typingAttributes[.noteCode] = true
-                view.typingAttributes[.backgroundColor] = NoteType.codeBackground
+                view.typingAttributes[.foregroundColor] = NoteType.codeInk
                 view.typingAttributes[.underlineStyle] = 0
             } else {
-                view.typingAttributes[.font] = plain
+                view.typingAttributes[.font] = NoteType.font(for: activeBlock)
+                view.typingAttributes[.foregroundColor] = Self.ink(for: activeBlock)
                 view.typingAttributes.removeValue(forKey: .noteCode)
-                view.typingAttributes.removeValue(forKey: .backgroundColor)
             }
-            code = turningOn
+            code.toggle()
             return
         }
+        let targets = inlineRanges(in: storage, covering: range)
+        guard !targets.isEmpty else { return }
+        let turningOn = targets.contains { !Self.isEntirely(storage, .noteCode, in: $0) }
         edit(view) {
-            if turningOn {
-                storage.addAttributes([.font: NoteType.codeFont, .noteCode: true,
-                                       .backgroundColor: NoteType.codeBackground,
-                                       .underlineStyle: 0], range: range)
-            } else {
-                storage.removeAttribute(.noteCode, range: range)
-                storage.removeAttribute(.backgroundColor, range: range)
-                storage.addAttribute(.font, value: plain, range: range)
+            for target in targets {
+                if turningOn {
+                    storage.addAttributes([.font: NoteType.codeFont, .noteCode: true,
+                                           .foregroundColor: NoteType.codeInk,
+                                           .underlineStyle: 0], range: target)
+                } else {
+                    let block = Self.block(in: storage, at: target.location)
+                    storage.removeAttribute(.noteCode, range: target)
+                    storage.addAttributes([.font: NoteType.font(for: block),
+                                           .foregroundColor: Self.ink(for: block)], range: target)
+                }
             }
         }
+        // The selection is the user's and stays exactly where it was.
+        view.setSelectedRange(range)
         refreshState()
     }
 
-    /// The paragraph(s) at the caret become a code block, or stop being one.
-    func toggleCodeBlock() {
+    /// Every paragraph the selection touches becomes a code block — one
+    /// block, lines and indentation kept — or, if all of them already are,
+    /// goes back to body. A quote converts in place.
+    func toggleCodeBlock() { toggleBlockFormat(.code) }
+
+    /// Same rule for a block quote: each touched paragraph keeps its own
+    /// boundary and gains the leading rule.
+    func toggleQuote() { toggleBlockFormat(.quote) }
+
+    private func toggleBlockFormat(_ block: NoteBlock) {
         guard let view = textView, let storage = view.textStorage else { return }
-        let leaving = activeBlock == .code
-        setBlock(leaving ? .body : .code)
-        // A block is code through and through: inline code, bold and italic
-        // inside it are dropped (their font is already the block's).
-        for range in paragraphRanges(in: storage, covering: view.selectedRange()) {
-            storage.removeAttribute(.noteCode, range: range)
-            storage.removeAttribute(.backgroundColor, range: range)
-            if !leaving { storage.addAttribute(.underlineStyle, value: 0, range: range) }
+        let paragraphs = paragraphRanges(in: storage, covering: view.selectedRange())
+        let all = paragraphs.allSatisfy {
+            // An empty last line has no character to ask; its type lives in
+            // the typing attributes, which is what `activeBlock` reads.
+            $0.location < storage.length ? Self.block(in: storage, at: $0.location) == block
+                                         : activeBlock == block
         }
-        view.needsDisplay = true
-        refreshState()
+        setBlock(all ? .body : block)
+    }
+
+    /// The selection cut to each line's own text: no list marker, no line
+    /// break, nothing inside a code block.
+    private func inlineRanges(in storage: NSTextStorage, covering selection: NSRange) -> [NSRange] {
+        let string = storage.string as NSString
+        return paragraphRanges(in: storage, covering: selection).compactMap { paragraph in
+            var content = paragraph
+            if content.length > 0,
+               string.substring(with: NSRange(location: NSMaxRange(content) - 1, length: 1)) == "\n" {
+                content.length -= 1
+            }
+            guard content.length > 0 else { return nil }
+            let block = Self.block(in: storage, at: content.location)
+            guard block != .code else { return nil }
+            if block.isList,
+               let match = string.substring(with: content)
+                .range(of: "^(\\d+\\.|•|☐|☑)\\s+", options: .regularExpression) {
+                let drawn = string.substring(with: content).distance(
+                    from: string.substring(with: content).startIndex, to: match.upperBound)
+                content.location += drawn
+                content.length -= drawn
+            }
+            let hit = NSIntersectionRange(content, selection)
+            return hit.length > 0 ? hit : nil
+        }
+    }
+
+    private static func block(in storage: NSAttributedString, at location: Int) -> NoteBlock {
+        guard location < storage.length else { return .body }
+        return (storage.attribute(.noteBlock, at: location, effectiveRange: nil) as? String)
+            .flatMap(NoteBlock.init(rawValue:)) ?? .body
+    }
+
+    private static func isEntirely(_ storage: NSAttributedString, _ key: NSAttributedString.Key,
+                                   in range: NSRange) -> Bool {
+        var all = true
+        storage.enumerateAttribute(key, in: range, options: []) { value, _, stop in
+            if value == nil { all = false; stop.pointee = true }
+        }
+        return all
+    }
+
+    /// A run inline typography must leave alone: inline code, or any line of
+    /// a code block. Code keeps its face (spec: prefer preserving code and
+    /// suppressing the conflicting mark).
+    private static func isCode(_ attributes: [NSAttributedString.Key: Any]) -> Bool {
+        attributes[.noteCode] != nil || (attributes[.noteBlock] as? String) == NoteBlock.code.rawValue
+    }
+
+    static func ink(for block: NoteBlock) -> NSColor {
+        block == .checklistDone ? .tertiaryLabelColor : .labelColor
     }
 
     // MARK: Inline style
@@ -135,9 +206,12 @@ final class NoteEditorController: ObservableObject {
         }
         let turningOn = !underline
         edit(view) {
-            storage.addAttribute(.underlineStyle,
-                                 value: turningOn ? NSUnderlineStyle.single.rawValue : 0,
-                                 range: range)
+            storage.enumerateAttributes(in: range, options: []) { attributes, subrange, _ in
+                guard !Self.isCode(attributes) else { return }
+                storage.addAttribute(.underlineStyle,
+                                     value: turningOn ? NSUnderlineStyle.single.rawValue : 0,
+                                     range: subrange)
+            }
         }
         // Underlining a selected phrase is also an explicit request to turn
         // that phrase into an action. Keep the user's underline as formatting,
@@ -171,11 +245,11 @@ final class NoteEditorController: ObservableObject {
 
     private func toggleTrait(_ trait: NSFontTraitMask, isOn: Bool) {
         guard let view = textView, let storage = view.textStorage else { return }
-        // Code never takes bold or italic (spec: no unintended inheritance).
-        guard activeBlock != .code, !code else { return }
         let range = view.selectedRange()
         let manager = NSFontManager.shared
         guard range.length > 0 else {
+            // Code never takes bold or italic (spec: no unintended inheritance).
+            guard activeBlock != .code, !code else { return }
             let current = (view.typingAttributes[.font] as? NSFont) ?? NoteType.font(for: activeBlock)
             view.typingAttributes[.font] = isOn
                 ? manager.convert(current, toNotHaveTrait: trait)
@@ -184,8 +258,11 @@ final class NoteEditorController: ObservableObject {
             return
         }
         edit(view) {
-            storage.enumerateAttribute(.font, in: range, options: []) { value, subrange, _ in
-                let font = (value as? NSFont) ?? NoteType.font(for: activeBlock)
+            // A selection that crosses code styles the words around it and
+            // leaves the code exactly as it was.
+            storage.enumerateAttributes(in: range, options: []) { attributes, subrange, _ in
+                guard !Self.isCode(attributes) else { return }
+                let font = (attributes[.font] as? NSFont) ?? NoteType.font(for: activeBlock)
                 storage.addAttribute(.font,
                                      value: isOn ? manager.convert(font, toNotHaveTrait: trait)
                                                  : manager.convert(font, toHaveTrait: trait),
@@ -233,7 +310,7 @@ final class NoteEditorController: ObservableObject {
     private func resetTypingAttributes(_ view: NSTextView, to block: NoteBlock, indent: Int = 0) {
         view.typingAttributes = [
             .font: NoteType.font(for: block),
-            .foregroundColor: block == .checklistDone ? NSColor.tertiaryLabelColor : NSColor.labelColor,
+            .foregroundColor: Self.ink(for: block),
             .paragraphStyle: NoteType.paragraphStyle(for: block, indent: indent),
             .noteBlock: block.rawValue,
             .noteIndent: indent,
@@ -273,6 +350,8 @@ final class NoteEditorController: ObservableObject {
         case "##":   block = .h2
         case "-", "*": block = .bullet
         case "[]", "[ ]": block = .checklistOpen
+        case ">":    block = .quote
+        case "```":  block = .code
         default:
             block = typed.range(of: "^\\d+\\.$", options: .regularExpression) != nil ? .numbered : nil
         }
@@ -299,6 +378,21 @@ final class NoteEditorController: ObservableObject {
     ///    that does not involve reaching for the mouse.
     func handleReturn() -> Bool {
         guard let view = textView, let storage = view.textStorage else { return false }
+        // Quote and code block: ⏎ stays inside, and on an EMPTY line it
+        // leaves — that line becomes body. In code only on the block's last
+        // line, because a blank line in the middle of code is code.
+        if activeBlock == .quote || activeBlock == .code {
+            let selection = view.selectedRange()
+            guard selection.length == 0 else { return false }
+            let string = storage.string as NSString
+            let line = string.paragraphRange(for: NSRange(location: min(selection.location, string.length), length: 0))
+            let empty = line.length == 0 || string.substring(with: line) == "\n"
+            guard empty else { return false }
+            if activeBlock == .code, NSMaxRange(line) < storage.length,
+               Self.block(in: storage, at: NSMaxRange(line)) == .code { return false }
+            setBlock(.body)
+            return true
+        }
         if activeBlock == .h1 || activeBlock == .h2 {
             let selection = view.selectedRange()
             edit(view) {
@@ -359,6 +453,18 @@ final class NoteEditorController: ObservableObject {
     }
 
     func handleBackspace() -> Bool {
+        // ⌫ at the very start of a quote line, or of a code block's first
+        // line, takes the block off before it would join two lines.
+        if let view = textView, let storage = view.textStorage,
+           activeBlock == .quote || activeBlock == .code, view.selectedRange().length == 0 {
+            let caret = view.selectedRange().location
+            let paragraph = (storage.string as NSString).paragraphRange(for: NSRange(location: caret, length: 0))
+            guard caret == paragraph.location else { return false }
+            if activeBlock == .code, paragraph.location > 0,
+               Self.block(in: storage, at: paragraph.location - 1) == .code { return false }
+            setBlock(.body)
+            return true
+        }
         guard let view = textView, let storage = view.textStorage, activeBlock.isList,
               view.selectedRange().length == 0 else { return false }
         let caret = view.selectedRange().location
@@ -439,10 +545,18 @@ final class NoteEditorController: ObservableObject {
             if old == .code { traits = [] }
             storage.addAttribute(.font, value: NoteType.font(for: block, traits: traits), range: subrange)
         }
-        storage.addAttribute(.foregroundColor,
-                             value: block == .checklistDone ? NSColor.tertiaryLabelColor
-                                                            : NSColor.labelColor,
-                             range: full)
+        storage.addAttribute(.foregroundColor, value: Self.ink(for: block), range: full)
+        if block == .code {
+            // A block is code through and through: inline code and
+            // underline inside it are dropped (its font is already code).
+            storage.removeAttribute(.noteCode, range: full)
+            storage.addAttribute(.underlineStyle, value: 0, range: full)
+        } else {
+            // Inline code keeps its own ink whatever the paragraph becomes.
+            storage.enumerateAttribute(.noteCode, in: full, options: []) { value, subrange, _ in
+                if value != nil { storage.addAttribute(.foregroundColor, value: NoteType.codeInk, range: subrange) }
+            }
+        }
         if block == .checklistDone {
             storage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: full)
         } else {
@@ -589,6 +703,81 @@ final class NoteEditorController: ObservableObject {
     }
 }
 
+// MARK: - Copy and paste inside notes
+//
+// RTF cannot carry the note's own attributes (block type, inline code), so a
+// copy also writes the selection as note markdown under a private type and a
+// paste into a note reads that first (ActionTextView). Other apps still get
+// the ordinary rich and plain text, and a plain-text paste stays plain.
+
+extension NoteEditorController {
+    static let markdownPasteboardType = NSPasteboard.PasteboardType("com.notchsnap.note-markdown")
+
+    /// Insert note markdown at the selection as ONE undoable edit.
+    ///
+    /// Blocks come across whole when the caret is on an empty line. Anywhere
+    /// else the first pasted line joins the line it lands in and takes that
+    /// line's type — a quote's words pasted mid-sentence are words, not a
+    /// second quote inside a paragraph — and inside a code block everything
+    /// is literal code text.
+    func paste(markdown: String) {
+        guard let view = textView, let storage = view.textStorage else { return }
+        let selection = view.selectedRange()
+        let target = activeBlock
+        let typing = view.typingAttributes
+        let pasted: NSMutableAttributedString
+        if target == .code {
+            pasted = NSMutableAttributedString(string: NoteMarkdown.plainText(markdown), attributes: typing)
+        } else {
+            pasted = NSMutableAttributedString(attributedString: NoteMarkdown.attributed(
+                from: markdown, textColor: .labelColor, accent: .labelColor, mutedColor: .tertiaryLabelColor))
+            let string = storage.string as NSString
+            let line = string.paragraphRange(for: NSRange(location: min(selection.location, string.length), length: 0))
+            let lineIsEmpty = line.length == 0 || string.substring(with: line) == "\n"
+            if !lineIsEmpty || selection.length > 0 { adopt(firstLineOf: pasted, as: target, typing: typing) }
+        }
+        guard pasted.length > 0 else { return }
+        var caret = selection.location + pasted.length
+        edit(view) {
+            storage.replaceCharacters(in: selection, with: pasted)
+            caret = renumber(storage, caret: caret) ?? caret
+        }
+        view.setSelectedRange(NSRange(location: min(caret, storage.length), length: 0))
+        refreshState()
+    }
+
+    /// Give the first pasted line the type of the line it is joining.
+    private func adopt(firstLineOf pasted: NSMutableAttributedString, as block: NoteBlock,
+                       typing: [NSAttributedString.Key: Any]) {
+        let string = pasted.string as NSString
+        let first = string.paragraphRange(for: NSRange(location: 0, length: 0))
+        var content = first
+        if content.length > 0, string.character(at: NSMaxRange(content) - 1) == 0x0A { content.length -= 1 }
+        let source = Self.block(in: pasted, at: 0)
+        if source.isList,
+           let match = string.substring(with: content).range(of: "^(\\d+\\.|•|☐|☑)\\s+", options: .regularExpression) {
+            let text = string.substring(with: content)
+            let drawn = text.distance(from: text.startIndex, to: match.upperBound)
+            pasted.deleteCharacters(in: NSRange(location: 0, length: drawn))
+            content.length -= drawn
+        }
+        let indent = typing[.noteIndent] as? Int ?? 0
+        let lineAttributes: [NSAttributedString.Key: Any] = [
+            .noteBlock: block.rawValue, .noteIndent: indent,
+            .paragraphStyle: NoteType.paragraphStyle(for: block, indent: indent),
+        ]
+        pasted.addAttributes(lineAttributes, range: NSRange(location: 0, length: content.length))
+        let baseTraits = NSFontManager.shared.traits(of: NoteType.font(for: source))
+        pasted.enumerateAttributes(in: NSRange(location: 0, length: content.length), options: []) { attributes, run, _ in
+            guard attributes[.noteCode] == nil else { return }
+            let traits = (attributes[.font] as? NSFont).map { NSFontManager.shared.traits(of: $0) } ?? []
+            pasted.addAttributes([.font: NoteType.font(for: block, traits: traits.subtracting(baseTraits)),
+                                  .foregroundColor: Self.ink(for: block)], range: run)
+            pasted.removeAttribute(.strikethroughStyle, range: run)
+        }
+    }
+}
+
 // MARK: - Detected action items
 //
 // The underlines, and everything that acts on them. It lives on the controller
@@ -683,6 +872,7 @@ extension NoteEditorController {
             count += 1
         }
         view.typingAttributes = typing.filter { $0.key != .noteAction && $0.key != .noteActionDone }
+        (view as? ActionTextView)?.applyCodeSpacing()
         detectedCount = count
         (view as? ActionTextView)?.needsDisplay = true
         (view as? ActionTextView)?.showSelectionControl()
@@ -699,6 +889,7 @@ extension NoteEditorController {
         storage.removeAttribute(.noteActionDone, range: full)
         view.typingAttributes.removeValue(forKey: .noteAction)
         view.typingAttributes.removeValue(forKey: .noteActionDone)
+        (view as? ActionTextView)?.applyCodeSpacing()
         (view as? ActionTextView)?.clearActionControl()
     }
 

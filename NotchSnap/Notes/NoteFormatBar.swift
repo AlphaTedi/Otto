@@ -22,9 +22,6 @@ struct NoteFormatBar: View {
 
     @ObservedObject private var editor = NoteEditorController.shared
     @State private var showsBlockMenu = false
-    /// Set by a long press on </>, so the release that ends it is not also
-    /// read as a click.
-    @State private var codeLongPressed = false
 
     var body: some View {
         HStack(spacing: 2) {
@@ -59,41 +56,41 @@ struct NoteFormatBar: View {
             divider
 
             // Group 3 — inline style
-            Button { editor.toggleBold() } label: {
-                Text("B").font(.system(size: 12.5, weight: .bold))
+            // A code block is code through and through: no typography in it.
+            Group {
+                Button { editor.toggleBold() } label: {
+                    Text("B").font(.system(size: 12.5, weight: .bold))
+                }
+                .buttonStyle(FormatControlStyle(isActive: editor.bold))
+                Button { editor.toggleItalic() } label: {
+                    Text("I").font(.system(size: 12.5).italic())
+                }
+                .buttonStyle(FormatControlStyle(isActive: editor.italic))
+                Button { editor.toggleUnderline() } label: {
+                    Text("U").font(.system(size: 12.5)).underline()
+                }
+                .buttonStyle(FormatControlStyle(isActive: editor.underline))
             }
-            .buttonStyle(FormatControlStyle(isActive: editor.bold))
-            Button { editor.toggleItalic() } label: {
-                Text("I").font(.system(size: 12.5).italic())
-            }
-            .buttonStyle(FormatControlStyle(isActive: editor.italic))
-            Button { editor.toggleUnderline() } label: {
-                Text("U").font(.system(size: 12.5)).underline()
-            }
-            .buttonStyle(FormatControlStyle(isActive: editor.underline))
+            .disabled(editor.activeBlock == .code)
 
             divider
 
-            // Group 4 — code. Click: inline code on the selection (⌘⇧C).
-            // Press and hold, or right-click: a code block (⌘⌥⇧C).
-            Button {
-                if codeLongPressed { codeLongPressed = false; return }
-                editor.toggleInlineCode()
-            } label: {
+            // Group 4 — code and quote: three separate verbs, as in Slack.
+            Button { editor.toggleInlineCode() } label: {
                 Text("</>").font(.system(size: 11, weight: .semibold))
             }
-            .buttonStyle(FormatControlStyle(isActive: editor.code || editor.activeBlock == .code))
-            .simultaneousGesture(LongPressGesture(minimumDuration: 0.45).onEnded { _ in
-                codeLongPressed = true
-                editor.toggleCodeBlock()
-            })
-            .contextMenu {
-                Button(L10n.t("notes.fmt.inlineCode") + "  \u{2318}\u{21E7}C") { editor.toggleInlineCode() }
-                Button(L10n.t("notes.fmt.codeBlock") + "  \u{2318}\u{2325}\u{21E7}C") { editor.toggleCodeBlock() }
-            }
-            .help(L10n.t("notes.fmt.codeHelp"))
+            .buttonStyle(FormatControlStyle(isActive: editor.code))
+            .disabled(editor.activeBlock == .code)
+            .help(L10n.t("notes.fmt.inlineCode") + "  \u{2318}\u{21E7}C")
             .accessibilityLabel(L10n.t("notes.fmt.inlineCode"))
-            .accessibilityHint(L10n.t("notes.fmt.codeHelp"))
+            Button { editor.toggleQuote() } label: { QuoteGlyph() }
+                .buttonStyle(FormatControlStyle(isActive: editor.activeBlock == .quote))
+                .help(L10n.t("notes.fmt.quote") + "  \u{2318}'")
+                .accessibilityLabel(L10n.t("notes.fmt.quote"))
+            Button { editor.toggleCodeBlock() } label: { CodeBlockGlyph() }
+                .buttonStyle(FormatControlStyle(isActive: editor.activeBlock == .code))
+                .help(L10n.t("notes.fmt.codeBlock") + "  \u{2318}\u{2325}\u{21E7}C")
+                .accessibilityLabel(L10n.t("notes.fmt.codeBlock"))
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 4)
@@ -125,7 +122,7 @@ struct NoteFormatBar: View {
     }
 }
 
-/// Rest, hover, active, pressed — one style so the nine controls cannot drift
+/// Rest, hover, active, pressed — one style so the controls cannot drift
 /// apart. A 28×28 hit area under glyphs that are much smaller, so the row is
 /// dense to look at and not to use.
 ///
@@ -171,6 +168,30 @@ private struct BulletGlyph: View {
     }
 }
 
+/// A leading rule and two lines: the quote's own shape, not a quote mark.
+private struct QuoteGlyph: View {
+    var body: some View {
+        HStack(spacing: 3) {
+            Capsule().frame(width: 2, height: 13)
+            VStack(alignment: .leading, spacing: 3.5) {
+                Capsule().frame(width: 9, height: 1.5)
+                Capsule().frame(width: 6, height: 1.5)
+            }
+        }
+        .frame(width: 14)
+    }
+}
+
+/// </> in a box: the block, beside the bare </> of inline code.
+private struct CodeBlockGlyph: View {
+    var body: some View {
+        Text("</>")
+            .font(.system(size: 8, weight: .bold))
+            .frame(width: 17, height: 13)
+            .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous).strokeBorder(lineWidth: 1.2))
+    }
+}
+
 private struct ChecklistGlyph: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 4, style: .continuous)
@@ -195,6 +216,9 @@ private struct BlockMenu: View {
             row(.bullet, glyph: "\u{2022}", glyphSize: 13, label: L10n.t("notes.fmt.bulleted"))
             row(.numbered, glyph: "1.", glyphSize: 12, label: L10n.t("notes.fmt.numbered"))
             row(.checklistOpen, glyph: "\u{2610}", glyphSize: 13, label: L10n.t("notes.fmt.checklist"))
+            Divider().padding(.horizontal, 8).padding(.vertical, 5)
+            row(.quote, glyph: "\u{201C}", glyphSize: 15, label: L10n.t("notes.fmt.quote"))
+            row(.code, glyph: "</>", glyphSize: 10.5, label: L10n.t("notes.fmt.codeBlock"))
         }
         .padding(OttoMenuStyle.padding - 4)
         .frame(width: 220)
