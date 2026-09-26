@@ -2352,13 +2352,6 @@ private struct TodoItemRow: View {
     @ObservedObject private var store = TodoStore.shared
     @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
 
-    /// The row the capture field just made (U5 §4.2): space-coloured for
-    /// 1.2 s so the eye finds where it landed.
-    private var justAdded: Bool { store.justAddedID == item.id }
-    private var rowTint: SpaceTint {
-        store.collection(id: item.collectionID)?.spaceTint ?? store.activeSpaceTint
-    }
-
     /// Whether the row draws anything under its title — the note editor, the
     /// inline steps, or the trailing step-draft row an expanded row always
     /// carries. Only then does the slab need vertical air of its own; plain
@@ -2443,27 +2436,6 @@ private struct TodoItemRow: View {
                 .strokeBorder(isExpanded ? accent.opacity(0.38) : .clear,
                               lineWidth: 1)
         )
-        // U5 "just added": space colour at 14% with a 35% inner edge and a
-        // quiet label, fading after 1.2 s. Content is not tinted — only the
-        // slab behind it.
-        .background(
-            RoundedRectangle(cornerRadius: LabMetrics.rowRadius, style: .continuous)
-                .fill(rowTint.base.color.opacity(justAdded ? 0.14 : 0))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: LabMetrics.rowRadius, style: .continuous)
-                .strokeBorder(rowTint.base.color.opacity(justAdded ? 0.35 : 0), lineWidth: 1)
-        )
-        .overlay(alignment: .trailing) {
-            if justAdded {
-                Text(L10n.t("capture.justAdded"))
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(rowTint.sectionColor)
-                    .padding(.trailing, LabMetrics.rowPaddingH)
-                    .transition(.opacity)
-                    .allowsHitTesting(false)
-            }
-        }
         .animation(Motion.hintFade, value: isFocused)
         // Was a bare assignment. The row's own background snapped, and so did
         // the hover half of the RowActions reveal — its condition includes

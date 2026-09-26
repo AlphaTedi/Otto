@@ -494,8 +494,8 @@ From `docs/TOP_NAVIGATION_ARCHITECTURE_PROMPT.md` (Marcello).
 
 - ONE section colour: `TodoCollection.color` now returns
   `spaceTint.sectionColor` (light tone on dark, the hue deepened to OKLCH
-  L ≤ 0.52 on light). Pill fill, checkboxes, capture circle, caret, selection
-  and "just added" all read it; `colorHex` survives only for old files. The New
+  L ≤ 0.52 on light). Pill fill, checkboxes, capture circle, caret, and selection
+  all read it; `colorHex` survives only for old files. The New
   section swatches are the tints themselves.
 - U5's ambient glow and tinted rim are REMOVED: the spec keeps material,
   surface and border neutral in every section.

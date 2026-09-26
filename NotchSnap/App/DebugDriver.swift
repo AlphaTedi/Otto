@@ -321,9 +321,6 @@ enum DebugDriver {
                         store.draftTitle = "Send deck to Roos"
                         await snap("input-typing")
                         store.draftTitle = ""
-                        if let first = store.openItems(in: work).first { store.debugMarkJustAdded(first.id) }
-                        try? await Task.sleep(nanoseconds: 100_000_000)
-                        await snap("input-saved")
                     }
                     if let original { store.selectCollection(original) }
                     window.orderOut(nil)
