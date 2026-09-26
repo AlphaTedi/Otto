@@ -477,9 +477,22 @@ enum DebugDriver {
                     appendState("hittest screen=(\(Int(x)),\(Int(y))) "
                                 + "window=(\(Int(inWindow.x)),\(Int(inWindow.y))) "
                                 + "shapeRect=\(shape) insideShape=\(shape.contains(screenPoint)) "
+                                + "insideContent=\(NotchController.shared.isInsidePanelContent(screenPoint)) "
                                 + "hit=\(hit.map { String(describing: type(of: $0)) } ?? "nil")")
                 } else {
                     appendState("hittest: no notch panel")
+                }
+            } else if command == "panel-hit-regions" {
+                let controller = NotchController.shared
+                if let panel = controller.panelForDebug {
+                    let frames = controller.panelContentFramesForDebug.map { frame in
+                        NSRect(x: panel.frame.minX + frame.minX,
+                               y: panel.frame.maxY - frame.maxY,
+                               width: frame.width, height: frame.height)
+                    }
+                    appendState("panel-hit-regions window=\(panel.frame) cards=\(frames)")
+                } else {
+                    appendState("panel-hit-regions: no notch panel")
                 }
             } else if command.hasPrefix("notes-move ") {
                 // notes-move <fromIndex> <beforeIndex>

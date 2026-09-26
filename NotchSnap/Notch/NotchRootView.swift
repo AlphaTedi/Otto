@@ -38,6 +38,7 @@ struct NotchRootView: View {
             notchShape
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .coordinateSpace(name: "notchPanelContent")
         .animation(NotchAnimation.contentHug, value: controller.state)
     }
 
