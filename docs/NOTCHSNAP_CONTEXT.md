@@ -600,3 +600,7 @@ From `otto-notes-mode-dropdown-prd.md` (Raycast-style accessory).
   looked up by name, draws nothing if absent) over the list's gradient fade —
   radius ramps to 8 at the pills. The Notes stream now uses the lists' edge
   effect and budget (it subtracted a container-only 36 and hard-clipped).
+  2026-09-26 (Figma): the blur is the BAR's, not the list's — a background of
+  the floating `TodoTabRow`, from the block's bottom edge to 40pt above the
+  pills (657×90). At the list's foot it sat above Completed and read as a haze
+  mid-panel. The list keeps only its fade.

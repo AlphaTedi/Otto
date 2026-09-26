@@ -168,20 +168,12 @@ struct TodoScrollEdgeEffect: ViewModifier {
         // edge of.
         //
         // 2026-09-26: the blur is back, and it is a real one this time — a
-        // VARIABLE radius (ProgressiveBlur), sharp at the top of the band and
-        // strongest at the pills, over the rows themselves. No material, so
-        // no ground and no second surface: the line problem above cannot
-        // come back. The fade stays under it as the floor.
+        // VARIABLE radius (ProgressiveBlur). It is NOT drawn here: at the foot
+        // of this region it sat above the Completed header, far from the
+        // pills, and read as a haze in the middle of the panel (Marcello,
+        // 2026-09-26, screenshot). It belongs to the bar — see TodoTabRow.
         content
             .modifier(ScrollEdgeFade(scrollOffset: scrollOffset, hasBelow: hasBelow))
-            .overlay(alignment: .bottom) {
-                ProgressiveBlur(edge: .bottom, maxRadius: 8)
-                    .frame(height: sectionBarFrostDepth)
-                    .opacity(hasBelow ? 1 : 0)
-                    .animation(NotchAnimation.hintFade, value: hasBelow)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
     }
 }
 
@@ -731,6 +723,9 @@ struct TodoTabRow: View {
     @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
     private var isContainerLayout: Bool { notchLayout == .container }
 
+    /// How far the foot blur reaches above the pills' top edge.
+    private static let footBlurReach: CGFloat = 40
+
     var body: some View {
         HStack(spacing: 6) {
             // Notes is the ONLY permanent pill here now.
@@ -789,6 +784,19 @@ struct TodoTabRow: View {
         // material samples them together on macOS 26. What separates the
         // scrolling rows from the pills is the shared fade + frosted material.
         .glassGroup(spacing: 6)
+        // The progressive blur, from the window's bottom edge to 40pt above
+        // the pills (Marcello's Figma, 2026-09-26). Behind the row so the
+        // pills stay sharp, above the list so the list is what it blurs.
+        .background {
+            if rulePosition == .above, !isContainerLayout {
+                ProgressiveBlur(edge: .bottom, maxRadius: 8)
+                    .padding(.top, -Self.footBlurReach)
+                    .padding(.bottom, -SpaceChrome.cornerInset)
+                    .padding(.horizontal, -16)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
         // No rule under the tab row (Marcello, 2026-07-26). The two paddings
         // stay: they were the breathing room either side of the line, and
         // together they are what now separates the tabs from the list.
