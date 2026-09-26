@@ -5,7 +5,8 @@ import os
 import hashlib
 import uuid
 
-PROJECT_ROOT = "/Users/marcellozanetta/Screenshot_app"
+# The folder this script lives in, so the checkout can be moved or renamed.
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 PROJ_DIR = os.path.join(PROJECT_ROOT, "NotchSnap.xcodeproj")
 PRODUCT_NAME = "NotchSnap"
 BUNDLE_ID = "com.notchsnap.app"
