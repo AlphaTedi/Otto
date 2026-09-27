@@ -17,6 +17,8 @@ struct EntityTitleView: NSViewRepresentable {
     let title: String
     let isBright: Bool
     let onTap: () -> Void
+    /// Removes an image chip's token from the title (its ✕ on hover).
+    var onRemoveImage: ((String) -> Void)? = nil
 
     func makeNSView(context: Context) -> EntityTextView {
         let view = EntityTextView()
@@ -42,6 +44,7 @@ struct EntityTitleView: NSViewRepresentable {
 
     func updateNSView(_ view: EntityTextView, context: Context) {
         view.onPlainTap = onTap
+        view.chips.onRemove = onRemoveImage
         view.textStorage?.setAttributedString(
             Self.attributedTitle(title, bright: isBright)
         )
@@ -90,6 +93,33 @@ struct EntityTitleView: NSViewRepresentable {
         let textCentre = (bodyFont.ascender + bodyFont.descender) / 2
         let chipOffset = textCentre - EntityChipRenderer.chipHeight / 2
         let result = NSMutableAttributedString()
+        // Image tokens first, as chips where they were typed; the text
+        // between them goes through the entity parser as before.
+        let ns = title as NSString
+        var cursor = 0
+        var pieces: [(text: String, image: String?)] = []
+        for match in AttachmentStore.tokenPattern.matches(in: title, range: NSRange(location: 0, length: ns.length)) {
+            if match.range.location > cursor {
+                pieces.append((ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor)), nil))
+            }
+            pieces.append(("", ns.substring(with: match.range(at: 2))))
+            cursor = NSMaxRange(match.range)
+        }
+        if cursor < ns.length { pieces.append((ns.substring(from: cursor), nil)) }
+        for piece in pieces {
+            if let path = piece.image {
+                var chipAttributes = bodyAttributes
+                chipAttributes[.attachment] = ImageChipAttachment(path: path)
+                result.append(NSAttributedString(string: "\u{FFFC}", attributes: chipAttributes))
+                continue
+            }
+            appendEntities(piece.text, to: result, bodyAttributes: bodyAttributes, chipOffset: chipOffset)
+        }
+        return result
+    }
+
+    private static func appendEntities(_ title: String, to result: NSMutableAttributedString,
+                                       bodyAttributes: [NSAttributedString.Key: Any], chipOffset: CGFloat) {
         for segment in EntityParser.parse(title) {
             switch segment {
             case .text(let run):
@@ -113,7 +143,6 @@ struct EntityTitleView: NSViewRepresentable {
                 result.append(NSAttributedString(string: "\u{2009}", attributes: bodyAttributes))
             }
         }
-        return result
     }
 }
 
@@ -121,8 +150,28 @@ struct EntityTitleView: NSViewRepresentable {
 
 final class EntityTextView: NSTextView {
     var onPlainTap: (() -> Void)?
+    /// Image chips: hover preview, ✕ (through `onRemove`), click to open.
+    lazy var chips = MainActor.assumeIsolated { ImageChipInteraction(textView: self, canRemove: true) }
+    private var chipTracking: NSTrackingArea?
 
     override var acceptsFirstResponder: Bool { false }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let chipTracking { removeTrackingArea(chipTracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                  owner: self)
+        addTrackingArea(area)
+        chipTracking = area
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        MainActor.assumeIsolated { _ = chips.mouseMoved(convert(event.locationInWindow, from: nil)) }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        MainActor.assumeIsolated { chips.clear() }
+    }
 
     /// The view is INVISIBLE to the mouse except where a link chip actually
     /// sits.
@@ -137,6 +186,7 @@ final class EntityTextView: NSTextView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         // `point` arrives in the SUPERVIEW's coordinate space.
         let local = convert(point, from: superview)
+        if MainActor.assumeIsolated({ chips.chip(at: local) != nil }) { return self }
         return linkURL(at: local) != nil ? self : nil
     }
 
@@ -144,6 +194,7 @@ final class EntityTextView: NSTextView {
         // Deliberately no super: non-selectable label; we only route clicks.
         // hitTest means we are only reached when the point is on a link.
         let point = convert(event.locationInWindow, from: nil)
+        if MainActor.assumeIsolated({ chips.mouseDown(point) }) { return }
         if let url = linkURL(at: point) {
             NSWorkspace.shared.open(url)   // EH-7
         } else {

@@ -333,9 +333,7 @@ struct TodoCaptureHeader: View {
             isTyping: isTyping,
             saveLabel: L10n.t("capture.save"),
             onSave: { store.commitDraft() },
-            onDot: { store.cycleCollection() },
-            attachments: store.draftAttachments,
-            onRemoveAttachment: { path in store.draftAttachments.removeAll { $0 == path } }
+            onDot: { store.cycleCollection() }
         ) {
             HighlightingTitleField(
                 text: $store.draftTitle,
@@ -349,7 +347,7 @@ struct TodoCaptureHeader: View {
                 },
                 fontSize: 18,
                 singleLine: true,
-                onImages: { paths in store.draftAttachments += paths }
+                allowsImages: true
             )
             .frame(height: fieldHeight)
             .background(GeometryReader { proxy in

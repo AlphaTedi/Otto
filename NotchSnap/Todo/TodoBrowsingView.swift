@@ -2580,7 +2580,10 @@ private struct TodoItemRow: View {
                     EntityTitleView(
                         title: item.title,
                         isBright: isFocused || isExpanded,
-                        onTap: activateRow
+                        onTap: activateRow,
+                        onRemoveImage: { path in
+                            store.rename(item.id, to: AttachmentStore.removingToken(path, from: item.title))
+                        }
                     )
                     // The export wraps the label in its own 8pt box, which is what
                     // gives a single-line row 33pt and lets a wrapped one grow to

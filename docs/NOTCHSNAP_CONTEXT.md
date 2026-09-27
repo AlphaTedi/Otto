@@ -432,6 +432,15 @@ container's own field is untouched (standing rule), so there images come
 through ⌘⇧I on a focused to-do. Removing a chip leaves the file in
 Attachments/ (no garbage collection yet).
 
+Same day, second pass (Marcello, like Conductor): images go IN the text at the
+caret, not beside it. A to-do's title now carries the `![…](…)` token where it
+was placed; the capture field (rich only to hold chips, plain paste) shows it
+as a chip, and so does the row (`EntityTitleView`). `ImageChipInteraction` is
+shared by the note editor, the field and the row: hover lights the chip, swaps
+its thumbnail for ✕ and floats `ImagePreviewPanel` (non-activating) above it;
+✕ removes, a click elsewhere opens. `TodoItem.attachments` stays only for the
+few to-dos made in the first pass.
+
 ### 2026-09-27 one icon family: Lucide
 
 Every icon that was an SF Symbol is now a Lucide icon (lucide.dev, ISC —

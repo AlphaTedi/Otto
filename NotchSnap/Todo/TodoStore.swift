@@ -308,9 +308,7 @@ final class TodoStore: ObservableObject {
 
     /// What is being typed into the draft row.
     @Published var draftTitle = ""
-    /// Images pasted or dropped into the capture field, waiting for the
-    /// to-do they will belong to (chips beside the text until ⏎).
-    @Published var draftAttachments: [String] = []
+
     /// True while the caret is actually in the draft row.
     ///
     /// Distinct from "the row exists", which is now always. Only the caret
@@ -461,12 +459,8 @@ final class TodoStore: ObservableObject {
         let title = parsed?.cleanedTitle ?? draftTitle
         guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let target = draftDestination?.id,
-              let created = addItem(title: title, collectionID: target,
-                                    dueDate: parsed?.date) else { return false }
-        if !draftAttachments.isEmpty {
-            setAttachments(draftAttachments, for: created.id)
-            draftAttachments = []
-        }
+              addItem(title: title, collectionID: target,
+                      dueDate: parsed?.date) != nil else { return false }
         Analytics.track(.todoCreated(.draft, hasDueDate: parsed?.date != nil))
         draftTitle = ""
         // Re-assert rather than assume: the field reports its own focus, and

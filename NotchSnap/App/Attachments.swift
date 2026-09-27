@@ -180,6 +180,12 @@ final class ImageChipCell: NSTextAttachmentCell {
     private let name: String
     private let chipFont = NSFont.systemFont(ofSize: 11.5, weight: .medium)
     private static let height: CGFloat = 20
+    /// Under the pointer. With `showsRemove`, the thumbnail's slot becomes an
+    /// ✕ — the Conductor chip (Marcello, 2026-09-27).
+    var hovered = false
+    var showsRemove = false
+    /// The ✕ / thumbnail slot, from the chip's leading edge.
+    static let removeZone: CGFloat = 22
 
     init(path: String) {
         self.path = path
@@ -200,34 +206,246 @@ final class ImageChipCell: NSTextAttachmentCell {
     override func draw(withFrame cellFrame: NSRect, in controlView: NSView?) {
         let frame = cellFrame.insetBy(dx: 0.5, dy: 0.5)
         let chip = NSBezierPath(roundedRect: frame, xRadius: 6, yRadius: 6)
-        NSColor.labelColor.withAlphaComponent(0.08).setFill()
+        NSColor.labelColor.withAlphaComponent(hovered ? 0.13 : 0.08).setFill()
         chip.fill()
-        NSColor.labelColor.withAlphaComponent(0.14).setStroke()
+        NSColor.labelColor.withAlphaComponent(hovered ? 0.22 : 0.14).setStroke()
         chip.lineWidth = 1
         chip.stroke()
 
         let thumbRect = NSRect(x: frame.minX + 5, y: frame.midY - 7, width: 14, height: 14)
-        NSGraphicsContext.saveGraphicsState()
-        NSBezierPath(roundedRect: thumbRect, xRadius: 3, yRadius: 3).addClip()
-        if let thumb = MainActor.assumeIsolated({ AttachmentStore.thumbnail(for: path) }) {
-            thumb.draw(in: thumbRect)
+        if hovered && showsRemove {
+            // ✕ in the thumbnail's place, and a hairline after it.
+            let x = NSBezierPath()
+            let inset = thumbRect.insetBy(dx: 3, dy: 3)
+            x.move(to: NSPoint(x: inset.minX, y: inset.minY)); x.line(to: NSPoint(x: inset.maxX, y: inset.maxY))
+            x.move(to: NSPoint(x: inset.minX, y: inset.maxY)); x.line(to: NSPoint(x: inset.maxX, y: inset.minY))
+            x.lineWidth = 1.5
+            x.lineCapStyle = .round
+            NSColor.labelColor.withAlphaComponent(0.8).setStroke()
+            x.stroke()
+            NSColor.labelColor.withAlphaComponent(0.18).setFill()
+            NSRect(x: frame.minX + Self.removeZone - 1, y: frame.minY + 3, width: 1, height: frame.height - 6).fill()
         } else {
-            NSColor.labelColor.withAlphaComponent(0.2).setFill()
-            thumbRect.fill()
+            NSGraphicsContext.saveGraphicsState()
+            NSBezierPath(roundedRect: thumbRect, xRadius: 3, yRadius: 3).addClip()
+            if let thumb = MainActor.assumeIsolated({ AttachmentStore.thumbnail(for: path) }) {
+                thumb.draw(in: thumbRect)
+            } else {
+                NSColor.labelColor.withAlphaComponent(0.2).setFill()
+                thumbRect.fill()
+            }
+            NSGraphicsContext.restoreGraphicsState()
         }
-        NSGraphicsContext.restoreGraphicsState()
 
         let textSize = (name as NSString).size(withAttributes: [.font: chipFont])
         (name as NSString).draw(at: NSPoint(x: thumbRect.maxX + 5, y: frame.midY - textSize.height / 2),
                                 withAttributes: [.font: chipFont, .foregroundColor: NSColor.labelColor.withAlphaComponent(0.85)])
     }
 
-    override func wantsToTrackMouse() -> Bool { true }
+    // Clicks and hover are the text view's (ImageChipInteraction), so the
+    // chip behaves the same in a note, the to-do field and a to-do row.
+    override func wantsToTrackMouse() -> Bool { false }
+}
 
-    override func trackMouse(with theEvent: NSEvent, in cellFrame: NSRect, of controlView: NSView?,
-                             untilMouseUp flag: Bool) -> Bool {
-        if theEvent.type == .leftMouseDown { MainActor.assumeIsolated { AttachmentStore.open(path) } }
+// MARK: - Hover preview and clicks, for any text view holding chips
+
+/// Hover a chip: it lights up, shows its ✕ (where removing is allowed) and a
+/// preview of the image floats above it. Click the ✕ to remove, anywhere
+/// else on the chip to open the image.
+@MainActor
+final class ImageChipInteraction {
+    private weak var textView: NSTextView?
+    private let canRemove: Bool
+    /// Default removal deletes the character (an editable text view). A
+    /// read-only one — a to-do row — supplies its own.
+    var onRemove: ((String) -> Void)?
+    private var hovered: (index: Int, cell: ImageChipCell)?
+
+    init(textView: NSTextView, canRemove: Bool) {
+        self.textView = textView
+        self.canRemove = canRemove
+    }
+
+    func chip(at point: NSPoint) -> (index: Int, rect: NSRect, cell: ImageChipCell)? {
+        guard let view = textView, let layout = view.layoutManager, let container = view.textContainer,
+              let storage = view.textStorage, storage.length > 0 else { return nil }
+        let local = NSPoint(x: point.x - view.textContainerOrigin.x, y: point.y - view.textContainerOrigin.y)
+        let glyph = layout.glyphIndex(for: local, in: container)
+        let index = layout.characterIndexForGlyph(at: glyph)
+        guard index < storage.length,
+              let attachment = storage.attribute(.attachment, at: index, effectiveRange: nil) as? ImageChipAttachment,
+              let cell = attachment.attachmentCell as? ImageChipCell else { return nil }
+        let rect = layout.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: container)
+            .offsetBy(dx: view.textContainerOrigin.x, dy: view.textContainerOrigin.y)
+        return rect.contains(point) ? (index, rect, cell) : nil
+    }
+
+    /// True while the pointer is over a chip.
+    @discardableResult
+    func mouseMoved(_ point: NSPoint) -> Bool {
+        guard let hit = chip(at: point) else { clear(); return false }
+        if hovered?.index != hit.index {
+            clear()
+            hit.cell.hovered = true
+            hit.cell.showsRemove = canRemove
+            hovered = (hit.index, hit.cell)
+            redraw(hit.index)
+            if let view = textView, let window = view.window {
+                let screen = window.convertToScreen(view.convert(hit.rect, to: nil))
+                ImagePreviewPanel.shared.show(hit.cell.path, above: screen, level: window.level)
+            }
+        }
         return true
+    }
+
+    func clear() {
+        guard let current = hovered else { return }
+        current.cell.hovered = false
+        hovered = nil
+        redraw(current.index)
+        ImagePreviewPanel.shared.hide()
+    }
+
+    /// True when the click was the chip's.
+    func mouseDown(_ point: NSPoint) -> Bool {
+        guard let hit = chip(at: point) else { return false }
+        clear()
+        let isRemove = canRemove && (textView?.userInterfaceLayoutDirection == .rightToLeft
+            ? point.x > hit.rect.maxX - ImageChipCell.removeZone
+            : point.x < hit.rect.minX + ImageChipCell.removeZone)
+        if isRemove {
+            if let onRemove { onRemove(hit.cell.path) }
+            else if let view = textView, view.isEditable {
+                view.insertText("", replacementRange: NSRange(location: hit.index, length: 1))
+            }
+        } else {
+            AttachmentStore.open(hit.cell.path)
+        }
+        return true
+    }
+
+    private func redraw(_ index: Int) {
+        guard let view = textView, let storage = view.textStorage, index < storage.length else { return }
+        view.layoutManager?.invalidateDisplay(forCharacterRange: NSRange(location: index, length: 1))
+    }
+}
+
+/// The floating preview above a hovered chip: the image, fitted into at most
+/// 320 × 220, on a dark rounded card. Borderless and non-activating, so it
+/// never takes the caret or the key window.
+@MainActor
+final class ImagePreviewPanel {
+    static let shared = ImagePreviewPanel()
+    private var panel: NSPanel?
+    private var shownPath: String?
+
+    func show(_ path: String, above anchor: NSRect, level: NSWindow.Level) {
+        guard let image = NSImage(contentsOf: AttachmentStore.url(for: path)), image.size.width > 0 else { return }
+        let maxSize = NSSize(width: 320, height: 220)
+        let scale = min(1, min(maxSize.width / image.size.width, maxSize.height / image.size.height))
+        let imageSize = NSSize(width: max(40, image.size.width * scale), height: max(30, image.size.height * scale))
+        let pad: CGFloat = 8
+        let size = NSSize(width: imageSize.width + pad * 2, height: imageSize.height + pad * 2)
+
+        let panel = self.panel ?? makePanel()
+        let card = NSView(frame: NSRect(origin: .zero, size: size))
+        card.wantsLayer = true
+        card.layer?.cornerRadius = 12
+        card.layer?.backgroundColor = NSColor(white: 0.12, alpha: 0.96).cgColor
+        card.layer?.borderColor = NSColor(white: 1, alpha: 0.12).cgColor
+        card.layer?.borderWidth = 1
+        let imageView = NSImageView(frame: NSRect(x: pad, y: pad, width: imageSize.width, height: imageSize.height))
+        imageView.image = image
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.wantsLayer = true
+        imageView.layer?.cornerRadius = 6
+        imageView.layer?.masksToBounds = true
+        card.addSubview(imageView)
+        panel.contentView = card
+
+        var origin = NSPoint(x: anchor.midX - size.width / 2, y: anchor.maxY + 8)
+        if let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchor) }) ?? NSScreen.main {
+            let visible = screen.visibleFrame
+            if origin.y + size.height > visible.maxY { origin.y = anchor.minY - 8 - size.height }
+            origin.x = min(max(origin.x, visible.minX + 8), visible.maxX - size.width - 8)
+        }
+        panel.level = NSWindow.Level(rawValue: level.rawValue + 1)
+        panel.setFrame(NSRect(origin: origin, size: size), display: true)
+        panel.orderFrontRegardless()
+        shownPath = path
+    }
+
+    func hide() {
+        panel?.orderOut(nil)
+        shownPath = nil
+    }
+
+    private func makePanel() -> NSPanel {
+        let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
+                            backing: .buffered, defer: true)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.ignoresMouseEvents = true
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        self.panel = panel
+        return panel
+    }
+}
+
+// MARK: - Chips in plain title text (the to-do field and rows)
+
+extension AttachmentStore {
+    /// `text` with each token drawn as a chip character.
+    static func chipped(_ text: String, attributes: [NSAttributedString.Key: Any]) -> NSMutableAttributedString {
+        let out = NSMutableAttributedString(string: text, attributes: attributes)
+        for match in tokenPattern.matches(in: text, range: NSRange(location: 0, length: (text as NSString).length)).reversed() {
+            let path = (text as NSString).substring(with: match.range(at: 2))
+            var chipAttributes = attributes
+            chipAttributes[.attachment] = ImageChipAttachment(path: path)
+            out.replaceCharacters(in: match.range, with: NSAttributedString(string: "\u{FFFC}", attributes: chipAttributes))
+        }
+        return out
+    }
+
+    /// Back to text: every chip becomes its token again.
+    nonisolated static func unchipped(_ attributed: NSAttributedString) -> String {
+        var out = ""
+        let string = attributed.string as NSString
+        attributed.enumerateAttribute(.attachment, in: NSRange(location: 0, length: attributed.length)) { value, range, _ in
+            if let chip = value as? ImageChipAttachment {
+                out += String(repeating: token(for: chip.path), count: range.length)
+            } else {
+                out += string.substring(with: range)
+            }
+        }
+        return out
+    }
+
+    /// Where `range` of the token text falls once tokens are single chips.
+    nonisolated static func displayRange(_ range: NSRange, in text: String) -> NSRange {
+        var shift = 0
+        for match in tokenPattern.matches(in: text, range: NSRange(location: 0, length: (text as NSString).length))
+            where NSMaxRange(match.range) <= range.location {
+            shift += match.range.length - 1
+        }
+        return NSRange(location: range.location - shift, length: range.length)
+    }
+
+    /// The title with one image's token taken out.
+    nonisolated static func removingToken(_ path: String, from text: String) -> String {
+        let ns = text as NSString
+        guard let match = tokenPattern.matches(in: text, range: NSRange(location: 0, length: ns.length))
+            .first(where: { ns.substring(with: $0.range(at: 2)) == path }) else { return text }
+        return ns.replacingCharacters(in: match.range, with: "")
+            .replacingOccurrences(of: "  ", with: " ").trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Title text without its image tokens — for places that show it plain.
+    nonisolated static func plainTitle(_ text: String) -> String {
+        tokenPattern.stringByReplacingMatches(in: text, range: NSRange(location: 0, length: (text as NSString).length),
+                                              withTemplate: "").replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespaces)
     }
 }
 

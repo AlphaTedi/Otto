@@ -617,10 +617,8 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 // keeps the caret; the next Esc, on an empty field, closes.
                 // The notch container keeps its own field's behaviour.
                 if AppState.shared.notchLayout == .panels,
-                   !store.draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    || !store.draftAttachments.isEmpty {
+                   !store.draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     store.draftTitle = ""
-                    store.draftAttachments = []
                     return true
                 }
                 notchWindow?.makeFirstResponder(nil)
@@ -855,13 +853,20 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             // ⌘⇧I — an image for the to-do being typed (floating field), or
             // for the focused to-do.
             if cmd, shift, !option, keyCode == 34, store.panelMode == .browsing {
-                let target = store.draftFocused ? nil : store.focusedItemID
+                // In the field: at the caret, like a pasted image. On a
+                // focused to-do: at the end of its title.
+                let field = NSApp.keyWindow?.firstResponder as? HighlightingTitleField.FocusReportingTextView
+                let target = field == nil ? store.focusedItemID : nil
                 AttachmentStore.chooseImages { paths in
                     guard !paths.isEmpty else { return }
-                    if let target, let item = store.items.first(where: { $0.id == target }) {
-                        store.setAttachments(item.attachments + paths, for: target)
+                    if let field, field.allowsImages {
+                        field.window?.makeFirstResponder(field)
+                        field.insertImageChips(paths)
+                    } else if let target, let item = store.items.first(where: { $0.id == target }) {
+                        store.rename(target, to: ([item.title] + paths.map(AttachmentStore.token(for:))).joined(separator: " "))
                     } else {
-                        store.draftAttachments += paths
+                        store.draftTitle += (store.draftTitle.isEmpty ? "" : " ")
+                            + paths.map(AttachmentStore.token(for:)).joined(separator: " ")
                         store.draftWantsFocus = true
                     }
                 }

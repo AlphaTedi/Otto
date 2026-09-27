@@ -246,8 +246,12 @@ final class ActionTextView: NSTextView {
         return accepted
     }
 
+    /// Image chips: hover preview, ✕ to remove, click to open.
+    private lazy var chips = MainActor.assumeIsolated { ImageChipInteraction(textView: self, canRemove: true) }
+
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        if MainActor.assumeIsolated({ chips.mouseDown(point) }) { return }
         if let hit = linkedControls().first(where: { $0.rect.contains(point) }), let noteID,
            let linked = TodoStore.shared.todo(forNote: noteID, phrase: hit.phrase) {
             TodoStore.shared.toggleComplete(linked.id)
@@ -296,6 +300,7 @@ final class ActionTextView: NSTextView {
 
     override func mouseMoved(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        if MainActor.assumeIsolated({ chips.mouseMoved(point) }) { clearActionControl(); return }
         if controlTarget != nil, controlRect.insetBy(dx: -7, dy: -4).contains(point) { return }
         guard let hit = MainActor.assumeIsolated({ NoteEditorController.shared.action(at: point) }),
               let layout = layoutManager, let container = textContainer else {
@@ -325,7 +330,10 @@ final class ActionTextView: NSTextView {
         needsDisplay = true
     }
 
-    override func mouseExited(with event: NSEvent) { clearActionControl() }
+    override func mouseExited(with event: NSEvent) {
+        clearActionControl()
+        MainActor.assumeIsolated { chips.clear() }
+    }
 
     private func linkedControls() -> [(rect: NSRect, phrase: String, done: Bool)] {
         guard let storage = textStorage else { return [] }

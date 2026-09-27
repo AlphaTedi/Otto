@@ -47,9 +47,10 @@ struct HighlightingTitleField: NSViewRepresentable {
     /// One line that scrolls sideways under the caret (the floating capture
     /// header, 2026-09-27) instead of wrapping and growing.
     var singleLine = false
-    /// Images pasted or dropped into the field (vault paths). Nil: the field
-    /// takes text only, as before.
-    var onImages: (([String]) -> Void)? = nil
+    /// Images pasted or dropped into the field land AT THE CARET, as chips in
+    /// the text (the title carries their `![…](…)` tokens), the way
+    /// Conductor's input does. Off: text only, as before.
+    var allowsImages = false
 
     static let lineHeight: CGFloat = 17
     static let maxHeight: CGFloat = 102   // ~6 lines, then it scrolls
@@ -75,7 +76,7 @@ struct HighlightingTitleField: NSViewRepresentable {
 
         let view = FocusReportingTextView()
         view.identifier = Self.fieldIdentifier
-        view.onImages = onImages
+        view.allowsImages = allowsImages
         view.onFocusChange = { focused in
             // Async: this fires from inside AppKit's responder change, and
             // publishing store state synchronously from there re-enters
@@ -84,7 +85,9 @@ struct HighlightingTitleField: NSViewRepresentable {
         }
         view.delegate = context.coordinator
         view.drawsBackground = false
-        view.isRichText = false
+        // Rich only to hold image chips (a plain text view would flatten an
+        // attachment to U+FFFC); what can be pasted stays plain text.
+        view.isRichText = allowsImages
         view.font = .systemFont(ofSize: fontSize)
         view.textContainerInset = .zero
         view.textContainer?.lineFragmentPadding = 0
@@ -108,7 +111,10 @@ struct HighlightingTitleField: NSViewRepresentable {
             view.textContainer?.widthTracksTextView = true
             view.autoresizingMask = [.width]
         }
-        view.string = text
+        view.textStorage?.setAttributedString(AttachmentStore.chipped(text, attributes: [
+            .font: NSFont.systemFont(ofSize: fontSize),
+            .foregroundColor: NSColor(DSColor.textPrimaryBright),
+        ]))
         context.coordinator.restyle(view, highlight: highlightRange)
 
         scroll.documentView = view
@@ -121,9 +127,15 @@ struct HighlightingTitleField: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let view = scroll.documentView as? NSTextView else { return }
-        (view as? FocusReportingTextView)?.onImages = onImages
-        if view.string != text {
-            view.string = text
+        (view as? FocusReportingTextView)?.allowsImages = allowsImages
+        // The view holds chips where the text holds tokens: compare in token
+        // form, and rebuild only when they really differ (a rebuild would move
+        // the caret).
+        if let storage = view.textStorage, AttachmentStore.unchipped(storage) != text {
+            storage.setAttributedString(AttachmentStore.chipped(text, attributes: [
+                .font: NSFont.systemFont(ofSize: fontSize),
+                .foregroundColor: NSColor(DSColor.textPrimaryBright),
+            ]))
         }
         view.insertionPointColor = NSColor(accent)
         view.selectedTextAttributes = [
@@ -166,23 +178,64 @@ struct HighlightingTitleField: NSViewRepresentable {
     /// responder calls is the only account of focus that is always right.
     final class FocusReportingTextView: NSTextView {
         var onFocusChange: ((Bool) -> Void)?
-        var onImages: (([String]) -> Void)?
+        var allowsImages = false
+        private lazy var chips = MainActor.assumeIsolated { ImageChipInteraction(textView: self, canRemove: true) }
+        private var chipTracking: NSTrackingArea?
 
+        /// Images, or plain text — never someone else's styled text: the view
+        /// is rich only so it can hold chips.
         override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
-            onImages == nil ? super.readablePasteboardTypes
-                            : [.fileURL, .png, .tiff] + super.readablePasteboardTypes
+            allowsImages ? [.fileURL, .png, .tiff, .string] : super.readablePasteboardTypes
         }
 
         override var acceptableDragTypes: [NSPasteboard.PasteboardType] {
-            onImages == nil ? super.acceptableDragTypes : [.fileURL, .png, .tiff] + super.acceptableDragTypes
+            allowsImages ? [.fileURL, .png, .tiff] + super.acceptableDragTypes : super.acceptableDragTypes
         }
 
         override func readSelection(from pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
-            if let onImages, AttachmentStore.hasImage(pboard) {
-                let paths = AttachmentStore.importFrom(pasteboard: pboard)
-                if !paths.isEmpty { onImages(paths); return true }
+            if allowsImages, MainActor.assumeIsolated({ AttachmentStore.hasImage(pboard) }) {
+                let paths = MainActor.assumeIsolated { AttachmentStore.importFrom(pasteboard: pboard) }
+                if !paths.isEmpty { insertImageChips(paths); return true }
             }
             return super.readSelection(from: pboard, type: type)
+        }
+
+        /// At the caret (or the drop point), like typing a word.
+        func insertImageChips(_ paths: [String]) {
+            var attributes = typingAttributes
+            let chips = NSMutableAttributedString()
+            for path in paths {
+                attributes[.attachment] = ImageChipAttachment(path: path)
+                chips.append(NSAttributedString(string: "\u{FFFC}", attributes: attributes))
+                attributes[.attachment] = nil
+                chips.append(NSAttributedString(string: " ", attributes: attributes))
+            }
+            insertText(chips, replacementRange: selectedRange())
+        }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            if let chipTracking { removeTrackingArea(chipTracking) }
+            let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                      owner: self)
+            addTrackingArea(area)
+            chipTracking = area
+        }
+
+        override func mouseMoved(with event: NSEvent) {
+            let point = convert(event.locationInWindow, from: nil)
+            if !MainActor.assumeIsolated({ chips.mouseMoved(point) }) { super.mouseMoved(with: event) }
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            MainActor.assumeIsolated { chips.clear() }
+            super.mouseExited(with: event)
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            let point = convert(event.locationInWindow, from: nil)
+            if MainActor.assumeIsolated({ chips.mouseDown(point) }) { return }
+            super.mouseDown(with: event)
         }
 
         override func becomeFirstResponder() -> Bool {
@@ -206,23 +259,34 @@ struct HighlightingTitleField: NSViewRepresentable {
             guard let view = notification.object as? NSTextView else { return }
             // Newlines only arrive via paste — collapse them (single logical
             // line of title text, even though it wraps visually).
-            if view.string.contains("\n") {
-                view.string = view.string.replacingOccurrences(of: "\n", with: " ")
+            if let storage = view.textStorage {
+                var newline = (storage.string as NSString).range(of: "\n")
+                while newline.location != NSNotFound {
+                    storage.replaceCharacters(in: newline, with: " ")
+                    newline = (storage.string as NSString).range(of: "\n")
+                }
             }
-            parent.text = view.string
+            // Token form: a chip in the view is `![…](…)` in the title.
+            parent.text = view.textStorage.map(AttachmentStore.unchipped) ?? view.string
         }
 
         func restyle(_ view: NSTextView, highlight: NSRange?) {
             let full = NSRange(location: 0, length: (view.string as NSString).length)
             guard let storage = view.textStorage else { return }
             storage.beginEditing()
-            storage.setAttributes([
+            // addAttributes, not setAttributes: an image chip's attachment
+            // must survive the restyle.
+            storage.addAttributes([
                 .foregroundColor: NSColor(DSColor.textPrimaryBright),
                 .font: NSFont.systemFont(ofSize: parent.fontSize),
             ], range: full)
-            if let highlight, NSMaxRange(highlight) <= full.length {
-                storage.addAttribute(.foregroundColor,
-                                     value: NSColor(DSColor.focusAccent), range: highlight)
+            // The date phrase is found in the TITLE, where a chip is a whole
+            // token; move its range to where it sits among single chips.
+            if let highlight {
+                let shown = AttachmentStore.displayRange(highlight, in: parent.text)
+                if shown.location >= 0, NSMaxRange(shown) <= full.length {
+                    storage.addAttribute(.foregroundColor, value: NSColor(DSColor.focusAccent), range: shown)
+                }
             }
             storage.endEditing()
             view.typingAttributes = [

@@ -167,6 +167,49 @@ enum DebugDriver {
             } else if command == "analytics-flush" {
                 Analytics.flush()
                 appendState("analytics flush requested")
+            } else if command.hasPrefix("chip-snap-pid ") {
+                // chip-snap-pid <pid> <dir> — a to-do title with an image chip,
+                // at rest and hovered, and the hover preview's card.
+                let parts = command.split(separator: " ", maxSplits: 2)
+                guard parts.count == 3, Int32(parts[1]) == ProcessInfo.processInfo.processIdentifier else { return }
+                let directory = URL(fileURLWithPath: String(parts[2]))
+                try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                let title = "Send the deck ![debug-sample.png](Attachments/debug-sample-000000.png) to the team"
+                let host = NSHostingView(rootView: EntityTitleView(title: title, isBright: true, onTap: {})
+                    .frame(width: 420).padding(12).background(Color(hex: "#1B1F35"))
+                    .environment(\.colorScheme, .dark))
+                host.appearance = NSAppearance(named: .darkAqua)
+                host.frame = NSRect(origin: .zero, size: host.fittingSize)
+                let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: host.frame.width, height: host.frame.height),
+                                      styleMask: [.borderless], backing: .buffered, defer: false)
+                window.contentView = host
+                window.orderBack(nil)
+                @MainActor func snap(_ view: NSView, _ name: String) {
+                    view.layoutSubtreeIfNeeded()
+                    RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+                    guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+                    view.cacheDisplay(in: view.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?.write(to: directory.appendingPathComponent(name + ".png"))
+                }
+                snap(host, "row")
+                func textViews(_ v: NSView) -> [EntityTextView] { (v as? EntityTextView).map { [$0] } ?? v.subviews.flatMap(textViews) }
+                if let tv = textViews(host).first, let storage = tv.textStorage {
+                    storage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: storage.length)) { value, _, _ in
+                        if let cell = (value as? ImageChipAttachment)?.attachmentCell as? ImageChipCell {
+                            cell.hovered = true; cell.showsRemove = true
+                        }
+                    }
+                    tv.needsDisplay = true
+                }
+                snap(host, "row-hover")
+                ImagePreviewPanel.shared.show("Attachments/debug-sample-000000.png",
+                                              above: NSRect(x: 200, y: 200, width: 100, height: 20), level: .normal)
+                if let card = NSApp.windows.first(where: { $0 is NSPanel && $0.contentView?.subviews.first is NSImageView })?.contentView {
+                    snap(card, "preview")
+                }
+                ImagePreviewPanel.shared.hide()
+                window.orderOut(nil)
+                appendState("chip-snap done")
             } else if command.hasPrefix("feedback-snap-pid ") {
                 let parts = command.split(separator: " ", maxSplits: 2)
                 guard parts.count == 3, Int32(parts[1]) == ProcessInfo.processInfo.processIdentifier else { return }
@@ -365,10 +408,8 @@ enum DebugDriver {
                     appendState("after back: mode=\(store.panelMode) path=\(store.panelPath.map(\.title))")
                     if let work = list("work") {
                         store.selectCollection(work.id)
-                        store.draftTitle = "Send deck to Roos"
-                        store.draftAttachments = ["Attachments/debug-sample-000000.png"]
+                        store.draftTitle = "Send deck ![debug-sample.png](Attachments/debug-sample-000000.png) to Roos"
                         await snap("input-typing")
-                        store.draftAttachments = []
                         store.draftTitle = "A much longer to-do title that would have wrapped onto a second and a third line before"
                         await snap("input-long")
                         store.draftTitle = ""
