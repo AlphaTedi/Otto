@@ -26,9 +26,9 @@ Change the catalogue in both files together.
 `AppSettings.analyticsConsent`: `nil` = never asked, `.granted`, `.denied`.
 Nothing is sent unless it is `.granted`.
 
-- Onboarding, last step ("You're set."): a "Share anonymous usage data"
-  checkbox, **checked by default** (Marcello, 2026-09-27; key `U`). Its state
-  is recorded when the flow finishes. Asked once — never again after updates.
+- Onboarding, permissions step ("Connect your day"): a "Share usage data"
+  switch, **on by default** (Marcello, 2026-09-27; key `U`). Its state is
+  recorded when the flow finishes. Asked once — never again after updates.
 - People who update without seeing the onboarding are not asked and stay at
   `nil`: nothing of theirs is sent unless they turn it on in Settings. (A
   one-time panel card existed for them in 1.65.0 and was removed.)

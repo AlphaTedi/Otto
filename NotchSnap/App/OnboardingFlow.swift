@@ -88,7 +88,7 @@ struct OnboardingFlowView: View {
         case .style: StyleStepContent(model: model)
         case .shortcut: ShortcutStepContent(model: model)
         case .permissions: PermissionsStepContent(model: model, permissions: model.permissions)
-        case .done: DoneStepContent(model: model)
+        case .done: DoneStepContent()
         }
     }
 
@@ -156,7 +156,7 @@ struct OnboardingFlowView: View {
         case .discover: DiscoverPanel(model: model)
         case .style: StylePanel(model: model)
         case .shortcut: ShortcutPanel(model: model)
-        case .permissions: PermissionsPanel(permissions: model.permissions)
+        case .permissions: PermissionsPanel(permissions: model.permissions, model: model)
         case .done: DonePanel()
         }
     }

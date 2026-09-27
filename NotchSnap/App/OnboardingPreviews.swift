@@ -630,9 +630,11 @@ struct FloatingStylePreview: View {
 
 // MARK: Done · confetti (C6)
 
-/// One burst, never looped: ~45 pieces spawn behind the logo, fly out under
-/// gravity with a little drift and spin, and settle into the scattered layout
-/// of the reference in about 1.6 s. Reduce Motion shows that layout still.
+/// Played once on "You're set.": the pieces drop in from above the panel,
+/// fall under gravity with a little sway and spin, and fade out before they
+/// reach the bottom — confetti that falls and is gone, not a burst that
+/// freezes mid-air (Marcello, 2026-09-27). The reference layout supplies
+/// each piece's colour, size, column and turn. Reduce Motion shows none.
 struct OBConfetti: View {
     struct Piece {
         let x, y, w, h: CGFloat
@@ -696,20 +698,20 @@ struct OBConfetti: View {
         Piece(475, 344, 7, 9, 0x7B6BFF, 88, 0.6),
     ]
 
-    private static let duration: Double = 1.6
+    /// Long enough for the slowest, latest piece to fall past the fade.
+    private static let duration: Double = 3.2
+    private static let gravity: Double = 320  // pt/s² — a leisurely drop, ~2 s to the fade
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var start: Date?
-    @State private var settled = false
+    @State private var finished = false
 
     var body: some View {
         Group {
-            if reduceMotion || settled {
-                canvas(progress: 1)
-            } else {
+            if !reduceMotion && !finished {
                 TimelineView(.animation) { context in
                     let elapsed = start.map { context.date.timeIntervalSince($0) } ?? 0
-                    canvas(progress: min(1, elapsed / Self.duration))
+                    canvas(time: elapsed)
                 }
             }
         }
@@ -717,36 +719,35 @@ struct OBConfetti: View {
         .accessibilityHidden(true)
         .onAppear {
             start = Date()
-            // Once it has landed there is nothing left to animate: stop the
-            // timeline rather than redraw a still frame 60 times a second.
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.duration + 0.05) { settled = true }
+            // Nothing left on screen after this: stop redrawing an empty canvas.
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.duration) { finished = true }
         }
     }
 
-    private func canvas(progress u: Double) -> some View {
+    private func canvas(time t: Double) -> some View {
         Canvas { context, size in
-            let origin = CGPoint(x: size.width / 2, y: size.height / 2)
-            // Fast out, easing to rest: a burst, then drag.
-            let travel = 1 - pow(1 - u, 3)
+            let height = Double(size.height)
             for (index, piece) in Self.pieces.enumerated() {
-                // Fixed per-piece variety, so the burst is the same every time
-                // and lands exactly on the reference layout.
+                // Fixed per-piece variety, so the fall is the same every time.
                 let seed = Double((index * 73 + 19) % 97) / 97
-                let target = CGPoint(x: piece.x + piece.w / 2, y: piece.y + piece.h / 2)
-                // Thrown up first and pulled down by gravity: an arc that
-                // rises, then falls into place.
-                let lift = (40 + 50 * seed) * sin(.pi * travel) * (1 - u)
-                let drift = 10 * sin(u * .pi * 2 + seed * 6) * (1 - u)
-                let point = CGPoint(x: origin.x + (target.x - origin.x) * travel + drift,
-                                    y: origin.y + (target.y - origin.y) * travel - lift)
-                let spin = (seed - 0.5) * 720 * (1 - travel)
+                let seed2 = Double((index * 37 + 11) % 89) / 89
+                let local = t - seed * 0.7            // staggered release
+                guard local > 0 else { continue }
+                // Start just above the panel, a little higher for some.
+                let y0 = -20 - seed2 * 60
+                let v0 = 20 + seed * 60
+                let y = y0 + v0 * local + 0.5 * Self.gravity * local * local
+                guard y < height + 20 else { continue }
+                let x = Double(piece.x + piece.w / 2) + 14 * sin(local * (1.6 + seed * 1.4) + seed2 * 6)
+                // Fade over the lower third, gone before the bottom edge.
+                let fadeStart = height * 0.55, fadeEnd = height * 0.92
+                let fade = y < fadeStart ? 1 : max(0, 1 - (y - fadeStart) / (fadeEnd - fadeStart))
+                guard fade > 0 else { continue }
                 var layer = context
-                layer.opacity = u < 0.08 ? u / 0.08 : 1 - (1 - piece.opacity) * travel
-                layer.translateBy(x: point.x, y: point.y)
-                layer.rotate(by: .degrees(piece.rotation + spin))
-                let scale = 0.5 + 0.5 * min(1, u * 4)
-                let rect = CGRect(x: -piece.w * scale / 2, y: -piece.h * scale / 2,
-                                  width: piece.w * scale, height: piece.h * scale)
+                layer.opacity = piece.opacity * fade * min(1, local / 0.15)
+                layer.translateBy(x: x, y: y)
+                layer.rotate(by: .degrees(piece.rotation + (seed - 0.5) * 540 * local))
+                let rect = CGRect(x: -piece.w / 2, y: -piece.h / 2, width: piece.w, height: piece.h)
                 layer.fill(Path(roundedRect: rect, cornerRadius: 2), with: .color(Color(obHex: piece.color)))
             }
         }

@@ -415,6 +415,17 @@ an already-visible row keeps the current viewport, while a row that is above or
 below it scrolls to the nearest edge. After expansion, one delayed geometry
 check reveals the new overflow only if the complete opened row no longer fits.
 
+### 2026-09-27 onboarding polish
+
+- The window is drawn 10% larger than the design (946×550 for 860×500): the
+  hosting view's bounds stay at the design size and AppKit scales them to the
+  frame (`OBMetric.windowScale`), so every design value is still in design
+  points. Not visually verified for text sharpness — no screen capture here.
+- Permission chips sit ON the rings (`PermissionsPanel.onRing`); a third chip
+  (bolt) shows the usage-data toggle, which is back on the permissions step,
+  on by default, recorded at finish.
+- Confetti falls from above under gravity and fades out; nothing stays.
+
 ### 2026-09-27 opt-in telemetry and feedback
 
 See `docs/TELEMETRY.md`. Anonymous usage counts go to a Cloudflare Worker + D1

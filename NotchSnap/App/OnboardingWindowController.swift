@@ -82,7 +82,7 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     /// main screen (SPEC §3).
     private static func center(_ window: NSWindow) {
         let screen = NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main
-        let size = OBMetric.windowSize
+        let size = OBMetric.scaledWindowSize
         let visible = screen?.visibleFrame ?? window.frame
         // Size and place in one call. Showing the window re-derives its frame
         // from the content rect (plus a titlebar the full-size content view
@@ -93,7 +93,7 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     convenience init() {
-        let size = OBMetric.windowSize
+        let size = OBMetric.scaledWindowSize
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: size),
             // Titled for key-window behaviour and the system shadow, but not
@@ -144,7 +144,12 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         hostingView.sizingOptions = []
         let container = NSView(frame: NSRect(origin: .zero, size: size))
         hostingView.frame = container.bounds
-        hostingView.autoresizingMask = [.width, .height]
+        // The window is 10% larger than the design; the SwiftUI content is
+        // laid out at the design's 860×500 and AppKit scales it up by the
+        // bounds/frame ratio — vectors and text are redrawn at the larger
+        // size, not magnified (OBMetric.windowScale). Fixed size, so no
+        // autoresizing to fight the ratio.
+        hostingView.setBoundsSize(OBMetric.windowSize)
         container.addSubview(hostingView)
         window.contentView = container
         // With a full-size content view the FRAME is the window — a content
@@ -333,7 +338,7 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         // G grants the first row still waiting for a grant (v3 §4.5).
         case (.permissions, "g"): model.permissions.grantCalendar(); return true
         case (.permissions, "l"): model.permissions.setLogin(!model.permissions.loginEnabled); return true
-        case (.done, "u"): model.setShareUsage(!model.shareUsage); return true
+        case (.permissions, "u"): model.setShareUsage(!model.shareUsage); return true
         default: return false
         }
     }

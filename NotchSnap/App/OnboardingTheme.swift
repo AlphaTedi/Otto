@@ -331,7 +331,15 @@ private struct OBIconShape: Shape {
 // MARK: Metrics
 
 enum OBMetric {
+    /// The design's size — every value in these files is in its points.
     static let windowSize = CGSize(width: 860, height: 500)
+    /// Drawn 10% larger than designed: at 860×500 the window read as too
+    /// small on screen (Marcello, 2026-09-27). The scale is applied once, to
+    /// the hosting view's bounds, so the design's numbers stay the design's.
+    static let windowScale: CGFloat = 1.1
+    static var scaledWindowSize: CGSize {
+        CGSize(width: (windowSize.width * windowScale).rounded(), height: (windowSize.height * windowScale).rounded())
+    }
     static let windowRadius: CGFloat = 36
     static let columnWidth: CGFloat = 360
     static let progressWidth: CGFloat = 300
