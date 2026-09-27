@@ -174,7 +174,7 @@ enum DebugDriver {
                 guard parts.count == 3, Int32(parts[1]) == ProcessInfo.processInfo.processIdentifier else { return }
                 let directory = URL(fileURLWithPath: String(parts[2]))
                 try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                let title = "Send the deck ![debug-sample.png](Attachments/debug-sample-000000.png) to the team"
+                let title = "Send the deck ![Image 2026-09-27T19.15.43.png](Attachments/debug sample 000000.png) to the team tomorrow"
                 let host = NSHostingView(rootView: EntityTitleView(title: title, isBright: true, onTap: {})
                     .frame(width: 420).padding(12).background(Color(hex: "#1B1F35"))
                     .environment(\.colorScheme, .dark))
@@ -202,7 +202,7 @@ enum DebugDriver {
                     tv.needsDisplay = true
                 }
                 snap(host, "row-hover")
-                ImagePreviewPanel.shared.show("Attachments/debug-sample-000000.png",
+                ImagePreviewPanel.shared.show("Attachments/debug sample 000000.png",
                                               above: NSRect(x: 200, y: 200, width: 100, height: 20), level: .normal)
                 if let card = NSApp.windows.first(where: { $0 is NSPanel && $0.contentView?.subviews.first is NSImageView })?.contentView {
                     snap(card, "preview")

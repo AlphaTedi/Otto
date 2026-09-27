@@ -58,7 +58,32 @@ enum NLDateParser {
 
     private static let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
 
+    /// Image tokens (`![…](Attachments/…)`) are never read as dates: a
+    /// pasted image is named with its timestamp, and "2026-09-27" inside
+    /// the token became a due date and was cut out of it (2026-09-27). The
+    /// title is parsed with each token as one placeholder, then mapped back.
     static func parse(_ title: String, now: Date = Date()) -> NLDateMatch? {
+        let ns = title as NSString
+        let tokens = AttachmentStore.tokenPattern.matches(in: title, range: NSRange(location: 0, length: ns.length))
+        guard !tokens.isEmpty else { return parseUnmasked(title, now: now) }
+        let placeholder = "\u{FFFC}"
+        var masked = title as NSString
+        for token in tokens.reversed() { masked = masked.replacingCharacters(in: token.range, with: placeholder) as NSString }
+        guard let match = parseUnmasked(masked as String, now: now) else { return nil }
+        // Back to the title's coordinates: each earlier token is longer than
+        // its placeholder by (length − 1).
+        let shift = tokens.filter { $0.range.location < match.nsRange.location }.reduce(0) { $0 + $1.range.length - 1 }
+        var cleaned = match.cleanedTitle
+        for token in tokens {
+            if let slot = cleaned.range(of: placeholder) {
+                cleaned.replaceSubrange(slot, with: ns.substring(with: token.range))
+            }
+        }
+        return NLDateMatch(nsRange: NSRange(location: match.nsRange.location + shift, length: match.nsRange.length),
+                           date: match.date, display: match.display, cleanedTitle: cleaned)
+    }
+
+    private static func parseUnmasked(_ title: String, now: Date = Date()) -> NLDateMatch? {
         guard let regex else { return nil }
         let full = NSRange(title.startIndex..., in: title)
         // NL: the LAST phrase wins.

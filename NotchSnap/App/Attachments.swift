@@ -58,7 +58,7 @@ enum AttachmentStore {
         guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
               let png = rep.representation(using: .png, properties: [:]) else { return nil }
         let stamp = ISO8601DateFormatter().string(from: Date()).prefix(19).replacingOccurrences(of: ":", with: ".")
-        let name = uniqueName(base: "Image \(stamp)", ext: "png")
+        let name = uniqueName(base: "Image-\(stamp)", ext: "png")
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             try png.write(to: directory.appendingPathComponent(name))
@@ -120,7 +120,9 @@ enum AttachmentStore {
     }
 
     private static func uniqueName(base: String, ext: String) -> String {
-        let clean = base.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ")", with: "")
+        // No spaces: the markdown link must stay one unbroken path.
+        let clean = base.replacingOccurrences(of: " ", with: "-")
+            .replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ")", with: "")
             .replacingOccurrences(of: "(", with: "").replacingOccurrences(of: "]", with: "")
             .replacingOccurrences(of: "[", with: "").trimmingCharacters(in: .whitespaces)
         let suffix = UUID().uuidString.prefix(6).lowercased()
@@ -132,7 +134,9 @@ enum AttachmentStore {
     /// `![name](Attachments/file.png)` — only paths inside Attachments/, so a
     /// user's own image link to somewhere else is left as text.
     nonisolated static let tokenPattern = try! NSRegularExpression(
-        pattern: #"!\[([^\]\n]*)\]\((Attachments/[^)\s]+)\)"#)
+        // Spaces allowed in the path: images pasted before 2026-09-27 were
+        // named "Image 2026-…png", and a token that did not match stayed text.
+        pattern: #"!\[([^\]\n]*)\]\((Attachments/[^)\n]+)\)"#)
 
     nonisolated static func token(for relativePath: String) -> String {
         "![\(displayName(for: relativePath))](\(relativePath))"
