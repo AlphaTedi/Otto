@@ -190,7 +190,7 @@ final class ImageChipCell: NSTextAttachmentCell {
     var showsRemove = false
     /// Air on both sides of the chip, so typed text never touches it
     /// (Marcello, 2026-09-27).
-    static let margin: CGFloat = 3
+    static let margin: CGFloat = 6
     /// The ✕ / icon slot, from the glyph's leading edge.
     static let removeZone: CGFloat = margin + 19
     private static let iconSide: CGFloat = 11
@@ -223,7 +223,7 @@ final class ImageChipCell: NSTextAttachmentCell {
         let side = Self.iconSide
         let thumbRect = NSRect(x: frame.minX + 6, y: frame.midY - side / 2, width: side, height: side)
         if hovered && showsRemove {
-            // ✕ in the thumbnail's place, and a hairline after it.
+            // ✕ in the icon's place — no divider (Marcello, 2026-09-27).
             let x = NSBezierPath()
             let inset = thumbRect.insetBy(dx: 1.5, dy: 1.5)
             x.move(to: NSPoint(x: inset.minX, y: inset.minY)); x.line(to: NSPoint(x: inset.maxX, y: inset.maxY))
@@ -232,8 +232,6 @@ final class ImageChipCell: NSTextAttachmentCell {
             x.lineCapStyle = .round
             NSColor.labelColor.withAlphaComponent(0.8).setStroke()
             x.stroke()
-            NSColor.labelColor.withAlphaComponent(0.18).setFill()
-            NSRect(x: cellFrame.minX + Self.removeZone - 1, y: frame.minY + 3, width: 1, height: frame.height - 6).fill()
         } else {
             // A small Lucide "image" glyph, not a thumbnail: at this size a
             // thumbnail read as a dark square (Marcello, 2026-09-27). The
@@ -356,9 +354,9 @@ final class ImagePreviewPanel {
     static let shared = ImagePreviewPanel()
     private var panel: NSPanel?
     private var shownPath: String?
-    /// The preview never outlives its chip: a watchdog hides it once the
-    /// pointer leaves the chip, the owning window hides (the notch closed) or
-    /// another desktop comes in — none of which sends a mouseExited
+    /// The preview never outlives its chip: it hides when the owning window
+    /// hides (the notch closed) or another desktop comes in — neither sends a
+    /// mouseExited
     /// (Marcello, 2026-09-27: it stayed after a swipe to the next desktop).
     private var watchdog: Timer?
     private var onDismiss: (() -> Void)?
@@ -368,21 +366,19 @@ final class ImagePreviewPanel {
         let maxSize = NSSize(width: 320, height: 220)
         let scale = min(1, min(maxSize.width / image.size.width, maxSize.height / image.size.height))
         let imageSize = NSSize(width: max(40, image.size.width * scale), height: max(30, image.size.height * scale))
-        let pad: CGFloat = 8
+        let pad: CGFloat = 0
         let size = NSSize(width: imageSize.width + pad * 2, height: imageSize.height + pad * 2)
 
         let panel = self.panel ?? makePanel()
         let card = NSView(frame: NSRect(origin: .zero, size: size))
         card.wantsLayer = true
-        card.layer?.cornerRadius = 12
-        card.layer?.backgroundColor = NSColor(white: 0.12, alpha: 0.96).cgColor
-        card.layer?.borderColor = NSColor(white: 1, alpha: 0.12).cgColor
-        card.layer?.borderWidth = 1
+        // Just the picture, rounded — no card or frame around it
+        // (Marcello, 2026-09-27).
         let imageView = NSImageView(frame: NSRect(x: pad, y: pad, width: imageSize.width, height: imageSize.height))
         imageView.image = image
         imageView.imageScaling = .scaleProportionallyUpOrDown
         imageView.wantsLayer = true
-        imageView.layer?.cornerRadius = 6
+        imageView.layer?.cornerRadius = 10
         imageView.layer?.masksToBounds = true
         card.addSubview(imageView)
         panel.contentView = card
@@ -399,18 +395,29 @@ final class ImagePreviewPanel {
         shownPath = path
         self.onDismiss = onDismiss
         watchdog?.invalidate()
-        let zone = anchor.insetBy(dx: -2, dy: -2)
-        watchdog = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self, weak owner] _ in
+        // Leaving the chip is the text view's mouseMoved/mouseExited; this
+        // only catches the window going away under a still pointer.
+        watchdog = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self, weak owner] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                let gone = owner.map { !$0.isVisible || !$0.isOnActiveSpace || $0.alphaValue < 0.05 } ?? true
-                if gone || !zone.contains(NSEvent.mouseLocation) {
-                    let dismiss = self.onDismiss
-                    self.hide()
-                    dismiss?()
-                }
+                if owner.map({ !$0.isVisible || $0.alphaValue < 0.05 }) ?? true { self.dismiss() }
             }
         }
+        if spaceObserver == nil {
+            spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.dismiss() }
+            }
+        }
+    }
+
+    private var spaceObserver: NSObjectProtocol?
+
+    private func dismiss() {
+        guard shownPath != nil else { return }
+        let callback = onDismiss
+        hide()
+        callback?()
     }
 
     func hide() {
