@@ -415,6 +415,23 @@ an already-visible row keeps the current viewport, while a row that is above or
 below it scrolls to the nearest edge. After expansion, one delayed geometry
 check reveals the new overflow only if the complete opened row no longer fits.
 
+### 2026-09-27 image attachments as inline chips
+
+Images in notes and to-dos (feedback batch, point 7; Marcello chose chips
+over full-width images). `Attachments.swift`: files are copied into the
+vault's `Attachments/` folder, referenced as `![name](Attachments/file)` —
+ordinary markdown, so Notes.md and section files show them in Obsidian
+(principle 7). Notes: the token lives in the note's markdown and is drawn as
+an `ImageChipAttachment` (thumbnail + name; click opens); paste, drop,
+the toolbar's image button and ⌘⇧I insert one. `NoteMarkdown` parses tokens
+before emphasis and writes them back verbatim — the round-trip test covers
+them (36/36). To-dos: `TodoItem.attachments` (decodeIfPresent), chips under
+the title with Open/Remove; images are pasted or dropped into the floating
+capture field (or ⌘⇧I) and wait as chips beside the text until ⏎. The
+container's own field is untouched (standing rule), so there images come
+through ⌘⇧I on a focused to-do. Removing a chip leaves the file in
+Attachments/ (no garbage collection yet).
+
 ### 2026-09-27 one icon family: Lucide
 
 Every icon that was an SF Symbol is now a Lucide icon (lucide.dev, ISC —

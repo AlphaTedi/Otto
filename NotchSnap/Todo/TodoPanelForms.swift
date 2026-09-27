@@ -47,6 +47,9 @@ struct HighlightingTitleField: NSViewRepresentable {
     /// One line that scrolls sideways under the caret (the floating capture
     /// header, 2026-09-27) instead of wrapping and growing.
     var singleLine = false
+    /// Images pasted or dropped into the field (vault paths). Nil: the field
+    /// takes text only, as before.
+    var onImages: (([String]) -> Void)? = nil
 
     static let lineHeight: CGFloat = 17
     static let maxHeight: CGFloat = 102   // ~6 lines, then it scrolls
@@ -72,6 +75,7 @@ struct HighlightingTitleField: NSViewRepresentable {
 
         let view = FocusReportingTextView()
         view.identifier = Self.fieldIdentifier
+        view.onImages = onImages
         view.onFocusChange = { focused in
             // Async: this fires from inside AppKit's responder change, and
             // publishing store state synchronously from there re-enters
@@ -117,6 +121,7 @@ struct HighlightingTitleField: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let view = scroll.documentView as? NSTextView else { return }
+        (view as? FocusReportingTextView)?.onImages = onImages
         if view.string != text {
             view.string = text
         }
@@ -161,6 +166,24 @@ struct HighlightingTitleField: NSViewRepresentable {
     /// responder calls is the only account of focus that is always right.
     final class FocusReportingTextView: NSTextView {
         var onFocusChange: ((Bool) -> Void)?
+        var onImages: (([String]) -> Void)?
+
+        override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
+            onImages == nil ? super.readablePasteboardTypes
+                            : [.fileURL, .png, .tiff] + super.readablePasteboardTypes
+        }
+
+        override var acceptableDragTypes: [NSPasteboard.PasteboardType] {
+            onImages == nil ? super.acceptableDragTypes : [.fileURL, .png, .tiff] + super.acceptableDragTypes
+        }
+
+        override func readSelection(from pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
+            if let onImages, AttachmentStore.hasImage(pboard) {
+                let paths = AttachmentStore.importFrom(pasteboard: pboard)
+                if !paths.isEmpty { onImages(paths); return true }
+            }
+            return super.readSelection(from: pboard, type: type)
+        }
 
         override func becomeFirstResponder() -> Bool {
             let accepted = super.becomeFirstResponder()

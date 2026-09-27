@@ -531,7 +531,32 @@ final class ActionTextView: NSTextView {
     }
 
     override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
-        [NoteEditorController.markdownPasteboardType] + super.readablePasteboardTypes
+        [NoteEditorController.markdownPasteboardType, .fileURL, .png, .tiff] + super.readablePasteboardTypes
+    }
+
+    /// An image pasted or dropped into a note lands as a chip at the caret
+    /// (or the drop point) and its file in the vault's Attachments folder.
+    @discardableResult
+    func insertImages(from pboard: NSPasteboard) -> Bool {
+        guard AttachmentStore.hasImage(pboard) else { return false }
+        let paths = AttachmentStore.importFrom(pasteboard: pboard)
+        guard !paths.isEmpty else { return false }
+        insertImageChips(paths)
+        return true
+    }
+
+    func insertImageChips(_ paths: [String]) {
+        var attributes = typingAttributes
+        let chips = NSMutableAttributedString()
+        for (i, path) in paths.enumerated() {
+            attributes[.attachment] = ImageChipAttachment(path: path)
+            chips.append(NSAttributedString(string: "\u{FFFC}", attributes: attributes))
+            if i < paths.count - 1 {
+                attributes[.attachment] = nil
+                chips.append(NSAttributedString(string: " ", attributes: attributes))
+            }
+        }
+        insertText(chips, replacementRange: selectedRange())
     }
 
     /// Drags keep the text system's own path: our paste inserts at the
@@ -541,6 +566,7 @@ final class ActionTextView: NSTextView {
     }
 
     override func readSelection(from pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
+        if type != NoteEditorController.markdownPasteboardType, insertImages(from: pboard) { return true }
         guard type == NoteEditorController.markdownPasteboardType,
               let markdown = pboard.string(forType: type) else {
             return super.readSelection(from: pboard, type: type)

@@ -366,7 +366,9 @@ enum DebugDriver {
                     if let work = list("work") {
                         store.selectCollection(work.id)
                         store.draftTitle = "Send deck to Roos"
+                        store.draftAttachments = ["Attachments/debug-sample-000000.png"]
                         await snap("input-typing")
+                        store.draftAttachments = []
                         store.draftTitle = "A much longer to-do title that would have wrapped onto a second and a third line before"
                         await snap("input-long")
                         store.draftTitle = ""
@@ -626,6 +628,10 @@ enum DebugDriver {
                 }
             } else if command == "meeting-notes-tests" {
                 for line in MeetingNotesVerification.run() { appendState(line) }
+            } else if command.hasPrefix("notes-format-snap-pid ") {
+                let parts = command.split(separator: " ", maxSplits: 2)
+                guard parts.count == 3, Int32(parts[1]) == ProcessInfo.processInfo.processIdentifier else { return }
+                handle("notes-format-snap " + String(parts[2]))
             } else if command.hasPrefix("notes-format-snap ") {
                 // notes-format-snap <dir> — the note body with inline code, a
                 // quote and a code block, dark and light, as PNGs. Off screen:
@@ -635,6 +641,7 @@ enum DebugDriver {
                 let sample = "## Deploy\nRun `make build` then check the `dist/` folder, **bold** too.\n"
                     + "> Slack-style quote with `code` inside, long enough to wrap onto a second line of the note body.\n> second quote line\n"
                     + "```\nfunc hello() {\n    print(\"hi\")\n\n}\nlong_unbroken_" + String(repeating: "x", count: 90) + "\n```\n- a list row after"
+                    + "\nScreenshot of the bug: ![debug-sample.png](Attachments/debug-sample-000000.png) as a chip"
                 for dark in [true, false] {
                     let scroll = ActionTextView.scrollableTextView()
                     let view = scroll.documentView as! ActionTextView
@@ -841,6 +848,13 @@ enum DebugDriver {
                     "> citazione",
                     "> uno\n> due\ncorpo",
                     "> con `code` dentro e **grassetto**",
+                    // Image chips (2026-09-27): alone, mid-sentence, in a list,
+                    // next to emphasis, and a file name holding * and _.
+                    "![shot.png](Attachments/shot-3f2a9c.png)",
+                    "prima ![a.png](Attachments/a-111111.png) e dopo **grassetto**",
+                    "- punto con ![b.jpg](Attachments/b-222222.jpg)",
+                    "![x_y*z.png](Attachments/x_y*z-333333.png) ![c.png](Attachments/c-444444.png)",
+                    "`![non è un chip](Attachments/code.png)` resta codice",
                     "> a\n>\n> b",
                     "codice `inline` qui",
                     "```\n  indentato\n\tcon tab\n\nriga lunghissima_senza_spazi_" + String(repeating: "x", count: 200) + "\n```",

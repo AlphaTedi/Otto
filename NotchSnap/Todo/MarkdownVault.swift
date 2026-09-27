@@ -257,6 +257,9 @@ final class MarkdownVault: ObservableObject {
     private func taskLine(_ item: TodoItem) -> String {
         let dayKey = VaultFormatters.cached("yyyy-MM-dd")
         var line = "- [\(item.isCompleted ? "x" : " ")] \(item.title)"
+        // Images as ordinary markdown, relative to the vault, so the section
+        // file shows them in Obsidian (Attachments.swift).
+        for path in item.attachments { line += " " + AttachmentStore.token(for: path) }
         if let due = item.dueDate { line += " 📅 \(dayKey.string(from: due))" }
         if item.isCompleted, let at = item.completedAt {
             line += " ✅ \(dayKey.string(from: at))"

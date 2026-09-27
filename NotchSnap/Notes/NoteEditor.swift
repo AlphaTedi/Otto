@@ -19,6 +19,19 @@ final class NoteEditorController: ObservableObject {
 
     weak var textView: NSTextView?
 
+    /// ⌘⇧I and the toolbar's image button: pick image files, drop them in at
+    /// the caret as chips (Attachments.swift). Paste and drag-and-drop go
+    /// through ActionTextView.readSelection.
+    func insertImageFromPanel() {
+        let range = textView?.selectedRange()
+        AttachmentStore.chooseImages { [weak self] paths in
+            guard let view = self?.textView as? ActionTextView else { return }
+            view.window?.makeFirstResponder(view)
+            if let range { view.setSelectedRange(range) }
+            if !paths.isEmpty { view.insertImageChips(paths) }
+        }
+    }
+
     /// Derived from the caret on every selection change; drives the lit
     /// controls. Not persisted.
     @Published private(set) var activeBlock: NoteBlock = .body

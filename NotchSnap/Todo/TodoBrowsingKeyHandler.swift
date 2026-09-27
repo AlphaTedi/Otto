@@ -439,6 +439,7 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                     case 28: editor.toggleBlock(.bullet);        return true   // ⌘⇧8
                     case 26: editor.toggleBlock(.numbered);      return true   // ⌘⇧7
                     case 25: editor.toggleBlock(.checklistOpen); return true   // ⌘⇧9
+                    case 34: editor.insertImageFromPanel();       return true   // ⌘⇧I
                     default: break
                     }
                 }
@@ -616,8 +617,10 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 // keeps the caret; the next Esc, on an empty field, closes.
                 // The notch container keeps its own field's behaviour.
                 if AppState.shared.notchLayout == .panels,
-                   !store.draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                   !store.draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || !store.draftAttachments.isEmpty {
                     store.draftTitle = ""
+                    store.draftAttachments = []
                     return true
                 }
                 notchWindow?.makeFirstResponder(nil)
@@ -847,6 +850,21 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             // nothing is selected.
             if cmd, !shift, keyCode == 36, let focused = store.focusedItemID {
                 store.toggleComplete(focused)
+                return true
+            }
+            // ⌘⇧I — an image for the to-do being typed (floating field), or
+            // for the focused to-do.
+            if cmd, shift, !option, keyCode == 34, store.panelMode == .browsing {
+                let target = store.draftFocused ? nil : store.focusedItemID
+                AttachmentStore.chooseImages { paths in
+                    guard !paths.isEmpty else { return }
+                    if let target, let item = store.items.first(where: { $0.id == target }) {
+                        store.setAttachments(item.attachments + paths, for: target)
+                    } else {
+                        store.draftAttachments += paths
+                        store.draftWantsFocus = true
+                    }
+                }
                 return true
             }
             if cmd, !shift, keyCode == 36, CalendarStore.shared.joinNextMeeting() {

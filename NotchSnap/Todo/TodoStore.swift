@@ -308,6 +308,9 @@ final class TodoStore: ObservableObject {
 
     /// What is being typed into the draft row.
     @Published var draftTitle = ""
+    /// Images pasted or dropped into the capture field, waiting for the
+    /// to-do they will belong to (chips beside the text until ⏎).
+    @Published var draftAttachments: [String] = []
     /// True while the caret is actually in the draft row.
     ///
     /// Distinct from "the row exists", which is now always. Only the caret
@@ -458,8 +461,12 @@ final class TodoStore: ObservableObject {
         let title = parsed?.cleanedTitle ?? draftTitle
         guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let target = draftDestination?.id,
-              addItem(title: title, collectionID: target,
-                      dueDate: parsed?.date) != nil else { return false }
+              let created = addItem(title: title, collectionID: target,
+                                    dueDate: parsed?.date) else { return false }
+        if !draftAttachments.isEmpty {
+            setAttachments(draftAttachments, for: created.id)
+            draftAttachments = []
+        }
         Analytics.track(.todoCreated(.draft, hasDueDate: parsed?.date != nil))
         draftTitle = ""
         // Re-assert rather than assume: the field reports its own focus, and
@@ -1131,6 +1138,20 @@ final class TodoStore: ObservableObject {
     /// row exit and the panel shrink then fire together on contentHug.
     /// Re-toggling mid-settle cancels cleanly — springs preserve velocity, so
     /// an interrupted exit reverses instead of snapping.
+    // MARK: - Image attachments
+
+    func setAttachments(_ paths: [String], for id: UUID) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].attachments = paths
+        scheduleSave()
+    }
+
+    func removeAttachment(_ path: String, from id: UUID) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].attachments.removeAll { $0 == path }
+        scheduleSave()
+    }
+
     func toggleComplete(_ id: UUID) {
         guard let idx = items.firstIndex(where: { $0.id == id }) else { return }
         if items[idx].isCompleted {

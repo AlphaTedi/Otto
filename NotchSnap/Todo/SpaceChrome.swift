@@ -64,6 +64,9 @@ struct CaptureHeader<Field: View>: View {
     /// A control that belongs to the space (the Notes · Meetings dropdown),
     /// trailing the field.
     var accessory: AnyView? = nil
+    /// Images waiting in the field, drawn as chips after the text.
+    var attachments: [String] = []
+    var onRemoveAttachment: ((String) -> Void)? = nil
     @ViewBuilder let field: Field
 
     static var height: CGFloat { 60 }
@@ -82,6 +85,10 @@ struct CaptureHeader<Field: View>: View {
                 field
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(attachments, id: \.self) { path in
+                AttachmentChip(path: path, onRemove: onRemoveAttachment.map { remove in { remove(path) } })
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            }
             if let accessory { accessory }
             trailing
         }
@@ -326,7 +333,9 @@ struct TodoCaptureHeader: View {
             isTyping: isTyping,
             saveLabel: L10n.t("capture.save"),
             onSave: { store.commitDraft() },
-            onDot: { store.cycleCollection() }
+            onDot: { store.cycleCollection() },
+            attachments: store.draftAttachments,
+            onRemoveAttachment: { path in store.draftAttachments.removeAll { $0 == path } }
         ) {
             HighlightingTitleField(
                 text: $store.draftTitle,
@@ -339,7 +348,8 @@ struct TodoCaptureHeader: View {
                     if focused { store.draftWantsFocus = false }
                 },
                 fontSize: 18,
-                singleLine: true
+                singleLine: true,
+                onImages: { paths in store.draftAttachments += paths }
             )
             .frame(height: fieldHeight)
             .background(GeometryReader { proxy in

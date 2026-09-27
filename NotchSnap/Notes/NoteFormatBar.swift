@@ -91,6 +91,15 @@ struct NoteFormatBar: View {
                 .buttonStyle(FormatControlStyle(isActive: editor.activeBlock == .code))
                 .help(L10n.t("notes.fmt.codeBlock") + "  \u{2318}\u{2325}\u{21E7}C")
                 .accessibilityLabel(L10n.t("notes.fmt.codeBlock"))
+
+            divider
+
+            // Group 5 — an image, as a chip in the text (⌘⇧I; paste and drop
+            // work too).
+            Button { editor.insertImageFromPanel() } label: { OttoIcon("photo", pointSize: 12) }
+                .buttonStyle(FormatControlStyle(isActive: false))
+                .help(L10n.t("notes.fmt.image") + "  \u{2318}\u{21E7}I")
+                .accessibilityLabel(L10n.t("notes.fmt.image"))
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 4)

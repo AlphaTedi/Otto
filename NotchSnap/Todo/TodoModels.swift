@@ -67,6 +67,10 @@ struct TodoItem: Identifiable, Codable, Equatable {
     var sourceNoteID: UUID?
     var sourcePhrase: String?
     var meetingNoteID: UUID? = nil
+    /// Images attached to the to-do, as vault-relative paths
+    /// (`Attachments/…`, see Attachments.swift). Shown as chips on the row;
+    /// in the vault they ride at the end of the to-do's line as `![…](…)`.
+    var attachments: [String] = []
 
     var hasDetails: Bool { !note.isEmpty || !checklist.isEmpty }
 
@@ -110,5 +114,6 @@ struct TodoItem: Identifiable, Codable, Equatable {
         sourceNoteID = try c.decodeIfPresent(UUID.self, forKey: .sourceNoteID)
         sourcePhrase = try c.decodeIfPresent(String.self, forKey: .sourcePhrase)
         meetingNoteID = try c.decodeIfPresent(UUID.self, forKey: .meetingNoteID)
+        attachments = try c.decodeIfPresent([String].self, forKey: .attachments) ?? []
     }
 }

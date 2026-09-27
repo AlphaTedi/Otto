@@ -5,7 +5,9 @@ import SwiftUI
 //
 // The governing rule comes from the handoff and it is the reason this file is
 // short: IF IT CANNOT BE WRITTEN INTO Notes.md AS MARKDOWN, IT DOES NOT ENTER
-// THE EDITOR. No colour, no highlight, no tables, no images, no font size.
+// THE EDITOR. No colour, no highlight, no tables, no font size. Images came
+// in (2026-09-27) the same way code did — through an exact markdown form:
+// `![name](Attachments/file)`, a real file in the vault, drawn as a chip.
 // Code (inline and block) and the block quote joined later (2026-09-25/26)
 // because each has an exact markdown form — `…`, a ``` fence, `> `. Every
 // format has an exact markdown equivalent, and a closed set is what makes the round-trip safe: a note is
@@ -385,6 +387,17 @@ enum NoteMarkdown {
             }
             return hit
         }
+        // Image chips, before emphasis: a file name may hold `*` or `_`, and
+        // the token must reach the attachment whole.
+        for match in AttachmentStore.tokenPattern.matches(
+            in: paragraph.string, options: [], range: NSRange(location: 0, length: paragraph.length)).reversed()
+            where !insideCode(match.range) {
+            let path = (paragraph.string as NSString).substring(with: match.range(at: 2))
+            var attributes = paragraph.attributes(at: match.range.location, effectiveRange: nil)
+            attributes[.attachment] = ImageChipAttachment(path: path)
+            paragraph.replaceCharacters(in: match.range,
+                                        with: NSAttributedString(string: "\u{FFFC}", attributes: attributes))
+        }
         for (regex, traits, isUnderline) in inlinePatterns {
             // Backwards, so replacing one match cannot shift the ranges of the
             // ones not yet handled.
@@ -550,9 +563,16 @@ enum NoteMarkdown {
         // span wherever any other attribute changes, and wrapping each piece
         // separately wrote "**a****b**" for one bold word.
         var segments: [(text: String, italic: Bool, bold: Bool, underline: Bool, code: Bool)] = []
+        var verbatim: [Int: String] = [:]   // segment index → token written as is
         clean.enumerateAttributes(in: range, options: []) { attributes, runRange, _ in
             let text = (attributed.string as NSString).substring(with: runRange)
             guard !text.isEmpty else { return }
+            // An image chip goes back to exactly the token it came from.
+            if let chip = attributes[.attachment] as? ImageChipAttachment {
+                verbatim[segments.count] = AttachmentStore.token(for: chip.path)
+                segments.append(("", false, false, false, false))
+                return
+            }
             let raw = (attributes[.font] as? NSFont).map { NSFontManager.shared.traits(of: $0) } ?? []
             let traits = raw.subtracting(baseTraits)
             // Otto's own underline is NOT the user's. A detected span wears
@@ -567,14 +587,15 @@ enum NoteMarkdown {
             let italic = !code && traits.contains(.italicFontMask)
             let bold = !code && traits.contains(.boldFontMask)
             let underline = !code && underlined
-            if let last = segments.last, last.italic == italic, last.bold == bold,
-               last.underline == underline, last.code == code {
+            if let last = segments.last, verbatim[segments.count - 1] == nil, last.italic == italic,
+               last.bold == bold, last.underline == underline, last.code == code {
                 segments[segments.count - 1].text += text
             } else {
                 segments.append((text, italic, bold, underline, code))
             }
         }
-        for segment in segments {
+        for (index, segment) in segments.enumerated() {
+            if let token = verbatim[index] { out += token; continue }
             if segment.code {
                 // Verbatim between backticks; edge spaces stay outside.
                 let core = segment.text.trimmingCharacters(in: .whitespaces)
@@ -609,7 +630,9 @@ enum NoteMarkdown {
     /// Plain text, for the stream's preview line and the word count — the
     /// markers are not words.
     static func plainText(_ markdown: String) -> String {
-        markdown.components(separatedBy: "\n")
+        AttachmentStore.tokenPattern.stringByReplacingMatches(
+            in: markdown, range: NSRange(location: 0, length: (markdown as NSString).length), withTemplate: "")
+            .components(separatedBy: "\n")
             .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("```") }
             .map { split($0).2 }
             .joined(separator: "\n")

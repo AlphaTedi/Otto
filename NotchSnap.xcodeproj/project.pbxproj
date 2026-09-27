@@ -17,6 +17,7 @@
 		0B0B0B0B0B0B0B0B0B0B0B02 /* OnboardingModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F02 /* OnboardingModel.swift */; };
 		0B0B0B0B0B0B0B0B0B0B0B03 /* OnboardingComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F03 /* OnboardingComponents.swift */; };
 		0B0B0B0B0B0B0B0B0B0B0B04 /* OnboardingSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F04 /* OnboardingSteps.swift */; };
+		0B0B0B0B0B0B0B0B0B0B0B0C /* Attachments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F0C /* Attachments.swift */; };
 		0B0B0B0B0B0B0B0B0B0B0B0B /* OttoIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F0B /* OttoIcon.swift */; };
 		0B0B0B0B0B0B0B0B0B0B0B0A /* FeedbackWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F0A /* FeedbackWindow.swift */; };
 		0B0B0B0B0B0B0B0B0B0B0B09 /* Analytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F09 /* Analytics.swift */; };
@@ -242,6 +243,7 @@
 		0F0F0F0F0F0F0F0F0F0F0F02 /* OnboardingModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingModel.swift; sourceTree = "<group>"; };
 		0F0F0F0F0F0F0F0F0F0F0F03 /* OnboardingComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingComponents.swift; sourceTree = "<group>"; };
 		0F0F0F0F0F0F0F0F0F0F0F04 /* OnboardingSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingSteps.swift; sourceTree = "<group>"; };
+		0F0F0F0F0F0F0F0F0F0F0F0C /* Attachments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Attachments.swift; sourceTree = "<group>"; };
 		0F0F0F0F0F0F0F0F0F0F0F0B /* OttoIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttoIcon.swift; sourceTree = "<group>"; };
 		0F0F0F0F0F0F0F0F0F0F0F0A /* FeedbackWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackWindow.swift; sourceTree = "<group>"; };
 		0F0F0F0F0F0F0F0F0F0F0F09 /* Analytics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Analytics.swift; sourceTree = "<group>"; };
@@ -500,6 +502,7 @@
 				0F0F0F0F0F0F0F0F0F0F0F02 /* OnboardingModel.swift */,
 				0F0F0F0F0F0F0F0F0F0F0F03 /* OnboardingComponents.swift */,
 				0F0F0F0F0F0F0F0F0F0F0F04 /* OnboardingSteps.swift */,
+				0F0F0F0F0F0F0F0F0F0F0F0C /* Attachments.swift */,
 				0F0F0F0F0F0F0F0F0F0F0F0B /* OttoIcon.swift */,
 				0F0F0F0F0F0F0F0F0F0F0F0A /* FeedbackWindow.swift */,
 				0F0F0F0F0F0F0F0F0F0F0F09 /* Analytics.swift */,
@@ -717,6 +720,7 @@
 				0B0B0B0B0B0B0B0B0B0B0B02 /* OnboardingModel.swift in Sources */,
 				0B0B0B0B0B0B0B0B0B0B0B03 /* OnboardingComponents.swift in Sources */,
 				0B0B0B0B0B0B0B0B0B0B0B04 /* OnboardingSteps.swift in Sources */,
+				0B0B0B0B0B0B0B0B0B0B0B0C /* Attachments.swift in Sources */,
 				0B0B0B0B0B0B0B0B0B0B0B0B /* OttoIcon.swift in Sources */,
 				0B0B0B0B0B0B0B0B0B0B0B0A /* FeedbackWindow.swift in Sources */,
 				0B0B0B0B0B0B0B0B0B0B0B09 /* Analytics.swift in Sources */,

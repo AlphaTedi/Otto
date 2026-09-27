@@ -2576,15 +2576,26 @@ private struct TodoItemRow: View {
             } else {
                 // EH-1..6: links/dates/mentions/code render as inline chips
                 // in the flowing, wrapping title.
-                EntityTitleView(
-                    title: item.title,
-                    isBright: isFocused || isExpanded,
-                    onTap: activateRow
-                )
-                // The export wraps the label in its own 8pt box, which is what
-                // gives a single-line row 33pt and lets a wrapped one grow to
-                // 50 instead of being clipped to a fixed height.
-                .padding(.vertical, LabMetrics.rowTextInset)
+                VStack(alignment: .leading, spacing: 0) {
+                    EntityTitleView(
+                        title: item.title,
+                        isBright: isFocused || isExpanded,
+                        onTap: activateRow
+                    )
+                    // The export wraps the label in its own 8pt box, which is what
+                    // gives a single-line row 33pt and lets a wrapped one grow to
+                    // 50 instead of being clipped to a fixed height.
+                    .padding(.vertical, LabMetrics.rowTextInset)
+                    // Its images, as chips under the title (Attachments.swift).
+                    if !item.attachments.isEmpty {
+                        HStack(spacing: 6) {
+                            ForEach(item.attachments, id: \.self) { path in
+                                AttachmentChip(path: path) { store.removeAttachment(path, from: item.id) }
+                            }
+                        }
+                        .padding(.bottom, LabMetrics.rowTextInset)
+                    }
+                }
             }
 
             Spacer(minLength: 6)
@@ -3147,6 +3158,7 @@ private struct ShortcutsOverlay: View {
         ("\u{21A9}", "todo.sc.editTitle"),
         ("\u{2192} \u{2190}", "todo.sc.expandRow"),
         ("\u{2318}N", "todo.sc.newTodo"),
+        ("\u{2318}\u{21E7}I", "todo.sc.addImage"),
         ("Esc", "todo.sc.clearDraft"),
         ("\u{21E5}", "todo.switchSection"),
         ("\u{2318}1\u{2013}9 / \u{2318}", "todo.sc.switchCollection"),
