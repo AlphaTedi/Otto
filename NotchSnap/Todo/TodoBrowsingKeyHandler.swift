@@ -73,6 +73,16 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             let lower = chars.lowercased()
 
             let notes = NotesStore.shared
+            // The one-time usage-data card answers to Esc (no) and to ⏎
+            // (share) — ⏎ only while the draft is empty, so it never eats
+            // the Return that saves a to-do.
+            if ConsentPrompt.shared.visible, store.panelMode == .browsing, !cmd, !option, !control {
+                if keyCode == 53 { ConsentPrompt.shared.answer(false); return true }
+                if keyCode == 36 || keyCode == 76,
+                   store.draftTitle.trimmingCharacters(in: .whitespaces).isEmpty {
+                    ConsentPrompt.shared.answer(true); return true
+                }
+            }
             if notes.meetingPicker {
                 let rows = CalendarStore.shared.upcomingToday
                 if keyCode == 53 { notes.cancelMeetingPicker(); return true }

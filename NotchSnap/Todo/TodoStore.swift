@@ -460,6 +460,7 @@ final class TodoStore: ObservableObject {
               let target = draftDestination?.id,
               addItem(title: title, collectionID: target,
                       dueDate: parsed?.date) != nil else { return false }
+        Analytics.track(.todoCreated(.draft, hasDueDate: parsed?.date != nil))
         draftTitle = ""
         // Re-assert rather than assume: the field reports its own focus, and
         // the list re-rendering underneath must not be able to take it.
@@ -1163,6 +1164,7 @@ final class TodoStore: ObservableObject {
             // the panel (Thomas, 2026-09-01).
             MarkdownVault.shared.recordCompletion(items[idx], from: self)
             noteArchiveChanged()
+            Analytics.track(.todoCompleted(age: Bucket.age(since: items[idx].createdAt)))
             settleTasks[id] = Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: 350_000_000)
                 guard !Task.isCancelled, let self else { return }

@@ -17,6 +17,9 @@
 		0B0B0B0B0B0B0B0B0B0B0B02 /* OnboardingModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F02 /* OnboardingModel.swift */; };
 		0B0B0B0B0B0B0B0B0B0B0B03 /* OnboardingComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F03 /* OnboardingComponents.swift */; };
 		0B0B0B0B0B0B0B0B0B0B0B04 /* OnboardingSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F04 /* OnboardingSteps.swift */; };
+		0B0B0B0B0B0B0B0B0B0B0B0A /* FeedbackWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F0A /* FeedbackWindow.swift */; };
+		0B0B0B0B0B0B0B0B0B0B0B09 /* Analytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F09 /* Analytics.swift */; };
+		0B0B0B0B0B0B0B0B0B0B0B08 /* AnalyticsEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F08 /* AnalyticsEvent.swift */; };
 		0B0B0B0B0B0B0B0B0B0B0B07 /* OnboardingPreviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F07 /* OnboardingPreviews.swift */; };
 		0B0B0B0B0B0B0B0B0B0B0B05 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F05 /* OnboardingFlow.swift */; };
 		EE01AA02BB03CC04DD05FF06 /* ShelfItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF06EE01AA02BB03CC04DD05 /* ShelfItem.swift */; };
@@ -238,6 +241,9 @@
 		0F0F0F0F0F0F0F0F0F0F0F02 /* OnboardingModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingModel.swift; sourceTree = "<group>"; };
 		0F0F0F0F0F0F0F0F0F0F0F03 /* OnboardingComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingComponents.swift; sourceTree = "<group>"; };
 		0F0F0F0F0F0F0F0F0F0F0F04 /* OnboardingSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingSteps.swift; sourceTree = "<group>"; };
+		0F0F0F0F0F0F0F0F0F0F0F0A /* FeedbackWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackWindow.swift; sourceTree = "<group>"; };
+		0F0F0F0F0F0F0F0F0F0F0F09 /* Analytics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Analytics.swift; sourceTree = "<group>"; };
+		0F0F0F0F0F0F0F0F0F0F0F08 /* AnalyticsEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsEvent.swift; sourceTree = "<group>"; };
 		0F0F0F0F0F0F0F0F0F0F0F07 /* OnboardingPreviews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPreviews.swift; sourceTree = "<group>"; };
 		0F0F0F0F0F0F0F0F0F0F0F05 /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
 		A54EE6536F83A25DC71266E2 /* AreaSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AreaSelector.swift; sourceTree = "<group>"; };
@@ -492,6 +498,9 @@
 				0F0F0F0F0F0F0F0F0F0F0F02 /* OnboardingModel.swift */,
 				0F0F0F0F0F0F0F0F0F0F0F03 /* OnboardingComponents.swift */,
 				0F0F0F0F0F0F0F0F0F0F0F04 /* OnboardingSteps.swift */,
+				0F0F0F0F0F0F0F0F0F0F0F0A /* FeedbackWindow.swift */,
+				0F0F0F0F0F0F0F0F0F0F0F09 /* Analytics.swift */,
+				0F0F0F0F0F0F0F0F0F0F0F08 /* AnalyticsEvent.swift */,
 				0F0F0F0F0F0F0F0F0F0F0F07 /* OnboardingPreviews.swift */,
 				0F0F0F0F0F0F0F0F0F0F0F05 /* OnboardingFlow.swift */,
 				FF46EE41AA42BB43CC44DD45 /* Localization.swift */,
@@ -705,6 +714,9 @@
 				0B0B0B0B0B0B0B0B0B0B0B02 /* OnboardingModel.swift in Sources */,
 				0B0B0B0B0B0B0B0B0B0B0B03 /* OnboardingComponents.swift in Sources */,
 				0B0B0B0B0B0B0B0B0B0B0B04 /* OnboardingSteps.swift in Sources */,
+				0B0B0B0B0B0B0B0B0B0B0B0A /* FeedbackWindow.swift in Sources */,
+				0B0B0B0B0B0B0B0B0B0B0B09 /* Analytics.swift in Sources */,
+				0B0B0B0B0B0B0B0B0B0B0B08 /* AnalyticsEvent.swift in Sources */,
 				0B0B0B0B0B0B0B0B0B0B0B07 /* OnboardingPreviews.swift in Sources */,
 				0B0B0B0B0B0B0B0B0B0B0B05 /* OnboardingFlow.swift in Sources */,
 				C1D718E235EFE1AEDF61E840 /* AppSettings.swift in Sources */,

@@ -468,6 +468,15 @@ struct TodoTabView: View {
             }
         }
         .animation(NotchAnimation.hintFade, value: notes.kindMenuOpen)
+        // The one-time usage-data question, floating over the foot of the
+        // panel so it costs the layout nothing (the panel still hugs).
+        .overlay(alignment: .bottom) {
+            if store.panelMode == .browsing {
+                ConsentCard()
+                    .padding(.horizontal, SpaceChrome.cornerInset)
+                    .padding(.bottom, PanelChrome.shared.tabRow + OttoMenuStyle.anchorGap)
+            }
+        }
         .onPreferenceChange(MenuAnchorKey.self) { menuAnchors = $0 }
         .coordinateSpace(name: OttoMenuStyle.space)
     }

@@ -131,7 +131,7 @@ class HotkeyManager {
             print("[HotkeyManager] \u{2303}\u{21E7}E \u{2192} Notes space")
             Task { @MainActor in
                 AppState.shared.pendingNotchFilter = .todos
-                NotchController.shared.triggerExpand()
+                NotchController.shared.triggerExpand(trigger: .hotkey)
                 NotesStore.shared.enterSpace()
                 // The space opens ready to write, and typing needs real
                 // keyboard focus — the panel is a non-activating window in an
@@ -151,7 +151,7 @@ class HotkeyManager {
             print("[HotkeyManager] ⌃⇧T → Notch on To-dos")
             Task { @MainActor in
                 AppState.shared.pendingNotchFilter = .todos
-                NotchController.shared.triggerExpand()
+                NotchController.shared.triggerExpand(trigger: .hotkey)
                 // Opening IS the intent to interact: the caret lands in the
                 // draft row so typing works immediately, and — since a
                 // nonactivating panel never takes focus on its own — this is

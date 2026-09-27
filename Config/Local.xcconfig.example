@@ -39,6 +39,16 @@
 GOOGLE_OAUTH_CLIENT_ID = 
 GOOGLE_OAUTH_CLIENT_SECRET = 
 
+// -------------------------------------------------------------- TELEMETRY --
+// Anonymous, opt-in usage counts (docs/TELEMETRY.md). The host of the
+// Cloudflare Worker in server/, WITHOUT https:// — a `//` starts a comment in
+// an xcconfig. The key is the Worker's OTTO_KEY (wrangler.toml); it is not a
+// secret, it only keeps random traffic out. Leave blank: nothing is ever sent.
+OTTO_SERVICE_HOST =
+OTTO_SERVICE_KEY =
+// Where "Send feedback" addresses its email. Blank hides the menu item.
+OTTO_FEEDBACK_EMAIL =
+
 // -------------------------------------------------------------- HARDENING --
 // Hardened Runtime is REQUIRED for notarization. Release-only so day-to-day
 // debug builds are unaffected.

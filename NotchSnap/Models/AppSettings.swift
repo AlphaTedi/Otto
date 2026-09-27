@@ -134,6 +134,10 @@ struct AppSettings: Codable {
     var launchAtLogin: Bool = false
     var showInDock: Bool = false
     var appTheme: AppTheme = .system
+    /// Anonymous usage data (docs/TELEMETRY.md). nil = never asked; the
+    /// onboarding or a one-time panel card asks. Opt-in: nothing is sent
+    /// unless this is `.granted`.
+    var analyticsConsent: AnalyticsConsent? = nil
 
     // Storage — Markdown defaults to Application Support. Users can choose a
     // more visible folder in Settings; see MarkdownVault.
@@ -171,6 +175,7 @@ struct AppSettings: Codable {
         launchAtLogin = (try? c.decodeIfPresent(Bool.self, forKey: .launchAtLogin)) ?? defaults.launchAtLogin
         showInDock = (try? c.decodeIfPresent(Bool.self, forKey: .showInDock)) ?? defaults.showInDock
         appTheme = (try? c.decodeIfPresent(AppTheme.self, forKey: .appTheme)) ?? defaults.appTheme
+        analyticsConsent = (try? c.decodeIfPresent(AnalyticsConsent.self, forKey: .analyticsConsent)) ?? nil
         let savedVaultDirectory = (try? c.decodeIfPresent(URL.self, forKey: .vaultDirectory)) ?? nil
         // Older versions used ~/Documents/Otto implicitly, prompting for
         // Documents access during startup exports. Redirect only that default;

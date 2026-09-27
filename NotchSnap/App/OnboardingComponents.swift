@@ -457,14 +457,16 @@ struct OBPermissionRow<Trailing: View>: View {
                     OBIconView(icon: icon, size: 16, color: tint)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(title).obFont(13, 600).foregroundStyle(p.textPrimary)
-                        // One line, always: the captions are short, and a
-                        // wide trailing control ("Open Settings ↗") was
-                        // breaking "Heads-up before meetings" in two.
                         Text(caption).obFont(11.5).foregroundStyle(p.textTertiary)
-                            .lineLimit(1)
-                            .fixedSize()
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    Spacer(minLength: 8)
+                    // The words first: a wide trailing control ("Open
+                    // Settings ↗") gives way before a short caption wraps.
+                    .layoutPriority(1)
+                    // No minimum: the HStack's own 12 already separates the
+                    // text from the control, and the 8 on top was exactly
+                    // what pushed a one-line caption onto two.
+                    Spacer(minLength: 0)
                     trailing
                 }
                 .padding(.vertical, 11)

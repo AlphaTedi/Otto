@@ -299,7 +299,9 @@ class NotchController: ObservableObject {
         }
     }
 
-    func triggerExpand() {
+    /// `trigger` is only reported (anonymous usage counts): which way people
+    /// open Otto is the keyboard-first question the numbers exist to answer.
+    func triggerExpand(trigger: AnalyticsEvent.OpenTrigger = .other) {
         // Cancel any collapse in progress
         collapseTask?.cancel()
         collapseTask = nil
@@ -309,6 +311,7 @@ class NotchController: ObservableObject {
 
         guard state != .expanded else { return }
 
+        Analytics.track(.notchOpened(trigger, layout: AppState.shared.notchLayout))
         HapticManager.shared.expandTap()
 
         // Opening the panel is the moment the data must be current.
@@ -973,7 +976,7 @@ class NotchController: ObservableObject {
                                 settled += tick
                                 if settled >= self.dragDwellNanos {
                                     AppState.shared.pendingNotchFilter = .tray
-                                    self.triggerExpand()
+                                    self.triggerExpand(trigger: .drag)
                                     return
                                 }
                             }
@@ -995,7 +998,7 @@ class NotchController: ObservableObject {
                 // Mouse approached during notification — interrupt and expand
                 notificationTask?.cancel()
                 notificationContentVisible = false
-                triggerExpand()
+                triggerExpand(trigger: .hover)
             }
             cancelCollapse()
         } else if !inZone && state == .expanded {
@@ -1057,7 +1060,7 @@ class NotchController: ObservableObject {
         switch state {
         case .idle, .hovering:
             if onNotch {
-                triggerExpand()
+                triggerExpand(trigger: .click)
                 // A click is an explicit open, and opening is the intent to
                 // interact: the caret lands in the draft row immediately
                 // (keyboard-first, Thomas 2026-09-01). This also activates
@@ -1074,7 +1077,7 @@ class NotchController: ObservableObject {
                 // Interrupt notification → expand to full gallery
                 notificationTask?.cancel()
                 notificationContentVisible = false
-                triggerExpand()
+                triggerExpand(trigger: .click)
                 makeKeyForTyping()
             }
         case .expanded:
@@ -1328,7 +1331,7 @@ class NotchController: ObservableObject {
     /// which tab it was left on.
     func openCreateFresh() {
         TodoStore.shared.focusDraft(fromGlobalShortcut: true)
-        triggerExpand()
+        triggerExpand(trigger: .hotkey)
         makeKeyForTyping()
     }
 
@@ -1355,7 +1358,7 @@ class NotchController: ObservableObject {
     /// same spring, same sequencing, no special "alert" animation.
     func presentMeetingAlert() {
         AppState.shared.pendingNotchFilter = .todos
-        triggerExpand()
+        triggerExpand(trigger: .meetingAlert)
     }
 
     /// Collapse after an alert unless the user is doing something else in the

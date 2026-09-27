@@ -156,11 +156,30 @@ enum DebugDriver {
                 if let target = store.lastUsedCollectionID ?? store.firstUserCollection?.id {
                     store.addItem(title: title, collectionID: target)
                 }
+            } else if command.hasPrefix("analytics-consent ") {
+                // analytics-consent yes|no|reset — reset puts it back to "never asked".
+                switch command.dropFirst(18) {
+                case "yes": Analytics.setConsent(true)
+                case "no": Analytics.setConsent(false)
+                default: AppState.shared.updateSettings { $0.analyticsConsent = nil }
+                }
+                appendState("analytics " + AnalyticsQueue.shared.debugDump())
+            } else if command == "analytics-flush" {
+                Analytics.flush()
+                appendState("analytics flush requested")
+            } else if command == "analytics-dump" {
+                appendState("analytics " + AnalyticsQueue.shared.debugDump())
             } else if command == "onboarding-flow-test" {
                 Task { @MainActor in
                     for line in await OnboardingWindowController.debugFlowTest() { appendState("flow " + line) }
                     appendState("onboarding-flow-test done")
                 }
+            } else if command.hasPrefix("onboarding-snap-pid ") {
+                // onboarding-snap-pid <pid> <dir> [steps] — only that process
+                // answers, so a Debug instance run from Xcode stays still.
+                let parts = command.split(separator: " ", maxSplits: 2)
+                guard parts.count == 3, Int32(parts[1]) == ProcessInfo.processInfo.processIdentifier else { return }
+                handle("onboarding-snap " + String(parts[2]))
             } else if command.hasPrefix("onboarding-snap ") {
                 // onboarding-snap <dir> [step,step…] — PNGs of the real window.
                 let parts = command.dropFirst(16).split(separator: " ")

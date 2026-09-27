@@ -268,6 +268,7 @@ struct PermissionsStepContent: View {
                 VStack(spacing: 0) {
                     calendarRow(p)
                     loginRow(p)
+                    usageRow(p)
                 }
                 if let summary = permissions.calendarSummary {
                     Text(summary)
@@ -310,6 +311,17 @@ struct PermissionsStepContent: View {
             }
             .accessibilityLabel(L10n.t("ob.perm.login") + ", L")
             .accessibilityValue(permissions.loginEnabled ? "on" : "off")
+        }
+    }
+
+    /// Opt-in anonymous usage data (docs/TELEMETRY.md): off until turned on.
+    private func usageRow(_ p: OBPalette) -> some View {
+        OBPermissionRow(icon: .bolt, tint: p.violet,
+                        title: L10n.t("ob.perm.usage"),
+                        caption: L10n.t("ob.perm.usage.caption")) {
+            OBSwitch(isOn: model.shareUsage) { model.setShareUsage(!model.shareUsage) }
+                .accessibilityLabel(L10n.t("ob.perm.usage") + ", U")
+                .accessibilityValue(model.shareUsage ? "on" : "off")
         }
     }
 }

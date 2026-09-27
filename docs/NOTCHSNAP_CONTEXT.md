@@ -415,6 +415,18 @@ an already-visible row keeps the current viewport, while a row that is above or
 below it scrolls to the nearest edge. After expansion, one delayed geometry
 check reveals the new overflow only if the complete opened row no longer fits.
 
+### 2026-09-27 opt-in telemetry and feedback
+
+See `docs/TELEMETRY.md`. Anonymous usage counts go to a Cloudflare Worker + D1
+(EU) in `server/`, only with consent (opt-in, off by default); events are a
+closed enum and the server refuses any string that is not enum-shaped, so no
+user content can be stored. The Sparkle feed stays on raw GitHub for now (no
+domain). Feedback is a Raycast-style window from the gear menu that sends an
+email through the user's mail app — attachments never touch a server. Two
+explicit exceptions, chosen by Marcello: the feedback window is a separate
+window (principle 1), and a sent feedback is not mirrored into the vault
+(principle 7) — it is a message, not the user's data.
+
 ### 2026-09-27 panel menus: one placement, neutral states
 
 The gear menu and the Notes · Meetings dropdown are both drawn by TodoTabView,

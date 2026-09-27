@@ -55,4 +55,8 @@ enum AppBuild {
     /// experiment exists to avoid touching — while keeping the lab's bundle id,
     /// so the two would then be indistinguishable.
     static var updatesEnabled: Bool { !isLab }
+
+    /// Usage data never leaves a lab build: its numbers would be one person
+    /// testing experiments, mixed in with everyone's real use.
+    static var analyticsEnabled: Bool { !isLab }
 }

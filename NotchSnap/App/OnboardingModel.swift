@@ -57,6 +57,14 @@ final class OnboardingModel: ObservableObject {
     private var bag = Set<AnyCancellable>()
     private var release: Task<Void, Never>?
 
+    /// The permissions step's "Share anonymous usage data" switch. Off until
+    /// the user turns it on (opt-in); written through `Analytics.setConsent`.
+    @Published private(set) var shareUsage = AppState.shared.settings.analyticsConsent == .granted
+    // Usage counts only: how long each step took, how many presses.
+    private let flowStart = Date()
+    private var stepStart = Date()
+    private var shortcutPresses = 0
+
     init() {
         let defaults = UserDefaults.standard
         defaults.removeObject(forKey: Keys.legacyFocus)
@@ -75,6 +83,9 @@ final class OnboardingModel: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.shortcutFired() }
             .store(in: &bag)
+
+        Analytics.track(.onboardingStarted)
+        Analytics.track(.onboardingStepViewed(step))
     }
 
     // MARK: Navigation
@@ -107,6 +118,7 @@ final class OnboardingModel: ObservableObject {
     /// Mac where another app owns ⌃⇧N (v3 §4.4).
     func skipShortcut() {
         guard step == .shortcut else { return }
+        Analytics.track(.onboardingShortcutSkipped)
         go(to: .permissions, direction: 1)
     }
 
@@ -120,6 +132,11 @@ final class OnboardingModel: ObservableObject {
     }
 
     private func go(to next: OnboardingStep, direction: CGFloat) {
+        if direction > 0 {
+            Analytics.track(.onboardingStepCompleted(step, durationMs: Int(Date().timeIntervalSince(stepStart) * 1000)))
+        }
+        Analytics.track(.onboardingStepViewed(next))
+        stepStart = Date()
         self.direction = direction
         if next == .discover, step == .welcome { discoverItem = .tasks }
         withAnimation(.spring(response: 0.45, dampingFraction: 0.9)) { step = next }
@@ -144,6 +161,7 @@ final class OnboardingModel: ObservableObject {
     func show(_ item: DiscoverItem) {
         guard step == .discover, item != discoverItem else { return }
         withAnimation(.easeInOut(duration: 0.25)) { discoverItem = item }
+        Analytics.track(.onboardingDiscoverViewed(item))
     }
 
     // MARK: Style
@@ -154,6 +172,7 @@ final class OnboardingModel: ObservableObject {
         guard mode != displayMode else { return }
         withAnimation(.easeInOut(duration: 0.2)) { displayMode = mode }
         AppState.shared.setNotchLayout(mode.layout)
+        Analytics.track(.onboardingStyleSelected(mode))
     }
 
     // MARK: Shortcut
@@ -167,8 +186,10 @@ final class OnboardingModel: ObservableObject {
     /// The hotkey, whichever path reported it.
     func shortcutFired() {
         guard step == .shortcut else { return }
+        shortcutPresses += 1
         if !shortcutDetected {
             withAnimation(.easeInOut(duration: 0.4)) { shortcutDetected = true }
+            Analytics.track(.onboardingShortcutFired(attempts: shortcutPresses))
         }
         // Each key pops in turn, 40 ms apart (v3 §4.4); the key-up never
         // reaches us, so the highlight lets go on its own.
@@ -189,7 +210,19 @@ final class OnboardingModel: ObservableObject {
 
     /// `onboarding.completed` is written only here — quitting early resumes
     /// the flow next launch, it does not complete it.
+    /// The usage-data switch on the permissions step. Takes effect at once:
+    /// on flushes what the onboarding has buffered, off throws it away.
+    func setShareUsage(_ on: Bool) {
+        withAnimation(.easeInOut(duration: 0.2)) { shareUsage = on }
+        Analytics.setConsent(on)
+    }
+
     func finish() {
+        // Finishing with the switch never touched is an answer too: no. The
+        // question is asked once, here, and the default is off.
+        if AppState.shared.settings.analyticsConsent == nil { Analytics.setConsent(false) }
+        Analytics.track(.onboardingStepCompleted(.done, durationMs: Int(Date().timeIntervalSince(stepStart) * 1000)))
+        Analytics.track(.onboardingCompleted(totalMs: Int(Date().timeIntervalSince(flowStart) * 1000)))
         let defaults = UserDefaults.standard
         defaults.set(true, forKey: Keys.completed)
         defaults.set(0, forKey: Keys.lastStep)
@@ -268,6 +301,7 @@ final class PermissionsModel: ObservableObject {
             await CalendarStore.shared.connect()
             calendarBusy = false
             refresh()
+            Analytics.track(.onboardingPermission(.calendar, calendar == .granted ? .granted : .denied))
         }
     }
 
@@ -279,6 +313,7 @@ final class PermissionsModel: ObservableObject {
             print("[Onboarding] Login item error: \(error)")
         }
         withAnimation(.easeInOut(duration: 0.2)) { refresh() }
+        Analytics.track(.onboardingPermission(.login, on ? .on : .off))
     }
 
     func openSettings() {

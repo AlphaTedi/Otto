@@ -128,6 +128,7 @@ struct AddTodoIntent: AppIntent {
                                        dueDate: parsed?.date) else {
             throw AddTodoError.emptyTitle
         }
+        Analytics.track(.todoCreated(.intent, hasDueDate: parsed?.date != nil))
         let entity = TodoEntity.from(item)
         return .result(value: entity,
                        dialog: "Added “\(entity.title)” to \(entity.sectionName).")
@@ -200,7 +201,7 @@ struct OpenTodosIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        NotchController.shared.triggerExpand()
+        NotchController.shared.triggerExpand(trigger: .intent)
         // Opening is the intent to interact — same contract as ⌃⇧T.
         NotchController.shared.makeKeyForTyping()
         return .result()

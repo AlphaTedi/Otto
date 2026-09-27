@@ -51,13 +51,16 @@
 <div class="wrap">
   <a class="back" href="index.html">&larr; Otto</a>
   <h1>Privacy Policy</h1>
-  <p class="updated">Last updated August 9, 2026</p>
+  <p class="updated">Last updated September 27, 2026</p>
 
   <div class="card">
-    <p>The short version: Otto stores your to-dos on your own Mac. It does not have a server, a
-    database, or an account system to store them in even if it wanted to. The only data that
-    leaves your Mac is the minimum needed to read your calendar, and it goes directly to Apple's
-    or Google's own servers under your own account — never to Otto or anyone else.</p>
+    <p>The short version: Otto stores your to-dos, notes and everything you write on your own
+    Mac, and nowhere else. There is no account and no cloud copy. Your calendar is read directly
+    from Apple's or Google's servers under your own account.</p>
+    <p>Otto does have one small server of its own, for one thing only: <strong>anonymous usage
+    counts, and only if you say yes</strong> — for example how many people finish the setup, or
+    how often the notch is opened with the keyboard. It never receives your to-dos, notes,
+    calendar, or anything you type. It is off unless you turn it on.</p>
   </div>
 
   <h2>Who this is</h2>
@@ -97,6 +100,46 @@
     </tr>
   </table>
 
+  <h2>Anonymous usage data (opt-in)</h2>
+  <p>
+    Otto asks once — during setup, or once in the panel after an update — whether you want to
+    share anonymous usage data. The answer is <strong>no</strong> unless you switch it on, and you
+    can change it at any time in Settings › General › Privacy.
+  </p>
+  <table>
+    <tr><th>What is sent (only with your yes)</th><th>What is never sent</th></tr>
+    <tr>
+      <td>Which features are used and how (for example "a to-do was created", "the notch was
+        opened from the keyboard", "the setup reached the shortcut step"), with coarse values
+        such as yes/no or a time rounded and bucketed</td>
+      <td>The text of any to-do, note, step, list or section name</td>
+    </tr>
+    <tr>
+      <td>Otto and macOS version, language, the layout you chose, whether a calendar is
+        connected</td>
+      <td>Calendar events, meeting titles, attendees, email addresses</td>
+    </tr>
+    <tr>
+      <td>A random ID created on your Mac, not linked to your hardware, Apple ID or any
+        account (Settings shows it and can reset it)</td>
+      <td>Your IP address is not stored; your name and files are never sent</td>
+    </tr>
+  </table>
+  <p>
+    The data goes to a small service run by Otto's developer on Cloudflare, stored in the
+    European Union. Raw events are deleted after 90 days; only daily totals are kept longer.
+    "Show what is sent" in Settings opens the exact file waiting to be sent. To have your data
+    deleted, email the ID shown in Settings to the address above.
+  </p>
+
+  <h2>Feedback</h2>
+  <p>
+    "Send feedback" (in the panel's gear menu) opens an email in your own mail app, addressed to
+    the developer, with any files you choose to attach. Nothing is uploaded to a server: it is an
+    ordinary email you send yourself. If you share usage data, Otto also counts that a feedback
+    was sent and its category — never its words.
+  </p>
+
   <h2>Google Account access</h2>
   <p>
     If you choose to connect a Google account, Otto requests exactly two permissions, and asks
@@ -117,7 +160,7 @@
     This exchange happens directly between your Mac and Google's own servers, using Google's
     standard OAuth sign-in in your browser. Otto never sees or stores your Google password. The
     access token is kept in the macOS Keychain and is never transmitted to any server operated by
-    Otto or its developer — because no such server exists.
+    Otto or its developer.
   </p>
   <p>
     You can revoke this access at any time from
@@ -128,10 +171,10 @@
 
   <h2>What Otto does not do</h2>
   <ul>
-    <li>No analytics, tracking, or telemetry of any kind.</li>
+    <li>No tracking, and no analytics unless you opt in to the anonymous usage counts above.</li>
     <li>No advertising, and no data is ever sold or shared with advertisers.</li>
     <li>No user accounts — there is nothing to sign up for and nothing tied to a central identity.</li>
-    <li>No third-party services receive your to-dos, notes, or calendar data. There is no backend server at all.</li>
+    <li>No server — Otto's or anyone's — receives your to-dos, notes, or calendar data.</li>
   </ul>
 
   <h2>Automatic updates</h2>

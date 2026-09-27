@@ -43,6 +43,14 @@ struct AvatarMenu: View {
                           shortcut: nil,
                           detail: MarkdownVault.shared.directory.lastPathComponent,
                           isDestination: false),
+        ]
+        // App-level, before Quit — and only when there is somewhere to send
+        // it (OTTO_FEEDBACK_EMAIL). No shortcut, by choice (2026-09-27).
+        + (FeedbackWindowController.isAvailable
+            ? [AvatarMenuRow(id: .feedback, label: L10n.t("feedback.menu"),
+                             shortcut: nil, detail: nil, isDestination: false)]
+            : [])
+        + [
             AvatarMenuRow(id: .quit, label: L10n.t("menu.quit"),
                           shortcut: "\u{2318}Q", detail: nil, isDestination: false),
         ]
@@ -105,6 +113,8 @@ struct AvatarMenu: View {
             // real .md files on disk, and the Finder showing them does that
             // more cheaply than any settings screen could.
             NSWorkspace.shared.activateFileViewerSelecting([MarkdownVault.shared.directory])
+        case .feedback:
+            FeedbackWindowController.show()
         case .quit:
             NSApp.terminate(nil)
         }
@@ -112,7 +122,7 @@ struct AvatarMenu: View {
 }
 
 struct AvatarMenuRow: Identifiable {
-    enum ID: Hashable { case insights, preferences, shortcuts, notesFolder, quit }
+    enum ID: Hashable { case insights, preferences, shortcuts, notesFolder, feedback, quit }
     let id: ID
     let label: String
     let shortcut: String?

@@ -50,6 +50,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         DebugDriver.install()
         #endif
 
+        // Anonymous usage counts — a no-op without the user's yes.
+        Analytics.appDidLaunch()
+
         // Setup notch controller
         notchController = NotchController.shared
         notchController?.setup()
@@ -63,6 +66,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated {
             TodoStore.shared.saveNow()
             NotesStore.shared.saveNow()
+            Analytics.flush()
         }
     }
 

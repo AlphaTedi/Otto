@@ -297,6 +297,7 @@ final class NotesStore: ObservableObject {
             title: NoteTitler.heuristicTitle(for: content) ?? NoteTitler.dateTitle(for: Date()),
             titleSource: .date
         )
+        Analytics.track(.noteCreated(meeting: false))
         withAnimation(Motion.contentHug) {
             notes.insert(note, at: 0)
             landingNoteID = note.id

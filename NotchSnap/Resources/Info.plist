@@ -46,6 +46,12 @@
 	<string>Otto turns your spoken brain-dump into to-dos using on-device speech recognition. Nothing is sent to Apple or any server.</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
+	<key>OttoServiceHost</key>
+	<string>$(OTTO_SERVICE_HOST)</string>
+	<key>OttoServiceKey</key>
+	<string>$(OTTO_SERVICE_KEY)</string>
+	<key>OttoFeedbackEmail</key>
+	<string>$(OTTO_FEEDBACK_EMAIL)</string>
 	<key>SUFeedURL</key>
 	<string>https://raw.githubusercontent.com/AlphaTedi/Otto/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>

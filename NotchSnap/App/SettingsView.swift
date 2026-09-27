@@ -198,6 +198,8 @@ struct GeneralSettingsView: View {
     @AppStorage(L10n.storageKey) private var appLanguage = "system"
 
     @ObservedObject private var updates = UpdateController.shared
+    /// Bumped by Reset ID so the shown ID redraws.
+    @State private var idRefresh = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -280,6 +282,37 @@ struct GeneralSettingsView: View {
                 Divider()
                 Toggle(isOn: $hapticFeedback) {
                     rowText("Haptic feedback", "Trackpad taps when the notch expands or you copy.")
+                }
+            }
+
+            // Opt-in anonymous usage data (docs/TELEMETRY.md). The file behind
+            // "Show what is sent" is exactly what leaves the Mac.
+            SettingsSection_Card(title: L10n.t("privacy.title"), subtitle: L10n.t("privacy.subtitle")) {
+                Toggle(isOn: Binding(
+                    get: { appState.settings.analyticsConsent == .granted },
+                    set: { Analytics.setConsent($0) }
+                )) {
+                    rowText(L10n.t("privacy.toggle"), L10n.t("ob.perm.usage.caption"))
+                }
+                .disabled(!AppBuild.analyticsEnabled)
+                Divider()
+                HStack(spacing: 10) {
+                    Button(L10n.t("privacy.show")) {
+                        let url = Analytics.queueFileURL
+                        if FileManager.default.fileExists(atPath: url.path) {
+                            NSWorkspace.shared.activateFileViewerSelecting([url])
+                        } else {
+                            NSWorkspace.shared.open(url.deletingLastPathComponent())
+                        }
+                    }
+                    Button(L10n.t("privacy.reset")) { Analytics.resetID(); idRefresh += 1 }
+                    Spacer()
+                    // In full: it is what to quote when asking for your data to be deleted.
+                    Text(L10n.t("privacy.id") + ": " + Analytics.installID)
+                        .font(.system(size: 11).monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .id(idRefresh)
                 }
             }
 

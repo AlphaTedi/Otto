@@ -174,7 +174,7 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         window?.close()
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 350_000_000)
-            NotchController.shared.triggerExpand()
+            NotchController.shared.triggerExpand(trigger: .onboarding)
             NotchController.shared.focusPanel()
         }
     }
@@ -333,6 +333,7 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         // G grants the first row still waiting for a grant (v3 §4.5).
         case (.permissions, "g"): model.permissions.grantCalendar(); return true
         case (.permissions, "l"): model.permissions.setLogin(!model.permissions.loginEnabled); return true
+        case (.permissions, "u"): model.setShareUsage(!model.shareUsage); return true
         default: return false
         }
     }
