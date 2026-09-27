@@ -57,9 +57,10 @@ final class OnboardingModel: ObservableObject {
     private var bag = Set<AnyCancellable>()
     private var release: Task<Void, Never>?
 
-    /// The permissions step's "Share anonymous usage data" switch. Off until
-    /// the user turns it on (opt-in); written through `Analytics.setConsent`.
-    @Published private(set) var shareUsage = AppState.shared.settings.analyticsConsent == .granted
+    /// The last step's "Share anonymous usage data" checkbox. Checked unless
+    /// the user already said no (Marcello, 2026-09-27: asked once, here, and
+    /// on by default); recorded when the flow finishes.
+    @Published private(set) var shareUsage = AppState.shared.settings.analyticsConsent != .denied
     // Usage counts only: how long each step took, how many presses.
     private let flowStart = Date()
     private var stepStart = Date()
@@ -210,17 +211,14 @@ final class OnboardingModel: ObservableObject {
 
     /// `onboarding.completed` is written only here — quitting early resumes
     /// the flow next launch, it does not complete it.
-    /// The usage-data switch on the permissions step. Takes effect at once:
-    /// on flushes what the onboarding has buffered, off throws it away.
     func setShareUsage(_ on: Bool) {
-        withAnimation(.easeInOut(duration: 0.2)) { shareUsage = on }
-        Analytics.setConsent(on)
+        withAnimation(.easeInOut(duration: 0.15)) { shareUsage = on }
     }
 
     func finish() {
-        // Finishing with the switch never touched is an answer too: no. The
-        // question is asked once, here, and the default is off.
-        if AppState.shared.settings.analyticsConsent == nil { Analytics.setConsent(false) }
+        // The one answer the flow gives: whatever the checkbox says as the
+        // user leaves. A yes also sends what the onboarding buffered.
+        Analytics.setConsent(shareUsage)
         Analytics.track(.onboardingStepCompleted(.done, durationMs: Int(Date().timeIntervalSince(stepStart) * 1000)))
         Analytics.track(.onboardingCompleted(totalMs: Int(Date().timeIntervalSince(flowStart) * 1000)))
         let defaults = UserDefaults.standard

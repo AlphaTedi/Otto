@@ -88,7 +88,7 @@ struct OnboardingFlowView: View {
         case .style: StyleStepContent(model: model)
         case .shortcut: ShortcutStepContent(model: model)
         case .permissions: PermissionsStepContent(model: model, permissions: model.permissions)
-        case .done: DoneStepContent()
+        case .done: DoneStepContent(model: model)
         }
     }
 

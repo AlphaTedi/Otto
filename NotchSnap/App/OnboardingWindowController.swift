@@ -333,7 +333,7 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         // G grants the first row still waiting for a grant (v3 §4.5).
         case (.permissions, "g"): model.permissions.grantCalendar(); return true
         case (.permissions, "l"): model.permissions.setLogin(!model.permissions.loginEnabled); return true
-        case (.permissions, "u"): model.setShareUsage(!model.shareUsage); return true
+        case (.done, "u"): model.setShareUsage(!model.shareUsage); return true
         default: return false
         }
     }

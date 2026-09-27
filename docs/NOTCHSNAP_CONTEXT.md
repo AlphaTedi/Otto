@@ -418,7 +418,9 @@ check reveals the new overflow only if the complete opened row no longer fits.
 ### 2026-09-27 opt-in telemetry and feedback
 
 See `docs/TELEMETRY.md`. Anonymous usage counts go to a Cloudflare Worker + D1
-(EU) in `server/`, only with consent (opt-in, off by default); events are a
+(EU) in `server/`, only with consent (asked once, on the onboarding's last
+step, checked by default — Marcello's call, knowing a pre-ticked box is weak
+consent under EU law; no prompt after updates); events are a
 closed enum and the server refuses any string that is not enum-shaped, so no
 user content can be stored. The Sparkle feed stays on raw GitHub for now (no
 domain). Feedback is a Raycast-style window from the gear menu; Send relays it

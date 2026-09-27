@@ -10,9 +10,11 @@ import Foundation
 //
 // One exception, and only in memory: before the question has been answered
 // (`consent == nil`), events wait in a small buffer. The onboarding asks on
-// its permissions step, and without the buffer its own funnel — the first
-// thing worth knowing — could never be seen. A yes flushes the buffer into
-// the queue; a no, or quitting, throws it away unsent.
+// its last step, and without the buffer its own funnel — the first thing
+// worth knowing — could never be seen. A yes flushes the buffer into the
+// queue; a no, or quitting, throws it away unsent. People who never see the
+// onboarding (an update) are never asked, so nothing of theirs is sent unless
+// they switch it on in Settings.
 //
 // The queue is a JSON-lines file in Application Support ("Show what is sent"
 // in Settings opens it), flushed every 60 s, at 20 events, and on quit.
@@ -347,72 +349,4 @@ final class AnalyticsQueue {
             + "queued=\(events.count) names=\(events.map(\.name))"
     }
     #endif
-}
-
-// MARK: - The one-time question, for people who never saw the onboarding ask
-
-/// Anyone updating from a version without telemetry has `consent == nil` and
-/// will not see the onboarding again. The panel asks them once, inline — a
-/// card, not a window — and ⏎ / Esc answer it (keyboard-first).
-@MainActor
-final class ConsentPrompt: ObservableObject {
-    static let shared = ConsentPrompt()
-
-    @Published private(set) var visible: Bool
-
-    private init() {
-        visible = AppBuild.analyticsEnabled && Analytics.serviceURL != nil
-            && AppState.shared.settings.analyticsConsent == nil
-            && UserDefaults.standard.integer(forKey: "onboardingVersion") >= 1
-    }
-
-    func answer(_ share: Bool) {
-        Analytics.setConsent(share)
-        withAnimation(.easeOut(duration: 0.2)) { visible = false }
-    }
-}
-
-struct ConsentCard: View {
-    @ObservedObject private var prompt = ConsentPrompt.shared
-
-    var body: some View {
-        if prompt.visible {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(L10n.t("consent.title"))
-                    .font(.system(size: 13.5, weight: .semibold))
-                    .foregroundStyle(DSColor.textPrimaryBright)
-                Text(L10n.t("consent.body"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(DSColor.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 8) {
-                    Spacer()
-                    Button { prompt.answer(false) } label: {
-                        HStack(spacing: 6) {
-                            Text(L10n.t("consent.no"))
-                            CaptureKeyHint(label: "esc")
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(DSColor.textSecondary)
-                    Button { prompt.answer(true) } label: {
-                        HStack(spacing: 6) {
-                            Text(L10n.t("consent.yes")).font(.system(size: 12.5, weight: .semibold))
-                            CaptureKeyHint(label: "\u{21A9}")
-                        }
-                        .padding(.horizontal, 10)
-                        .frame(height: 26)
-                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(SpaceInk.a(0.12)))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(DSColor.textPrimaryBright)
-                }
-                .font(.system(size: 12.5))
-            }
-            .padding(14)
-            .frame(maxWidth: 420, alignment: .leading)
-            .ottoMenuSurface()
-            .transition(.opacity.combined(with: .offset(y: 6)))
-        }
-    }
 }

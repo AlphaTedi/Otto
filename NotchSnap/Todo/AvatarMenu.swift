@@ -114,9 +114,25 @@ struct AvatarMenu: View {
             // more cheaply than any settings screen could.
             NSWorkspace.shared.activateFileViewerSelecting([MarkdownVault.shared.directory])
         case .feedback:
+            // The panel floats above ordinary windows; left open, it covered
+            // the feedback form it had just opened (2026-09-27).
+            NotchController.shared.forceCollapse()
             FeedbackWindowController.show()
         case .quit:
             NSApp.terminate(nil)
+        }
+    }
+}
+
+extension AvatarMenuRow.ID {
+    var symbol: String {
+        switch self {
+        case .insights: return "chart.bar"
+        case .preferences: return "gearshape"
+        case .shortcuts: return "keyboard"
+        case .notesFolder: return "folder"
+        case .feedback: return "bubble.left"
+        case .quit: return "power"
         }
     }
 }
@@ -144,6 +160,12 @@ private struct AvatarMenuRowView: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 13) {
+                // A glyph per row, like Raycast's menu: the list reads at a
+                // glance instead of word by word (Marcello, 2026-09-27).
+                Image(systemName: row.id.symbol)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(DSColor.textSecondary)
+                    .frame(width: 16)
                 Text(row.label)
                     .font(.system(size: OttoMenuStyle.rowFont, weight: row.isDestination ? .medium : .regular))
                     .foregroundStyle(row.isDestination ? DSColor.textPrimaryBright

@@ -268,7 +268,6 @@ struct PermissionsStepContent: View {
                 VStack(spacing: 0) {
                     calendarRow(p)
                     loginRow(p)
-                    usageRow(p)
                 }
                 if let summary = permissions.calendarSummary {
                     Text(summary)
@@ -311,17 +310,6 @@ struct PermissionsStepContent: View {
             }
             .accessibilityLabel(L10n.t("ob.perm.login") + ", L")
             .accessibilityValue(permissions.loginEnabled ? "on" : "off")
-        }
-    }
-
-    /// Opt-in anonymous usage data (docs/TELEMETRY.md): off until turned on.
-    private func usageRow(_ p: OBPalette) -> some View {
-        OBPermissionRow(icon: .bolt, tint: p.violet,
-                        title: L10n.t("ob.perm.usage"),
-                        caption: L10n.t("ob.perm.usage.caption")) {
-            OBSwitch(isOn: model.shareUsage) { model.setShareUsage(!model.shareUsage) }
-                .accessibilityLabel(L10n.t("ob.perm.usage") + ", U")
-                .accessibilityValue(model.shareUsage ? "on" : "off")
         }
     }
 }
@@ -388,14 +376,47 @@ private struct PermissionChip: View {
 // MARK: 6 · Done (v3 §4.6)
 
 struct DoneStepContent: View {
+    @ObservedObject var model: OnboardingModel
+
     var body: some View {
         withPalette { p in
             VStack(spacing: 8) {
                 row(L10n.t("ob.done.add"), HotkeyManager.quickEntryDisplay, p)
                 row(L10n.t("ob.done.search"), "type", p)
                 row(L10n.t("ob.done.shortcuts"), "?", p)
+                usageCheckbox(p).padding(.top, 14)
             }
         }
+    }
+
+    /// Anonymous usage data (docs/TELEMETRY.md), asked once, here; checked
+    /// by default. `U` toggles it.
+    private func usageCheckbox(_ p: OBPalette) -> some View {
+        Button { model.setShareUsage(!model.shareUsage) } label: {
+            HStack(alignment: .top, spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(model.shareUsage ? p.textPrimary : .clear)
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .strokeBorder(model.shareUsage ? p.textPrimary : p.ink(0.3), lineWidth: 1.5)
+                    if model.shareUsage {
+                        OBIconView(icon: .check, size: 11, color: p.window, lineWidth: 2.6)
+                    }
+                }
+                .frame(width: 16, height: 16)
+                .padding(.top, 1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L10n.t("ob.perm.usage")).obFont(12.5, 500).foregroundStyle(p.ink(0.85))
+                    Text(L10n.t("ob.done.usageCaption")).obFont(11.5).foregroundStyle(p.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(L10n.t("ob.perm.usage") + ", U")
+        .accessibilityAddTraits(model.shareUsage ? .isSelected : [])
     }
 
     private func row(_ text: String, _ key: String, _ p: OBPalette) -> some View {

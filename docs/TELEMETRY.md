@@ -24,14 +24,19 @@ Change the catalogue in both files together.
 ## Consent
 
 `AppSettings.analyticsConsent`: `nil` = never asked, `.granted`, `.denied`.
-Opt-in — nothing is sent unless it is `.granted`.
+Nothing is sent unless it is `.granted`.
 
-- Onboarding, permissions step: "Share anonymous usage data" switch, off by
-  default (key `U`). Finishing without touching it records `.denied`.
-- People who update without seeing the onboarding get a one-time card in the
-  panel (`ConsentCard`): ⏎ shares (only while the draft is empty), Esc declines.
+- Onboarding, last step ("You're set."): a "Share anonymous usage data"
+  checkbox, **checked by default** (Marcello, 2026-09-27; key `U`). Its state
+  is recorded when the flow finishes. Asked once — never again after updates.
+- People who update without seeing the onboarding are not asked and stay at
+  `nil`: nothing of theirs is sent unless they turn it on in Settings. (A
+  one-time panel card existed for them in 1.65.0 and was removed.)
 - Settings › General › Privacy: the switch, "Show what is sent" (the queue
   file), "Reset ID", and the full anonymous ID to quote for deletion.
+- Note: under EU case law (CJEU Planet49, 2019) a pre-ticked box is not valid
+  consent for device identifiers. Accepted knowingly for now; an unticked
+  default is the compliant alternative.
 
 Before the question is answered, events wait in memory only (so a yes on the
 permissions step can still send the onboarding's own funnel); a no or a quit
