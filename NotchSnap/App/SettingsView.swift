@@ -25,7 +25,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView {
             List(SettingsSection.allCases, selection: $selection) { section in
-                Label(section.title, systemImage: section.icon)
+                Label { Text(section.title) } icon: { OttoIcon(section.icon, pointSize: 13) }
                     .tag(section)
             }
             .listStyle(.sidebar)
@@ -385,8 +385,7 @@ private struct ThemeCard: View {
                     )
 
                 HStack(spacing: 6) {
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 12))
+                    OttoIcon(isSelected ? "checkmark.circle.fill" : "circle", pointSize: 12)
                         .foregroundStyle(isSelected ? Color.accentColor : .secondary)
                     Text(theme.label).font(.system(size: 12, weight: .medium))
                     Spacer()
@@ -676,9 +675,8 @@ private struct SizePresetRow: View {
 
                 Spacer()
 
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                OttoIcon(isSelected ? "checkmark.circle.fill" : "circle", pointSize: 16)
                     .foregroundStyle(isSelected ? Color.accentColor : Color.secondary.opacity(0.5))
-                    .font(.system(size: 16))
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
@@ -733,7 +731,7 @@ struct StorageSettingsView: View {
             ) {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 8) {
-                        Image(systemName: "folder.fill")
+                        OttoIcon("folder.fill", pointSize: 12)
                             .foregroundStyle(.secondary)
                         Text(vaultPath)
                             .font(.system(size: 12, design: .monospaced))

@@ -58,15 +58,13 @@ struct ScreenshotThumbnailView: View {
 
             // Badge: copied checkmark (green) or annotation indicator (pencil)
             if item.wasCopied {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 14))
+                OttoIcon("checkmark.circle.fill", pointSize: 14)
                     .foregroundStyle(.white, Color.green)
                     .background(Circle().fill(Color.black.opacity(0.4)).padding(-2))
                     .offset(x: -4, y: 4)
                     .transition(.scale.combined(with: .opacity))
             } else if item.hasAnnotations {
-                Image(systemName: "pencil.circle.fill")
-                    .font(.system(size: 12))
+                OttoIcon("pencil.circle.fill", pointSize: 12)
                     .foregroundColor(.white)
                     .shadow(radius: 2)
                     .padding(4)
@@ -185,8 +183,7 @@ struct ThumbnailActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 11, weight: .semibold))
+            OttoIcon(icon, pointSize: 11)
                 .foregroundStyle(color)
                 .frame(width: 26, height: 26)
                 .background(

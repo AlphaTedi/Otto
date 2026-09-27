@@ -177,7 +177,7 @@ struct MenuBarIconView: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            Image(systemName: "camera.viewfinder")
+            OttoIcon("camera.viewfinder")
 
             if count > 0 {
                 Text(count > 9 ? "9+" : "\(count)")

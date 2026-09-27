@@ -162,8 +162,7 @@ private struct AvatarMenuRowView: View {
             HStack(spacing: 13) {
                 // A glyph per row, like Raycast's menu: the list reads at a
                 // glance instead of word by word (Marcello, 2026-09-27).
-                Image(systemName: row.id.symbol)
-                    .font(.system(size: 13, weight: .regular))
+                OttoIcon(row.id.symbol, pointSize: 13)
                     .foregroundStyle(DSColor.textSecondary)
                     .frame(width: 16)
                 Text(row.label)

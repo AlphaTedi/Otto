@@ -290,8 +290,7 @@ struct ActionPicker: View {
             }
 
             Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .semibold))
+                OttoIcon("xmark", pointSize: 9)
                     .foregroundStyle(DSColor.textFaint)
                     .contentShape(Rectangle())
             }

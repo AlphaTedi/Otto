@@ -347,8 +347,7 @@ struct QuickFindView: View {
             // a focused TextField — a real field grabbed mid-word would
             // select-all and eat the seeding character. The caret is ours.
             HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12))
+                OttoIcon("magnifyingglass", pointSize: 12)
                     .foregroundStyle(DSColor.textSecondary)
                 Text(store.findQuery)
                     .font(.system(size: 13))

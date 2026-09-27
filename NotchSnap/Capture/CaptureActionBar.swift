@@ -16,8 +16,7 @@ struct CaptureActionBar: View {
         HStack(spacing: 6) {
             // Cancel — red X, no label
             Button(action: onCancel) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .semibold))
+                OttoIcon("xmark", pointSize: 13)
                     .foregroundStyle(Color(red: 1, green: 0.23, blue: 0.19))
                     .frame(width: 32, height: 32)
                     .background(
@@ -34,8 +33,7 @@ struct CaptureActionBar: View {
             // Save — outlined secondary
             Button(action: onSave) {
                 HStack(spacing: 4) {
-                    Image(systemName: "square.and.arrow.down")
-                        .font(.system(size: 12, weight: .medium))
+                    OttoIcon("square.and.arrow.down", pointSize: 12)
                     Text("Save")
                         .font(.system(size: 12, weight: .medium))
                     Text("\u{2318}S")
@@ -59,8 +57,7 @@ struct CaptureActionBar: View {
             // Copy — primary blue filled
             Button(action: onCopy) {
                 HStack(spacing: 4) {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 12, weight: .medium))
+                    OttoIcon("doc.on.doc", pointSize: 12)
                     Text("Copy")
                         .font(.system(size: 12, weight: .medium))
                     Text("\u{2318}C")

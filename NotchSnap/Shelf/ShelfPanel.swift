@@ -109,8 +109,7 @@ struct TrayCard: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                 if item.isPinned {
-                    Image(systemName: "pin.fill")
-                        .font(.system(size: 8, weight: .bold))
+                    OttoIcon("pin.fill", pointSize: 8)
                         .foregroundStyle(.white)
                         .padding(3)
                         .background(Circle().fill(Color.accentColor))
@@ -128,8 +127,7 @@ struct TrayCard: View {
             // Bottom row: type badge, or actions while hovering
             ZStack {
                 HStack(spacing: 3) {
-                    Image(systemName: item.type.iconName)
-                        .font(.system(size: 7))
+                    OttoIcon(item.type.iconName, pointSize: 7)
                     Text(item.type.rawValue.capitalized)
                         .font(.system(size: 8))
                 }
@@ -183,8 +181,7 @@ private struct TrayMiniButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 8, weight: .semibold))
+            OttoIcon(icon, pointSize: 8)
                 .foregroundStyle(.white)
                 .frame(width: 16, height: 16)
                 .background(Circle().fill(Color.white.opacity(hover ? 0.3 : 0.15)))
@@ -213,8 +210,7 @@ struct TrayEmptyState: View {
                                   style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
                     .frame(width: 44, height: 44)
                     .scaleEffect(pulse ? 1.03 : 1.0)
-                Image(systemName: "arrow.down")
-                    .font(.system(size: 16, weight: .semibold))
+                OttoIcon("arrow.down", pointSize: 16)
                     .foregroundStyle(.white.opacity(0.6))
                     .offset(y: pulse ? 2 : -2)
             }
@@ -270,7 +266,7 @@ private final class TrayDragNSView: NSView, NSDraggingSource {
         } else if let url = item.payloadURL {
             thumbnail = NSWorkspace.shared.icon(forFile: url.path)
         } else {
-            let icon = NSImage(systemSymbolName: item.type.iconName, accessibilityDescription: nil)
+            let icon = Icons.nsImage(item.type.iconName, pointSize: 16)
             thumbnail = icon
         }
     }

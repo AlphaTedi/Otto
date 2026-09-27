@@ -57,8 +57,7 @@ struct NotchNotificationContent: View {
                 .aspectRatio(contentMode: .fill)
                 .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
         } else if let iconName = controller.notificationIcon {
-            Image(systemName: iconName)
-                .font(.system(size: 12, weight: .semibold))
+            OttoIcon(iconName, pointSize: 12)
                 .foregroundColor(controller.notificationIconColor)
         }
     }
@@ -68,8 +67,7 @@ struct NotchNotificationContent: View {
     @ViewBuilder
     private var rightContent: some View {
         if controller.notificationShowCheckmark {
-            Image(systemName: "checkmark")
-                .font(.system(size: 12, weight: .bold))
+            OttoIcon("checkmark", pointSize: 12)
                 .foregroundColor(Color(red: 0.196, green: 0.843, blue: 0.294))
         } else if let text = controller.notificationRightText {
             Text(text)

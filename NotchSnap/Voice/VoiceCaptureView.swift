@@ -220,8 +220,7 @@ private struct DraftCard: View {
 
                 if hover {
                     Button(action: onRemove) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 9, weight: .medium))
+                        OttoIcon("xmark", pointSize: 9)
                             .foregroundStyle(DSColor.textFaint)
                             .contentShape(Rectangle())
                     }

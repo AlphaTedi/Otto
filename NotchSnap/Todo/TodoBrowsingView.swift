@@ -1122,8 +1122,7 @@ private struct VoiceChip: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: isActive ? "waveform" : "mic.fill")
-                .font(.system(size: 10, weight: .medium))
+            OttoIcon(isActive ? "waveform" : "mic.fill", pointSize: 10)
                 .foregroundStyle(isActive ? DSColor.primaryText : DSColor.textPrimaryBright)
                 .frame(width: 26, height: 24)
                 .background(
@@ -1773,8 +1772,7 @@ struct TodoBrowsingView: View {
                     withAnimation(NotchAnimation.contentHug) { store.completedExpanded.toggle() }
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 9, weight: .medium))
+                        OttoIcon("chevron.right", pointSize: 9)
                             .foregroundStyle(DSColor.textFaint)
                             .rotationEffect(.degrees(store.completedExpanded ? 90 : 0))
                         Text(L10n.t("todo.completed"))
@@ -1891,8 +1889,7 @@ private struct CompletedDayRow: View {
                 withAnimation(NotchAnimation.contentHug) { store.toggleCompletedDay(day.day) }
             } label: {
                 HStack(spacing: 12) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .medium))
+                    OttoIcon("chevron.right", pointSize: 9)
                         .foregroundStyle(DSColor.textFaint)
                         .rotationEffect(.degrees(isOpen ? 90 : 0))
                         .frame(width: 10, alignment: .leading)
@@ -2017,8 +2014,7 @@ private struct CompletedEntryRow: View {
                     .strokeBorder(filled ? Color.clear : DSColor.textFaint, lineWidth: 1.2)
             )
             .overlay(
-                Image(systemName: "checkmark")
-                    .font(.system(size: 8, weight: .bold))
+                OttoIcon("checkmark", pointSize: 8)
                     .foregroundStyle(filled ? DSColor.onAccentFill : DSColor.textFaint)
             )
             .frame(width: 16, height: 16)
@@ -2511,8 +2507,7 @@ private struct TodoItemRow: View {
                         RoundedRectangle(cornerRadius: LabMetrics.checkboxRadius, style: .continuous)
                             .fill(accent)
                             .frame(width: LabMetrics.checkboxSize, height: LabMetrics.checkboxSize)
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 10, weight: .black))
+                        OttoIcon("checkmark", pointSize: 10)
                             // On the category's own fill, which is light in
                             // both appearances — see DSColor.onAccentFill.
                             .foregroundStyle(DSColor.onAccentFill.opacity(0.85))
@@ -2601,8 +2596,7 @@ private struct TodoItemRow: View {
                 // still qualifies — leaving it on `hasDetails` would have it
                 // pointing at a checklist already on screen.
                 if !item.note.isEmpty && !isExpanded {
-                    Image(systemName: "text.alignleft")
-                        .font(.system(size: 8))
+                    OttoIcon("text.alignleft", pointSize: 8)
                         .foregroundStyle(DSColor.textHint)
                 }
 
@@ -2764,8 +2758,7 @@ private struct TodoItemRow: View {
                         }
                     } label: {
                         HStack(spacing: 6) {
-                            Image(systemName: "ellipsis")
-                                .font(.system(size: 8, weight: .semibold))
+                            OttoIcon("ellipsis", pointSize: 8)
                             Text(moreStepsLabel(hiddenCount))
                                 .font(DSFont.checklistItem)
                         }
@@ -2930,8 +2923,7 @@ private struct StepRow: View {
                                          style: .continuous)
                             .fill(accent)
                             .frame(width: 10, height: 10)
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 6, weight: .black))
+                        OttoIcon("checkmark", pointSize: 6)
                             .foregroundStyle(DSColor.primaryText.opacity(0.85))
                     }
                 }
@@ -2986,8 +2978,7 @@ private struct StepRow: View {
             Button {
                 TodoStore.shared.deleteChecklistItem(step.id, in: parentID)
             } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 7, weight: .semibold))
+                OttoIcon("xmark", pointSize: 7)
                     .foregroundStyle(DSColor.textFaint)
                     .frame(width: 12, height: 12)
                     .contentShape(Rectangle())
@@ -3234,8 +3225,7 @@ private struct SweepButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: "wind")
-                .font(.system(size: 11, weight: .medium))
+            OttoIcon("wind", pointSize: 11)
                 .foregroundStyle(hover ? DSColor.textPrimaryBright : DSColor.textHint)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)

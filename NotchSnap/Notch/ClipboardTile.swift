@@ -48,8 +48,7 @@ struct ClipboardTile: View {
             VStack(alignment: .leading, spacing: 0) {
                 // Header: type icon + (snippet label | timestamp) + kind badge
                 HStack(spacing: 4) {
-                    Image(systemName: item.kind == .snippet ? "text.badge.star" : item.iconName)
-                        .font(.system(size: 12, weight: .medium))
+                    OttoIcon(item.kind == .snippet ? "text.badge.star" : item.iconName, pointSize: 12)
                         .foregroundStyle(item.kind == .snippet ? Color.yellow : .secondary)
 
                     if item.kind == .snippet, let label = item.label {
@@ -62,8 +61,7 @@ struct ClipboardTile: View {
                     Spacer()
 
                     if item.kind == .pinned {
-                        Image(systemName: "pin.fill")
-                            .font(.system(size: 8))
+                        OttoIcon("pin.fill", pointSize: 8)
                             .foregroundStyle(Color.accentColor)
                     } else if item.kind == .history {
                         Text(item.relativeTime)
@@ -178,8 +176,7 @@ struct ClipboardTile: View {
 
         case .url:
             HStack(spacing: 6) {
-                Image(systemName: "globe")
-                    .font(.system(size: 14))
+                OttoIcon("globe", pointSize: 14)
                     .foregroundStyle(.blue)
                 Text(item.sourceURL?.host ?? item.previewText ?? "")
                     .font(.system(size: 10))

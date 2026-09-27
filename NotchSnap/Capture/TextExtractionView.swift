@@ -84,8 +84,7 @@ struct TextExtractionView: View {
 
             Button(action: copySelected) {
                 HStack(spacing: 4) {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 11, weight: .semibold))
+                    OttoIcon("doc.on.doc", pointSize: 11)
                     Text("Copy")
                         .font(.system(size: 12, weight: .medium))
                 }
@@ -97,8 +96,7 @@ struct TextExtractionView: View {
             divider
 
             Button(action: onExit) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .semibold))
+                OttoIcon("xmark", pointSize: 12)
                     .foregroundColor(.white.opacity(0.7))
             }
             .buttonStyle(.plain)

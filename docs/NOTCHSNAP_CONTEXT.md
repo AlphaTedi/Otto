@@ -415,6 +415,21 @@ an already-visible row keeps the current viewport, while a row that is above or
 below it scrolls to the nearest edge. After expansion, one delayed geometry
 check reveals the new overflow only if the complete opened row no longer fits.
 
+### 2026-09-27 one icon family: Lucide
+
+Every icon that was an SF Symbol is now a Lucide icon (lucide.dev, ISC —
+Resources/LUCIDE-LICENSE.txt): 73 template SVGs in Assets.xcassets/Lucide,
+drawn through `OttoIcon(symbol, pointSize:)` (SwiftUI) and
+`Icons.nsImage(_:pointSize:)` (AppKit). Call sites still pass SF Symbol names;
+`Icons.lucide` maps them, so enums and menus that carry a symbol name did not
+change. `pointSize` is the font size the old `.font(.system(size:))` gave the
+symbol (frame = size × 1.15, same optical size). New icon: add the SVG
+(currentColor → #000000) as a template imageset and one line in the map. Do
+not reintroduce `Image(systemName:)`; an unmapped name logs
+"[OttoIcon] no Lucide mapping" in DEBUG. Hand-drawn shapes (onboarding icons,
+note toolbar glyphs, checkboxes) were already drawn on the same 24-pt stroke
+grid and stay.
+
 ### 2026-09-27 calendar: the Mac's Calendar only
 
 Google as a calendar source is switched off (`CalendarStore.Source.available`

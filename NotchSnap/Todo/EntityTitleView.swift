@@ -192,8 +192,7 @@ enum EntityChipRenderer {
 
         var icon: NSImage?
         if let symbolName = DSEntityChip.sfSymbol(for: kind),
-           let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
-               .withSymbolConfiguration(.init(pointSize: 10, weight: .medium)) {
+           let symbol = Icons.nsImage(symbolName, pointSize: 10) {
             icon = symbol.tinted(with: textColor)
         }
         let iconAdvance: CGFloat = icon.map { $0.size.width + 4 } ?? 0

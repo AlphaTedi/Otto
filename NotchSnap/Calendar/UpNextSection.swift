@@ -257,8 +257,7 @@ private struct CalendarNudgeCard: View {
             SettingsWindowController.showCalendarTab()
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: "calendar.badge.plus")
-                    .font(.system(size: 14))
+                OttoIcon("calendar.badge.plus", pointSize: 14)
                     .foregroundStyle(DSColor.textSecondary)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -272,8 +271,7 @@ private struct CalendarNudgeCard: View {
 
                 Spacer(minLength: 0)
 
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10))
+                OttoIcon("chevron.right", pointSize: 10)
                     .foregroundStyle(DSColor.textHint)
             }
             .padding(.horizontal, 12)
@@ -332,8 +330,7 @@ struct MeetingPlatformIcon: View {
                     default:
                         // No recognized platform: a calendar block, or a camera
                         // when there is some other video link.
-                        Image(systemName: hasVideo ? "video.fill" : "calendar")
-                            .font(.system(size: side * 0.62))
+                        OttoIcon(hasVideo ? "video.fill" : "calendar", pointSize: side * 0.62)
                             .foregroundStyle(DSColor.textSecondary)
                             .frame(width: side, height: side)
                     }
@@ -357,8 +354,7 @@ private struct BrandGlyph: View {
             RoundedRectangle(cornerRadius: side * 0.24, style: .continuous)
                 .fill(fill)
                 .overlay(
-                    Image(systemName: symbol)
-                        .font(.system(size: side * 0.46, weight: .medium))
+                    OttoIcon(symbol, pointSize: side * 0.46)
                         .foregroundStyle(.white)
                 )
                 .frame(width: side, height: side)

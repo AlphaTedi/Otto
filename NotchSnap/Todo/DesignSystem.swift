@@ -373,8 +373,7 @@ struct CategoryTabChip: View {
             if let remaining {
                 if remaining == 0 {
                     // Nothing left — a quiet "all clear", not a zero.
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 9, weight: .bold))
+                    OttoIcon("checkmark", pointSize: 9)
                         .foregroundColor(isActive ? Self.onFill : DSColor.textPrimary)
                         .opacity(0.5)
                 } else {
@@ -422,8 +421,7 @@ struct CreationTabChip: View {
     let isActive: Bool
 
     var body: some View {
-        Image(systemName: "plus")
-            .font(.system(size: 12))
+        OttoIcon("plus", pointSize: 12)
             .foregroundColor(isActive ? DSColor.primaryText : DSColor.textPrimaryBright)
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
@@ -688,8 +686,7 @@ struct ColorSwatchButton: View {
             )
             .overlay {
                 if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .bold))
+                    OttoIcon("checkmark", pointSize: 14)
                         .foregroundColor(DSColor.primaryText)
                 }
             }
@@ -775,7 +772,7 @@ struct EntityChipReference: View {
     var body: some View {
         HStack(spacing: 4) {
             if let symbol = DSEntityChip.sfSymbol(for: kind) {
-                Image(systemName: symbol).font(.system(size: 10))
+                OttoIcon(symbol, pointSize: 10)
             }
             Text(label)
                 .font(kind == .code ? .system(size: 12, design: .monospaced) : .system(size: 12))
@@ -923,8 +920,7 @@ struct AccountAvatar: View {
                     .fill(DSColor.placeholderFill)
                     .frame(width: diameter, height: diameter)
                     .overlay(
-                        Image(systemName: "person.fill")
-                            .font(.system(size: diameter * 0.46))
+                        OttoIcon("person.fill", pointSize: diameter * 0.46)
                             .foregroundStyle(DSColor.textSecondary)
                     )
             }

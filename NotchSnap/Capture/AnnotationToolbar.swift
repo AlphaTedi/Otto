@@ -38,8 +38,7 @@ struct AnnotationToolbar: View {
             // Cancel (optional, leftmost)
             if let onCancel {
                 Button(action: onCancel) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 13, weight: .semibold))
+                    OttoIcon("xmark", pointSize: 13)
                         .foregroundStyle(Color(red: 1, green: 0.23, blue: 0.19))
                         .frame(width: 28, height: 28)
                 }
@@ -56,8 +55,7 @@ struct AnnotationToolbar: View {
 
                 if let onOCR {
                     Button(action: onOCR) {
-                        Image(systemName: "text.viewfinder")
-                            .font(.system(size: 14))
+                        OttoIcon("text.viewfinder", pointSize: 14)
                             .foregroundStyle(.secondary)
                             .frame(width: 30, height: 30)
                     }
@@ -69,8 +67,7 @@ struct AnnotationToolbar: View {
                 Button {
                     roundedCorners.toggle()
                 } label: {
-                    Image(systemName: roundedCorners ? "app.fill" : "square")
-                        .font(.system(size: 14))
+                    OttoIcon(roundedCorners ? "app.fill" : "square", pointSize: 14)
                         .foregroundStyle(roundedCorners ? Color.accentColor : .secondary)
                         .frame(width: 30, height: 30)
                         .background(
@@ -106,8 +103,7 @@ struct AnnotationToolbar: View {
                 if let onSave {
                     Button(action: onSave) {
                         HStack(spacing: 4) {
-                            Image(systemName: "square.and.arrow.down")
-                                .font(.system(size: 11, weight: .medium))
+                            OttoIcon("square.and.arrow.down", pointSize: 11)
                             Text("Save")
                                 .font(.system(size: 12, weight: .medium))
                                 .lineLimit(1)
@@ -135,8 +131,7 @@ struct AnnotationToolbar: View {
                 if let onCopy {
                     Button(action: onCopy) {
                         HStack(spacing: 4) {
-                            Image(systemName: "doc.on.doc")
-                                .font(.system(size: 11, weight: .medium))
+                            OttoIcon("doc.on.doc", pointSize: 11)
                             Text("Copy")
                                 .font(.system(size: 12, weight: .medium))
                                 .lineLimit(1)
@@ -248,8 +243,7 @@ private struct ToolbarToolButton: View {
         Button { active = tool } label: {
             Group {
                 if let symbol {
-                    Image(systemName: symbol)
-                        .font(.system(size: 14, weight: isActive ? .semibold : .regular))
+                    OttoIcon(symbol, pointSize: 14)
                 } else if let letter {
                     Text(letter)
                         .font(.system(size: 15, weight: isActive ? .bold : .semibold, design: .serif))
@@ -354,8 +348,7 @@ private struct ToolbarUndoRedoButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 13))
+            OttoIcon(symbol, pointSize: 13)
                 .foregroundStyle(.primary)
                 .frame(width: 28, height: 28)
         }

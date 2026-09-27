@@ -234,8 +234,7 @@ struct NotchExpandedView: View {
 
     private var emptyState: some View {
         VStack(spacing: 8) {
-            Image(systemName: "clipboard")
-                .font(.system(size: 28))
+            OttoIcon("clipboard", pointSize: 28)
                 .foregroundColor(.white.opacity(0.5))
                 .scaleEffect(appeared ? 1.0 : 0.6)
                 .opacity(appeared ? 1.0 : 0.0)
@@ -369,8 +368,7 @@ private struct ClearTrayChip: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 4) {
-                Image(systemName: "paintbrush")
-                    .font(.system(size: 9, weight: .semibold))
+                OttoIcon("paintbrush", pointSize: 9)
                 Text(L10n.t("tray.clear"))
                     .font(.system(size: 10, weight: .medium))
             }

@@ -232,8 +232,7 @@ private struct BackChip: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: "arrow.left")
-                .font(.system(size: 13, weight: .semibold))
+            OttoIcon("arrow.left", pointSize: 13)
                 .foregroundStyle(SpaceInk.a(0.85))
                 .frame(width: SpaceChrome.slotWidth, height: 28)
                 // 24 − 16: concentric with the window's corner.
@@ -270,8 +269,7 @@ struct SettingsGearButton: View {
         Button {
             if store.showsAvatarMenu { store.closeAvatarMenu() } else { store.openAvatarMenu() }
         } label: {
-            Image(systemName: "gearshape")
-                .font(.system(size: 18, weight: .regular))
+            OttoIcon("gearshape", pointSize: 18)
                 .foregroundStyle(SpaceInk.a(0.75))
                 .frame(width: 34, height: 34)
                 .background(Circle().fill(SpaceInk.a(hover || store.showsAvatarMenu ? 0.12 : 0.07)))

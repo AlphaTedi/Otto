@@ -1653,8 +1653,7 @@ private struct ClipboardPreview: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                Image(systemName: item.iconName)
-                    .font(.system(size: 14, weight: .semibold))
+                OttoIcon(item.iconName, pointSize: 14)
                     .foregroundStyle(.secondary)
                 Text(item.relativeTime)
                     .font(.system(size: 11))

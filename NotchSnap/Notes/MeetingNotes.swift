@@ -245,7 +245,7 @@ struct MeetingTasksView: View {
                         ForEach(Array(visible.enumerated()), id: \.element.id) { index, item in
                             HStack(spacing: 8) {
                                 Button { todos.toggleComplete(item.id) } label: {
-                                    Image(systemName: item.isCompleted ? "checkmark.square.fill" : "square").accessibilityLabel(L10n.t("todo.sc.toggleComplete"))
+                                    OttoIcon(item.isCompleted ? "checkmark.square.fill" : "square", pointSize: 12).accessibilityLabel(L10n.t("todo.sc.toggleComplete"))
                                 }
                                 if editingID == item.id {
                                     TextField("", text: $editedTitle).textFieldStyle(.plain).focused($editFocused)

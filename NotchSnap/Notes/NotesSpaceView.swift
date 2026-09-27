@@ -624,8 +624,7 @@ private struct Composer: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: LabMetrics.rowInnerGap) {
-                Image(systemName: "note.text")
-                    .font(.system(size: 14, weight: .medium))
+                OttoIcon("note.text", pointSize: 14)
                     .foregroundStyle(NotesMetrics.pillStroke)
                     .frame(width: LabMetrics.checkboxSize, height: LabMetrics.checkboxSize)
 
@@ -717,8 +716,7 @@ private struct CalendarComposer: View {
 
     var body: some View {
         HStack(spacing: LabMetrics.rowInnerGap) {
-            Image(systemName: "calendar")
-                .font(.system(size: 14, weight: .medium))
+            OttoIcon("calendar", pointSize: 14)
                 .foregroundStyle(LabMetrics.accent)
                 .frame(width: LabMetrics.checkboxSize, height: LabMetrics.checkboxSize)
 
@@ -729,8 +727,7 @@ private struct CalendarComposer: View {
                 .focused($focused)
 
             Button { store.beginMeetingPicker() } label: {
-                Image(systemName: "calendar.badge.plus")
-                    .font(.system(size: 13, weight: .semibold))
+                OttoIcon("calendar.badge.plus", pointSize: 13)
                     .foregroundStyle(DSColor.textSecondary)
                     .frame(width: 30, height: 24)
                     .background(Capsule().fill(DSColor.fieldBackground))
@@ -782,8 +779,7 @@ struct NotesKindMenu: View {
                     .font(.system(size: 15, weight: .medium))
                     .lineLimit(1)
                 // Static, as in Raycast: the chevron never rotates.
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
+                OttoIcon("chevron.down", pointSize: 10)
             }
             .foregroundStyle(SpaceInk.a(0.70))
             .padding(.vertical, 6)
@@ -826,8 +822,7 @@ struct NotesKindMenuList: View {
         let shape = RoundedRectangle(cornerRadius: OttoMenuStyle.rowRadius, style: .continuous)
         return Button { notes.chooseKind(meetings: index == 1) } label: {
             HStack(spacing: 8) {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 11, weight: .semibold))
+                OttoIcon("checkmark", pointSize: 11)
                     .foregroundStyle(DSColor.textPrimaryBright)
                     .opacity(active ? 1 : 0)
                     .frame(width: 14)
@@ -1393,8 +1388,7 @@ private struct BackButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: "chevron.left")
-                .font(.system(size: 15, weight: .semibold))
+            OttoIcon("chevron.left", pointSize: 15)
                 .foregroundStyle(hover ? DSColor.textPrimaryBright : LabMetrics.accent)
                 .frame(width: 30, height: 30)
                 .background(

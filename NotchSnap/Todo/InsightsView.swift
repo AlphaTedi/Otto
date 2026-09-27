@@ -140,8 +140,7 @@ struct InsightsView: View {
                     .buttonStyle(.plain)
                     Spacer(minLength: 8)
                     Button { state.dismissSurfacing() } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 9, weight: .semibold))
+                        OttoIcon("xmark", pointSize: 9)
                             .foregroundStyle(DSColor.textFaint)
                             .contentShape(Rectangle())
                     }
@@ -227,8 +226,7 @@ struct InsightsView: View {
 
     private func stepButton(systemName: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 10, weight: .semibold))
+            OttoIcon(systemName, pointSize: 10)
                 .foregroundStyle(enabled ? DSColor.textSecondary : DSColor.textFaint)
                 .frame(width: 16, height: 16)
                 .contentShape(Rectangle())

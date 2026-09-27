@@ -206,8 +206,7 @@ private struct ReminderRow: View {
     var body: some View {
         HStack(spacing: 6) {
             Button(action: onToggle) {
-                Image(systemName: reminder.isCompleted ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 12))
+                OttoIcon(reminder.isCompleted ? "checkmark.square.fill" : "square", pointSize: 12)
                     .foregroundStyle(reminder.isCompleted ? Color.accentColor : .white.opacity(0.5))
             }
             .buttonStyle(.plain)
@@ -260,8 +259,7 @@ private struct NoteRow: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: note.promotedReminderID != nil ? "bell.fill" : "note.text")
-                .font(.system(size: 9))
+            OttoIcon(note.promotedReminderID != nil ? "bell.fill" : "note.text", pointSize: 9)
                 .foregroundStyle(.white.opacity(0.4))
 
             Text(note.firstLine)
@@ -317,8 +315,7 @@ struct NotchControlLabel: View {
     var body: some View {
         HStack(spacing: 5) {
             if let icon {
-                Image(systemName: icon)
-                    .font(.system(size: 10, weight: .semibold))
+                OttoIcon(icon, pointSize: 10)
             }
             Text(title)
                 .font(.system(size: 11, weight: .semibold))

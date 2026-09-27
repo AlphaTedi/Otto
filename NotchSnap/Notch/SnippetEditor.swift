@@ -11,8 +11,7 @@ struct NewSnippetTile: View {
             SnippetEditorController.shared.show(editing: nil)
         } label: {
             VStack(spacing: 6) {
-                Image(systemName: "plus")
-                    .font(.system(size: 16, weight: .semibold))
+                OttoIcon("plus", pointSize: 16)
                 Text(L10n.t("snippet.new"))
                     .font(.system(size: 9, weight: .medium))
             }

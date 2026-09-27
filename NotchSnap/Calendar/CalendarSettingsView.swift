@@ -99,8 +99,7 @@ struct CalendarSettingsView: View {
             saveCredentialsAndConnect()
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: "calendar.badge.clock")
-                    .font(.system(size: 12, weight: .medium))
+                OttoIcon("calendar.badge.clock", pointSize: 12)
                 Text(isConnecting ? "Connecting\u{2026}" : L10n.t("gcal.signIn"))
                     .font(.system(size: 12, weight: .medium))
             }
@@ -179,8 +178,7 @@ struct CalendarSettingsView: View {
                     connect()
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: "calendar")
-                            .font(.system(size: 12, weight: .medium))
+                        OttoIcon("calendar", pointSize: 12)
                         Text(isConnecting ? "Connecting\u{2026}" : "Connect Calendar")
                             .font(.system(size: 12, weight: .medium))
                     }

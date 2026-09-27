@@ -259,8 +259,7 @@ struct NotchPresenceView: View {
             EmptyView()
         case .countdown(let countdown):
             if let platform = countdown.platform {
-                Image(systemName: platform.symbol)
-                    .font(.system(size: 11, weight: .semibold))
+                OttoIcon(platform.symbol, pointSize: 11)
                     .foregroundStyle(platform.tint)
             } else {
                 // A to-do: its own checkbox, at the size the app draws it.

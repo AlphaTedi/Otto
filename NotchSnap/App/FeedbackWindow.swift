@@ -132,8 +132,7 @@ private struct FeedbackForm: View {
 
     private var header: some View {
         VStack(spacing: 8) {
-            Image(systemName: "exclamationmark.bubble.fill")
-                .font(.system(size: 30))
+            OttoIcon("exclamationmark.bubble.fill", pointSize: 30)
                 .foregroundStyle(.secondary)
                 .frame(width: 56, height: 56)
                 .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.primary.opacity(0.08)))
@@ -158,7 +157,7 @@ private struct FeedbackForm: View {
             HStack {
                 Text(L10n.t("feedback.attach")).font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
                 Spacer()
-                Button { browse() } label: { Image(systemName: "plus") }
+                Button { browse() } label: { OttoIcon("plus") }
                     .disabled(files.count >= 5)
                     .help(L10n.t("feedback.drop"))
             }
@@ -169,10 +168,10 @@ private struct FeedbackForm: View {
                 } else {
                     ForEach(files, id: \.self) { url in
                         HStack(spacing: 6) {
-                            Image(systemName: "doc").foregroundStyle(.secondary)
+                            OttoIcon("doc").foregroundStyle(.secondary)
                             Text(url.lastPathComponent).lineLimit(1).truncationMode(.middle)
                             Spacer()
-                            Button { files.removeAll { $0 == url } } label: { Image(systemName: "xmark.circle.fill") }
+                            Button { files.removeAll { $0 == url } } label: { OttoIcon("xmark.circle.fill") }
                                 .buttonStyle(.plain)
                                 .foregroundStyle(.secondary)
                         }
@@ -205,7 +204,7 @@ private struct FeedbackForm: View {
                 HStack(spacing: 6) {
                     Text(L10n.t("feedback.diagnostics")).font(.system(size: 13))
                     Button { showsDiagnostics.toggle() } label: {
-                        Image(systemName: showsDiagnostics ? "chevron.up" : "chevron.down").font(.system(size: 10))
+                        OttoIcon(showsDiagnostics ? "chevron.up" : "chevron.down", pointSize: 10)
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
