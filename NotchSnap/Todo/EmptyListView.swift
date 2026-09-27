@@ -55,11 +55,13 @@ struct EmptyListView: View {
         .padding(.top, compact ? 29 : 32)
         .padding(.bottom, compact ? 59 : 32)
         .frame(maxWidth: .infinity, minHeight: fillHeight)
-        // The budget is 16pt short of the real gap in the floating panels
-        // (it subtracts the container's top padding), and that 16 lands under
-        // the region. Half of it is the geometric centre; 5 is the optical
-        // one — the eye wants a centred block a touch high.
-        .offset(y: fillHeight == nil ? 0 : 5)
+        // Measured on the live panel (Marcello, 2026-09-26 screenshot): with
+        // +5 here the block's centre sat ~35pt below the middle of the gap
+        // between the header's hairline and the pills — the budget reserves
+        // room under the region that the empty list never draws into. −33
+        // puts it on that middle, a touch high, where a centred block reads
+        // as centred.
+        .offset(y: fillHeight == nil ? 0 : -33)
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(L10n.t("todo.emptyA11y") + " " + L10n.t(subtitleKey))
