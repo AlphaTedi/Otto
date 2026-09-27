@@ -105,9 +105,9 @@ struct CaptureHeader<Field: View>: View {
         ZStack(alignment: .trailing) {
             if isTyping, let saveLabel {
                 SaveButton(label: saveLabel, action: onSave)
-                    // Room between a line that runs full width and the
-                    // button (Marcello, 2026-09-27: it touched).
-                    .padding(.leading, 16)
+                    // The gap before the button matches the one after it,
+                    // to the panel's edge (Marcello, 2026-09-27).
+                    .padding(.leading, SpaceChrome.cornerInset - SpaceChrome.slotGap)
                     .transition(.opacity)
             } else if !isTyping, accessory == nil {
                 // Where a space has its own control (Notes · Meetings) that

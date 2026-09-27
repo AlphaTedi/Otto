@@ -203,7 +203,7 @@ enum DebugDriver {
                 }
                 snap(host, "row-hover")
                 ImagePreviewPanel.shared.show("Attachments/debug sample 000000.png",
-                                              above: NSRect(x: 200, y: 200, width: 100, height: 20), level: .normal)
+                                              above: NSRect(x: 200, y: 200, width: 100, height: 20), owner: window) {}
                 if let card = NSApp.windows.first(where: { $0 is NSPanel && $0.contentView?.subviews.first is NSImageView })?.contentView {
                     snap(card, "preview")
                 }

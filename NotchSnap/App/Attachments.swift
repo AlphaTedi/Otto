@@ -188,8 +188,12 @@ final class ImageChipCell: NSTextAttachmentCell {
     /// ✕ — the Conductor chip (Marcello, 2026-09-27).
     var hovered = false
     var showsRemove = false
-    /// The ✕ / thumbnail slot, from the chip's leading edge.
-    static let removeZone: CGFloat = 22
+    /// Air on both sides of the chip, so typed text never touches it
+    /// (Marcello, 2026-09-27).
+    static let margin: CGFloat = 3
+    /// The ✕ / icon slot, from the glyph's leading edge.
+    static let removeZone: CGFloat = margin + 19
+    private static let iconSide: CGFloat = 11
 
     init(path: String) {
         self.path = path
@@ -202,13 +206,13 @@ final class ImageChipCell: NSTextAttachmentCell {
 
     override func cellSize() -> NSSize {
         let text = (name as NSString).size(withAttributes: [.font: chipFont])
-        return NSSize(width: ceil(6 + 14 + 5 + text.width + 7), height: Self.height)
+        return NSSize(width: ceil(Self.margin + 6 + Self.iconSide + 4 + text.width + 7 + Self.margin), height: Self.height)
     }
 
     override func cellBaselineOffset() -> NSPoint { NSPoint(x: 0, y: -5) }
 
     override func draw(withFrame cellFrame: NSRect, in controlView: NSView?) {
-        let frame = cellFrame.insetBy(dx: 0.5, dy: 0.5)
+        let frame = cellFrame.insetBy(dx: Self.margin + 0.5, dy: 0.5)
         let chip = NSBezierPath(roundedRect: frame, xRadius: 6, yRadius: 6)
         NSColor.labelColor.withAlphaComponent(hovered ? 0.13 : 0.08).setFill()
         chip.fill()
@@ -216,11 +220,12 @@ final class ImageChipCell: NSTextAttachmentCell {
         chip.lineWidth = 1
         chip.stroke()
 
-        let thumbRect = NSRect(x: frame.minX + 5, y: frame.midY - 7, width: 14, height: 14)
+        let side = Self.iconSide
+        let thumbRect = NSRect(x: frame.minX + 6, y: frame.midY - side / 2, width: side, height: side)
         if hovered && showsRemove {
             // ✕ in the thumbnail's place, and a hairline after it.
             let x = NSBezierPath()
-            let inset = thumbRect.insetBy(dx: 3, dy: 3)
+            let inset = thumbRect.insetBy(dx: 1.5, dy: 1.5)
             x.move(to: NSPoint(x: inset.minX, y: inset.minY)); x.line(to: NSPoint(x: inset.maxX, y: inset.maxY))
             x.move(to: NSPoint(x: inset.minX, y: inset.maxY)); x.line(to: NSPoint(x: inset.maxX, y: inset.minY))
             x.lineWidth = 1.5
@@ -228,22 +233,31 @@ final class ImageChipCell: NSTextAttachmentCell {
             NSColor.labelColor.withAlphaComponent(0.8).setStroke()
             x.stroke()
             NSColor.labelColor.withAlphaComponent(0.18).setFill()
-            NSRect(x: frame.minX + Self.removeZone - 1, y: frame.minY + 3, width: 1, height: frame.height - 6).fill()
+            NSRect(x: cellFrame.minX + Self.removeZone - 1, y: frame.minY + 3, width: 1, height: frame.height - 6).fill()
         } else {
-            NSGraphicsContext.saveGraphicsState()
-            NSBezierPath(roundedRect: thumbRect, xRadius: 3, yRadius: 3).addClip()
-            if let thumb = MainActor.assumeIsolated({ AttachmentStore.thumbnail(for: path) }) {
-                thumb.draw(in: thumbRect)
-            } else {
-                NSColor.labelColor.withAlphaComponent(0.2).setFill()
-                thumbRect.fill()
-            }
-            NSGraphicsContext.restoreGraphicsState()
+            // A small Lucide "image" glyph, not a thumbnail: at this size a
+            // thumbnail read as a dark square (Marcello, 2026-09-27). The
+            // hover preview shows the picture.
+            Self.icon(side: side).draw(in: thumbRect)
         }
 
         let textSize = (name as NSString).size(withAttributes: [.font: chipFont])
         (name as NSString).draw(at: NSPoint(x: thumbRect.maxX + 5, y: frame.midY - textSize.height / 2),
                                 withAttributes: [.font: chipFont, .foregroundColor: NSColor.labelColor.withAlphaComponent(0.85)])
+    }
+
+    private static var iconCache: NSImage?
+    private static func icon(side: CGFloat) -> NSImage {
+        if let iconCache { return iconCache }
+        let glyph = Icons.nsImage("photo", pointSize: side / Icons.opticalScale)
+        let tinted = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+            glyph?.draw(in: rect)
+            NSColor.labelColor.withAlphaComponent(0.7).set()
+            rect.fill(using: .sourceAtop)
+            return true
+        }
+        iconCache = tinted
+        return tinted
     }
 
     // Clicks and hover are the text view's (ImageChipInteraction), so the
@@ -296,7 +310,7 @@ final class ImageChipInteraction {
             redraw(hit.index)
             if let view = textView, let window = view.window {
                 let screen = window.convertToScreen(view.convert(hit.rect, to: nil))
-                ImagePreviewPanel.shared.show(hit.cell.path, above: screen, level: window.level)
+                ImagePreviewPanel.shared.show(hit.cell.path, above: screen, owner: window) { [weak self] in self?.clear() }
             }
         }
         return true
@@ -342,8 +356,14 @@ final class ImagePreviewPanel {
     static let shared = ImagePreviewPanel()
     private var panel: NSPanel?
     private var shownPath: String?
+    /// The preview never outlives its chip: a watchdog hides it once the
+    /// pointer leaves the chip, the owning window hides (the notch closed) or
+    /// another desktop comes in — none of which sends a mouseExited
+    /// (Marcello, 2026-09-27: it stayed after a swipe to the next desktop).
+    private var watchdog: Timer?
+    private var onDismiss: (() -> Void)?
 
-    func show(_ path: String, above anchor: NSRect, level: NSWindow.Level) {
+    func show(_ path: String, above anchor: NSRect, owner: NSWindow, onDismiss: @escaping () -> Void) {
         guard let image = NSImage(contentsOf: AttachmentStore.url(for: path)), image.size.width > 0 else { return }
         let maxSize = NSSize(width: 320, height: 220)
         let scale = min(1, min(maxSize.width / image.size.width, maxSize.height / image.size.height))
@@ -373,13 +393,30 @@ final class ImagePreviewPanel {
             if origin.y + size.height > visible.maxY { origin.y = anchor.minY - 8 - size.height }
             origin.x = min(max(origin.x, visible.minX + 8), visible.maxX - size.width - 8)
         }
-        panel.level = NSWindow.Level(rawValue: level.rawValue + 1)
+        panel.level = NSWindow.Level(rawValue: owner.level.rawValue + 1)
         panel.setFrame(NSRect(origin: origin, size: size), display: true)
         panel.orderFrontRegardless()
         shownPath = path
+        self.onDismiss = onDismiss
+        watchdog?.invalidate()
+        let zone = anchor.insetBy(dx: -2, dy: -2)
+        watchdog = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self, weak owner] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let gone = owner.map { !$0.isVisible || !$0.isOnActiveSpace || $0.alphaValue < 0.05 } ?? true
+                if gone || !zone.contains(NSEvent.mouseLocation) {
+                    let dismiss = self.onDismiss
+                    self.hide()
+                    dismiss?()
+                }
+            }
+        }
     }
 
     func hide() {
+        watchdog?.invalidate()
+        watchdog = nil
+        onDismiss = nil
         panel?.orderOut(nil)
         shownPath = nil
     }
@@ -463,15 +500,8 @@ struct AttachmentChip: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Group {
-                if let thumb = AttachmentStore.thumbnail(for: path) {
-                    Image(nsImage: thumb).resizable().aspectRatio(contentMode: .fill)
-                } else {
-                    OttoIcon("photo", pointSize: 10)
-                }
-            }
-            .frame(width: 14, height: 14)
-            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+            OttoIcon("photo", pointSize: 11 / Icons.opticalScale)
+                .foregroundStyle(DSColor.textPrimary.opacity(0.7))
             Text(AttachmentStore.displayName(for: path))
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(DSColor.textPrimary)
