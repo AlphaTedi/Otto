@@ -55,6 +55,11 @@ enum DSColor {
     /// THE row hover — to-dos and notes alike (Marcello, 2026-09-25: the
     /// to-do's is the right one). A 4% wash; selection keeps its own fill.
     static var rowHover: Color { .dynamicOverlay(light: 0.04, dark: 0.04) }
+    /// The notch container sits on pure black (or white), where 4% all but
+    /// disappears (Marcello, 2026-09-27: "I almost don't see the hover").
+    /// Stronger there, in both appearances.
+    static var containerRowHover: Color { .dynamicOverlay(light: 0.06, dark: 0.10) }
+    static func rowHover(container: Bool) -> Color { container ? containerRowHover : rowHover }
     // Panel & structure
     static let panelBackground = Color.dynamic(light: .white, dark: NSColor(white: 0.067, alpha: 1))
     static let outerBackground = Color.dynamic(light: .white, dark: .black)

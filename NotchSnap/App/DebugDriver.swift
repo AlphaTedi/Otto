@@ -367,7 +367,14 @@ enum DebugDriver {
                         store.selectCollection(work.id)
                         store.draftTitle = "Send deck to Roos"
                         await snap("input-typing")
+                        store.draftTitle = "A much longer to-do title that would have wrapped onto a second and a third line before"
+                        await snap("input-long")
                         store.draftTitle = ""
+                        if let first = store.openItems(in: work).first {
+                            store.focusedItemID = first.id
+                            await snap("row-focused")
+                            store.focusedItemID = nil
+                        }
                     }
                     if let original { store.selectCollection(original) }
                     window.orderOut(nil)

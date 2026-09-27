@@ -859,7 +859,7 @@ private struct NotesCaptureHeader: View {
             placeholder: L10n.t("capture.notePlaceholder"),
             showsPlaceholder: store.draft.isEmpty,
             isTyping: !store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-            saveLabel: String(format: L10n.t("capture.saveTo"), L10n.t("filter.notes")),
+            saveLabel: L10n.t("capture.save"),
             onSave: { store.commitDraft() },
             onDot: { TodoStore.shared.cycleCollection() },
             accessory: AnyView(NotesKindMenu())
@@ -924,6 +924,7 @@ private struct NoteEntryRow: View {
     let onFrame: (CGRect) -> Void
 
     @ObservedObject private var store = NotesStore.shared
+    @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
     private var isLanding: Bool { store.landingNoteID == note.id }
     private var isSelected: Bool { store.selectedNoteID == note.id }
 
@@ -1012,7 +1013,7 @@ private struct NoteEntryRow: View {
             RoundedRectangle(cornerRadius: NotesMetrics.highlightRadius, style: .continuous)
                 .fill(isLanding ? NotesMetrics.pillStroke.opacity(0.12)
                       : (isSelected ? DSColor.focusedRowBackground
-                         : (isHovered ? DSColor.rowHover : Color.clear)))
+                         : (isHovered ? DSColor.rowHover(container: notchLayout == .container) : Color.clear)))
         )
         .overlay(
             RoundedRectangle(cornerRadius: NotesMetrics.highlightRadius, style: .continuous)

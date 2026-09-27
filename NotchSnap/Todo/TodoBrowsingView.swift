@@ -1379,6 +1379,11 @@ struct TodoBrowsingView: View {
             }
         }
         .padding(.horizontal, isContainerLayout ? LabMetrics.listInset : SpaceChrome.columnInset)
+        // The container's list ended flush on the panel's rounded foot: a
+        // multi-line last to-do sat against the edge (Marcello, 2026-09-27).
+        // Inside the content, so the hugging height includes it and a
+        // scrolled list ends with the same air.
+        .padding(.bottom, isContainerLayout ? 16 : 0)
         // A second catcher, INSIDE what will become the scroll region.
         //
         // The panel already had one at its root, but an NSScrollView is opaque
@@ -2420,7 +2425,7 @@ private struct TodoItemRow: View {
             RoundedRectangle(cornerRadius: LabMetrics.rowRadius, style: .continuous)
                 .fill(isExpanded ? DSColor.fieldBackground
                                  : (isFocused ? DSColor.focusedRowBackground
-                                              : (hover ? DSColor.rowHover
+                                              : (hover ? DSColor.rowHover(container: notchLayout == .container)
                                                        : .clear)))
         )
         // Expanded rows borrow the section tint already used by their
@@ -2633,7 +2638,7 @@ private struct TodoItemRow: View {
             ZStack(alignment: .trailing) {
                 Color.clear.frame(width: LabMetrics.rowActionsWidth, height: 1)
                 if !item.isCompleted && !isExpanded && (hover || isFocused) {
-                    RowActions(showEnter: isFocused, showGrip: hover)
+                    RowActions(showEnter: isFocused, showGrip: hover, enterLabel: "\u{2318}\u{21B5}")
                         .transition(.opacity)
                 }
             }
@@ -2835,15 +2840,22 @@ private struct TodoItemRow: View {
 struct RowActions: View {
     let showEnter: Bool
     let showGrip: Bool
+    /// The key the badge names. A to-do row shows ⌘⏎ — what completes it —
+    /// because a bare ⏎ badge read as "Return ticks this off", when ⏎ opens
+    /// the row for editing (Marcello, 2026-09-27). Notes keep ⏎: it opens
+    /// the note, and that is what it says.
+    var enterLabel = "\u{21B5}"
 
     var body: some View {
         HStack(spacing: LabMetrics.rowActionGap) {
             if showEnter {
-                Text("\u{21B5}")
+                Text(enterLabel)
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(DSColor.rowAffordance)
-                    .frame(width: LabMetrics.enterBadgeWidth,
-                           height: LabMetrics.enterBadgeHeight)
+                    .padding(.horizontal, enterLabel.count > 1 ? 5 : 0)
+                    .frame(minWidth: LabMetrics.enterBadgeWidth,
+                           minHeight: LabMetrics.enterBadgeHeight)
+                    .fixedSize()
                     .overlay(
                         RoundedRectangle(cornerRadius: LabMetrics.enterBadgeRadius,
                                          style: .continuous)

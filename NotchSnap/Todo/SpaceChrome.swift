@@ -42,9 +42,9 @@ enum SpaceChrome {
 // MARK: Capture header (U5 §4) — floating panels only
 
 /// The borderless, Raycast-style capture field: a space dot, the text, and a
-/// trailing "Save to <Space> ↵" once something is typed. Nothing trails the
-/// empty field any more: ⇥ still switches space, it just is not spelled out
-/// (Notes/Meetings dropdown PRD, 2026-09-26). 60 pt tall whatever state it is in, with a
+/// trailing hint that is "Switch space ⇥" while empty and a single "Save ↵"
+/// button once something is typed (Marcello, 2026-09-27 — the hint came back,
+/// and the section's name left the button: the dot already says where). 60 pt tall whatever state it is in, with a
 /// hairline under it across the whole panel.
 ///
 /// Shared by the to-do field and the Notes composer; each brings its own text
@@ -99,6 +99,17 @@ struct CaptureHeader<Field: View>: View {
             if isTyping, let saveLabel {
                 SaveButton(label: saveLabel, action: onSave)
                     .transition(.opacity)
+            } else if !isTyping, accessory == nil {
+                // Where a space has its own control (Notes · Meetings) that
+                // control stands here instead.
+                HStack(spacing: 10) {
+                    Text(L10n.t("todo.switchSpace"))
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(SpaceInk.a(0.45))
+                        .fixedSize()
+                    CaptureKeyHint(label: L10n.t("capture.tab"))
+                }
+                .transition(.opacity)
             }
         }
         .animation(.easeOut(duration: 0.15), value: isTyping)
@@ -158,25 +169,22 @@ private struct SaveButton: View {
     @State private var hover = false
 
     var body: some View {
+        // One button, the word inside it: "Save ↵" (2026-09-27).
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Text(label)
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(SpaceInk.a(hover ? 1 : 0.72))
+                    .font(.system(size: 12.5, weight: .semibold))
                     .lineLimit(1)
                 Text("\u{21B5}")
                     .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#111111"))
-                    .frame(minWidth: 22, minHeight: 20)
-                    .padding(.horizontal, 5)
-                    .padding(1)
-                    .background(RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(hover ? Color.white : Color(hex: "#F2F1F5")))
-                    .shadow(color: Color(hex: "#B69CFF").opacity(hover ? 0.55 : 0), radius: 6)
+                    .opacity(0.6)
             }
-            .padding(.leading, 6)
-            .padding(.trailing, 2)
-            .frame(height: 24)
+            .foregroundStyle(Color(hex: "#111111"))
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(hover ? Color.white : Color(hex: "#F2F1F5")))
+            .shadow(color: Color(hex: "#B69CFF").opacity(hover ? 0.55 : 0), radius: 6)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -305,15 +313,10 @@ struct TodoCaptureHeader: View {
 
     /// Driven from here, where `draftTitle` is observed: an NSViewRepresentable
     /// is not re-measured on a pure content change (see InlineDraftRow).
-    private var fieldHeight: CGFloat {
-        let width = fieldWidth > 0 ? fieldWidth : 360
-        let text = store.draftTitle.isEmpty ? " " : store.draftTitle
-        let measured = NSAttributedString(string: text, attributes: [.font: NSFont.systemFont(ofSize: 18)])
-            .boundingRect(with: NSSize(width: width, height: .greatestFiniteMagnitude),
-                          options: [.usesLineFragmentOrigin, .usesFontLeading]).height
-        return max(HighlightingTitleField.lineHeight(18),
-                   min(ceil(measured), HighlightingTitleField.maxHeight))
-    }
+    /// One line, always: long text scrolls sideways under the caret, the
+    /// way Raycast's field does, instead of growing the header over the list
+    /// (Marcello, 2026-09-27).
+    private var fieldHeight: CGFloat { HighlightingTitleField.lineHeight(18) }
 
     var body: some View {
         CaptureHeader(
@@ -321,7 +324,7 @@ struct TodoCaptureHeader: View {
             placeholder: L10n.t("capture.placeholder"),
             showsPlaceholder: store.draftTitle.isEmpty,
             isTyping: isTyping,
-            saveLabel: String(format: L10n.t("capture.saveTo"), store.draftDestination?.name ?? ""),
+            saveLabel: L10n.t("capture.save"),
             onSave: { store.commitDraft() },
             onDot: { store.cycleCollection() }
         ) {
@@ -335,7 +338,8 @@ struct TodoCaptureHeader: View {
                     store.draftFocused = focused
                     if focused { store.draftWantsFocus = false }
                 },
-                fontSize: 18
+                fontSize: 18,
+                singleLine: true
             )
             .frame(height: fieldHeight)
             .background(GeometryReader { proxy in

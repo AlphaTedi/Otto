@@ -44,6 +44,9 @@ struct HighlightingTitleField: NSViewRepresentable {
     var onFocusChange: (Bool) -> Void = { _ in }
     /// 13 everywhere except U5's floating capture header, which is 18.
     var fontSize: CGFloat = 13
+    /// One line that scrolls sideways under the caret (the floating capture
+    /// header, 2026-09-27) instead of wrapping and growing.
+    var singleLine = false
 
     static let lineHeight: CGFloat = 17
     static let maxHeight: CGFloat = 102   // ~6 lines, then it scrolls
@@ -81,10 +84,26 @@ struct HighlightingTitleField: NSViewRepresentable {
         view.font = .systemFont(ofSize: fontSize)
         view.textContainerInset = .zero
         view.textContainer?.lineFragmentPadding = 0
-        view.isVerticallyResizable = true
-        view.isHorizontallyResizable = false
-        view.textContainer?.widthTracksTextView = true
-        view.autoresizingMask = [.width]
+        if singleLine {
+            // The classic single-line NSTextView: the text container is as
+            // wide as the text, the view grows sideways inside the scroll
+            // view, and AppKit keeps the caret in sight as you type.
+            view.isVerticallyResizable = false
+            view.isHorizontallyResizable = true
+            view.textContainer?.widthTracksTextView = false
+            view.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
+                                                       height: CGFloat.greatestFiniteMagnitude)
+            view.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
+                                  height: CGFloat.greatestFiniteMagnitude)
+            view.autoresizingMask = [.height]
+            scroll.horizontalScrollElasticity = .none
+            scroll.verticalScrollElasticity = .none
+        } else {
+            view.isVerticallyResizable = true
+            view.isHorizontallyResizable = false
+            view.textContainer?.widthTracksTextView = true
+            view.autoresizingMask = [.width]
+        }
         view.string = text
         context.coordinator.restyle(view, highlight: highlightRange)
 
@@ -122,6 +141,7 @@ struct HighlightingTitleField: NSViewRepresentable {
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView,
                       context: Context) -> CGSize? {
         let width = (proposal.width.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }) ?? 200
+        if singleLine { return CGSize(width: width, height: Self.lineHeight(fontSize)) }
         let measured = NSAttributedString(
             string: text.isEmpty ? " " : text,
             attributes: [.font: NSFont.systemFont(ofSize: fontSize)]
