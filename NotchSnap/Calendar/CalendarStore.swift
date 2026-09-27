@@ -77,20 +77,22 @@ final class CalendarStore: ObservableObject {
         /// automatically once Config/GoogleOAuth.xcconfig is filled in, and
         /// stays visible for anyone already signed in so they are never
         /// stranded by a rebuild.
+        ///
+        /// Google is switched off for now (Marcello, 2026-09-27): the Mac's
+        /// own Calendar carries Google accounts — Meet links included, in the
+        /// event notes — and a direct Google sign-in needs Google's app
+        /// verification before it can be offered to anyone. The provider and
+        /// its OAuth code stay, ready to come back.
         @MainActor
-        static var available: [Source] {
-            if GoogleOAuth.hasBundledCredentials
-                || GoogleOAuth.shared.isSignedIn
-                || GoogleOAuth.shared.usesCustomCredentials {
-                return allCases
-            }
-            return [.macOS]
-        }
+        static var available: [Source] { [.macOS] }
     }
 
     @AppStorage("calendarSource") private var storedSource: String = Source.macOS.rawValue
     var source: Source {
-        get { Source(rawValue: storedSource) ?? .macOS }
+        // Only the Mac's Calendar while Google is off — an install that had
+        // chosen Google is moved back without touching its stored choice.
+        get { Source.available.contains(Source(rawValue: storedSource) ?? .macOS)
+                ? (Source(rawValue: storedSource) ?? .macOS) : .macOS }
         set {
             guard newValue != source else { return }
             // Switching backends invalidates everything derived from the old

@@ -254,6 +254,26 @@ struct CalendarSettingsView: View {
                 }
             }
 
+            // Otto re-reads every 10 s and on every change, so the lag on a
+            // meeting booked five minutes out is macOS's download interval
+            // for the account, which only Calendar's own setting controls.
+            SettingsSection_Card(
+                title: L10n.t("cal.faster.title"),
+                subtitle: L10n.t("cal.faster.subtitle")
+            ) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(L10n.t("cal.faster.steps"))
+                        .font(.system(size: 11))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button(L10n.t("cal.faster.open")) {
+                        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.iCal") {
+                            NSWorkspace.shared.openApplication(at: url, configuration: .init())
+                        }
+                    }
+                    .font(.system(size: 11))
+                }
+            }
+
             // "Connected" on its own was misleading — it reported account
             // emails while the calendar holding the actual meeting wasn't
             // synced to this Mac. Listing exactly what NotchSnap can read

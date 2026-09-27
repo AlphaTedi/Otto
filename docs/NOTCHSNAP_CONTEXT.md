@@ -415,6 +415,18 @@ an already-visible row keeps the current viewport, while a row that is above or
 below it scrolls to the nearest edge. After expansion, one delayed geometry
 check reveals the new overflow only if the complete opened row no longer fits.
 
+### 2026-09-27 calendar: the Mac's Calendar only
+
+Google as a calendar source is switched off (`CalendarStore.Source.available`
+returns only `.macOS`; an install that had chosen Google reads the Mac's
+Calendar). Google accounts added in Internet Accounts still carry Meet links
+in the event notes, which `VideoCallDetector` already finds. The OAuth code
+stays for later — a direct sign-in needs Google's app verification (sensitive
+scope) and ideally a domain. Otto already re-reads every 10 s, calls
+`refreshSourcesIfNecessary()` and reacts to `EKEventStoreChanged`; the real
+lag is Calendar.app's per-account "Refresh Calendars" interval, so Settings ›
+Calendar now tells people to set it to Every minute.
+
 ### 2026-09-27 onboarding polish
 
 - The window is drawn 10% larger than the design (946×550 for 860×500): the
