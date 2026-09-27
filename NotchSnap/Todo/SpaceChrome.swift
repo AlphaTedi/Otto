@@ -279,6 +279,7 @@ struct SettingsGearButton: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        .menuAnchor(.gear)
         .onHover { hovering in withAnimation(Motion.hoverFade) { hover = hovering } }
         .help(L10n.t("settings.open"))
         .accessibilityLabel(L10n.t("settings.open"))

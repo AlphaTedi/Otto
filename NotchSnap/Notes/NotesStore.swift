@@ -417,7 +417,8 @@ final class NotesStore: ObservableObject {
 
     /// Opens the dropdown with the active view highlighted.
     func openKindMenu() {
-        kindMenuSelection = TodoStore.shared.panelMode == .calendar ? 1 : 0
+        // Nothing lit until the pointer or an arrow asks, like the gear menu.
+        kindMenuSelection = -1
         kindMenuOpen = true
     }
 

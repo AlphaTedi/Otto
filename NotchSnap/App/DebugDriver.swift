@@ -327,6 +327,10 @@ enum DebugDriver {
                     }
                     notes.enterCalendarSpace(); await snap("space-calendar")
                     notes.openKindMenu(); await snap("space-calendar-menu")
+                    notes.closeKindMenu()
+                    store.openAvatarMenu(); await snap("space-calendar-gear")
+                    store.closeAvatarMenu()
+                    notes.openKindMenu()
                     notes.chooseKind(meetings: false); await snap("space-notes-after-menu")
                     appendState("kind menu: open=\(notes.kindMenuOpen) mode=\(store.panelMode)")
                     notes.leaveSpace()
@@ -448,6 +452,50 @@ enum DebugDriver {
                         for sub in view.subviews { walk(sub, depth + 1) }
                     }
                     walk(root, 0)
+                }
+            } else if command.hasPrefix("kind-click-pid ") {
+                // kind-click-pid <pid> — opens the Notes · Meetings menu and
+                // sends a real mouse click (through NSWindow.sendEvent, the
+                // path a hardware click takes) to its Meetings row, then to
+                // the gear menu's first row. Logs what each click changed.
+                guard Int32(command.dropFirst(15)) == ProcessInfo.processInfo.processIdentifier else { return }
+                Task { @MainActor in
+                    let notes = NotesStore.shared
+                    NotchController.shared.triggerExpand()
+                    notes.enterSpace()
+                    try? await Task.sleep(nanoseconds: 1_200_000_000)
+                    guard let window = NSApp.windows.first(where: { $0 is NotchPanel }),
+                          let host = window.contentView.flatMap(Self.hostingView(in:)) else {
+                        appendState("kind-click: no panel"); return
+                    }
+                    @MainActor func click(_ point: CGPoint) async {
+                        let inWindow = host.convert(point, to: nil)
+                        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                            if let event = NSEvent.mouseEvent(with: type, location: inWindow, modifierFlags: [],
+                                                              timestamp: ProcessInfo.processInfo.systemUptime,
+                                                              windowNumber: window.windowNumber, context: nil,
+                                                              eventNumber: 0, clickCount: 1, pressure: 1) {
+                                window.sendEvent(event)
+                            }
+                            try? await Task.sleep(nanoseconds: 60_000_000)
+                        }
+                        try? await Task.sleep(nanoseconds: 400_000_000)
+                    }
+                    guard let trigger = MenuAnchorDebug.global[.notesKind] else { appendState("kind-click: no trigger"); return }
+                    await click(CGPoint(x: trigger.midX, y: trigger.midY))
+                    appendState("kind-click after trigger: open=\(notes.kindMenuOpen)")
+                    // Second row: gap 8, padding 10, row 1 is ~40 tall.
+                    await click(CGPoint(x: trigger.maxX - 60, y: trigger.maxY + 8 + 10 + 41 + 20))
+                    appendState("kind-click after Meetings row: open=\(notes.kindMenuOpen) mode=\(store.panelMode)")
+                    notes.enterSpace()
+                    try? await Task.sleep(nanoseconds: 600_000_000)
+                    if let gear = MenuAnchorDebug.global[.gear] {
+                        await click(CGPoint(x: gear.midX, y: gear.midY))
+                        appendState("gear-click: menu=\(store.showsAvatarMenu) highlight=\(store.avatarMenuHighlight)")
+                        store.closeAvatarMenu()
+                    }
+                    NotchController.shared.forceCollapse()
+                    appendState("kind-click done")
                 }
             } else if command.hasPrefix("kind-hit-pid ") {
                 // kind-hit-pid <pid> — what a click over the Notes · Meetings
@@ -1129,6 +1177,15 @@ enum DebugDriver {
     }
 
     static func note(_ text: String) { appendState(text) }
+
+    /// The SwiftUI hosting view inside the notch panel — hosting-view
+    /// coordinates are what `.global` frames are measured in.
+    @MainActor
+    private static func hostingView(in view: NSView) -> NSView? {
+        if String(describing: type(of: view)).contains("HostingView") { return view }
+        for sub in view.subviews { if let found = hostingView(in: sub) { return found } }
+        return nil
+    }
 
     private static func appendState(_ text: String) {
         let line = "[\(Date())] \(text)\n"

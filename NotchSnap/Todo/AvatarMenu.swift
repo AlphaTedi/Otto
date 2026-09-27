@@ -182,15 +182,17 @@ private struct AvatarMenuRowView: View {
     /// The current destination uses the same quiet cyan glass selection as
     /// the formatting popover. Hover and keyboard focus extend that treatment
     /// to any row without changing the menu's hierarchy.
+    /// Only under the pointer or the keyboard: nothing is lit when the menu
+    /// opens (Insights was, as a standing "destination" tint — 2026-09-27).
     private var background: Color {
-        OttoMenuStyle.rowFill(highlighted: hover || isHighlighted, current: row.isDestination)
+        OttoMenuStyle.rowFill(highlighted: hover || isHighlighted)
     }
 
     @Environment(\.menuRowPressed) private var isPressed
 
     private var pressedWash: Color {
         guard isPressed else { return .clear }
-        return LabMetrics.accent.opacity(0.14)
+        return SpaceInk.a(0.06)
     }
 }
 
@@ -235,11 +237,61 @@ enum OttoMenuStyle {
     static let ground = Color.dynamic(light: NSColor(white: 1, alpha: 0.6),
                                       dark: NSColor(srgbRed: 0.105, green: 0.105, blue: 0.12, alpha: 0.78))
 
-    /// The current item carries a standing cyan cast; hover and keyboard
-    /// highlight deepen it, on any row.
-    static func rowFill(highlighted: Bool, current: Bool) -> Color {
-        if current { return LabMetrics.accent.opacity(highlighted ? 0.20 : 0.14) }
-        return LabMetrics.accent.opacity(highlighted ? 0.18 : 0)
+    /// Space between a menu and the control it opened from, whichever side
+    /// it opens on (2026-09-27: the two menus sat at different distances).
+    static let anchorGap: CGFloat = 8
+
+    /// Coordinate space the menus and their triggers are measured in — the
+    /// panel's (TodoTabView).
+    static let space = "otto.menus"
+
+    /// Hover and keyboard highlight: the neutral wash rows use everywhere
+    /// else, never a colour (2026-09-27). Being the current item is shown by
+    /// its check or weight, not by a fill.
+    static func rowFill(highlighted: Bool, current: Bool = false) -> Color {
+        highlighted ? SpaceInk.a(0.08) : .clear
+    }
+}
+
+/// The controls a panel menu opens from. Each reports its frame in the
+/// panel's space so its menu can open a fixed `anchorGap` away from it.
+enum MenuAnchor: Hashable { case gear, notesKind }
+
+#if DEBUG
+/// The anchors in hosting-view coordinates, for DebugDriver's click tests.
+@MainActor enum MenuAnchorDebug { static var global: [MenuAnchor: CGRect] = [:] }
+#endif
+
+struct MenuAnchorKey: PreferenceKey {
+    static let defaultValue: [MenuAnchor: CGRect] = [:]
+    static func reduce(value: inout [MenuAnchor: CGRect], nextValue: () -> [MenuAnchor: CGRect]) {
+        value.merge(nextValue()) { $1 }
+    }
+}
+
+extension View {
+    func menuAnchor(_ anchor: MenuAnchor) -> some View {
+        background(GeometryReader { proxy in
+            Color.clear.preference(key: MenuAnchorKey.self,
+                                   value: [anchor: proxy.frame(in: .named(OttoMenuStyle.space))])
+            #if DEBUG
+                .onAppear { MenuAnchorDebug.global[anchor] = proxy.frame(in: .global) }
+                .onChange(of: proxy.frame(in: .global)) { MenuAnchorDebug.global[anchor] = $0 }
+            #endif
+        })
+    }
+
+    /// Places a menu against its anchor: trailing edges flush, `anchorGap`
+    /// below it (or above, when it opens upward). Used inside a full-panel
+    /// overlay, so `size` is the panel's.
+    func anchoredMenu(to anchor: CGRect, in size: CGSize, opensUpward: Bool) -> some View {
+        self
+            .padding(.trailing, max(0, size.width - anchor.maxX))
+            .padding(opensUpward ? .bottom : .top,
+                     opensUpward ? max(0, size.height - anchor.minY + OttoMenuStyle.anchorGap)
+                                 : anchor.maxY + OttoMenuStyle.anchorGap)
+            .frame(maxWidth: .infinity, maxHeight: .infinity,
+                   alignment: opensUpward ? .bottomTrailing : .topTrailing)
     }
 }
 

@@ -415,6 +415,17 @@ an already-visible row keeps the current viewport, while a row that is above or
 below it scrolls to the nearest edge. After expansion, one delayed geometry
 check reveals the new overflow only if the complete opened row no longer fits.
 
+### 2026-09-27 panel menus: one placement, neutral states
+
+The gear menu and the Notes · Meetings dropdown are both drawn by TodoTabView,
+placed against the control that opened them (`menuAnchor` / `anchoredMenu`):
+trailing edges flush, `OttoMenuStyle.anchorGap` (8) away, above or below.
+The dropdown moved up from its header because rows inside it never received
+clicks there; now a real-click test (`kind-click-pid`, NSWindow.sendEvent)
+confirms the Meetings row switches the view. Highlight is the neutral
+`SpaceInk.a(0.08)` wash on hover/keyboard only, never cyan and never lit on
+open (Insights used to carry a standing tint); "current" is a check or weight.
+
 ### 2026-09-26 onboarding v3
 
 From Marcello's `otto-onboarding-v3` handoff (SPEC.md + PNGs + reference HTML),

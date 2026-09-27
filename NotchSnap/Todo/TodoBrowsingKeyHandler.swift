@@ -88,9 +88,14 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                     switch keyCode {
                     case 53: notes.closeKindMenu(); return true
                     case 125, 126:
-                        notes.kindMenuSelection = keyCode == 125 ? 1 : 0; return true
+                        let down = keyCode == 125
+                        notes.kindMenuSelection = notes.kindMenuSelection < 0 ? (down ? 0 : 1) : (down ? 1 : 0)
+                        return true
                     case 36, 76:
-                        notes.chooseKind(meetings: notes.kindMenuSelection == 1); return true
+                        if notes.kindMenuSelection >= 0 {
+                            notes.chooseKind(meetings: notes.kindMenuSelection == 1)
+                        }
+                        return true
                     case 48 where !cmd && !option && !control:
                         // ⇥ closes it and still changes space.
                         notes.closeKindMenu()

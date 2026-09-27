@@ -347,6 +347,8 @@ struct TodoTabView: View {
     @ObservedObject private var notes = NotesStore.shared
     @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
     @State private var footBlurVisible = false
+    /// Where the controls the panel menus open from are (MenuAnchor).
+    @State private var menuAnchors: [MenuAnchor: CGRect] = [:]
 
     /// The notch silhouette hugs its content, so its height moves with the
     /// section; the floating panels are a fixed 556 and do not.
@@ -432,6 +434,8 @@ struct TodoTabView: View {
         .overlay {
             if store.showsAvatarMenu {
                 MenuDismissCatcher { store.closeAvatarMenu() }
+            } else if notes.kindMenuOpen {
+                MenuDismissCatcher { notes.closeKindMenu() }
             }
         }
         // The avatar menu, over everything and inside the panel.
@@ -441,15 +445,31 @@ struct TodoTabView: View {
         // it, in the floating panels it is at the foot so the menu rises. A
         // menu that opens off the edge of its own panel is a menu you cannot
         // read.
-        .overlay(alignment: isContainerLayout ? .topTrailing : .bottomTrailing) {
-            if store.showsAvatarMenu {
-                AvatarMenu()
-                    .padding(.horizontal, LabMetrics.tabsInset)
-                    .padding(isContainerLayout ? .top : .bottom, PanelChrome.shared.tabRow + 4)
-                    .transition(.opacity.combined(
-                        with: .offset(y: isContainerLayout ? -4 : 4)))
+        //
+        // Both panel menus are placed the same way (2026-09-27): against the
+        // control that opened them, trailing edges flush, `anchorGap` away.
+        // The Notes · Meetings menu lives up here too rather than inside its
+        // header — at this level its rows are hit before anything under them.
+        .overlay {
+            GeometryReader { proxy in
+                ZStack {
+                    if store.showsAvatarMenu, let gear = menuAnchors[.gear] {
+                        AvatarMenu()
+                            .anchoredMenu(to: gear, in: proxy.size, opensUpward: !isContainerLayout)
+                            .transition(.opacity.combined(
+                                with: .offset(y: isContainerLayout ? -4 : 4)))
+                    }
+                    if notes.kindMenuOpen, let trigger = menuAnchors[.notesKind] {
+                        NotesKindMenuList(meetings: store.panelMode == .calendar)
+                            .anchoredMenu(to: trigger, in: proxy.size, opensUpward: false)
+                            .transition(.opacity.combined(with: .offset(y: -4)))
+                    }
+                }
             }
         }
+        .animation(NotchAnimation.hintFade, value: notes.kindMenuOpen)
+        .onPreferenceChange(MenuAnchorKey.self) { menuAnchors = $0 }
+        .coordinateSpace(name: OttoMenuStyle.space)
     }
 
     /// The normal to-do panel: tab row + the active mode's surface, with the

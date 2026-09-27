@@ -514,17 +514,8 @@ private struct StreamView: View {
             // and their click catchers are AppKit views, which win every hit
             // test against SwiftUI — the click went to the note underneath.
             .allowsHitTesting(!store.kindMenuOpen)
-            // A click anywhere on the stream closes the menu instead. SwiftUI,
-            // not MenuDismissCatcher: an AppKit catcher here outranks the
-            // menu's own SwiftUI rows, which sit over this same area.
-            .overlay {
-                if store.kindMenuOpen {
-                    Color.white.opacity(0.001)
-                        .contentShape(Rectangle())
-                        .onTapGesture { store.closeKindMenu() }
-                        .accessibilityHidden(true)
-                }
-            }
+            // A click anywhere else closes it: the panel's MenuDismissCatcher,
+            // the same one the gear's menu uses.
         }
     }
 
@@ -804,28 +795,18 @@ struct NotesKindMenu: View {
         }
         .buttonStyle(.plain)
         .fixedSize()
+        // The menu itself is drawn by the panel (TodoTabView), placed
+        // against this frame like the gear's menu is against the gear.
+        .menuAnchor(.notesKind)
         .onHover { hovering in withAnimation(Motion.hoverFade) { hover = hovering } }
         .help(L10n.t("notes.kind.help"))
         .accessibilityLabel(String(format: L10n.t("notes.kind.a11y"), title))
         .accessibilityAddTraits(.isButton)
-        .overlay(alignment: .topTrailing) {
-            if notes.kindMenuOpen {
-                NotesKindMenuList(meetings: meetings)
-                    // Under the trigger, flush with its trailing edge.
-                    .offset(y: 30 + 6)
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.96, anchor: .topTrailing)),
-                        removal: .opacity))
-            }
-        }
-        .animation(notes.kindMenuOpen ? .spring(response: 0.45, dampingFraction: 0.80)
-                                      : .easeOut(duration: 0.12),
-                   value: notes.kindMenuOpen)
         .onDisappear { notes.closeKindMenu() }
     }
 }
 
-private struct NotesKindMenuList: View {
+struct NotesKindMenuList: View {
     let meetings: Bool
     @ObservedObject private var notes = NotesStore.shared
 
@@ -847,7 +828,7 @@ private struct NotesKindMenuList: View {
             HStack(spacing: 8) {
                 Image(systemName: "checkmark")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(LabMetrics.accent)
+                    .foregroundStyle(DSColor.textPrimaryBright)
                     .opacity(active ? 1 : 0)
                     .frame(width: 14)
                 Text(title)
@@ -862,8 +843,7 @@ private struct NotesKindMenuList: View {
             .padding(.leading, 10)
             .padding(.trailing, OttoMenuStyle.rowPaddingH)
             .padding(.vertical, OttoMenuStyle.rowPaddingV)
-            .background(shape.fill(OttoMenuStyle.rowFill(highlighted: notes.kindMenuSelection == index,
-                                                          current: active)))
+            .background(shape.fill(OttoMenuStyle.rowFill(highlighted: notes.kindMenuSelection == index)))
             .contentShape(shape)
         }
         .buttonStyle(.plain)
