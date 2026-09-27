@@ -16,6 +16,8 @@ export const dashboardHTML = /* html */ `<!doctype html>
     --violet: #9d8bff; --green: #7fe3a8; --amber: #ffc98a;
   }
   * { box-sizing: border-box; }
+  /* display:flex on #gate would otherwise beat the hidden attribute. */
+  [hidden] { display: none !important; }
   body { margin: 0; background: var(--bg); color: var(--text);
          font: 14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
   main { max-width: 1080px; margin: 0 auto; padding: 32px 20px 64px; }
