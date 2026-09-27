@@ -46,8 +46,6 @@ GOOGLE_OAUTH_CLIENT_SECRET =
 // secret, it only keeps random traffic out. Leave blank: nothing is ever sent.
 OTTO_SERVICE_HOST =
 OTTO_SERVICE_KEY =
-// Where "Send feedback" addresses its email. Blank hides the menu item.
-OTTO_FEEDBACK_EMAIL =
 
 // -------------------------------------------------------------- HARDENING --
 // Hardened Runtime is REQUIRED for notarization. Release-only so day-to-day

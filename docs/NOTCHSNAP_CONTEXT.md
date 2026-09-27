@@ -421,8 +421,9 @@ See `docs/TELEMETRY.md`. Anonymous usage counts go to a Cloudflare Worker + D1
 (EU) in `server/`, only with consent (opt-in, off by default); events are a
 closed enum and the server refuses any string that is not enum-shaped, so no
 user content can be stored. The Sparkle feed stays on raw GitHub for now (no
-domain). Feedback is a Raycast-style window from the gear menu that sends an
-email through the user's mail app — attachments never touch a server. Two
+domain). Feedback is a Raycast-style window from the gear menu; Send relays it
+through the Worker to ottoapp.feedback@gmail.com by email (Resend) — nothing
+is stored, and no mail app is involved (Marcello chose this over mailto). Two
 explicit exceptions, chosen by Marcello: the feedback window is a separate
 window (principle 1), and a sent feedback is not mirrored into the vault
 (principle 7) — it is a message, not the user's data.

@@ -1,13 +1,17 @@
 // Otto's monitoring Worker (docs/TELEMETRY.md).
 //
 //   POST /v1/events   — anonymous event batches from the app (opt-in only)
+//   POST /v1/feedback — a feedback message, forwarded by email, never stored
 //   GET  /dashboard   — Marcello's private dashboard (password in a secret)
 //   GET  /api/summary — the numbers behind it
 //   cron 03:00 UTC    — daily rollups, 90-day raw retention
 //
-// What it never does: store an IP address, accept free text, receive a
-// to-do, a note, a calendar event or a feedback message. Feedback travels by
-// email from the user's Mac; only the fact that one was sent arrives here.
+// What it never does: store an IP address, receive a to-do, a note or a
+// calendar event. Feedback is the one message a user writes to us on purpose:
+// it is relayed to Marcello's inbox through Resend and not kept here — no
+// table holds it, attachments included.
+
+import { relayFeedback } from "./feedback";
 
 import { EVENTS, UUID, validateContext, validateProps } from "./events";
 import { dashboardHTML } from "./dashboard";
@@ -17,6 +21,8 @@ export interface Env {
   OTTO_KEY: string;
   EXCLUDED_INSTALLS: string;
   DASHBOARD_PASSWORD?: string;
+  RESEND_API_KEY?: string;
+  FEEDBACK_TO: string;
 }
 
 const MAX_EVENTS = 100;
@@ -28,6 +34,11 @@ export default {
     const url = new URL(request.url);
     try {
       if (url.pathname === "/v1/events" && request.method === "POST") return await ingest(request, env);
+      if (url.pathname === "/v1/feedback" && request.method === "POST") {
+        if (request.headers.get("x-otto-key") !== env.OTTO_KEY) return json({ error: "bad key" }, 403);
+        const result = await relayFeedback(request, env);
+        return json(result.body, result.status);
+      }
       if (url.pathname === "/dashboard" && request.method === "GET") {
         return new Response(dashboardHTML, {
           headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store",

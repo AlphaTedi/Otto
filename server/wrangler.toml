@@ -17,8 +17,11 @@ crons = ["0 3 * * *"]
 [vars]
 # Not a secret — it ships inside the app. It only keeps random traffic out.
 OTTO_KEY = "otto-v1-7c4e2a"
+# Where feedback is delivered (by Resend, from its shared sender).
+FEEDBACK_TO = "ottoapp.feedback@gmail.com"
 # install_ids to leave out of every number (Marcello's own Macs), comma-separated.
 EXCLUDED_INSTALLS = ""
 
-# DASHBOARD_PASSWORD is a secret, set by Marcello:
+# Secrets, set by Marcello (never in this file):
 #   npx wrangler secret put DASHBOARD_PASSWORD
+#   npx wrangler secret put RESEND_API_KEY

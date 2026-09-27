@@ -167,6 +167,11 @@ enum DebugDriver {
             } else if command == "analytics-flush" {
                 Analytics.flush()
                 appendState("analytics flush requested")
+            } else if command.hasPrefix("feedback-snap-pid ") {
+                let parts = command.split(separator: " ", maxSplits: 2)
+                guard parts.count == 3, Int32(parts[1]) == ProcessInfo.processInfo.processIdentifier else { return }
+                FeedbackWindowController.debugSnapshot(to: URL(fileURLWithPath: String(parts[2])))
+                appendState("feedback-snap done")
             } else if command == "analytics-dump" {
                 appendState("analytics " + AnalyticsQueue.shared.debugDump())
             } else if command == "onboarding-flow-test" {

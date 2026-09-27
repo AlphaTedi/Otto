@@ -122,6 +122,7 @@ enum Analytics {
             track(.onboardingAbandoned(lastStep: step))
         }
         if isSending { AnalyticsQueue.shared.start() }
+        FeedbackOutbox.shared.retryPending()
     }
 
     private static func markActiveDay() {

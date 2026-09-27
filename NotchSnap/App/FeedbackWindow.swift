@@ -8,22 +8,19 @@ import UniformTypeIdentifiers
 // over an in-panel mode (2026-09-27): it departs from principle 1 on purpose,
 // the way Raycast's and Slack's feedback forms do.
 //
-// Nothing is uploaded. "Send" hands the message and its attachments to the
-// user's mail app, addressed to OTTO_FEEDBACK_EMAIL; the files never touch a
-// server. The only thing the telemetry learns — and only with consent — is
-// that a feedback of some category was sent.
+// "Send" posts the message straight to Otto's Worker, which relays it to
+// Marcello's inbox by email (Resend) and keeps nothing — no table holds it.
+// No mail app is involved: the user presses Send and it is sent. Offline, it
+// waits in `FeedbackOutbox` and goes when the network is back. With consent,
+// the telemetry also counts that a feedback of some category was sent — never
+// its words.
 
 @MainActor
 final class FeedbackWindowController: NSWindowController, NSWindowDelegate {
     private static var shared: FeedbackWindowController?
 
-    /// Where feedback is addressed. Blank hides "Send feedback" entirely.
-    static let recipient: String = {
-        let value = Bundle.main.object(forInfoDictionaryKey: "OttoFeedbackEmail") as? String ?? ""
-        return value.contains("$(") ? "" : value.trimmingCharacters(in: .whitespaces)
-    }()
-
-    static var isAvailable: Bool { !recipient.isEmpty }
+    /// Needs the service: without OTTO_SERVICE_HOST there is nowhere to send.
+    static var isAvailable: Bool { Analytics.serviceURL != nil }
 
     static func show() {
         if shared == nil { shared = FeedbackWindowController() }
@@ -66,7 +63,10 @@ private struct FeedbackForm: View {
     @State private var diagnostics = true
     @State private var showsDiagnostics = false
     @State private var dropTargeted = false
+    @State private var email = ""
     @State private var notice: String?
+    @State private var sending = false
+    @State private var sent = false
     @FocusState private var textFocused: Bool
 
     private var canSend: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -109,9 +109,13 @@ private struct FeedbackForm: View {
                     .foregroundStyle(.secondary)
             }
             attachments
+            field(L10n.t("feedback.email")) {
+                TextField(L10n.t("feedback.emailPlaceholder"), text: $email)
+                    .textFieldStyle(.roundedBorder)
+            }
             diagnosticsRow
             if let notice {
-                Text(notice).font(.system(size: 11.5)).foregroundStyle(.orange)
+                Text(notice).font(.system(size: 11.5)).foregroundStyle(sent ? .green : .orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Divider()
@@ -224,13 +228,16 @@ private struct FeedbackForm: View {
                 Spacer()
                 Button(L10n.t("feedback.cancel"), action: close)
                 Button(action: send) {
-                    Text(L10n.t("feedback.send") + "  \u{2318}\u{21A9}")
+                    HStack(spacing: 6) {
+                        if sending { ProgressView().controlSize(.small) }
+                        Text(L10n.t("feedback.send") + "  \u{2318}\u{21A9}")
+                    }
                 }
                 .keyboardShortcut(.return, modifiers: .command)
                 .buttonStyle(.borderedProminent)
-                .disabled(!canSend)
+                .disabled(!canSend || sending || sent)
             }
-            Text(L10n.t("feedback.viaMail")).font(.system(size: 10.5)).foregroundStyle(.tertiary)
+            Text(L10n.t("feedback.privacyNote")).font(.system(size: 10.5)).foregroundStyle(.tertiary)
         }
     }
 
@@ -251,24 +258,34 @@ private struct FeedbackForm: View {
     }
 
     private func send() {
-        guard canSend else { return }
-        let recipient = FeedbackWindowController.recipient
-        var body = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if diagnostics { body += "\n\n—\n" + Self.diagnosticsText() }
-        let subject = "Otto feedback · " + L10n.t("feedback.cat.\(category.rawValue)")
-        let items: [Any] = [body as NSString] + files.map { $0 as NSURL }
+        guard canSend, !sending else { return }
+        var attachments: [FeedbackOutbox.Attachment] = []
+        var total = 0
+        for url in files {
+            guard let data = try? Data(contentsOf: url) else { continue }
+            total += data.count
+            attachments.append(.init(filename: url.lastPathComponent, content: data.base64EncodedString()))
+        }
+        // The Worker's limit, checked here so the user hears it now, not later.
+        guard total <= 10 * 1024 * 1024 else { notice = L10n.t("feedback.tooLarge"); return }
 
-        if let service = NSSharingService(named: .composeEmail), service.canPerform(withItems: items) {
-            service.recipients = [recipient]
-            service.subject = subject
-            service.perform(withItems: items)
-            Analytics.track(.feedbackSent(category, attachments: files.count, diagnostics: diagnostics))
-            close()
-        } else {
-            // No mail account: the words at least are not lost.
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(subject + "\n\n" + body, forType: .string)
-            notice = String(format: L10n.t("feedback.noMail"), recipient)
+        let message = FeedbackOutbox.Message(
+            category: category.rawValue,
+            body: String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(5000)),
+            email: email.trimmingCharacters(in: .whitespaces).isEmpty ? nil : email.trimmingCharacters(in: .whitespaces),
+            diagnostics: diagnostics ? Self.diagnosticsText() : nil,
+            // Only when usage data is shared, so a report can be matched to
+            // what that install did.
+            install_id: Analytics.consent == .granted ? Analytics.installID : nil,
+            attachments: attachments)
+        Analytics.track(.feedbackSent(category, attachments: files.count, diagnostics: diagnostics))
+        sending = true
+        notice = nil
+        FeedbackOutbox.shared.send(message) { delivered in
+            sending = false
+            sent = true
+            notice = L10n.t(delivered ? "feedback.sent" : "feedback.queued")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { close() }
         }
     }
 
@@ -284,3 +301,120 @@ private struct FeedbackForm: View {
         ].joined(separator: "\n")
     }
 }
+
+// MARK: - FeedbackOutbox — nothing written is lost offline
+
+/// Each unsent message is one JSON file in Application Support, tried again
+/// at launch and every few minutes until the Worker takes it.
+@MainActor
+final class FeedbackOutbox {
+    static let shared = FeedbackOutbox()
+
+    struct Attachment: Codable { let filename: String; let content: String }
+    struct Message: Codable {
+        let category: String
+        let body: String
+        let email: String?
+        let diagnostics: String?
+        let install_id: String?
+        let attachments: [Attachment]
+    }
+
+    private var timer: Timer?
+
+    private var directory: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(AppBuild.supportRoot, isDirectory: true)
+            .appendingPathComponent("feedback-outbox", isDirectory: true)
+    }
+
+    /// Posts at once; on failure keeps it for later. `done(true)` = delivered.
+    func send(_ message: Message, done: @escaping @MainActor (Bool) -> Void) {
+        post(message) { [weak self] delivered in
+            if !delivered { self?.store(message) }
+            done(delivered)
+        }
+    }
+
+    /// Launch, and every five minutes while something is waiting.
+    func retryPending() {
+        let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        let pending = files.filter { $0.pathExtension == "json" }
+        guard !pending.isEmpty else { timer?.invalidate(); timer = nil; return }
+        scheduleRetry()
+        for file in pending {
+            guard let data = try? Data(contentsOf: file),
+                  let message = try? JSONDecoder().decode(Message.self, from: data) else {
+                try? FileManager.default.removeItem(at: file); continue
+            }
+            post(message) { delivered in
+                if delivered { try? FileManager.default.removeItem(at: file) }
+            }
+        }
+    }
+
+    private func store(_ message: Message) {
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent(UUID().uuidString + ".json")
+        try? JSONEncoder().encode(message).write(to: file, options: .atomic)
+        scheduleRetry()
+    }
+
+    private func scheduleRetry() {
+        guard timer == nil else { return }
+        let timer = Timer(timeInterval: 300, repeats: true) { _ in
+            MainActor.assumeIsolated { FeedbackOutbox.shared.retryPending() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    private func post(_ message: Message, done: @escaping @MainActor (Bool) -> Void) {
+        guard let base = Analytics.serviceURL, let body = try? JSONEncoder().encode(message) else {
+            done(false); return
+        }
+        var request = URLRequest(url: base.appendingPathComponent("v1/feedback"))
+        request.httpMethod = "POST"
+        request.httpBody = body
+        request.timeoutInterval = 60
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(Analytics.serviceKey, forHTTPHeaderField: "X-Otto-Key")
+        URLSession.shared.dataTask(with: request) { _, response, _ in
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            // 400/413 will never succeed on a retry: count them as done.
+            let final = (200..<300).contains(status) || status == 400 || status == 413
+            Task { @MainActor in done(final) }
+        }.resume()
+    }
+}
+
+#if DEBUG
+extension FeedbackWindowController {
+    /// DebugDriver `feedback-snap-pid`: the form, dark and light, as PNGs.
+    static func debugSnapshot(to directory: URL) {
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        for (name, appearance) in [("dark", NSAppearance.Name.darkAqua), ("light", .aqua)] {
+            let host = NSHostingView(rootView: FeedbackForm(close: {})
+                .background(Color(nsColor: .windowBackgroundColor))
+                .environment(\.colorScheme, appearance == .darkAqua ? .dark : .light))
+            host.appearance = NSAppearance(named: appearance)
+            let size = host.fittingSize
+            host.frame = NSRect(origin: .zero, size: size)
+            let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: size.width, height: size.height),
+                                  styleMask: [.borderless], backing: .buffered, defer: false)
+            window.appearance = NSAppearance(named: appearance)
+            window.backgroundColor = appearance == .darkAqua ? NSColor(white: 0.12, alpha: 1) : .windowBackgroundColor
+            window.contentView = host
+            window.orderBack(nil)
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+            if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                host.cacheDisplay(in: host.bounds, to: rep)
+                try? rep.representation(using: .png, properties: [:])?
+                    .write(to: directory.appendingPathComponent("feedback-\(name).png"))
+            }
+            window.orderOut(nil)
+        }
+    }
+}
+#endif

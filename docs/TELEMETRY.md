@@ -4,12 +4,13 @@ Anonymous, opt-in usage counts, so Marcello can see how many people use Otto,
 how they get through the onboarding and how they open the notch. Built from
 the "Telemetria, Update e Feedback" PRD (2026-09-27), trimmed to what was
 decided: no appcast proxy yet (the Sparkle feed stays on raw GitHub until
-there is a domain), and feedback by email rather than through the server.
+there is a domain), and feedback relayed by email rather than stored.
 
 ## The rule
 
-**No user content ever leaves the Mac.** To-dos, notes, steps, list names,
-calendar events and feedback text stay local. Two locks enforce it:
+**No user content ever leaves the Mac** — with one deliberate exception: a
+feedback the user writes and sends to us. To-dos, notes, steps, list names and
+calendar events stay local. Two locks enforce it for telemetry:
 
 1. In the app, `AnalyticsEvent` is a closed enum whose props are enum raw
    values, Bools, Ints and buckets (`AnalyticsValue`). No case takes a string
@@ -54,6 +55,8 @@ Cloudflare Worker `otto-telemetry` + D1 database `otto-telemetry` in the EU
 jurisdiction, free plan. <https://otto-telemetry.otto-telemetry.workers.dev>
 
 - `POST /v1/events` — batches from the app (`X-Otto-Key` header).
+- `POST /v1/feedback` — relays one feedback to `FEEDBACK_TO` through Resend
+  (secret `RESEND_API_KEY`), attachments ≤ 10 MB total; nothing is stored.
 - `GET /dashboard` — private dashboard; asks for `DASHBOARD_PASSWORD`.
 - `GET /api/summary?days=30` — its numbers (Bearer password).
 - Cron 03:00 UTC — daily rollups (kept forever), raw events deleted after 90 days.
@@ -66,15 +69,18 @@ Operations (Node is in `~/.local/node`):
 cd server
 npx wrangler deploy                              # publish a change
 npx wrangler secret put DASHBOARD_PASSWORD       # set/replace the dashboard password
+npx wrangler secret put RESEND_API_KEY           # feedback delivery
 npx wrangler d1 execute otto-telemetry --remote --file=schema.sql
 ```
 
 ## Feedback
 
 "Send feedback" in the gear menu opens `FeedbackWindowController`: category,
-description (required), up to 5 attachments, "Include diagnostic info". Send
-hands everything to the user's mail app (`NSSharingService.composeEmail`),
-addressed to `OTTO_FEEDBACK_EMAIL`; without a mail account the text is copied
-instead. Nothing is uploaded. The item is hidden while `OTTO_FEEDBACK_EMAIL` is
-blank. With consent, `feedback_sent` records the category and the number of
+description (required), up to 5 attachments (10 MB total), optional reply
+email, "Include diagnostic info". Send posts it to `/v1/feedback`; the Worker
+emails it to ottoapp.feedback@gmail.com (the user's email as Reply-To) and
+keeps nothing. Offline, `FeedbackOutbox` keeps it as a JSON file in
+Application Support and retries at launch and every 5 minutes. Independent of
+the telemetry consent; `install_id` is attached only when usage data is shared.
+With consent, `feedback_sent` records the category and the number of
 attachments — never the words.
