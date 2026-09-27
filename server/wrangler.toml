@@ -1,0 +1,24 @@
+# Otto's monitoring backend — anonymous usage counts only (docs/TELEMETRY.md).
+# Never receives user content: the app sends typed events whose values are
+# enums, booleans or numbers, and the Worker rejects anything else.
+name = "otto-telemetry"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "otto-telemetry"
+database_id = "92ef8974-195b-4d91-9de6-5fef6585f9c2"
+
+[triggers]
+# 03:00 UTC: roll yesterday up, drop raw events older than 90 days.
+crons = ["0 3 * * *"]
+
+[vars]
+# Not a secret — it ships inside the app. It only keeps random traffic out.
+OTTO_KEY = "otto-v1-7c4e2a"
+# install_ids to leave out of every number (Marcello's own Macs), comma-separated.
+EXCLUDED_INSTALLS = ""
+
+# DASHBOARD_PASSWORD is a secret, set by Marcello:
+#   npx wrangler secret put DASHBOARD_PASSWORD

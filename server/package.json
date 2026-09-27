@@ -1,0 +1,12 @@
+{
+  "name": "otto-telemetry",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "schema": "wrangler d1 execute otto-telemetry --remote --file=schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^4.141.0"
+  }
+}
