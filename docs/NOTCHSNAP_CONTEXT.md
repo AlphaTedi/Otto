@@ -834,3 +834,18 @@ napping.*".
 DEBUG: `panel-render` also snaps `space-empty` (first user list with nothing
 open). `open -n Otto.app --args -debugCommand "<command>"` runs a driver command
 3s after launch, for shells whose distributed notifications never arrive.
+
+### 2026-09-28 crash on open: the panel's frame is pinned
+
+v1.67.0 aborted the moment the notch opened on Marcello's M4 MacBook Pro
+(macOS 26.6.2): `NSHostingView.windowDidLayout -> updateAnimatedWindowSize ->
+NSWindow setFrame -> NSScrollView setNeedsLayout -> _postWindowNeedsLayout`
+throws, uncaught, `abort()`. The same loop as the 2026-08-22 crash, which
+`sizingOptions = []` had fixed on 26.6.1 — on 26.6.2 SwiftUI still resizes
+the window from inside the display cycle. Two guards now, each sufficient:
+`NotchHostingView` lives inside `NotchContainerView` (a plain, click-through
+container) instead of being the panel's contentView, and `NotchPanel`
+drops every frame request that is not `pinnedFrame` — the frame
+`NotchController` computed, updated only in `repositionForCurrentScreen`.
+Rule: nothing but the controller sizes the notch panel; if the panel ever
+needs a new frame, set `pinnedFrame` first.
