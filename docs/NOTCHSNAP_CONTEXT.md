@@ -870,3 +870,18 @@ needs a new frame, set `pinnedFrame` first.
   Macs") counted as editing; ← on a focused, closed row did nothing. All three
   fixed in `TodoBrowsingKeyHandler` (`isEditingText` ignores read-only and
   off-screen editors).
+
+### 2026-09-29 the logo's eyes move (onboarding)
+
+`App/OttoEyesLogo.swift` is the otto-eyes-animation handoff's drop-in view:
+the wordmark drawn in a `Canvas`, the holes of the two "O"s moving as eyes
+under a `TimelineView` — saccades (11 s), drift (3.7 s), single blinks
+(7.3 s, lid from the top), periods deliberately co-prime-ish. Motion values
+are the handoff's `otto-eyes-motion.json`, untouched; `preview.html` in the
+handoff is the reference to compare against. Static and open with Reduce
+Motion. It replaces the static `OttoLogo` on the welcome screen (190 wide)
+and the done panel (170 wide), in the palette's `logo` colour; the
+permissions tile keeps the static mark (68 wide — below ~40 pt the saccades
+stop reading, and a tile icon should not look around). Changes from the
+handoff file: `public` and `#Preview` removed, `tPath` marked
+`nonisolated(unsafe)` for Swift 6 mode.

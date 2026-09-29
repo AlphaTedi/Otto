@@ -89,7 +89,11 @@ struct WelcomeStepView: View {
             ZStack {
                 OBGlowBackground(glows: onboardingGlows(model))
                 VStack(spacing: 22) {
-                    OttoLogo(width: 190, color: p.logo)
+                    // The animated wordmark: its eyes look around (OttoEyesLogo).
+                    // Same width as the static mark it replaces, so the column
+                    // keeps its measure.
+                    OttoEyesLogo(color: p.logo)
+                        .frame(width: 190)
                         .scaleEffect(shown[0] || reduceMotion ? 1 : 0.96)
                         .opacity(shown[0] ? 1 : 0)
                     OBText(text: OnboardingStep.welcome.body, size: 17, lineHeight: 24.65,
@@ -432,7 +436,8 @@ struct DonePanel: View {
         withPalette { p in
             ZStack {
                 OBConfetti()
-                OttoLogo(width: 170, color: p.logo)
+                OttoEyesLogo(color: p.logo)
+                    .frame(width: 170)
             }
             .frame(width: OBMetric.panelSize.width, height: OBMetric.panelSize.height)
         }

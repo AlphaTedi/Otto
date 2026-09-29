@@ -19,6 +19,7 @@
 		0B0B0B0B0B0B0B0B0B0B0B04 /* OnboardingSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F04 /* OnboardingSteps.swift */; };
 		0B0B0B0B0B0B0B0B0B0B0B0C /* Attachments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F0C /* Attachments.swift */; };
 		0B0B0B0B0B0B0B0B0B0B0B0B /* OttoIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F0B /* OttoIcon.swift */; };
+		0B0B0B0B0B0B0B0B0B0B0B0D /* OttoEyesLogo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F0D /* OttoEyesLogo.swift */; };
 		0B0B0B0B0B0B0B0B0B0B0B0A /* FeedbackWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F0A /* FeedbackWindow.swift */; };
 		0B0B0B0B0B0B0B0B0B0B0B09 /* Analytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F09 /* Analytics.swift */; };
 		0B0B0B0B0B0B0B0B0B0B0B08 /* AnalyticsEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0F0F0F0F0F0F0F0F0F0F08 /* AnalyticsEvent.swift */; };
@@ -245,6 +246,7 @@
 		0F0F0F0F0F0F0F0F0F0F0F04 /* OnboardingSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingSteps.swift; sourceTree = "<group>"; };
 		0F0F0F0F0F0F0F0F0F0F0F0C /* Attachments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Attachments.swift; sourceTree = "<group>"; };
 		0F0F0F0F0F0F0F0F0F0F0F0B /* OttoIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttoIcon.swift; sourceTree = "<group>"; };
+		0F0F0F0F0F0F0F0F0F0F0F0D /* OttoEyesLogo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttoEyesLogo.swift; sourceTree = "<group>"; };
 		0F0F0F0F0F0F0F0F0F0F0F0A /* FeedbackWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackWindow.swift; sourceTree = "<group>"; };
 		0F0F0F0F0F0F0F0F0F0F0F09 /* Analytics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Analytics.swift; sourceTree = "<group>"; };
 		0F0F0F0F0F0F0F0F0F0F0F08 /* AnalyticsEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsEvent.swift; sourceTree = "<group>"; };
@@ -504,6 +506,7 @@
 				0F0F0F0F0F0F0F0F0F0F0F04 /* OnboardingSteps.swift */,
 				0F0F0F0F0F0F0F0F0F0F0F0C /* Attachments.swift */,
 				0F0F0F0F0F0F0F0F0F0F0F0B /* OttoIcon.swift */,
+				0F0F0F0F0F0F0F0F0F0F0F0D /* OttoEyesLogo.swift */,
 				0F0F0F0F0F0F0F0F0F0F0F0A /* FeedbackWindow.swift */,
 				0F0F0F0F0F0F0F0F0F0F0F09 /* Analytics.swift */,
 				0F0F0F0F0F0F0F0F0F0F0F08 /* AnalyticsEvent.swift */,
@@ -722,6 +725,7 @@
 				0B0B0B0B0B0B0B0B0B0B0B04 /* OnboardingSteps.swift in Sources */,
 				0B0B0B0B0B0B0B0B0B0B0B0C /* Attachments.swift in Sources */,
 				0B0B0B0B0B0B0B0B0B0B0B0B /* OttoIcon.swift in Sources */,
+				0B0B0B0B0B0B0B0B0B0B0B0D /* OttoEyesLogo.swift in Sources */,
 				0B0B0B0B0B0B0B0B0B0B0B0A /* FeedbackWindow.swift in Sources */,
 				0B0B0B0B0B0B0B0B0B0B0B09 /* Analytics.swift in Sources */,
 				0B0B0B0B0B0B0B0B0B0B0B08 /* AnalyticsEvent.swift in Sources */,
