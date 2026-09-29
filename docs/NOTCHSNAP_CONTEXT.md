@@ -852,3 +852,21 @@ drops every frame request that is not `pinnedFrame` — the frame
 `NotchController` computed, updated only in `repositionForCurrentScreen`.
 Rule: nothing but the controller sizes the notch panel; if the panel ever
 needs a new frame, set `pinnedFrame` first.
+
+### 2026-09-29 text is never black; ← always reaches the bar
+
+- **Notes.** A run with no `.foregroundColor` draws in fixed black, whatever
+  the appearance — invisible on the dark notch. Typing after a pasted image
+  chip produced one (the caret sat after an attachment character). The note
+  view (`ActionTextView`) now keeps the invariant itself: typing attributes
+  always carry a colour and never an attachment, `didChangeText` gives any
+  colourless run the body ink, and rich text pasted from other apps takes the
+  ink of the line it lands in (plain text already does). Rule: every colour in
+  a note is one of ours and follows the appearance — black only in light mode.
+- **Lists.** ←/→ walk the space bar unless the caret is in a field with
+  VISIBLE text. A whitespace-only draft (Esc keeps the text, so it survives
+  reopens) used to hold the arrows on that Mac for good; a text control still
+  first responder after its space went away (timing-dependent, hence "some
+  Macs") counted as editing; ← on a focused, closed row did nothing. All three
+  fixed in `TodoBrowsingKeyHandler` (`isEditingText` ignores read-only and
+  off-screen editors).

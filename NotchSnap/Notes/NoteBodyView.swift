@@ -565,6 +565,46 @@ final class ActionTextView: NSTextView {
             }
         }
         insertText(chips, replacementRange: selectedRange())
+        // The caret now sits after an attachment character; what is typed
+        // next takes the note's text attributes, not the chip's.
+        attributes[.attachment] = nil
+        typingAttributes = attributes
+    }
+
+    // MARK: Text is never black (Marcello, 2026-09-29)
+    //
+    // A run with no foreground colour is drawn in fixed black — invisible on
+    // the dark notch — whatever the appearance. Typing after an image chip
+    // produced exactly that: the line after a pasted screenshot came out
+    // black. Every colour in a note is the note's own (labelColor & co.,
+    // which follow the appearance), so: typing attributes always carry one,
+    // any run that ends up without one gets the body ink, and rich text from
+    // other apps is re-inked on the way in.
+
+    override var typingAttributes: [NSAttributedString.Key: Any] {
+        get { super.typingAttributes }
+        set {
+            var attributes = newValue
+            attributes[.attachment] = nil
+            if attributes[.foregroundColor] == nil { attributes[.foregroundColor] = NSColor.labelColor }
+            super.typingAttributes = attributes
+        }
+    }
+
+    override func didChangeText() {
+        if let storage = textStorage, storage.length > 0 {
+            var missing: [NSRange] = []
+            storage.enumerateAttribute(.foregroundColor, in: NSRange(location: 0, length: storage.length),
+                                       options: []) { value, range, _ in
+                if value == nil { missing.append(range) }
+            }
+            if !missing.isEmpty {
+                storage.beginEditing()
+                for range in missing { storage.addAttribute(.foregroundColor, value: NSColor.labelColor, range: range) }
+                storage.endEditing()
+            }
+        }
+        super.didChangeText()
     }
 
     /// Drags keep the text system's own path: our paste inserts at the
@@ -577,9 +617,28 @@ final class ActionTextView: NSTextView {
         if type != NoteEditorController.markdownPasteboardType, insertImages(from: pboard) { return true }
         guard type == NoteEditorController.markdownPasteboardType,
               let markdown = pboard.string(forType: type) else {
-            return super.readSelection(from: pboard, type: type)
+            return readForeignSelection(from: pboard, type: type)
         }
         MainActor.assumeIsolated { NoteEditorController.shared.paste(markdown: markdown) }
+        return true
+    }
+
+    /// Rich text from another app (Safari, Pages, Mail…) carries its own
+    /// colours — usually black, sometimes a highlight. It keeps its words and
+    /// emphasis but takes the ink of the line it lands in. Plain text already
+    /// arrives in the typing attributes, so it is left alone.
+    private func readForeignSelection(from pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
+        let start = selectedRange().location
+        let ink = (typingAttributes[.foregroundColor] as? NSColor) ?? .labelColor
+        guard super.readSelection(from: pboard, type: type) else { return false }
+        guard type != .string, let storage = textStorage else { return true }
+        let end = selectedRange().location
+        guard end > start, end <= storage.length else { return true }
+        let inserted = NSRange(location: start, length: end - start)
+        storage.beginEditing()
+        storage.addAttribute(.foregroundColor, value: ink, range: inserted)
+        storage.removeAttribute(.backgroundColor, range: inserted)
+        storage.endEditing()
         return true
     }
 

@@ -644,8 +644,28 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
         /// note, a step. Typing must reach it untouched.
         @MainActor
         private static func isEditingText() -> Bool {
-            let responder = notchResponder
-            return responder is NSTextView || responder is NSTextField
+            switch notchResponder {
+            case let text as NSTextView:
+                guard text.isEditable else { return false }
+                // A field editor stands in for the NSTextField it edits.
+                if text.isFieldEditor, let field = text.delegate as? NSView { return isOnScreen(field) }
+                return isOnScreen(text)
+            case let field as NSTextField:
+                return field.isEditable && isOnScreen(field)
+            default:
+                return false
+            }
+        }
+
+        /// A text control that still holds first responder after its space
+        /// went away — the Notes body mid-transition, a SwiftUI field torn
+        /// down while focused — is not one the user is typing in. Counting it
+        /// held ←/→ (and ⇥) on the caret of a field nobody could see, and how
+        /// long it lingered was a matter of timing, so it hit some Macs more
+        /// than others (Marcello, 2026-09-29).
+        @MainActor
+        private static func isOnScreen(_ view: NSView) -> Bool {
+            view.window != nil && !view.isHiddenOrHasHiddenAncestor && !view.visibleRect.isEmpty
         }
 
         // MARK: Find mode (manual query editing)
@@ -730,8 +750,13 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             // bar. That is the same test the Notes composer uses for ↑↓, and
             // it covers his case exactly, since the field is empty every time
             // the panel opens.
+            //
+            // "Empty" means nothing visible: a stray space left in the draft
+            // (Esc keeps the text, so it survives every reopen) used to hold
+            // the arrows on the caret on that Mac for good, with nothing on
+            // screen to explain it (Marcello, 2026-09-29).
             if keyCode == 123 || keyCode == 124, !cmd, !option, !control, !shift,
-               store.draftTitle.isEmpty,
+               store.draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                draftHasCaret() || !isEditingText() {
                 store.cycleSpace(by: keyCode == 124 ? 1 : -1)
                 return true
@@ -965,8 +990,10 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 }
                 return true
             case 123:                           // ← collapse details
+                // Nothing open to collapse: ← walks the bar, focused row or
+                // not. It used to do nothing at all on a focused row — a dead
+                // key exactly where you are after ↓ into a list.
                 guard store.expandedItemID != nil else {
-                    guard store.focusedItemID == nil else { return false }
                     store.cycleSpace(by: -1)
                     return true
                 }
