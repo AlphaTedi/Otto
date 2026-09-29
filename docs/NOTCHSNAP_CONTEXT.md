@@ -470,10 +470,13 @@ Calendar now tells people to set it to Every minute.
 
 ### 2026-09-27 onboarding polish
 
-- The window is drawn 10% larger than the design (946×550 for 860×500): the
-  hosting view's bounds stay at the design size and AppKit scales them to the
-  frame (`OBMetric.windowScale`), so every design value is still in design
-  points. Not visually verified for text sharpness — no screen capture here.
+- ~~The window is drawn 10% larger than the design~~ **REVERTED 2026-09-29.**
+  It scaled the hosting view's bounds (860×500) inside a 946×550 frame, and
+  SwiftUI does not map mouse events through a bounds scale: clicks and hover
+  landed ~10% right/down of the pointer, so no button worked (only ⏎) and a
+  click on Notes hit Meetings. Back to 860×500 with bounds == frame. A larger
+  onboarding must scale the design's values (`OBMetric`, fonts), never the
+  hosting view's bounds.
 - Permission chips sit ON the rings (`PermissionsPanel.onRing`); a third chip
   (bolt) shows the usage-data toggle, which is back on the permissions step,
   on by default, recorded at finish.
