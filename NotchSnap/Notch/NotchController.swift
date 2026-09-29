@@ -281,8 +281,9 @@ class NotchController: ObservableObject {
         notchSize = calculateNotchSize(screen: screen)
         AppState.shared.notchBarHeight = notchSize.height
         let newFrame = calculateMaxPanelFrame(screen: screen)
+        // Pin first, and always: the panel refuses any other frame.
+        (panel as? NotchPanel)?.pinnedFrame = newFrame
         if panel.frame != newFrame {
-            (panel as? NotchPanel)?.pinnedFrame = newFrame
             panel.setFrame(newFrame, display: true, animate: false)
         }
     }
