@@ -885,3 +885,38 @@ permissions tile keeps the static mark (68 wide — below ~40 pt the saccades
 stop reading, and a tile icon should not look around). Changes from the
 handoff file: `public` and `#Preview` removed, `tPath` marked
 `nonisolated(unsafe)` for Swift 6 mode.
+
+### 2026-09-30 feedback batch ("Otto feedback.md")
+
+- **Open animation.** Time Profiler on open/close cycles: a quarter of the
+  main thread was `EntityTitleView` rebuilding every title (entity parse with
+  a data detector, chip images) and measuring it on each of several layout
+  passes per frame. Titles and their sizes are now cached on (text,
+  brightness, appearance); `updateNSView` skips an unchanged title.
+- **Row width.** Wrapped titles stopped ~100pt short of the edge: every line
+  kept the 60pt hint gutter. The gutter is now an exclusion path on the
+  FIRST line only (`firstLineReserve`, measured with the same container);
+  ⌘↵/grip/note glyph sit on that line. Still reserved at rest, so hover and
+  focus reflow nothing.
+- **No scrollbars** anywhere in the panel (lists, Notes stream, note body,
+  meeting pickers); the soft foot says there is more.
+- **Completed** clears the whole blur band at the end of a long list (travel
+  = blur depth + 16, was one footer).
+- **Sections.** "New section" is a dashed pill after the last tab. The bar is
+  built in two places (column / over the list's foot), so a fresh bar now
+  scrolls the selected section into view on appear.
+- **⌘↩ joins.** The draft field swallowed ⌘↩ (caret is there on every open);
+  it now joins first when there is a meeting, else files the draft. While a
+  joinable alert is up (it opens without the keyboard), ⌘↩ is a Carbon hot
+  key, unregistered when the alert goes.
+- **Presence** shows the Meet / Zoom / Teams mark, like the meeting card.
+- **Drag over the notch** no longer opens it — that opened the retired tray.
+- **Hover haptic** is back (slow pointer inside the notch only, ≥ 0.6 s
+  apart); "feedback opt-in" in the report was dictation for "aptico".
+- **Steps.** ⏎ on a step of a CLOSED to-do opens it first, so the next step
+  (or the draft slot) exists to take the caret.
+- **Desktop swipe.** Re-pins now go through `pinToOwnSpace()`, which drops
+  `.canJoinAllSpaces` on success — before, only the launch pin did, so a pin
+  that failed at login and succeeded later still had AppKit carrying the
+  notch along the swipe. One retry 3 s after launch. Not verifiable here
+  (no synthetic input); confirm on the M4.

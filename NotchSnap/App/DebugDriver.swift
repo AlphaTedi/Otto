@@ -368,7 +368,7 @@ enum DebugDriver {
                     @MainActor func list(_ name: String) -> TodoCollection? {
                         store.collections.first { $0.name.lowercased() == name }
                     }
-                    for name in ["work", "grocery", "personal"] {
+                    for name in ["work", "grocery", "personal", "otto things to do"] {
                         if let c = list(name) { notes.leaveSpace(); store.selectCollection(c.id) }
                         await snap("space-" + name)
                     }

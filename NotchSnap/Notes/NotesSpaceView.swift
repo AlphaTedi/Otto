@@ -433,7 +433,7 @@ private struct StreamView: View {
                 .padding(.top, 28)
         } else {
             ScrollViewReader { proxy in
-                ScrollView(.vertical, showsIndicators: true) {
+                ScrollView(.vertical, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: NotesMetrics.entryGap) {
                         ForEach(entries) { note in
                             NoteEntryRow(

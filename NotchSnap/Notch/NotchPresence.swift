@@ -36,11 +36,8 @@ import SwiftUI
 
 /// Where an upcoming meeting happens. Drives the left glyph.
 ///
-/// NOTE ON MARKS: these are SF Symbols in a brand-ish tint, NOT the Meet /
-/// Zoom / Teams logos. Shipping the real marks means bundling someone else's
-/// trademarked artwork under their brand terms, which is a decision to make
-/// deliberately rather than incidentally — and a hand-drawn lookalike would be
-/// worse than an honest generic glyph.
+/// Meet, Zoom and Teams show the same marks as the meeting card
+/// (MeetingPlatformIcon); other links get a tinted camera glyph.
 enum MeetingPlatform: Equatable {
     case meet
     case zoom
@@ -57,6 +54,16 @@ enum MeetingPlatform: Equatable {
         if haystack.contains("teams") || haystack.contains("microsoft") { return .teams }
         if url != nil { return .otherVideo }
         return .inPerson
+    }
+
+    /// The name MeetingPlatformIcon draws a mark for; nil for the rest.
+    var brandName: String? {
+        switch self {
+        case .meet:  return "Google Meet"
+        case .zoom:  return "Zoom"
+        case .teams: return "Microsoft Teams"
+        case .otherVideo, .inPerson: return nil
+        }
     }
 
     var symbol: String {
@@ -258,7 +265,12 @@ struct NotchPresenceView: View {
         case .resting:
             EmptyView()
         case .countdown(let countdown):
-            if let platform = countdown.platform {
+            if let platform = countdown.platform, let brand = platform.brandName {
+                // The platform's own mark, the one the meeting card wears
+                // (Marcello, 2026-09-30: "dovrebbe essere di Google Meet").
+                MeetingPlatformIcon(platform: brand)
+                    .frame(width: 13, height: 13)
+            } else if let platform = countdown.platform {
                 OttoIcon(platform.symbol, pointSize: 11)
                     .foregroundStyle(platform.tint)
             } else {

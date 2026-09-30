@@ -41,6 +41,25 @@ class HotkeyManager {
         case quickEntry = 8       // ⌥Space — global to-do quick entry (KB-1)
         case openTodos = 9        // ⌃⇧T — expand notch on the To-do tab
         case openNotesSpace = 10  // ⌃⇧E — expand notch on the Notes space
+        case joinMeeting = 11     // ⌘↩ — only while a meeting alert is up
+    }
+
+    private var joinHotKeyRef: EventHotKeyRef?
+
+    /// ⌘↩ joins the alerting meeting from any app. Registered only for the
+    /// alert's lifetime, so ⌘↩ belongs to every other app the rest of the time.
+    func setJoinHotKey(_ active: Bool) {
+        if active, joinHotKeyRef == nil, eventHandler != nil {
+            let id = EventHotKeyID(signature: signature, id: HotKeyID.joinMeeting.rawValue)
+            var ref: EventHotKeyRef?
+            if RegisterEventHotKey(UInt32(kVK_Return), UInt32(cmdKey), id,
+                                   GetApplicationEventTarget(), 0, &ref) == noErr {
+                joinHotKeyRef = ref
+            }
+        } else if !active, let ref = joinHotKeyRef {
+            UnregisterEventHotKey(ref)
+            joinHotKeyRef = nil
+        }
     }
 
     func start() {
@@ -88,6 +107,7 @@ class HotkeyManager {
             }
         }
         hotKeyRefs.removeAll()
+        setJoinHotKey(false)
 
         if let handler = eventHandler {
             RemoveEventHandler(handler)
@@ -146,6 +166,9 @@ class HotkeyManager {
                 NotchController.shared.toggleCreate()
                 NotificationCenter.default.post(name: .quickEntryFired, object: nil)
             }
+
+        case .joinMeeting:
+            CalendarStore.shared.join()
 
         case .openTodos:
             print("[HotkeyManager] ⌃⇧T → Notch on To-dos")

@@ -763,6 +763,14 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             }
 
             // The draft row owns ⏎ / Esc whenever it holds the caret.
+            // ⌘⏎ joins the next meeting even with the caret in the draft —
+            // which is where it is every time the notch opens. The draft took
+            // it as a plain ⏎, so ⌘⏎ to join never worked from an opened
+            // panel (Marcello, 2026-09-30). With nothing to join it still
+            // files the draft.
+            if cmd, !shift, keyCode == 36, draftHasCaret(), CalendarStore.shared.joinNextMeeting() {
+                return true
+            }
             if handleDraft(store, keyCode: keyCode) { return true }
 
             // While a text control has focus (note field, add-step), don't

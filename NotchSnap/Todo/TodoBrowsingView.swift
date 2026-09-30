@@ -1034,6 +1034,21 @@ struct TodoTabRow: View {
                 proxy.scrollTo(active, anchor: .center)
             }
         }
+        // …and when this row is NEW. The bar is drawn in one of two places
+        // (in the column, or over the list's foot once the list is long), so
+        // walking from a short section to a long one builds a fresh row
+        // scrolled to its start — the change above never fires for it and
+        // the selected section sat off-screen (Marcello, 2026-09-30). The
+        // width is only known a pass later, hence also on the overflow flag.
+        .onAppear {
+            DispatchQueue.main.async {
+                if let active = store.activeCollectionID { proxy.scrollTo(active, anchor: .center) }
+            }
+        }
+        .onChange(of: tabsOverflow) { overflow in
+            guard overflow, let active = store.activeCollectionID else { return }
+            proxy.scrollTo(active, anchor: .center)
+        }
         }
     }
 }
@@ -1163,19 +1178,29 @@ private struct NewSectionButton: View {
             TodoStore.shared.setMode(.newCategory)
             NotchController.shared.focusPanel()
         } label: {
-            Text(L10n.t("todo.newSection"))
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(hover ? DSColor.textPrimary : DSColor.textSecondary)
-                .fixedSize()
-                .padding(.horizontal, LabMetrics.tabPaddingH)
-                .padding(.vertical, LabMetrics.tabPaddingV)
-                // The same capsule an inactive tab wears on hover, so it
-                // belongs to the row rather than sitting beside it.
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(hover ? DSColor.fieldBackground : Color.clear)
-                )
-                .contentShape(Capsule(style: .continuous))
+            // A pill of its own after the last section, the tabs' size and
+            // shape (Marcello, 2026-09-30: "a pill next to the last
+            // section"). Dashed, like the empty step slot: a place for a
+            // section rather than a section.
+            HStack(spacing: 5) {
+                OttoIcon("plus", pointSize: 11)
+                Text(L10n.t("todo.newSection"))
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .foregroundStyle(hover ? DSColor.textPrimary : DSColor.textSecondary)
+            .fixedSize()
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(hover ? DSColor.fieldBackground : Color.clear)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(DSColor.textSecondary.opacity(hover ? 0.45 : 0.3),
+                                  style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+            )
+            .contentShape(Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -1434,7 +1459,7 @@ struct TodoBrowsingView: View {
             // the entire Completed section read as missing rather than
             // scrolled away (Marcello, 2026-08-05).
             ScrollViewReader { proxy in
-                ScrollView(showsIndicators: true) {
+                ScrollView(showsIndicators: false) {
                     content
                         .measureHeight(SectionHeightKey.self)
                         .background(
@@ -1445,11 +1470,13 @@ struct TodoBrowsingView: View {
                                 )
                             }
                         )
-                    // The footer overlays this scroll view. Leave one footer
-                    // of travel at the end so the last row can move fully
-                    // above the pills instead of remaining hidden behind it.
+                    // The footer overlays this scroll view. Leave enough travel
+                    // at the end that the last thing — usually Completed —
+                    // clears the whole blur band, not just the pills: at one
+                    // footer (95) its header still sat 24pt inside the blur,
+                    // squeezed against the bar (Marcello, 2026-09-30).
                     if overlapsFooter {
-                        Color.clear.frame(height: LabMetrics.floatingFooterDepth)
+                        Color.clear.frame(height: LabMetrics.floatingFooterBlurDepth + 16)
                     }
                     // Anchor for the "more below" pill to jump to.
                     Color.clear.frame(height: 1).id(Self.bottomAnchor)
@@ -2482,11 +2509,42 @@ private struct TodoItemRow: View {
         .contextMenu { contextMenuItems }
     }
 
-    // The first text line is ~17pt tall; the 14pt checkbox and the trailing
-    // indicators sit on THAT line via a small top inset, so a title that
-    // wraps to several lines keeps the checkbox pinned to the top-left
-    // instead of floating to the vertical middle (FB1, Marcello 2026-07-23).
-    fileprivate static let firstLineInset: CGFloat = 1.5
+
+    private static let titleLineHeight: CGFloat =
+        ceil(NSLayoutManager().defaultLineHeight(for: .systemFont(ofSize: DSFont.todoTitleSize)))
+
+    /// Room the first line of the title leaves for `trailingHints`.
+    private var trailingReserve: CGFloat {
+        guard !item.isCompleted else { return 0 }
+        return LabMetrics.rowActionsWidth + 6 + (item.note.isEmpty ? 0 : 14)
+    }
+
+    /// The note glyph and the ⌘↵ / grip cluster, on the title's first line.
+    ///
+    /// Each affordance answers the input that can actually reach it: ⏎ is a
+    /// KEYBOARD act, so it appears when the row has keyboard focus; the grip
+    /// is a MOUSE act, so it appears under the pointer (Marcello, 2026-08-22).
+    /// NC-2: the note glyph means "there is something here you cannot see",
+    /// so it shows only for a note on a closed row.
+    private var trailingHints: some View {
+        HStack(spacing: 6) {
+            if !item.note.isEmpty && !isExpanded {
+                OttoIcon("text.alignleft", pointSize: 8)
+                    .foregroundStyle(DSColor.textHint)
+            }
+            ZStack(alignment: .trailing) {
+                Color.clear.frame(width: LabMetrics.rowActionsWidth, height: 1)
+                if !item.isCompleted && !isExpanded && (hover || isFocused) {
+                    RowActions(showEnter: isFocused, showGrip: hover, enterLabel: "\u{2318}\u{21B5}")
+                        .transition(.opacity)
+                }
+            }
+            .frame(width: LabMetrics.rowActionsWidth, alignment: .trailing)
+        }
+        // Centred on the first line: the title's inset plus one line box.
+        .frame(height: Self.titleLineHeight)
+        .padding(.top, LabMetrics.rowTextInset)
+    }
 
     private var titleRow: some View {
         // CENTER, per the export's `align-items: center`. Top-aligning while
@@ -2583,7 +2641,8 @@ private struct TodoItemRow: View {
                         onTap: activateRow,
                         onRemoveImage: { path in
                             store.rename(item.id, to: AttachmentStore.removingToken(path, from: item.title))
-                        }
+                        },
+                        firstLineReserve: trailingReserve
                     )
                     // The export wraps the label in its own 8pt box, which is what
                     // gives a single-line row 33pt and lets a wrapped one grow to
@@ -2599,64 +2658,18 @@ private struct TodoItemRow: View {
                         .padding(.bottom, LabMetrics.rowTextInset)
                     }
                 }
+                // The title runs to the row's edge; only its FIRST line stops
+                // short, for the hints drawn at the end of that line.
+                //
+                // Every line used to stop at the 60pt gutter the hints need
+                // (plus a spacer), so wrapped titles ended around three
+                // quarters of the way across (Marcello, 2026-09-30). The
+                // gutter is still ALWAYS reserved on line one, so a hint
+                // appearing on hover or focus reflows nothing — the rule that
+                // made it a gutter in the first place (2026-08-22).
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .topTrailing) { trailingHints }
             }
-
-            Spacer(minLength: 6)
-
-            // Trailing indicators ride the first line too.
-            Group {
-                // No pencil. Opening a row puts the caret straight in the
-                // title, so a button to do the same thing was an extra step
-                // for something that should just be click-and-type
-                // (Marcello, 2026-08-10).
-
-                // NC-2, narrowed: the indicator means "there is something here
-                // you cannot see". Steps are visible now, so only a note
-                // still qualifies — leaving it on `hasDetails` would have it
-                // pointing at a checklist already on screen.
-                if !item.note.isEmpty && !isExpanded {
-                    OttoIcon("text.alignleft", pointSize: 8)
-                        .foregroundStyle(DSColor.textHint)
-                }
-
-            }
-            // Glyphs align to the FIRST line of the title, not to the centre
-            // of a title that has wrapped to three lines.
-            .padding(.top, Self.firstLineInset + 1)
-
-            // Each affordance answers the input that can actually reach it.
-            //
-            // ⏎ is a KEYBOARD act, so it appears when the row has keyboard
-            // focus — you arrowed here, and ⏎ is what to press next. The grip
-            // is a MOUSE act, so it appears under the pointer. Showing both to
-            // whichever input arrived first advertised a key to someone
-            // holding a mouse and a handle to someone who had let go of it
-            // (Marcello, 2026-08-22).
-            //
-            // Hovering the focused row is the one moment both are true, and
-            // then the hairline earns its place by separating them — which is
-            // exactly the state the export draws.
-            // The gutter is ALWAYS here; only its contents come and go.
-            //
-            // Letting the cluster into the layout on hover took width away
-            // from the title, so a title that only just fit on one line
-            // re-wrapped to two and the row grew — under the pointer, and
-            // under the arrow keys, which made the whole list lurch
-            // (Marcello, 2026-08-22). Holding the width open means the title
-            // measures the same whether or not anything is drawn beside it,
-            // so nothing reflows and there is nothing to truncate.
-            //
-            // Centred in the row, like the export. The first-line inset the
-            // other glyphs use is for aligning to a title that wraps; this
-            // cluster belongs to the row, not to the title.
-            ZStack(alignment: .trailing) {
-                Color.clear.frame(width: LabMetrics.rowActionsWidth, height: 1)
-                if !item.isCompleted && !isExpanded && (hover || isFocused) {
-                    RowActions(showEnter: isFocused, showGrip: hover, enterLabel: "\u{2318}\u{21B5}")
-                        .transition(.opacity)
-                }
-            }
-            .frame(width: LabMetrics.rowActionsWidth, alignment: .trailing)
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: activateRow)
@@ -2974,8 +2987,22 @@ private struct StepRow: View {
                     // than back in the list.
                     .onSubmit {
                         commit()
-                        if !store.moveDetailFocus(1, in: parentID) {
-                            store.focusStepDraft(in: parentID)
+                        // A closed to-do shows its first steps only and no
+                        // draft slot, so the step after this one did not exist
+                        // to take the caret and ⏎ just ended the edit
+                        // (Marcello, 2026-09-30). Open the to-do first, then
+                        // move once its rows are there.
+                        let moveOn = { [store, parentID, step] in
+                            store.focusedDetail = (parentID, .step(step.id))
+                            if !store.moveDetailFocus(1, in: parentID) {
+                                store.focusStepDraft(in: parentID)
+                            }
+                        }
+                        if store.expandedItemID == parentID {
+                            moveOn()
+                        } else {
+                            withAnimation(Motion.contentHug) { store.expandedItemID = parentID }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: moveOn)
                         }
                     }
                     // Clicking away is a save everywhere else in this app.
@@ -3158,6 +3185,7 @@ private struct ShortcutsOverlay: View {
     private let rows: [(String, String)] = [
         ("\u{2191} \u{2193}", "todo.sc.moveFocus"),
         ("\u{2423}", "todo.sc.toggleComplete"),
+        ("\u{2318}\u{21A9}", "todo.sc.completeOrJoin"),
         ("\u{21A9}", "todo.sc.editTitle"),
         ("\u{2192} \u{2190}", "todo.sc.expandRow"),
         ("\u{2318}N", "todo.sc.newTodo"),

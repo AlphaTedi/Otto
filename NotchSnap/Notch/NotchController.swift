@@ -206,10 +206,11 @@ class NotchController: ObservableObject {
         //
         // AppKit's flag comes off only if this worked. A failed pin leaves the
         // window exactly as it behaved before any of this existed.
-        if SpaceAnchor.pin(panel) {
-            panel.collectionBehavior = [.stationary, .fullScreenAuxiliary, .ignoresCycle]
-        }
         self.panel = panel
+        pinToOwnSpace()
+        // Once more when the login rush is over, in case the window server
+        // refused the first one.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.pinToOwnSpace() }
         applyNotchAppearance()
 
         // Start mouse tracking
@@ -236,10 +237,24 @@ class NotchController: ObservableObject {
             forName: NSWorkspace.activeSpaceDidChangeNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in
-                guard let panel = self?.panel else { return }
-                SpaceAnchor.pin(panel)
-            }
+            Task { @MainActor in self?.pinToOwnSpace() }
+        }
+    }
+
+    /// Put the panel in Otto's own space, and only once that has WORKED drop
+    /// AppKit's `.canJoinAllSpaces` (which is what carries the notch along a
+    /// desktop swipe). Every re-pin goes through here: re-pinning used to
+    /// leave the flag on, so a pin that failed at launch — the window server
+    /// is not always ready at login — and succeeded later still had AppKit
+    /// dragging the notch across with the desktop, the "two notches" of
+    /// Marcello's report (2026-09-30).
+    private func pinToOwnSpace() {
+        guard let panel else { return }
+        if SpaceAnchor.pin(panel) {
+            panel.collectionBehavior = [.stationary, .fullScreenAuxiliary, .ignoresCycle]
+        } else {
+            panel.collectionBehavior = [.canJoinAllSpaces, .stationary,
+                                        .fullScreenAuxiliary, .ignoresCycle]
         }
     }
 
@@ -286,6 +301,7 @@ class NotchController: ObservableObject {
         if panel.frame != newFrame {
             panel.setFrame(newFrame, display: true, animate: false)
         }
+        pinToOwnSpace()
     }
 
     // MARK: - State Transitions (with velocity preservation and interruptibility)
@@ -965,7 +981,13 @@ class NotchController: ObservableObject {
         // the target is now the notch itself plus a small forgiveness margin,
         // and it has to be held there.
         if isDragSessionActive {
-            if state != .expanded && dragTargetRect().contains(location) {
+            // Holding a drag over the notch opened it onto the file tray. The
+            // tray is gone from Otto (showLegacyPanels is always false), so
+            // this only ever opened the to-dos in the way of whatever was
+            // being dragged (Marcello, 2026-09-30: "molto fastidioso"). The
+            // no-collapse-mid-drag rule below still holds.
+            if AppState.shared.showLegacyPanels,
+               state != .expanded && dragTargetRect().contains(location) {
                 if dragDwellTask == nil {
                     // Polls its own clock rather than waiting on mouse events.
                     // A hand held still emits NO events, so an event-driven

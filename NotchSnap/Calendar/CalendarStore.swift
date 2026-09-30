@@ -19,7 +19,13 @@ final class CalendarStore: ObservableObject {
     @Published private(set) var accountDescription: String?
     @Published private(set) var meetings: [DetectedMeeting] = []
     /// Non-nil while the interruptive alert is on screen (CA-3).
-    @Published private(set) var activeAlert: DetectedMeeting?
+    @Published private(set) var activeAlert: DetectedMeeting? {
+        // The alert opens the notch WITHOUT taking the keyboard (it must not
+        // steal typing), so the ⌘↩ its Join button advertises never reached
+        // the panel's key handler — only the click worked (Marcello,
+        // 2026-09-30). While a joinable alert is up, ⌘↩ is a global hot key.
+        didSet { HotkeyManager.shared.setJoinHotKey(activeAlert?.videoURL != nil) }
+    }
     /// True from the moment an alert is sent away until the notch has
     /// finished closing behind it.
     ///

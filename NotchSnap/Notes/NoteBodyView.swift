@@ -33,7 +33,9 @@ struct NoteBodyView: NSViewRepresentable {
         view.allowsUndo = true
         view.drawsBackground = false
         scroll.drawsBackground = false
-        scroll.hasVerticalScroller = true
+        // No scroller anywhere in the panel; the soft bottom edge says
+        // "more below" (Marcello, 2026-09-30).
+        scroll.hasVerticalScroller = false
         scroll.autohidesScrollers = true
         view.textContainerInset = NSSize(width: 28, height: 0)
         view.textContainer?.lineFragmentPadding = 0

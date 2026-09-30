@@ -102,7 +102,7 @@ struct MeetingSelectionView: View {
             }
             if calendar.upcomingToday.isEmpty { Text(L10n.t("meeting.noEvents")).foregroundStyle(DSColor.textSecondary) }
             ScrollViewReader { proxy in
-                ScrollView {
+                ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(Array(calendar.upcomingToday.enumerated()), id: \.element.id) { index, meeting in
                             Button { calendar.openNotes(for: meeting) } label: {
@@ -163,7 +163,7 @@ struct MeetingHistoryView: View {
                 TextField(L10n.t("meeting.search"), text: $notes.meetingLinkQuery).textFieldStyle(.plain)
             }
             if rows.isEmpty { Text(L10n.t("meeting.noSessions")).foregroundStyle(DSColor.textSecondary) }
-            ScrollView {
+            ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                         Button {
@@ -240,7 +240,7 @@ struct MeetingTasksView: View {
                 }
                 .onChange(of: draftFocused) { if $0 { notes.meetingFocus = 1 } }
             ScrollViewReader { proxy in
-                ScrollView {
+                ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(Array(visible.enumerated()), id: \.element.id) { index, item in
                             HStack(spacing: 8) {

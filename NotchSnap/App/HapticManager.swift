@@ -35,18 +35,22 @@ final class HapticManager: @unchecked Sendable {
         performer.perform(.generic, performanceTime: .now)
     }
 
-    /// Hover is NOT an action, so it no longer taps.
+    /// Hover taps again (Marcello, 2026-09-30: "quando faccio hover sulla
+    /// notch il feedback aptico non funziona più").
     ///
-    /// It fired whenever the pointer crossed the trigger zone at the top of
-    /// the screen — which on a notch app happens constantly, and most of the
-    /// time on the way to somewhere else entirely. It was rate-limited to
-    /// 250ms, which stopped it buzzing but not from firing at moments the
-    /// user had not asked for anything.
-    ///
-    /// Haptics are a budget: every one spent on something the user did not do
-    /// makes the ones for things they DID do count for less. Expand and
-    /// collapse still tap, because those are commits.
-    func notchHoverEntered() {}
+    /// It was removed on 2026-08 because it fired on every pass across the
+    /// top of the screen. What reaches here now is already filtered: the
+    /// controller only enters hover for a SLOW pointer inside the notch's own
+    /// rect (fast transits are ignored), and only from idle. The rate limit
+    /// keeps a hand hovering in and out from buzzing.
+    func notchHoverEntered() {
+        guard isEnabled else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - lastHoverTap > 0.6 else { return }
+        lastHoverTap = now
+        performer.perform(.generic, performanceTime: .now)
+    }
+    private var lastHoverTap: TimeInterval = 0
 
     // Legacy aliases
     func hoverTap() { notchHoverEntered() }

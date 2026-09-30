@@ -299,7 +299,7 @@ struct ActionPicker: View {
         }
         if editor.pickerExpanded {
             ScrollViewReader { proxy in
-            ScrollView {
+            ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
                         Button { onPick(section.id) } label: {
