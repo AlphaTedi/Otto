@@ -34,6 +34,9 @@ enum SpaceChrome {
     /// checkbox column. One token, so no list corrects itself with its own
     /// offset (2026-09-25 spec).
     static let columnInset: CGFloat = 10
+    /// Panel edge → a row's trailing hints: the column inset plus the row's
+    /// own padding. The capture field's trailing control ends there too.
+    static var rowTrailingInset: CGFloat { columnInset + LabMetrics.rowPaddingH }
     /// Where text starts after the leading slot — the capture field's text,
     /// a page title after Back, a note's body and meeting metadata: 53.
     static var textColumn: CGFloat { cornerInset + slotWidth + slotGap }
@@ -92,7 +95,10 @@ struct CaptureHeader<Field: View>: View {
             if let accessory { accessory }
             trailing
         }
-        .padding(.horizontal, SpaceChrome.cornerInset)
+        .padding(.leading, SpaceChrome.cornerInset)
+        // The keycap / Save button end on the same vertical as the rows'
+        // ⌘↵ and grip below them (Marcello, 2026-10-01: "più allineate").
+        .padding(.trailing, SpaceChrome.rowTrailingInset)
         .padding(.vertical, 8)
         .frame(minHeight: Self.height)
         .overlay(alignment: .bottom) {

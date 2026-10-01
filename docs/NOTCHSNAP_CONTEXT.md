@@ -893,11 +893,8 @@ handoff file: `public` and `#Preview` removed, `tPath` marked
   a data detector, chip images) and measuring it on each of several layout
   passes per frame. Titles and their sizes are now cached on (text,
   brightness, appearance); `updateNSView` skips an unchanged title.
-- **Row width.** Wrapped titles stopped ~100pt short of the edge: every line
-  kept the 60pt hint gutter. The gutter is now an exclusion path on the
-  FIRST line only (`firstLineReserve`, measured with the same container);
-  ⌘↵/grip/note glyph sit on that line. Still reserved at rest, so hover and
-  focus reflow nothing.
+- **Row width.** Tried a first-line-only gutter (text under the hints on
+  later lines); REVERTED 2026-10-01 — see below.
 - **No scrollbars** anywhere in the panel (lists, Notes stream, note body,
   meeting pickers); the soft foot says there is more.
 - **Completed** clears the whole blur band at the end of a long list (travel
@@ -920,3 +917,18 @@ handoff file: `public` and `#Preview` removed, `tPath` marked
   that failed at login and succeeded later still had AppKit carrying the
   notch along the swipe. One retry 3 s after launch. Not verifiable here
   (no synthetic input); confirm on the M4.
+
+### 2026-10-01 row geometry: one gutter, equal insets
+
+From Marcello's mock-up (red bands on both sides). The hint gutter
+(`rowActionsWidth`, ⌘↵ / grip / note glyph in one slot) is reserved on EVERY
+line — no text ever runs under it — and the hints are centred in the row like
+the checkbox. The checkbox's inset from the slab equals the hints' inset
+(12 each side), and the capture field's trailing control now ends on the same
+vertical (`SpaceChrome.rowTrailingInset` = column inset + row padding = 22),
+as does Completed's sparkline. Plain rows carry 6pt top and bottom, so a
+single line is still its 37pt floor and a wrapped row keeps air above its
+first line and below its last. ↓ onto a row under the floating pills now
+scrolls it ABOVE them (`revealRowIfNeeded(footer:)`); the last to-do scrolls
+to the very end. DEBUG `panel-render` snaps `row-focused-last` (the longest
+list walked down to its last row).

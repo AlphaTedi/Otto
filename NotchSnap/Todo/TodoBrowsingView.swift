@@ -1490,7 +1490,8 @@ struct TodoBrowsingView: View {
                 .onChange(of: store.focusedItemID) { focused in
                     guard let focused else { return }
                     revealRowIfNeeded(focused,
-                                      viewport: viewport - (isContainerLayout ? 0 : LabMetrics.floatingFooterDepth),
+                                      viewport: viewport,
+                                      footer: isContainerLayout ? 0 : LabMetrics.floatingFooterDepth,
                                       proxy: proxy)
                 }
                 // Expanding changes the row's height after the click. Wait for
@@ -1501,7 +1502,8 @@ struct TodoBrowsingView: View {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                         guard store.expandedItemID == expanded else { return }
                         revealRowIfNeeded(expanded,
-                                          viewport: viewport - (isContainerLayout ? 0 : LabMetrics.floatingFooterDepth),
+                                          viewport: viewport,
+                                          footer: isContainerLayout ? 0 : LabMetrics.floatingFooterDepth,
                                           proxy: proxy)
                     }
                 }
@@ -1575,11 +1577,19 @@ struct TodoBrowsingView: View {
     /// Scroll the least possible amount, and only when the complete row is
     /// outside the visible list region. Row frames are in content coordinates;
     /// adding `scrollOffset` gives the current viewport in that same space.
+    ///
+    /// `footer` is how much of the viewport's foot the floating pills cover.
+    /// The visible region stops above it — and so must the scroll: anchoring
+    /// a row at `.bottom` lined it up with the viewport's real bottom, under
+    /// the pills, so ↓ onto the last to-do selected something you could not
+    /// see (Marcello, 2026-10-01).
     private func revealRowIfNeeded(_ id: UUID,
-                                   viewport: CGFloat,
+                                   viewport fullViewport: CGFloat,
+                                   footer: CGFloat,
                                    proxy: ScrollViewProxy) {
         guard let frame = rowFrames[id] else { return }
         let margin: CGFloat = 8
+        let viewport = fullViewport - footer
         let visibleTop = max(0, scrollOffset) + margin
         let visibleBottom = max(0, scrollOffset) + viewport - margin
 
@@ -1587,10 +1597,25 @@ struct TodoBrowsingView: View {
             withAnimation(NotchAnimation.hintFade) {
                 proxy.scrollTo(id, anchor: .top)
             }
+        } else if frame.maxY > visibleBottom,
+                  let collection = store.activeCollection,
+                  store.openItems(in: collection).last?.id == id {
+            // The last to-do: go all the way to the end, so it is out of the
+            // soft foot too, not just above the pills.
+            withAnimation(NotchAnimation.hintFade) {
+                proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
+            }
         } else if frame.maxY > visibleBottom {
             // A row taller than the viewport cannot fit in full; anchoring its
             // top keeps the title and collapse control available.
-            let anchor: UnitPoint = frame.height >= viewport - margin * 2 ? .top : .bottom
+            //
+            // scrollTo lines the row's point at `y` up with the viewport's
+            // point at `y`. For the row's foot to land `footer + margin` above
+            // the viewport's foot: y = 1 − (footer + margin) / (V − h).
+            let room = fullViewport - frame.height
+            let anchor: UnitPoint = frame.height >= viewport - margin * 2 || room <= 0
+                ? .top
+                : UnitPoint(x: 0.5, y: max(0, 1 - (footer + margin) / room))
             withAnimation(NotchAnimation.hintFade) {
                 proxy.scrollTo(id, anchor: anchor)
             }
@@ -1838,6 +1863,9 @@ struct TodoBrowsingView: View {
                             }
                         }
                     }
+                    // The sparkline ends on the rows' hint line, not the
+                    // slab's edge (Marcello, 2026-10-01: "più allineate").
+                    .padding(.trailing, LabMetrics.rowPaddingH)
                     // Carries the separation the rule used to provide.
                     .padding(.top, DSSpacing.tabRowBottomMargin + 10)
                     .contentShape(Rectangle())
@@ -2436,6 +2464,12 @@ private struct TodoItemRow: View {
         // Plain rows keep no padding and their 37pt floor, which already
         // insets them.
         .padding(.horizontal, LabMetrics.rowPaddingH)
+        // Plain rows get the same 6 top and bottom. A one-line row is still
+        // exactly its 37pt floor (6 + 4 + 17 + 4 + 6); a WRAPPED one now keeps
+        // the side inset's air above its first line and below its last
+        // instead of touching the slab — visible only on hover and focus,
+        // which is exactly when it was (Marcello, 2026-10-01).
+        .padding(.vertical, carriesDetails ? 0 : LabMetrics.listRowGap)
         .padding(.top, carriesDetails ? LabMetrics.listRowGap : 0)
         // The title row is visually taller than the 10pt step draft because
         // its text carries `rowTextInset` above and below. Adding that inset
@@ -2510,16 +2544,8 @@ private struct TodoItemRow: View {
     }
 
 
-    private static let titleLineHeight: CGFloat =
-        ceil(NSLayoutManager().defaultLineHeight(for: .systemFont(ofSize: DSFont.todoTitleSize)))
-
-    /// Room the first line of the title leaves for `trailingHints`.
-    private var trailingReserve: CGFloat {
-        guard !item.isCompleted else { return 0 }
-        return LabMetrics.rowActionsWidth + 6 + (item.note.isEmpty ? 0 : 14)
-    }
-
-    /// The note glyph and the ⌘↵ / grip cluster, on the title's first line.
+    /// The note glyph at rest; the ⌘↵ / grip cluster on hover or focus,
+    /// in the same slot.
     ///
     /// Each affordance answers the input that can actually reach it: ⏎ is a
     /// KEYBOARD act, so it appears when the row has keyboard focus; the grip
@@ -2527,23 +2553,18 @@ private struct TodoItemRow: View {
     /// NC-2: the note glyph means "there is something here you cannot see",
     /// so it shows only for a note on a closed row.
     private var trailingHints: some View {
-        HStack(spacing: 6) {
-            if !item.note.isEmpty && !isExpanded {
+        let showsActions = !item.isCompleted && !isExpanded && (hover || isFocused)
+        return ZStack(alignment: .trailing) {
+            Color.clear.frame(width: LabMetrics.rowActionsWidth, height: 1)
+            if showsActions {
+                RowActions(showEnter: isFocused, showGrip: hover, enterLabel: "\u{2318}\u{21B5}")
+                    .transition(.opacity)
+            } else if !item.note.isEmpty && !isExpanded {
                 OttoIcon("text.alignleft", pointSize: 8)
                     .foregroundStyle(DSColor.textHint)
             }
-            ZStack(alignment: .trailing) {
-                Color.clear.frame(width: LabMetrics.rowActionsWidth, height: 1)
-                if !item.isCompleted && !isExpanded && (hover || isFocused) {
-                    RowActions(showEnter: isFocused, showGrip: hover, enterLabel: "\u{2318}\u{21B5}")
-                        .transition(.opacity)
-                }
-            }
-            .frame(width: LabMetrics.rowActionsWidth, alignment: .trailing)
         }
-        // Centred on the first line: the title's inset plus one line box.
-        .frame(height: Self.titleLineHeight)
-        .padding(.top, LabMetrics.rowTextInset)
+        .frame(width: LabMetrics.rowActionsWidth, alignment: .trailing)
     }
 
     private var titleRow: some View {
@@ -2641,8 +2662,7 @@ private struct TodoItemRow: View {
                         onTap: activateRow,
                         onRemoveImage: { path in
                             store.rename(item.id, to: AttachmentStore.removingToken(path, from: item.title))
-                        },
-                        firstLineReserve: trailingReserve
+                        }
                     )
                     // The export wraps the label in its own 8pt box, which is what
                     // gives a single-line row 33pt and lets a wrapped one grow to
@@ -2658,18 +2678,16 @@ private struct TodoItemRow: View {
                         .padding(.bottom, LabMetrics.rowTextInset)
                     }
                 }
-                // The title runs to the row's edge; only its FIRST line stops
-                // short, for the hints drawn at the end of that line.
-                //
-                // Every line used to stop at the 60pt gutter the hints need
-                // (plus a spacer), so wrapped titles ended around three
-                // quarters of the way across (Marcello, 2026-09-30). The
-                // gutter is still ALWAYS reserved on line one, so a hint
-                // appearing on hover or focus reflows nothing — the rule that
-                // made it a gutter in the first place (2026-08-22).
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .overlay(alignment: .topTrailing) { trailingHints }
             }
+
+            // The hint gutter, on EVERY line and always reserved: no text
+            // ever runs under ⌘↵ or the grip, and a hint appearing on hover
+            // or focus reflows nothing (Marcello, 2026-10-01, the red band
+            // in his mock-up; the 2026-08-22 reflow rule). Centred in the
+            // row like the checkbox opposite it, its right edge on the same
+            // line as the capture field's keycap.
+            trailingHints
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: activateRow)

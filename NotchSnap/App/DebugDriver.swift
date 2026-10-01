@@ -419,6 +419,18 @@ enum DebugDriver {
                             store.focusedItemID = nil
                         }
                     }
+                    // The longest list, walked down to its last to-do the way
+                    // ↓ does: the row must end up above the floating pills.
+                    if let long = store.collections.max(by: { store.openItems(in: $0).count < store.openItems(in: $1).count }) {
+                        store.selectCollection(long.id)
+                        await snap("long-top")
+                        for item in store.openItems(in: long) {
+                            store.focusedItemID = item.id
+                            try? await Task.sleep(nanoseconds: 250_000_000)
+                        }
+                        await snap("row-focused-last")
+                        store.focusedItemID = nil
+                    }
                     if let original { store.selectCollection(original) }
                     window.orderOut(nil)
                     GlassDebug.forceOpaque = false

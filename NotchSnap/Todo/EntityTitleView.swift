@@ -19,9 +19,6 @@ struct EntityTitleView: NSViewRepresentable {
     let onTap: () -> Void
     /// Removes an image chip's token from the title (its ✕ on hover).
     var onRemoveImage: ((String) -> Void)? = nil
-    /// Width kept free at the end of the FIRST line only, for the row's
-    /// trailing hints (⌘↵, grip, note glyph). Later lines run to the edge.
-    var firstLineReserve: CGFloat = 0
 
     func makeNSView(context: Context) -> EntityTextView {
         let view = EntityTextView()
@@ -48,7 +45,6 @@ struct EntityTitleView: NSViewRepresentable {
     func updateNSView(_ view: EntityTextView, context: Context) {
         view.onPlainTap = onTap
         view.chips.onRemove = onRemoveImage
-        view.firstLineReserve = firstLineReserve
         // Only when the title actually changed: re-setting the same string
         // re-laid-out every row's text view on every panel update.
         let key = Self.cacheKey(title, bright: isBright)
@@ -77,44 +73,20 @@ struct EntityTitleView: NSViewRepresentable {
         // Exactly the same trap as HighlightingTitleField, which carries the
         // same warning — reading a live NSView's layout during SwiftUI's sizing
         // pass is never safe.
-        let sizeKey = Self.cacheKey(title, bright: isBright) + "\u{1}\(width)\u{1}\(firstLineReserve)" as NSString
+        let sizeKey = Self.cacheKey(title, bright: isBright) + "\u{1}\(width)" as NSString
         let measured: CGSize
         if let cached = Self.sizeCache.object(forKey: sizeKey) {
             measured = cached.sizeValue
         } else {
-            measured = Self.measure(Self.attributedTitle(title, bright: isBright),
-                                    width: width, firstLineReserve: firstLineReserve)
+            measured = Self.attributedTitle(title, bright: isBright)
+                .boundingRect(
+                    with: NSSize(width: width, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading]
+                ).size
             Self.sizeCache.setObject(NSValue(size: measured), forKey: sizeKey)
         }
         return CGSize(width: proposal.width ?? ceil(measured.width),
                       height: ceil(measured.height))
-    }
-
-    /// The reserve is an exclusion path a couple of points tall at the top
-    /// right: only the line fragment that starts at y = 0 overlaps it, so only
-    /// the first line is shortened — whatever its height.
-    static func exclusionPaths(width: CGFloat, reserve: CGFloat) -> [NSBezierPath] {
-        guard reserve > 0, width > reserve else { return [] }
-        return [NSBezierPath(rect: NSRect(x: width - reserve, y: 0, width: reserve, height: 2))]
-    }
-
-    /// Wrapped size with the same container the view draws with (exclusion
-    /// included) — boundingRect cannot take an exclusion path.
-    private static func measure(_ string: NSAttributedString, width: CGFloat,
-                                firstLineReserve: CGFloat) -> CGSize {
-        guard firstLineReserve > 0, width < 50_000 else {
-            return string.boundingRect(with: NSSize(width: width, height: .greatestFiniteMagnitude),
-                                       options: [.usesLineFragmentOrigin, .usesFontLeading]).size
-        }
-        let storage = NSTextStorage(attributedString: string)
-        let layout = NSLayoutManager()
-        let container = NSTextContainer(size: NSSize(width: width, height: .greatestFiniteMagnitude))
-        container.lineFragmentPadding = 0
-        container.exclusionPaths = exclusionPaths(width: width, reserve: firstLineReserve)
-        layout.addTextContainer(container)
-        storage.addLayoutManager(layout)
-        layout.ensureLayout(for: container)
-        return layout.usedRect(for: container).size
     }
 
     // MARK: Caches
@@ -221,18 +193,6 @@ final class EntityTextView: NSTextView {
     var onPlainTap: (() -> Void)?
     /// The cache key of the title on screen (EntityTitleView.updateNSView).
     var renderedKey: String?
-    var firstLineReserve: CGFloat = 0 { didSet { if firstLineReserve != oldValue { applyReserve() } } }
-
-    override func setFrameSize(_ newSize: NSSize) {
-        let changed = newSize.width != frame.width
-        super.setFrameSize(newSize)
-        if changed { applyReserve() }
-    }
-
-    private func applyReserve() {
-        textContainer?.exclusionPaths = EntityTitleView.exclusionPaths(width: bounds.width,
-                                                                       reserve: firstLineReserve)
-    }
     /// Image chips: hover preview, ✕ (through `onRemove`), click to open.
     lazy var chips = MainActor.assumeIsolated { ImageChipInteraction(textView: self, canRemove: true) }
     private var chipTracking: NSTrackingArea?
