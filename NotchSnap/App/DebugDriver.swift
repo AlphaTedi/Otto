@@ -210,6 +210,80 @@ enum DebugDriver {
                 ImagePreviewPanel.shared.hide()
                 window.orderOut(nil)
                 appendState("chip-snap done")
+            } else if command.hasPrefix("settings-snap-pid ") {
+                // settings-snap-pid <pid> <dir> — every Settings page, light
+                // and dark, rendered off screen. Writes nothing.
+                let parts = command.split(separator: " ", maxSplits: 2)
+                guard parts.count == 3, Int32(parts[1]) == ProcessInfo.processInfo.processIdentifier else { return }
+                let directory = URL(fileURLWithPath: String(parts[2]))
+                Task { @MainActor in
+                    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                    for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+                        // On screen but behind every other window: an
+                        // off-screen window never draws its scroll views.
+                        let window = NSWindow(contentRect: NSRect(x: 40, y: 40, width: 860, height: 640),
+                                              styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: false)
+                        window.titlebarAppearsTransparent = true
+                        window.appearance = NSAppearance(named: appearance)
+                        let host = NSHostingView(rootView: SettingsView().environmentObject(AppState.shared))
+                        window.contentView = host
+                        window.orderBack(nil)
+                        // The detail pane alone too: cacheDisplay draws a
+                        // Form, it does not draw a split view.
+                        let pageWindow = NSWindow(contentRect: NSRect(x: 40, y: 40, width: 620, height: 640),
+                                                  styleMask: [.borderless], backing: .buffered, defer: false)
+                        pageWindow.appearance = NSAppearance(named: appearance)
+                        for section in SettingsSection.allCases {
+                            let pageHost = NSHostingView(rootView: SettingsPageDebugHost(section: section)
+                                .environmentObject(AppState.shared))
+                            pageWindow.contentView = pageHost
+                            pageWindow.orderBack(nil)
+                            try? await Task.sleep(nanoseconds: 700_000_000)
+                            pageHost.layoutSubtreeIfNeeded()
+                            if let rep = pageHost.bitmapImageRepForCachingDisplay(in: pageHost.bounds) {
+                                pageHost.cacheDisplay(in: pageHost.bounds, to: rep)
+                                try? rep.representation(using: .png, properties: [:])?
+                                    .write(to: directory.appendingPathComponent("page-\(name)-\(section.rawValue).png"))
+                            }
+                        }
+                        let sidebarHost = NSHostingView(rootView: SettingsSidebar(selection: .constant(.appearance))
+                            .frame(width: 230, height: 520).tint(Color("SettingsAccent")))
+                        pageWindow.contentView = sidebarHost
+                        try? await Task.sleep(nanoseconds: 700_000_000)
+                        if let rep = sidebarHost.bitmapImageRepForCachingDisplay(in: sidebarHost.bounds) {
+                            sidebarHost.cacheDisplay(in: sidebarHost.bounds, to: rep)
+                            try? rep.representation(using: .png, properties: [:])?
+                                .write(to: directory.appendingPathComponent("sidebar-\(name).png"))
+                        }
+                        pageWindow.orderOut(nil)
+                        for section in SettingsSection.allCases {
+                            AppState.shared.pendingSettingsSection = section
+                            try? await Task.sleep(nanoseconds: 900_000_000)
+                            // The split view and Form are layer trees that
+                            // cacheDisplay leaves blank; render the layers.
+                            host.layoutSubtreeIfNeeded()
+                            window.display()
+                            CATransaction.flush()
+                            if let layer = window.contentView?.superview?.layer ?? host.layer {
+                                let scale: CGFloat = 2
+                                let size = layer.bounds.size
+                                if let ctx = CGContext(data: nil, width: Int(size.width * scale), height: Int(size.height * scale),
+                                                       bitsPerComponent: 8, bytesPerRow: 0,
+                                                       space: CGColorSpaceCreateDeviceRGB(),
+                                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) {
+                                    ctx.scaleBy(x: scale, y: scale)
+                                    layer.render(in: ctx)
+                                    if let image = ctx.makeImage() {
+                                        try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?
+                                            .write(to: directory.appendingPathComponent("\(name)-\(section.rawValue).png"))
+                                    }
+                                }
+                            }
+                        }
+                        window.orderOut(nil)
+                    }
+                    appendState("settings-snap done")
+                }
             } else if command.hasPrefix("feedback-snap-pid ") {
                 let parts = command.split(separator: " ", maxSplits: 2)
                 guard parts.count == 3, Int32(parts[1]) == ProcessInfo.processInfo.processIdentifier else { return }

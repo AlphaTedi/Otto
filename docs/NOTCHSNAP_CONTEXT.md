@@ -932,3 +932,24 @@ first line and below its last. ↓ onto a row under the floating pills now
 scrolls it ABOVE them (`revealRowIfNeeded(footer:)`); the last to-do scrolls
 to the very end. DEBUG `panel-render` snaps `row-focused-last` (the longest
 list walked down to its last row).
+
+### 2026-10-01 Settings redesign (Direction A, glass-first)
+
+From `SETTINGS_REDESIGN_SPEC.md` (Marcello). Sidebar = `List(.sidebar)` with
+three Sections (Otto · Connections · System), nine pages, each a 22pt
+gradient tile; pages are grouped `Form`s with a 28pt tile + `.title2.bold()`
+header in a top safe-area inset (an empty header-only Section made the next
+section's header render as a footer). New pages: Opening (trigger, hover
+delay, auto-close, Restore Defaults), Permissions (calendar access + the
+stale-sync warning moved from Calendar; the sidebar shows a warning glyph
+when access was refused or sync is stale — never-asked is not a warning),
+Privacy (moved from General). Updates, onboarding replay and Send feedback
+live in About. `VisualPicker` (Buttons, `.isSelected`, ←/→) draws Layout and
+Theme thumbnails from system colours. Accent = `SettingsAccent` colour asset
+(#2BB3A6 light / #4FD1C5 dark) via `.tint`. Calendar diagnostics are
+DEBUG-only. Deviations from the spec, deliberate: icons are Lucide through
+OttoIcon (one icon family app-wide), and the Shortcuts list follows
+HotkeyManager, which the spec's table misread (⌃⇧N is New to-do, ⌥⌘N toggles
+the field, ⌃⇧E opens Notes). All storage keys unchanged. DEBUG
+`settings-snap-pid <pid> <dir>` renders every page and the sidebar in light
+and dark (pages alone: a split view does not draw into cacheDisplay).

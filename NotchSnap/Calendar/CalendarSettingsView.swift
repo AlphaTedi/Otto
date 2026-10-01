@@ -1,44 +1,56 @@
 import SwiftUI
 
-// MARK: - CalendarSettingsView — the Calendar tab (calendar PRD §2)
+// MARK: - CalendarSettingsView — Calendar & Meetings (calendar PRD §2)
 //
 // SU-1: connection lives in the standard Settings window, not the notch —
 // the one deliberate exception to "everything lives in the notch", because
 // granting calendar access is a rare, one-time, system-mediated action.
 //
-// Two sources (2026-07-26). macOS Calendar via EventKit was the original and
-// still suits a Mac whose sync is healthy. Google OAuth was added because that
-// assumption failed twice over: macOS stopped syncing Marcello's Google
-// account entirely, and an ad-hoc-signed copy on a second Mac cannot obtain
-// the calendar permission EventKit needs. Talking to Google directly sidesteps
-// both — no macOS sync in the path, and no TCC prompt at all.
+// A grouped Form like every other page (SETTINGS_REDESIGN_SPEC, 2026-10-01).
+// Access status and the "macOS isn't syncing" warning moved to Permissions;
+// this page keeps one line pointing there when something is off. The
+// diagnostics (today's events, the wide sync check) are DEBUG-only now.
 
 struct CalendarSettingsView: View {
+    @EnvironmentObject var appState: AppState
     @ObservedObject private var calendar = CalendarStore.shared
     @State private var isConnecting = false
-    @State private var probeLines: [String] = []
     @State private var clientID = ""
     @State private var clientSecret = ""
+    #if DEBUG
+    @State private var probeLines: [String] = []
+    #endif
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            PageTitle(title: "Calendar",
-                      subtitle: "Meetings in Today, and a heads-up before they start.")
-
+        SettingsPage(section: .calendar) {
             // Only offered when there is more than one usable source; a
             // one-option picker is just noise.
             let sources = CalendarStore.Source.available
             if sources.count > 1 {
-                Picker(L10n.t("gcal.source"), selection: Binding(
-                    get: { calendar.source },
-                    set: { calendar.source = $0 }
-                )) {
-                    ForEach(sources) { source in
-                        Text(source.label).tag(source)
+                Section {
+                    Picker(L10n.t("gcal.source"), selection: Binding(
+                        get: { calendar.source },
+                        set: { calendar.source = $0 }
+                    )) {
+                        ForEach(sources) { Text($0.label).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                }
+            }
+
+            if SettingsPermissions.needsAttention(calendar) {
+                Section {
+                    HStack {
+                        Label {
+                            Text("Something needs attention in Permissions.")
+                        } icon: {
+                            OttoIcon("exclamationmark.triangle.fill", pointSize: 12)
+                        }
+                        .foregroundStyle(.orange)
+                        Spacer()
+                        Button("Open Permissions") { appState.pendingSettingsSection = .permissions }
                     }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
             }
 
             if calendar.isConnected {
@@ -51,40 +63,53 @@ struct CalendarSettingsView: View {
         }
     }
 
-    // MARK: Google (disconnected)
+    // MARK: Disconnected
 
-    private var googleDisconnected: some View {
-        SettingsSection_Card(title: L10n.t("gcal.title")) {
-            VStack(alignment: .leading, spacing: 14) {
-                Text(L10n.t("gcal.subtitle"))
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if GoogleOAuth.hasBundledCredentials {
-                    // The shipped-credential case: one button, nothing else.
-                    signInButton
-                } else {
-                    // No credential compiled in. Do NOT show a dead button
-                    // beside a hidden panel — that was the worst of both
-                    // (Marcello, 2026-07-28). Show the setup plainly instead.
-                    setupSteps
-                    LabeledContent(L10n.t("gcal.clientID")) {
-                        TextField("", text: $clientID).textFieldStyle(.roundedBorder)
-                    }
-                    LabeledContent(L10n.t("gcal.clientSecret")) {
-                        SecureField("", text: $clientSecret).textFieldStyle(.roundedBorder)
-                    }
-                    signInButton
-                }
-
-                if let error = calendar.lastError {
-                    Text(error)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color(hex: "#E07A5F"))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+    @ViewBuilder
+    private var disconnected: some View {
+        Section {
+            LabeledContent {
+                Button(isConnecting ? "Connecting\u{2026}" : "Connect Calendar") { connect() }
+                    .disabled(isConnecting)
+            } label: {
+                Text("macOS Calendar")
+                Text("Meetings in Today, and a heads-up before they start.")
             }
+            if let error = calendar.lastError {
+                Text(error).foregroundStyle(.orange)
+            }
+        } header: {
+            Text("Account")
+        } footer: {
+            Text("Uses the calendars already in the Calendar app, including Google accounts added in Internet Accounts. Otto only reads them.")
+        }
+    }
+
+    // MARK: Google (only when that source is offered)
+
+    @ViewBuilder
+    private var googleDisconnected: some View {
+        Section {
+            if !GoogleOAuth.hasBundledCredentials {
+                TextField(L10n.t("gcal.clientID"), text: $clientID)
+                SecureField(L10n.t("gcal.clientSecret"), text: $clientSecret)
+                Link(L10n.t("gcal.openConsole"),
+                     destination: URL(string: "https://console.cloud.google.com/apis/credentials")!)
+            }
+            LabeledContent {
+                Button(isConnecting ? "Connecting\u{2026}" : L10n.t("gcal.signIn")) {
+                    saveCredentialsAndConnect()
+                }
+                .disabled(isConnecting || !canSignIn)
+            } label: {
+                Text(L10n.t("gcal.title"))
+                Text(L10n.t("gcal.subtitle"))
+            }
+            if let error = calendar.lastError {
+                Text(error).foregroundStyle(.orange)
+            }
+        } header: {
+            Text("Account")
         }
         .onAppear {
             if GoogleOAuth.shared.usesCustomCredentials {
@@ -94,62 +119,9 @@ struct CalendarSettingsView: View {
         }
     }
 
-    private var signInButton: some View {
-        Button {
-            saveCredentialsAndConnect()
-        } label: {
-            HStack(spacing: 8) {
-                OttoIcon("calendar.badge.clock", pointSize: 12)
-                Text(isConnecting ? "Connecting\u{2026}" : L10n.t("gcal.signIn"))
-                    .font(.system(size: 12, weight: .medium))
-            }
-            .foregroundStyle(Color(hex: "#111111"))
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(Color(hex: "#EEEEEE"))
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(isConnecting || !canSignIn)
-    }
-
-    /// Shown only in a build with no credential compiled in — i.e. to whoever
-    /// is building the app, not to someone who was handed a finished copy.
-    private var setupSteps: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(L10n.t("gcal.setupIntro"))
-                .font(.system(size: 11, weight: .semibold))
-            ForEach(Array([L10n.t("gcal.step1"), L10n.t("gcal.step2"),
-                           L10n.t("gcal.step3"), L10n.t("gcal.step4")].enumerated()),
-                    id: \.offset) { index, step in
-                HStack(alignment: .top, spacing: 6) {
-                    Text("\(index + 1).")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 14, alignment: .trailing)
-                    Text(step)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            Button {
-                NSWorkspace.shared.open(
-                    URL(string: "https://console.cloud.google.com/apis/credentials")!)
-            } label: {
-                Text(L10n.t("gcal.openConsole"))
-                    .font(.system(size: 11, weight: .medium))
-            }
-            .padding(.top, 2)
-        }
-    }
-
     /// Signing in needs a credential from somewhere: shipped, or typed in.
     private var canSignIn: Bool {
-        GoogleOAuth.hasBundledCredentials
-            || (!clientID.isEmpty && !clientSecret.isEmpty)
+        GoogleOAuth.hasBundledCredentials || (!clientID.isEmpty && !clientSecret.isEmpty)
     }
 
     private func saveCredentialsAndConnect() {
@@ -164,259 +136,124 @@ struct CalendarSettingsView: View {
         connect()
     }
 
-    // MARK: Disconnected
-
-    private var disconnected: some View {
-        SettingsSection_Card(title: "macOS Calendar") {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Connect to see meetings in Today and get notch alerts before they start.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Button {
-                    connect()
-                } label: {
-                    HStack(spacing: 8) {
-                        OttoIcon("calendar", pointSize: 12)
-                        Text(isConnecting ? "Connecting\u{2026}" : "Connect Calendar")
-                            .font(.system(size: 12, weight: .medium))
-                    }
-                    .foregroundStyle(Color(hex: "#111111"))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(Color(hex: "#EEEEEE"))
-                    )
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(isConnecting)
-
-                if let error = calendar.lastError {
-                    Text(error)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color(hex: "#E07A5F"))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Text("Uses the calendars already in the macOS Calendar app — including Google accounts you've added in System Settings \u{203A} Internet Accounts. Otto only ever reads them.")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
     // MARK: Connected (SU-5)
 
+    @ViewBuilder
     private var connected: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            SettingsSection_Card(title: "Account") {
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(Color(hex: "#8FBF7A"))
-                        .frame(width: 8, height: 8)
-                    Text(calendar.accountDescription ?? "macOS Calendar")
-                        .font(.system(size: 12))
-                    Spacer()
+        Section {
+            LabeledContent {
+                Label {
                     Text("Connected")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color(hex: "#8FBF7A"))
+                } icon: {
+                    OttoIcon("checkmark.circle.fill", pointSize: 12)
                 }
-            }
-
-            // The failure that wasted an evening: macOS had silently stopped
-            // syncing these accounts in mid-May, so nothing created since then
-            // ever reached this Mac — and NotchSnap looked broken while
-            // faithfully showing an empty (frozen) database. Say it loudly.
-            if calendar.syncLooksStale, let last = calendar.lastSyncedAt {
-                SettingsSection_Card(title: "\u{26A0} macOS isn't syncing your calendars") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("The newest event on this Mac is from \(last.formatted(date: .abbreviated, time: .shortened)). Anything created in Google since then hasn't arrived, so Otto can't show it.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color(hex: "#E07A5F"))
-                            .fixedSize(horizontal: false, vertical: true)
-                        Text("Fix: System Settings \u{203A} Internet Accounts \u{203A} your Google account \u{203A} toggle Calendars off and on. If that doesn't help, remove and re-add the account — Google expires its tokens, and a dead token looks exactly like this.")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Button("Open Internet Accounts") {
-                            if let url = URL(string: "x-apple.systempreferences:com.apple.systempreferences.InternetAccounts") {
-                                NSWorkspace.shared.open(url)
-                            }
-                        }
-                        .font(.system(size: 11))
-                    }
-                }
-            }
-
-            // Otto re-reads every 10 s and on every change, so the lag on a
-            // meeting booked five minutes out is macOS's download interval
-            // for the account, which only Calendar's own setting controls.
-            SettingsSection_Card(
-                title: L10n.t("cal.faster.title"),
-                subtitle: L10n.t("cal.faster.subtitle")
-            ) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(L10n.t("cal.faster.steps"))
-                        .font(.system(size: 11))
-                        .fixedSize(horizontal: false, vertical: true)
-                    Button(L10n.t("cal.faster.open")) {
-                        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.iCal") {
-                            NSWorkspace.shared.openApplication(at: url, configuration: .init())
-                        }
-                    }
-                    .font(.system(size: 11))
-                }
-            }
-
-            // "Connected" on its own was misleading — it reported account
-            // emails while the calendar holding the actual meeting wasn't
-            // synced to this Mac. Listing exactly what NotchSnap can read
-            // makes a missing calendar obvious instead of silent.
-            SettingsSection_Card(
-                title: "Calendars Otto can read",
-                subtitle: "Only these are checked for meetings. A calendar missing here isn't synced to this Mac."
-            ) {
-                let calendars = calendar.visibleCalendars
-                if calendars.isEmpty {
-                    Text("No calendars found. Add your account in System Settings \u{203A} Internet Accounts and make sure Calendars is enabled for it.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color(hex: "#E07A5F"))
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    // Per-calendar opt-out: macOS grants access to the whole
-                    // calendar database at once (there's no per-account system
-                    // permission), so choosing what NotchSnap uses happens here.
-                    ForEach(calendars) { entry in
-                        Toggle(isOn: Binding(
-                            get: { entry.isEnabled },
-                            set: { calendar.setCalendar(entry.id, enabled: $0) }
-                        )) {
-                            HStack(spacing: 8) {
-                                Text(entry.title).font(.system(size: 12))
-                                Spacer()
-                                Text("\(entry.source) \u{00B7} \(entry.sourceType)")
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-            }
-
-            SettingsSection_Card(
-                title: "Today's events",
-                subtitle: "What Otto sees right now, and why anything is hidden."
-            ) {
-                let rows = calendar.diagnoseToday()
-                if rows.isEmpty {
-                    Text("No events at all in today's calendars.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(rows, id: \.self) { row in
-                        Text(row)
-                            .font(.system(size: 10).monospacedDigit())
-                            .foregroundStyle(row.hasSuffix("SHOWN") ? Color(hex: "#8FBF7A") : .secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                Divider()
-                HStack {
-                    Text("Showing \(calendar.upcomingToday.count) upcoming")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Refresh") {
-                        Task { await calendar.refresh() }
-                    }
-                    .font(.system(size: 11))
-                }
-
-                // If today looks empty, this answers "is anything syncing at
-                // all?" — counts over -7d…+30d per calendar.
-                DisclosureGroup("Sync check") {
-                    VStack(alignment: .leading, spacing: 3) {
-                        ForEach(probeLines, id: \.self) { line in
-                            Text(line)
-                                .font(.system(size: 10).monospacedDigit())
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        Button("Run check") { probeLines = calendar.probeWideWindow() }
-                            .font(.system(size: 11))
-                            .padding(.top, 4)
-                    }
-                    .padding(.top, 6)
-                }
-                .font(.system(size: 11))
-            }
-
-            SettingsSection_Card(
-                title: "Alert timing",
-                subtitle: "How far ahead Otto warns you about a meeting."
-            ) {
-                leadTimeRow(
-                    label: "Ambient dot",
-                    help: "A small dot on the notch, no interruption.",
-                    value: $calendar.ambientLeadMinutes,
-                    range: 5...60, step: 5
-                )
-                Divider()
-                leadTimeRow(
-                    label: "Open the notch",
-                    help: "The panel opens itself with Join and Snooze.",
-                    value: $calendar.alertLeadMinutes,
-                    range: 1...15, step: 1
-                )
-                Divider()
-                leadTimeRow(
-                    label: "Snooze length",
-                    help: "How long Snooze delays the alert.",
-                    value: $calendar.snoozeMinutes,
-                    range: 1...30, step: 1
-                )
-            }
-
-            // SU-8
-            Button {
-                calendar.disconnect()
+                .foregroundStyle(.green)
             } label: {
-                Text("Disconnect")
-                    .font(.system(size: 11))
-                    .underline()
-                    .foregroundStyle(Color(hex: "#999999"))
-                    .contentShape(Rectangle())
+                Text(calendar.accountDescription ?? "macOS Calendar")
             }
-            .buttonStyle(.plain)
+            // Otto re-reads every 10 s; the lag on a meeting booked five
+            // minutes out is macOS's download interval for the account.
+            LabeledContent {
+                Button(L10n.t("cal.faster.open")) {
+                    if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.iCal") {
+                        NSWorkspace.shared.openApplication(at: url, configuration: .init())
+                    }
+                }
+            } label: {
+                Text(L10n.t("cal.faster.title"))
+                Text("Calendar \u{203A} Settings \u{203A} Accounts \u{203A} Refresh: Every minute.")
+            }
+            .help(L10n.t("cal.faster.steps"))
+        } header: {
+            Text("Account")
+        }
 
-            Text("Disconnecting stops all meeting alerts immediately. To revoke calendar access entirely, use System Settings \u{203A} Privacy & Security \u{203A} Calendars.")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        // Per-calendar opt-out: macOS grants the whole calendar database at
+        // once, so choosing what Otto uses happens here.
+        Section {
+            let calendars = calendar.visibleCalendars
+            if calendars.isEmpty {
+                Text("No calendars found. Add your account in Internet Accounts with Calendars turned on.")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(calendars) { entry in
+                    Toggle(isOn: Binding(
+                        get: { entry.isEnabled },
+                        set: { calendar.setCalendar(entry.id, enabled: $0) }
+                    )) {
+                        Text(entry.title)
+                        Text("\(entry.source) \u{00B7} \(entry.sourceType)")
+                    }
+                }
+            }
+        } header: {
+            Text("Calendars")
+        } footer: {
+            Text("Only these are checked for meetings. One missing here isn't synced to this Mac.")
+        }
+
+        Section("Alert timing") {
+            leadTimeRow("Ambient dot", "A small dot on the notch, no interruption.",
+                        value: $calendar.ambientLeadMinutes, range: 5...60, step: 5)
+            leadTimeRow("Open the notch", "The panel opens itself with Join and Snooze.",
+                        value: $calendar.alertLeadMinutes, range: 1...15, step: 1)
+            leadTimeRow("Snooze length", "How long Snooze delays the alert.",
+                        value: $calendar.snoozeMinutes, range: 1...30, step: 1)
+        }
+
+        #if DEBUG
+        diagnostics
+        #endif
+
+        Section {
+            HStack {
+                Spacer()
+                Button("Disconnect", role: .destructive) { calendar.disconnect() }
+            }
+        } footer: {
+            Text("Stops all meeting alerts. To revoke access entirely, use System Settings \u{203A} Privacy & Security \u{203A} Calendars.")
         }
     }
 
+    #if DEBUG
+    /// What Otto sees right now and why anything is hidden — development only.
     @ViewBuilder
-    private func leadTimeRow(label: String, help: String,
+    private var diagnostics: some View {
+        Section {
+            let rows = calendar.diagnoseToday()
+            if rows.isEmpty {
+                Text("No events at all in today's calendars.").foregroundStyle(.secondary)
+            } else {
+                ForEach(rows, id: \.self) { row in
+                    Text(row).font(.caption.monospaced()).foregroundStyle(.secondary)
+                }
+            }
+            HStack {
+                Text("Showing \(calendar.upcomingToday.count) upcoming").foregroundStyle(.secondary)
+                Spacer()
+                Button("Refresh") { Task { await calendar.refresh() } }
+                Button("Run check") { probeLines = calendar.probeWideWindow() }
+            }
+            ForEach(probeLines, id: \.self) { line in
+                Text(line).font(.caption.monospaced()).foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Today's events (DEBUG)")
+        }
+    }
+    #endif
+
+    private func leadTimeRow(_ label: String, _ help: String,
                              value: Binding<Int>, range: ClosedRange<Int>,
                              step: Int) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(label).font(.system(size: 13))
-                Text(help).font(.system(size: 11)).foregroundStyle(.secondary)
-            }
-            Spacer()
+        LabeledContent {
             Stepper(value: value, in: range, step: step) {
-                Text("\(value.wrappedValue) min")
-                    .font(.system(size: 12))
-                    .monospacedDigit()
+                Text("\(value.wrappedValue) min").monospacedDigit()
             }
             .fixedSize()
+        } label: {
+            Text(label)
+            Text(help)
         }
     }
 
