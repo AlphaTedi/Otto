@@ -230,6 +230,10 @@ struct ContextBar<Title: View, Trailing: View>: View {
     var body: some View {
         HStack(alignment: .center, spacing: SpaceChrome.slotGap) {
             BackChip(parentTitle: parentTitle, action: onBack)
+                // More air than the field's dot gets: the chip is a filled
+                // square, and at the dot's 7pt the title read as touching it
+                // (Marcello, 2026-10-02).
+                .padding(.trailing, 5)
             title
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityAddTraits(.isHeader)
