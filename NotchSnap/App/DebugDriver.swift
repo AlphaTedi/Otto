@@ -210,6 +210,33 @@ enum DebugDriver {
                 ImagePreviewPanel.shared.hide()
                 window.orderOut(nil)
                 appendState("chip-snap done")
+            } else if command.hasPrefix("entity-chip-snap-pid ") {
+                // entity-chip-snap-pid <pid> <dir> — a title with date, link and
+                // @name chips in light and in dark. Writes nothing.
+                let parts = command.split(separator: " ", maxSplits: 2)
+                guard parts.count == 3, Int32(parts[1]) == ProcessInfo.processInfo.processIdentifier else { return }
+                let directory = URL(fileURLWithPath: String(parts[2]))
+                try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                let saved = NSApp.appearance
+                for (name, look) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+                    NSApp.appearance = NSAppearance(named: look)
+                    let view = EntityTitleView(title: "Call @simon today about https://skiper-ui.com and `code`",
+                                               isBright: false, onTap: {})
+                        .frame(width: 520, height: 40)
+                        .padding(12)
+                        .background(Color(nsColor: .windowBackgroundColor))
+                    let host = NSHostingView(rootView: view)
+                    host.appearance = NSAppearance(named: look)
+                    host.frame = NSRect(x: 0, y: 0, width: 544, height: 64)
+                    host.layoutSubtreeIfNeeded()
+                    if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                        host.cacheDisplay(in: host.bounds, to: rep)
+                        try? rep.representation(using: .png, properties: [:])?
+                            .write(to: directory.appendingPathComponent("chips-\(name).png"))
+                    }
+                }
+                NSApp.appearance = saved
+                appendState("entity-chip-snap done")
             } else if command.hasPrefix("settings-snap-pid ") {
                 // settings-snap-pid <pid> <dir> — every Settings page, light
                 // and dark, rendered off screen. Writes nothing.

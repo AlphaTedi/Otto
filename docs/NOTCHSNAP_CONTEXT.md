@@ -965,3 +965,14 @@ shortcuts are one keycap per key; settings changes apply without animation
 (the Hover delay row cross-faded over Auto-close); the layout/theme pickers
 take focus as a whole (no square focus ring per thumbnail). The image-chip
 preview now also closes whenever the notch leaves `.expanded`.
+
+### 2026-10-02 small polish batch
+
+Settings ← → use SF Symbols (System Settings' own arrows — a deliberate
+exception to Lucide). Row hints lose their separator; the gutter is 52 (was
+60), so titles get 8pt more. Entity chips have light-mode pairs
+(`DSEntityChip`, resolved per appearance into the cached chip image; DEBUG
+`entity-chip-snap-pid`). The Notes pill is a pill like the rest (no dashed
+edge). The Notes/lists divider is a dynamic overlay, visible in light. The
+Notes · Meetings dropdown sits 15pt from the right edge — the same as from
+the top.

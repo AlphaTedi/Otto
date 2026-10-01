@@ -740,7 +740,8 @@ struct TodoTabRow: View {
             // scroll. Without it the bar read as one row of equals in which
             // the first item simply refused to move (Marcello, 2026-09-06).
             Rectangle()
-                .fill(Color.white.opacity(0.12))
+                // Dark ink in light mode: white at 12% vanished there.
+                .fill(Color.dynamicOverlay(light: 0.15, dark: 0.12))
                 .frame(width: 1, height: 18)
                 .padding(.horizontal, 2)
 
@@ -2908,14 +2909,8 @@ struct RowActions: View {
                     )
             }
 
-            // Only when both are up does a separator have two things to
-            // separate.
-            if showEnter && showGrip {
-                Rectangle()
-                    .fill(DSColor.rowAffordance)
-                    .frame(width: 1, height: LabMetrics.enterBadgeHeight)
-            }
-
+            // No separator between the two (Marcello, 2026-10-02): the gap
+            // separates them, and the gutter gets narrower for the title.
             if showGrip { DragGrip() }
         }
         .allowsHitTesting(false)

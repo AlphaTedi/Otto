@@ -73,6 +73,8 @@ struct CaptureHeader<Field: View>: View {
     @ViewBuilder let field: Field
 
     static var height: CGFloat { 60 }
+    /// (60 − the dropdown's 30) / 2: the accessory's distance from the top.
+    static var accessoryInset: CGFloat { 15 }
 
     var body: some View {
         HStack(alignment: .center, spacing: SpaceChrome.slotGap) {
@@ -93,12 +95,16 @@ struct CaptureHeader<Field: View>: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
             if let accessory { accessory }
-            trailing
+            // Only when it shows something: an empty slot still cost the
+            // HStack's spacing beside the accessory.
+            if isTyping || accessory == nil { trailing }
         }
         .padding(.leading, SpaceChrome.cornerInset)
         // The keycap / Save button end on the same vertical as the rows'
         // ⌘↵ and grip below them (Marcello, 2026-10-01: "più allineate").
-        .padding(.trailing, SpaceChrome.rowTrailingInset)
+        // The Notes · Meetings dropdown instead sits as far from the right
+        // edge as from the top one (Marcello, 2026-10-02).
+        .padding(.trailing, accessory != nil && !isTyping ? Self.accessoryInset : SpaceChrome.rowTrailingInset)
         .padding(.vertical, 8)
         .frame(minHeight: Self.height)
         .overlay(alignment: .bottom) {

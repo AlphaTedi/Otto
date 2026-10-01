@@ -272,13 +272,26 @@ enum EntityChipRenderer {
     private static var cache: [String: NSImage] = [:]
 
     static func image(kind: EntityKind, label: String) -> NSImage {
-        let key = "\(kind)|\(label)"
+        // Per appearance: the chip colours are light/dark pairs, resolved
+        // here once and baked into the image.
+        let appearance = NSApp.effectiveAppearance
+        let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let key = "\(kind)|\(label)|\(dark)"
         if let cached = cache[key] { return cached }
+        var made = NSImage()
+        appearance.performAsCurrentDrawingAppearance {
+            made = render(kind: kind, label: label)
+        }
+        cache[key] = made
+        return made
+    }
+
+    private static func render(kind: EntityKind, label: String) -> NSImage {
 
         let font: NSFont = DSEntityChip.isMonospaced(kind)
             ? .monospacedSystemFont(ofSize: 12, weight: .regular)
             : .systemFont(ofSize: 12)
-        let textColor = NSColor(DSEntityChip.text(for: kind))
+        let textColor = NSColor(DSEntityChip.text(for: kind)).usingColorSpace(.sRGB) ?? .labelColor
         let textAttributes: [NSAttributedString.Key: Any] = [
             .font: font, .foregroundColor: textColor,
         ]
@@ -293,8 +306,8 @@ enum EntityChipRenderer {
 
         let size = NSSize(width: ceil(7 + iconAdvance + textSize.width + 7),
                           height: chipHeight)
-        let background = NSColor(DSEntityChip.background(for: kind))
-        let border = NSColor(DSEntityChip.border(for: kind))
+        let background = NSColor(DSEntityChip.background(for: kind)).usingColorSpace(.sRGB) ?? .clear
+        let border = NSColor(DSEntityChip.border(for: kind)).usingColorSpace(.sRGB) ?? .clear
 
         let image = NSImage(size: size, flipped: false) { rect in
             let path = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5),
@@ -317,7 +330,6 @@ enum EntityChipRenderer {
             )
             return true
         }
-        cache[key] = image
         return image
     }
 }

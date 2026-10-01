@@ -112,7 +112,7 @@ enum LabMetrics {
     /// The trailing gutter, RESERVED on every row whether anything is drawn in
     /// it or not: badge 23 + 6 + rule 1 + 6 + grip 16. Held open permanently
     /// so the title's width never changes — see the comment at its use.
-    static let rowActionsWidth: CGFloat = 60  // ⌘⏎ badge (2026-09-27) + separator + grip
+    static let rowActionsWidth: CGFloat = 52  // ⌘⏎ badge + gap + grip; no separator since 2026-10-02
 
     // Section tabs, now at the BOTTOM
     static let tabsInset: CGFloat = 24

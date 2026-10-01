@@ -51,11 +51,13 @@ struct SettingsView: View {
                 .navigationTitle(selection.title)
                 .toolbar {
                     ToolbarItemGroup(placement: .navigation) {
-                        Button { step(&back, &forward) } label: { OttoIcon("chevron.left", pointSize: 13) }
+                        // SF Symbols here on purpose: these are System
+                        // Settings' own arrows (Marcello, 2026-10-02).
+                        Button { step(&back, &forward) } label: { Image(systemName: "chevron.left") }
                             .disabled(back.isEmpty)
                             .help("Back")
                             .accessibilityLabel("Back")
-                        Button { step(&forward, &back) } label: { OttoIcon("chevron.right", pointSize: 13) }
+                        Button { step(&forward, &back) } label: { Image(systemName: "chevron.right") }
                             .disabled(forward.isEmpty)
                             .help("Forward")
                             .accessibilityLabel("Forward")

@@ -1468,21 +1468,12 @@ struct NotesPill: View {
         // Never squeezed: when the lists overflow, the scroller gives way, not
         // this pill (its capsule ends were being cut off).
         .fixedSize()
-        // U5 §5.1: a 1.4-pt dashed amber edge at 55%; selected, a solid
-        // amber fill with dark text. ONE capsule in every state
-        // (Marcello, 2026-09-06).
+        // Like every other pill (Marcello, 2026-10-02): no dashed edge — a
+        // fill when selected, the shared hover wash otherwise.
         .background(Capsule(style: .continuous).fill(
             isActive ? SpaceTint.notes.base.color.opacity(0.85)
-                     : (hover ? SpaceTint.notes.base.color.opacity(0.10) : Color.clear)
+                     : (hover ? DSColor.fieldBackground : Color.clear)
         ))
-        // A 14-pt circular radius rather than `Capsule`: a stroked capsule at
-        // this size rendered a flat tick at each end (seen on Calendar's solid
-        // edge; the dashes here were hiding the same thing).
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .circular)
-                .strokeBorder(SpaceTint.notes.base.color.opacity(isActive ? 0.85 : 0.55),
-                              style: StrokeStyle(lineWidth: 1.4, dash: isActive ? [] : [4, 3]))
-        )
         .contentShape(Capsule(style: .continuous))
         .onTapGesture { NotesStore.shared.enterSpace() }
         .onHover { hover = $0 }

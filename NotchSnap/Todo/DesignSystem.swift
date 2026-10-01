@@ -716,37 +716,45 @@ enum EntityKind {
 }
 
 enum DSEntityChip {
+    /// Light and dark pairs. The chips were dark-only, so on a light panel
+    /// every date, link and @name was a near-black lozenge — far louder than
+    /// the words around it (Marcello, 2026-10-02). Light mode: a pale wash
+    /// of the same hue, a soft edge, and the hue darkened for the text.
+    private static func pair(_ light: String, _ dark: String) -> Color {
+        .dynamic(light: NSColor(Color(hex: light)), dark: NSColor(Color(hex: dark)))
+    }
+
     static func background(for kind: EntityKind) -> Color {
         switch kind {
-        case .link: return Color(hex: "#1A2733")
-        case .date: return Color(hex: "#231F14")
-        case .mention: return Color(hex: "#2A1F33")
-        // Code sits on a warm dark ground rather than neutral grey — the
+        case .link: return pair("#E5EFF8", "#1A2733")
+        case .date: return pair("#F7EED5", "#231F14")
+        case .mention: return pair("#F1E6F8", "#2A1F33")
+        // Code sits on a warm ground rather than neutral grey — the
         // orange-on-dark convention Slack, Jira and every code review tool
         // share, which is what makes a snippet findable by scanning rather
         // than reading (Marcello's tester, 2026-08-10).
-        case .code: return Color(hex: "#2A1A14")
-        case .channel: return Color(hex: "#14262A")
+        case .code: return pair("#FBE9DE", "#2A1A14")
+        case .channel: return pair("#DFF2F4", "#14262A")
         }
     }
 
     static func border(for kind: EntityKind) -> Color {
         switch kind {
-        case .link: return Color(hex: "#2F4A5C")
-        case .date: return Color(hex: "#4A3F22")
-        case .mention: return Color(hex: "#493459")
-        case .code: return Color(hex: "#5C3524")
-        case .channel: return Color(hex: "#245259")
+        case .link: return pair("#BDD4E8", "#2F4A5C")
+        case .date: return pair("#E5D29A", "#4A3F22")
+        case .mention: return pair("#D9C2E9", "#493459")
+        case .code: return pair("#EEC3AA", "#5C3524")
+        case .channel: return pair("#A8D8DE", "#245259")
         }
     }
 
     static func text(for kind: EntityKind) -> Color {
         switch kind {
-        case .link: return DSColor.CategoryPalette.blue
-        case .date: return DSColor.CategoryPalette.amber
-        case .mention: return DSColor.CategoryPalette.purple
-        case .code: return Color(hex: "#E8905C")
-        case .channel: return Color(hex: "#5CC5D6")
+        case .link: return pair("#2B6A9A", "#7FB8E0")
+        case .date: return pair("#8A6A0E", "#E8C15A")
+        case .mention: return pair("#7A479B", "#C99EE0")
+        case .code: return pair("#AD5326", "#E8905C")
+        case .channel: return pair("#1F7F8C", "#5CC5D6")
         }
     }
 
