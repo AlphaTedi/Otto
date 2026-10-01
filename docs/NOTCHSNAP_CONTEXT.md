@@ -960,3 +960,8 @@ in the toolbar beside ← → history buttons; a "Search settings" field heads
 the sidebar (title + keyword match); every control is centred on its row via
 `SettingRow` (Form's label slot aligned controls to the label's first line).
 The hover slider rounds to 25 ms itself instead of `step:`, which drew ticks.
+Third pass (2026-10-01): sidebar groups have no titles (gaps only);
+shortcuts are one keycap per key; settings changes apply without animation
+(the Hover delay row cross-faded over Auto-close); the layout/theme pickers
+take focus as a whole (no square focus ring per thumbnail). The image-chip
+preview now also closes whenever the notch leaves `.expanded`.

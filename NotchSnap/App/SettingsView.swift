@@ -125,7 +125,9 @@ struct SettingsSidebar: View {
             ForEach(SettingsGroup.allCases) { group in
                 let sections = group.sections.filter { $0.matches(query) }
                 if !sections.isEmpty {
-                    Section(group.title) {
+                    // No group titles: the gap between the groups is the
+                    // separation (Marcello, 2026-10-01).
+                    Section {
                         ForEach(sections) { section in
                             Label {
                                 HStack {
@@ -341,18 +343,30 @@ struct StatusLabel: View {
     }
 }
 
-/// A keycap-looking chip for a shortcut.
+/// A shortcut as one keycap per key — ⌃ ⇧ N, not "⌃⇧N" squeezed into a
+/// single chip, where the glyphs ran together (Marcello, 2026-10-01).
 private struct KeycapChip: View {
     let keys: String
 
+    /// "Esc" is one key; everything else here is one key per character.
+    private var caps: [String] {
+        keys.count > 1 && keys.allSatisfy(\.isLetter) ? [keys] : keys.map(String.init)
+    }
+
     var body: some View {
-        Text(keys)
-            .font(.callout.monospaced())
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-            .accessibilityLabel(keys)
+        HStack(spacing: 4) {
+            ForEach(Array(caps.enumerated()), id: \.offset) { _, cap in
+                Text(cap)
+                    .font(.callout)
+                    .foregroundStyle(.primary)
+                    .frame(minWidth: 14)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(keys)
     }
 }
 
@@ -390,12 +404,17 @@ struct VisualPicker<Option: Hashable, Thumbnail: View>: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                // The picker as a whole takes focus (←/→ below); a focus
+                // ring per Button drew a square around the rounded
+                // thumbnail (Marcello, 2026-10-01).
+                .focusable(false)
                 .accessibilityLabel(label(option))
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
         .padding(.vertical, 4)
         .focusable()
+        .modifier(NoFocusRing())
         .onMoveCommand { direction in
             guard let index = options.firstIndex(of: selection) else { return }
             switch direction {
@@ -408,6 +427,13 @@ struct VisualPicker<Option: Hashable, Thumbnail: View>: View {
     }
 }
 
+/// `focusEffectDisabled` is macOS 14+.
+private struct NoFocusRing: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 14.0, *) { content.focusEffectDisabled() } else { content }
+    }
+}
+
 // MARK: - Helper: binding to AppSettings
 
 @MainActor
@@ -417,7 +443,13 @@ private func settingsBinding<T>(_ appState: AppState, _ keyPath: WritableKeyPath
         set: { newValue in
             var settings = appState.settings
             settings[keyPath: keyPath] = newValue
-            appState.updateSettings { $0 = settings }
+            // No animation: a row appearing or leaving (Hover delay) was
+            // cross-faded in place, so for a moment two rows' text sat on top
+            // of each other (Marcello, 2026-10-01). System Settings swaps
+            // rows instantly too.
+            var instant = Transaction()
+            instant.disablesAnimations = true
+            withTransaction(instant) { appState.updateSettings { $0 = settings } }
         }
     )
 }
@@ -562,7 +594,6 @@ struct AppearanceSettingsView: View {
             } footer: {
                 Text(notchLayout.summary)
             }
-            .animation(.default, value: notchLayout)
 
             Section("Theme") {
                 VisualPicker(
@@ -746,7 +777,6 @@ struct OpeningSettingsView: View {
                     .fixedSize()
                 }
             }
-            .animation(.default, value: appState.settings.notchTrigger)
 
             Section {
                 SettingRow(title: "Restore defaults", subtitle: "Opening, hover delay, auto-close and the notch size.") {

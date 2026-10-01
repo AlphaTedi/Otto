@@ -413,7 +413,8 @@ final class ImagePreviewPanel {
 
     private var spaceObserver: NSObjectProtocol?
 
-    private func dismiss() {
+    /// Close the preview and tell its chip, so the chip un-hovers too.
+    func dismiss() {
         guard shownPath != nil else { return }
         let callback = onDismiss
         hide()

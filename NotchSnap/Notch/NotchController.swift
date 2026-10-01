@@ -11,7 +11,12 @@ class NotchController: ObservableObject {
     /// NotchSnap product surface.
     private static let legacyNotificationsAreAvailable = false
 
-    @Published var state: NotchState = .idle
+    @Published var state: NotchState = .idle {
+        // An image chip's hover preview is its own window, so nothing closes
+        // it when the notch does — a desktop swipe mid-hover left it floating
+        // on screen (Marcello, 2026-10-01). Leaving `.expanded` closes it.
+        didSet { if oldValue == .expanded, state != .expanded { ImagePreviewPanel.shared.dismiss() } }
+    }
     /// Visibility follows presentation; cancelled tasks cannot strand an empty panel.
     var contentVisible: Bool { state == .expanded }
     @Published var screenshotJustArrived: Bool = false
