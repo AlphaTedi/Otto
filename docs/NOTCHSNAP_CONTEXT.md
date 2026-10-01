@@ -953,3 +953,10 @@ HotkeyManager, which the spec's table misread (⌃⇧N is New to-do, ⌥⌘N tog
 the field, ⌃⇧E opens Notes). All storage keys unchanged. DEBUG
 `settings-snap-pid <pid> <dir>` renders every page and the sidebar in light
 and dark (pages alone: a split view does not draw into cacheDisplay).
+
+Second pass, same day (Marcello, against System Settings): the system accent
+(the SettingsAccent teal is gone); no header inside the page — the title sits
+in the toolbar beside ← → history buttons; a "Search settings" field heads
+the sidebar (title + keyword match); every control is centred on its row via
+`SettingRow` (Form's label slot aligned controls to the label's first line).
+The hover slider rounds to 25 ms itself instead of `step:`, which drew ticks.

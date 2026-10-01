@@ -68,12 +68,9 @@ struct CalendarSettingsView: View {
     @ViewBuilder
     private var disconnected: some View {
         Section {
-            LabeledContent {
+            SettingRow(title: "macOS Calendar", subtitle: "Meetings in Today, and a heads-up before they start.") {
                 Button(isConnecting ? "Connecting\u{2026}" : "Connect Calendar") { connect() }
                     .disabled(isConnecting)
-            } label: {
-                Text("macOS Calendar")
-                Text("Meetings in Today, and a heads-up before they start.")
             }
             if let error = calendar.lastError {
                 Text(error).foregroundStyle(.orange)
@@ -96,14 +93,11 @@ struct CalendarSettingsView: View {
                 Link(L10n.t("gcal.openConsole"),
                      destination: URL(string: "https://console.cloud.google.com/apis/credentials")!)
             }
-            LabeledContent {
+            SettingRow(title: L10n.t("gcal.title"), subtitle: L10n.t("gcal.subtitle")) {
                 Button(isConnecting ? "Connecting\u{2026}" : L10n.t("gcal.signIn")) {
                     saveCredentialsAndConnect()
                 }
                 .disabled(isConnecting || !canSignIn)
-            } label: {
-                Text(L10n.t("gcal.title"))
-                Text(L10n.t("gcal.subtitle"))
             }
             if let error = calendar.lastError {
                 Text(error).foregroundStyle(.orange)
@@ -141,27 +135,20 @@ struct CalendarSettingsView: View {
     @ViewBuilder
     private var connected: some View {
         Section {
-            LabeledContent {
-                Label {
-                    Text("Connected")
-                } icon: {
-                    OttoIcon("checkmark.circle.fill", pointSize: 12)
-                }
-                .foregroundStyle(.green)
-            } label: {
-                Text(calendar.accountDescription ?? "macOS Calendar")
+            SettingRow(title: calendar.accountDescription ?? "macOS Calendar") {
+                StatusLabel(text: "Connected", icon: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .fixedSize()
             }
             // Otto re-reads every 10 s; the lag on a meeting booked five
             // minutes out is macOS's download interval for the account.
-            LabeledContent {
+            SettingRow(title: L10n.t("cal.faster.title"),
+                       subtitle: "Calendar \u{203A} Settings \u{203A} Accounts \u{203A} Refresh: Every minute.") {
                 Button(L10n.t("cal.faster.open")) {
                     if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.iCal") {
                         NSWorkspace.shared.openApplication(at: url, configuration: .init())
                     }
                 }
-            } label: {
-                Text(L10n.t("cal.faster.title"))
-                Text("Calendar \u{203A} Settings \u{203A} Accounts \u{203A} Refresh: Every minute.")
             }
             .help(L10n.t("cal.faster.steps"))
         } header: {
@@ -177,12 +164,11 @@ struct CalendarSettingsView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(calendars) { entry in
-                    Toggle(isOn: Binding(
-                        get: { entry.isEnabled },
-                        set: { calendar.setCalendar(entry.id, enabled: $0) }
-                    )) {
-                        Text(entry.title)
-                        Text("\(entry.source) \u{00B7} \(entry.sourceType)")
+                    SettingRow(title: entry.title, subtitle: "\(entry.source) \u{00B7} \(entry.sourceType)") {
+                        RowSwitch(label: entry.title, isOn: Binding(
+                            get: { entry.isEnabled },
+                            set: { calendar.setCalendar(entry.id, enabled: $0) }
+                        ))
                     }
                 }
             }
@@ -246,14 +232,11 @@ struct CalendarSettingsView: View {
     private func leadTimeRow(_ label: String, _ help: String,
                              value: Binding<Int>, range: ClosedRange<Int>,
                              step: Int) -> some View {
-        LabeledContent {
+        SettingRow(title: label, subtitle: help) {
             Stepper(value: value, in: range, step: step) {
                 Text("\(value.wrappedValue) min").monospacedDigit()
             }
             .fixedSize()
-        } label: {
-            Text(label)
-            Text(help)
         }
     }
 

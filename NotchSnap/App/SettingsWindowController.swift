@@ -57,7 +57,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         // The two deviations: let the sidebar's material continue up behind the
         // traffic lights, the way Finder and System Settings do.
         window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
+        // The page's name shows in the toolbar beside ← →, like System
+        // Settings (2026-10-01); the window keeps "Settings" for the Window menu.
         // Unified so the toolbar area belongs to the split view rather than
         // sitting on a separate strip above it.
         window.toolbarStyle = .unified

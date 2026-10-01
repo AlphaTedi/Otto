@@ -11,6 +11,13 @@ import SwiftUI
 // macOS has no equivalent: the icon tiles and the layout / theme thumbnails,
 // and even those sit inside Buttons so they keep keyboard and VoiceOver.
 //
+// Second pass the same day (Marcello, against System Settings itself): the
+// system accent, not a teal of our own; the page title lives in the toolbar
+// beside ← → history arrows, not as a header inside the page; a search field
+// heads the sidebar; and every control is centred on its row — Form aligns a
+// control to its label's FIRST line, which left segmented pickers and menus
+// riding high beside a two-line label, so rows are `SettingRow` now.
+//
 // Icons are Lucide through OttoIcon, not SF Symbols as the spec's table says:
 // the whole app is one icon family since 2026-09-27, and Settings is part of
 // the app. The symbol NAMES are the spec's; OttoIcon maps them.
@@ -23,24 +30,48 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
     @State private var selection: SettingsSection = .general
+    @State private var query = ""
+    /// ← → like System Settings: pages visited, and pages stepped back from.
+    @State private var back: [SettingsSection] = []
+    @State private var forward: [SettingsSection] = []
+    /// Set while a history arrow is moving the selection, so that move is not
+    /// itself recorded as a visit.
+    @State private var steppingHistory = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         NavigationSplitView {
-            SettingsSidebar(selection: $selection)
-            .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
+            SettingsSidebar(selection: $selection, query: query)
+                .searchable(text: $query, placement: .sidebar, prompt: "Search settings")
+                .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
         } detail: {
             page(for: selection)
                 .id(selection)
                 .transition(.opacity)
                 .navigationTitle(selection.title)
+                .toolbar {
+                    ToolbarItemGroup(placement: .navigation) {
+                        Button { step(&back, &forward) } label: { OttoIcon("chevron.left", pointSize: 13) }
+                            .disabled(back.isEmpty)
+                            .help("Back")
+                            .accessibilityLabel("Back")
+                        Button { step(&forward, &back) } label: { OttoIcon("chevron.right", pointSize: 13) }
+                            .disabled(forward.isEmpty)
+                            .help("Forward")
+                            .accessibilityLabel("Forward")
+                    }
+                }
         }
         .animation(reduceMotion ? nil : NotchAnimation.contentIn, value: selection)
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 760, minHeight: 520)
-        // Toggles, sliders and selection rings inherit it.
-        .tint(Color("SettingsAccent"))
         .environmentObject(appState)
+        .onChange(of: selection) { [selection] _ in
+            // `selection` in the capture list is the value BEFORE the change.
+            guard !steppingHistory else { steppingHistory = false; return }
+            back.append(selection)
+            forward.removeAll()
+        }
         // SU-6: the Today nudge card deep-links straight to the Calendar pane.
         .onChange(of: appState.pendingSettingsSection) { requested in
             guard let requested else { return }
@@ -56,6 +87,14 @@ struct SettingsView: View {
         .onDisappear {
             NotificationCenter.default.post(name: .settingsWindowClosed, object: nil)
         }
+    }
+
+    /// Pop a page off `from`, remember the current one on `to`.
+    private func step(_ from: inout [SettingsSection], _ to: inout [SettingsSection]) {
+        guard let target = from.popLast() else { return }
+        to.append(selection)
+        steppingHistory = true
+        selection = target
     }
 
     @ViewBuilder
@@ -74,31 +113,35 @@ struct SettingsView: View {
     }
 }
 
-
 /// The sidebar: three groups, a tile per page, the Permissions warning.
+/// A query narrows it to the pages whose title or settings match.
 struct SettingsSidebar: View {
     @Binding var selection: SettingsSection
+    var query: String = ""
     @ObservedObject private var calendar = CalendarStore.shared
 
     var body: some View {
         List(selection: $selection) {
             ForEach(SettingsGroup.allCases) { group in
-                Section(group.title) {
-                    ForEach(group.sections) { section in
-                        Label {
-                            HStack {
-                                Text(section.title)
-                                Spacer()
-                                if section == .permissions, SettingsPermissions.needsAttention(calendar) {
-                                    OttoIcon("exclamationmark.triangle.fill", pointSize: 11)
-                                        .foregroundStyle(.orange)
-                                        .accessibilityLabel("Needs attention")
+                let sections = group.sections.filter { $0.matches(query) }
+                if !sections.isEmpty {
+                    Section(group.title) {
+                        ForEach(sections) { section in
+                            Label {
+                                HStack {
+                                    Text(section.title)
+                                    Spacer()
+                                    if section == .permissions, SettingsPermissions.needsAttention(calendar) {
+                                        OttoIcon("exclamationmark.triangle.fill", pointSize: 11)
+                                            .foregroundStyle(.orange)
+                                            .accessibilityLabel("Needs attention")
+                                    }
                                 }
+                            } icon: {
+                                SettingsIconTile(section: section)
                             }
-                        } icon: {
-                            SettingsIconTile(section: section)
+                            .tag(section)
                         }
-                        .tag(section)
                     }
                 }
             }
@@ -150,6 +193,27 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         }
     }
 
+    /// What the search field finds a page by, besides its title.
+    private var keywords: [String] {
+        switch self {
+        case .general:     return ["launch", "login", "dock", "language", "sound", "haptic"]
+        case .appearance:  return ["layout", "notch", "floating", "panels", "theme", "dark", "light", "size", "presence"]
+        case .opening:     return ["hover", "click", "delay", "auto-close", "menu bar", "restore", "defaults"]
+        case .shortcuts:   return ["keyboard", "hotkey", "keys"]
+        case .calendar:    return ["meeting", "alert", "snooze", "account", "calendars", "disconnect", "refresh"]
+        case .storage:     return ["markdown", "folder", "finder", "obsidian", "files", "vault"]
+        case .permissions: return ["access", "calendar", "sync", "internet accounts", "privacy & security"]
+        case .privacy:     return ["usage", "data", "analytics", "anonymous", "id"]
+        case .about:       return ["version", "update", "onboarding", "feedback"]
+        }
+    }
+
+    func matches(_ query: String) -> Bool {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return true }
+        return title.lowercased().contains(q) || keywords.contains { $0.contains(q) }
+    }
+
     /// SF Symbol names, drawn as Lucide by OttoIcon. About draws the logo.
     var icon: String {
         switch self {
@@ -186,8 +250,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 
 // MARK: - Building blocks
 
-/// A rounded, gradient-filled icon tile — the sidebar's at 22pt, the page
-/// header's at 28.
+/// A rounded, gradient-filled icon tile for the sidebar.
 struct SettingsIconTile: View {
     let section: SettingsSection
     var size: CGFloat = 22
@@ -216,25 +279,8 @@ struct SettingsIconTile: View {
     }
 }
 
-/// The page's first row: the tile at 28pt and the title.
-private struct SettingsPageHeader: View {
-    let section: SettingsSection
-
-    var body: some View {
-        HStack(spacing: 10) {
-            SettingsIconTile(section: section, size: 28)
-            Text(section.title)
-                .font(.title2.bold())
-                .foregroundStyle(.primary)
-        }
-        .textCase(nil)
-        .padding(.bottom, 6)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
-    }
-}
-
-/// One settings page: the header, then grouped sections.
+/// One settings page: grouped sections from the top, like System Settings.
+/// The page's name is the window's title, beside the history arrows.
 struct SettingsPage<Content: View>: View {
     let section: SettingsSection
     @ViewBuilder var content: () -> Content
@@ -244,19 +290,49 @@ struct SettingsPage<Content: View>: View {
             content()
         }
         .formStyle(.grouped)
-        // Above the first section, inside the scroll — an empty Section with
-        // a header made the next section's header render as a footer.
-        .safeAreaInset(edge: .top, spacing: 0) {
-            SettingsPageHeader(section: section)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
+    }
+}
+
+/// A row: title and optional one-line subtitle on the left, the control on
+/// the right, CENTRED on the row whatever the label's height. Form's own
+/// label slot aligns a control with the label's first line instead.
+struct SettingRow<Control: View>: View {
+    let title: String
+    var subtitle: String? = nil
+    @ViewBuilder var control: () -> Control
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 16) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 0)
+            control()
         }
     }
 }
 
+/// The switch of a SettingRow.
+struct RowSwitch: View {
+    let label: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Toggle(label, isOn: $isOn)
+            .labelsHidden()
+            .toggleStyle(.switch)
+    }
+}
+
 /// A Label whose icon is one of the app's (Lucide) glyphs.
-private struct StatusLabel: View {
+struct StatusLabel: View {
     let text: String
     let icon: String
 
@@ -303,7 +379,7 @@ struct VisualPicker<Option: Hashable, Thumbnail: View>: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                             .overlay {
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .strokeBorder(selected ? AnyShapeStyle(.tint)
+                                    .strokeBorder(selected ? AnyShapeStyle(Color.accentColor)
                                                            : AnyShapeStyle(Color(nsColor: .separatorColor)),
                                                   lineWidth: selected ? 3 : 1)
                             }
@@ -358,53 +434,50 @@ struct GeneralSettingsView: View {
     var body: some View {
         SettingsPage(section: .general) {
             Section("Startup") {
-                Toggle(isOn: Binding(
-                    get: { appState.settings.launchAtLogin },
-                    set: { newValue in
-                        appState.updateSettings { $0.launchAtLogin = newValue }
-                        do {
-                            if newValue { try SMAppService.mainApp.register() }
-                            else        { try SMAppService.mainApp.unregister() }
-                        } catch {
-                            print("[Settings] Login item error: \(error)")
+                SettingRow(title: "Launch at login", subtitle: "Open Otto automatically when you sign in.") {
+                    RowSwitch(label: "Launch at login", isOn: Binding(
+                        get: { appState.settings.launchAtLogin },
+                        set: { newValue in
+                            appState.updateSettings { $0.launchAtLogin = newValue }
+                            do {
+                                if newValue { try SMAppService.mainApp.register() }
+                                else        { try SMAppService.mainApp.unregister() }
+                            } catch {
+                                print("[Settings] Login item error: \(error)")
+                            }
                         }
-                    }
-                )) {
-                    Text("Launch at login")
-                    Text("Open Otto automatically when you sign in.")
+                    ))
                 }
-                Toggle(isOn: Binding(
-                    get: { appState.settings.showInDock },
-                    set: { newValue in
-                        appState.updateSettings { $0.showInDock = newValue }
-                        NSApp.setActivationPolicy(newValue ? .regular : .accessory)
-                    }
-                )) {
-                    Text("Show in Dock")
-                    Text("Off keeps Otto in the menu bar only.")
+                SettingRow(title: "Show in Dock", subtitle: "Off keeps Otto in the menu bar only.") {
+                    RowSwitch(label: "Show in Dock", isOn: Binding(
+                        get: { appState.settings.showInDock },
+                        set: { newValue in
+                            appState.updateSettings { $0.showInDock = newValue }
+                            NSApp.setActivationPolicy(newValue ? .regular : .accessory)
+                        }
+                    ))
                 }
             }
 
             Section {
-                Picker(selection: $appLanguage) {
-                    ForEach(AppLanguage.allCases) { lang in
-                        Text(lang.label).tag(lang.rawValue)
+                SettingRow(title: L10n.t("settings.language"), subtitle: L10n.t("settings.language.subtitle")) {
+                    Picker(L10n.t("settings.language"), selection: $appLanguage) {
+                        ForEach(AppLanguage.allCases) { lang in
+                            Text(lang.label).tag(lang.rawValue)
+                        }
                     }
-                } label: {
-                    Text(L10n.t("settings.language"))
-                    Text(L10n.t("settings.language.subtitle"))
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .fixedSize()
                 }
-                .pickerStyle(.menu)
             }
 
             Section("Feedback") {
-                Toggle(isOn: $soundEffectsEnabled) {
-                    Text("Interface sounds")
-                    Text("Subtle clicks when the notch opens and closes.")
+                SettingRow(title: "Interface sounds", subtitle: "Subtle clicks when the notch opens and closes.") {
+                    RowSwitch(label: "Interface sounds", isOn: $soundEffectsEnabled)
                 }
-                Toggle(isOn: $hapticFeedback) {
-                    Text("Haptics")
-                    Text("Trackpad taps on hover, open and close.")
+                SettingRow(title: "Haptics", subtitle: "Trackpad taps on hover, open and close.") {
+                    RowSwitch(label: "Haptics", isOn: $hapticFeedback)
                 }
             }
         }
@@ -468,17 +541,21 @@ struct AppearanceSettingsView: View {
                     thumbnail: { LayoutThumbnail(layout: $0) }
                 )
                 if notchLayout == .container {
-                    Picker("Size", selection: Binding(
-                        get: { NotchSizePreset.match(width: expandedWidth, height: expandedHeight) },
-                        set: { preset in
-                            expandedWidth = preset.width
-                            expandedHeight = preset.height
-                            cornerRadius = preset.radius
+                    SettingRow(title: "Size") {
+                        Picker("Size", selection: Binding(
+                            get: { NotchSizePreset.match(width: expandedWidth, height: expandedHeight) },
+                            set: { preset in
+                                expandedWidth = preset.width
+                                expandedHeight = preset.height
+                                cornerRadius = preset.radius
+                            }
+                        )) {
+                            ForEach(NotchSizePreset.allCases) { Text($0.label).tag($0) }
                         }
-                    )) {
-                        ForEach(NotchSizePreset.allCases) { Text($0.label).tag($0) }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .fixedSize()
                     }
-                    .pickerStyle(.segmented)
                 }
             } header: {
                 Text("Layout")
@@ -500,9 +577,8 @@ struct AppearanceSettingsView: View {
             }
 
             Section {
-                Toggle(isOn: $showNotchPresence) {
-                    Text("Presence in the notch")
-                    Text("A small always-on dot for what's next.")
+                SettingRow(title: "Presence in the notch", subtitle: "A small always-on dot for what's next.") {
+                    RowSwitch(label: "Presence in the notch", isOn: $showNotchPresence)
                 }
             }
         }
@@ -620,58 +696,61 @@ struct OpeningSettingsView: View {
     var body: some View {
         SettingsPage(section: .opening) {
             Section {
-                Picker(selection: settingsBinding(appState, \.notchTrigger)) {
-                    Text("Hover").tag(NotchTrigger.hover)
-                    Text("Click").tag(NotchTrigger.click)
-                    Text("Menu bar only").tag(NotchTrigger.never)
-                } label: {
-                    Text("Open the notch")
-                    Text("Shortcuts open it whatever you choose.")
+                SettingRow(title: "Open the notch", subtitle: "Shortcuts always work.") {
+                    Picker("Open the notch", selection: settingsBinding(appState, \.notchTrigger)) {
+                        Text("Hover").tag(NotchTrigger.hover)
+                        Text("Click").tag(NotchTrigger.click)
+                        Text("Menu bar only").tag(NotchTrigger.never)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .fixedSize()
                 }
-                .pickerStyle(.segmented)
 
                 if appState.settings.notchTrigger == .hover {
-                    LabeledContent {
+                    SettingRow(title: "Hover delay", subtitle: "How long the pointer rests first.") {
                         HStack(spacing: 10) {
                             Slider(
                                 value: Binding(
                                     get: { Double(appState.settings.hoverDelayMs) },
-                                    set: { newVal in appState.updateSettings { $0.hoverDelayMs = Int(newVal) } }
+                                    // 25 ms steps, rounded here rather than with
+                                    // `step:`, which draws a row of tick marks.
+                                    set: { newVal in
+                                        appState.updateSettings { $0.hoverDelayMs = Int((newVal / 25).rounded()) * 25 }
+                                    }
                                 ),
-                                in: 0...500, step: 25
+                                in: 0...500
                             )
-                            .frame(width: 200)
                             .labelsHidden()
+                            .frame(width: 180)
+                            .accessibilityLabel("Hover delay")
                             Text(appState.settings.hoverDelayMs == 0 ? "Instant" : "\(appState.settings.hoverDelayMs) ms")
                                 .monospacedDigit()
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 2)
                                 .background(.quaternary, in: Capsule())
-                                .frame(minWidth: 70, alignment: .trailing)
+                                .frame(width: 76, alignment: .trailing)
                         }
-                    } label: {
-                        Text("Hover delay")
-                        Text("How long the pointer rests before the notch reacts.")
                     }
                 }
 
-                Picker(selection: settingsBinding(appState, \.autoCollapseSeconds)) {
-                    Text("3 seconds").tag(Optional(3))
-                    Text("5 seconds").tag(Optional(5))
-                    Text("10 seconds").tag(Optional(10))
-                    Text("Never").tag(Optional<Int>.none)
-                } label: {
-                    Text("Auto-close")
-                    Text("After the pointer leaves an open notch.")
+                SettingRow(title: "Auto-close", subtitle: "After the pointer leaves an open notch.") {
+                    Picker("Auto-close", selection: settingsBinding(appState, \.autoCollapseSeconds)) {
+                        Text("3 seconds").tag(Optional(3))
+                        Text("5 seconds").tag(Optional(5))
+                        Text("10 seconds").tag(Optional(10))
+                        Text("Never").tag(Optional<Int>.none)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .fixedSize()
                 }
-                .pickerStyle(.menu)
             }
             .animation(.default, value: appState.settings.notchTrigger)
 
             Section {
-                HStack {
-                    Spacer()
-                    Button("Restore Defaults") {
+                SettingRow(title: "Restore defaults", subtitle: "Opening, hover delay, auto-close and the notch size.") {
+                    Button("Restore") {
                         let p = NotchSizePreset.wide
                         expandedWidth = p.width
                         expandedHeight = p.height
@@ -683,8 +762,6 @@ struct OpeningSettingsView: View {
                         }
                     }
                 }
-            } footer: {
-                Text("Resets opening, hover delay, auto-close and the notch size.")
             }
         }
     }
@@ -709,19 +786,17 @@ struct ShortcutsSettingsView: View {
                 Text("These work from any app.")
             }
 
-            Section {
+            Section("In Otto") {
                 row("Close the notch", "Esc")
                 row("Every shortcut in the panel", "?")
                 row("Settings", "\u{2318},")
                 row("Quit", "\u{2318}Q")
-            } header: {
-                Text("In Otto")
             }
         }
     }
 
     private func row(_ action: String, _ keys: String) -> some View {
-        LabeledContent(action) { KeycapChip(keys: keys) }
+        SettingRow(title: action) { KeycapChip(keys: keys) }
     }
 }
 
@@ -741,7 +816,7 @@ struct StorageSettingsView: View {
     var body: some View {
         SettingsPage(section: .storage) {
             Section {
-                LabeledContent("Folder") {
+                SettingRow(title: "Folder") {
                     Text(vaultPath)
                         .font(.callout.monospaced())
                         .foregroundStyle(.secondary)
@@ -821,24 +896,18 @@ struct PermissionsSettingsView: View {
     var body: some View {
         SettingsPage(section: .permissions) {
             Section {
-                LabeledContent {
+                SettingRow(title: "Calendar", subtitle: "Read-only, for meetings in Today and alerts.") {
                     if SettingsPermissions.calendarGranted {
                         StatusLabel(text: "Allowed", icon: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                     } else if SettingsPermissions.calendarStatus == .notDetermined {
                         Text("Not requested").foregroundStyle(.secondary)
                     } else {
-                        StatusLabel(text: "Not allowed", icon: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                    }
-                } label: {
-                    Text("Calendar")
-                    Text("Read-only, for meetings in Today and alerts.")
-                }
-                if !SettingsPermissions.calendarGranted {
-                    HStack {
-                        Spacer()
-                        Link("Open System Settings", destination: SettingsPermissions.calendarPrivacyURL)
+                        HStack(spacing: 12) {
+                            StatusLabel(text: "Not allowed", icon: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Link("Open System Settings", destination: SettingsPermissions.calendarPrivacyURL)
+                        }
                     }
                 }
             } header: {
@@ -847,12 +916,10 @@ struct PermissionsSettingsView: View {
 
             if calendar.syncLooksStale, let last = calendar.lastSyncedAt {
                 Section {
-                    StatusLabel(text: "macOS isn't syncing your calendars", icon: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    Text("The newest event on this Mac is from \(last.formatted(date: .abbreviated, time: .shortened)). Anything created since then hasn't arrived, so Otto can't show it.")
-                        .foregroundStyle(.secondary)
-                    HStack {
-                        Spacer()
+                    SettingRow(
+                        title: "macOS isn't syncing your calendars",
+                        subtitle: "Newest event on this Mac: \(last.formatted(date: .abbreviated, time: .shortened)). Anything created since hasn't arrived."
+                    ) {
                         Link("Open Internet Accounts", destination: SettingsPermissions.internetAccountsURL)
                     }
                 } header: {
@@ -875,17 +942,15 @@ struct PrivacySettingsView: View {
     var body: some View {
         SettingsPage(section: .privacy) {
             Section {
-                Toggle(isOn: Binding(
-                    get: { appState.settings.analyticsConsent == .granted },
-                    set: { Analytics.setConsent($0) }
-                )) {
-                    Text(L10n.t("privacy.toggle"))
-                    Text(L10n.t("ob.perm.usage.caption"))
+                SettingRow(title: L10n.t("privacy.toggle"), subtitle: L10n.t("ob.perm.usage.caption")) {
+                    RowSwitch(label: L10n.t("privacy.toggle"), isOn: Binding(
+                        get: { appState.settings.analyticsConsent == .granted },
+                        set: { Analytics.setConsent($0) }
+                    ))
+                    .disabled(!AppBuild.analyticsEnabled)
                 }
-                .disabled(!AppBuild.analyticsEnabled)
-
                 // In full: it is what to quote when asking for your data to be deleted.
-                LabeledContent(L10n.t("privacy.id")) {
+                SettingRow(title: L10n.t("privacy.id")) {
                     Text(Analytics.installID)
                         .font(.callout.monospaced())
                         .foregroundStyle(.secondary)
@@ -948,44 +1013,37 @@ struct AboutSettingsView: View {
             }
 
             Section {
-                LabeledContent {
+                SettingRow(
+                    title: String(format: L10n.t("update.version"), UpdateController.currentVersion),
+                    subtitle: String(format: L10n.t("update.lastChecked"), updates.lastCheckDescription)
+                ) {
                     Button(updates.canCheck ? L10n.t("update.check") : L10n.t("update.checking")) {
                         updates.checkForUpdates()
                     }
                     .disabled(!updates.canCheck)
-                } label: {
-                    Text(String(format: L10n.t("update.version"), UpdateController.currentVersion))
-                    Text(String(format: L10n.t("update.lastChecked"), updates.lastCheckDescription))
                 }
-                Toggle(isOn: Binding(
-                    get: { updates.automaticallyChecks },
-                    set: { updates.automaticallyChecks = $0 }
-                )) {
-                    Text(L10n.t("update.automatic"))
-                    Text("Once a day; updates install in place.")
+                SettingRow(title: L10n.t("update.automatic"), subtitle: "Once a day; updates install in place.") {
+                    RowSwitch(label: L10n.t("update.automatic"), isOn: Binding(
+                        get: { updates.automaticallyChecks },
+                        set: { updates.automaticallyChecks = $0 }
+                    ))
                 }
             } header: {
                 Text(L10n.t("update.section"))
             }
 
             Section {
-                LabeledContent {
-                    // Onboarding runs once and never again; replaying it is
-                    // how the flow gets reviewed without reinstalling.
+                // Onboarding runs once and never again; replaying it is how
+                // the flow gets reviewed without reinstalling.
+                SettingRow(title: "Onboarding", subtitle: "Walk through the welcome flow again.") {
                     Button("Show Again") {
                         UserDefaults.standard.set(0, forKey: "onboardingVersion")
                         OnboardingWindowController.show()
                     }
-                } label: {
-                    Text("Onboarding")
-                    Text("Walk through the welcome flow again.")
                 }
                 if FeedbackWindowController.isAvailable {
-                    LabeledContent {
+                    SettingRow(title: "Feedback", subtitle: "A bug, an idea, a screenshot — straight to us.") {
                         Button("Send Feedback\u{2026}") { FeedbackWindowController.show() }
-                    } label: {
-                        Text("Feedback")
-                        Text("A bug, an idea, a screenshot — straight to us.")
                     }
                 }
             } footer: {
@@ -1001,20 +1059,17 @@ struct SettingsPageDebugHost: View {
     let section: SettingsSection
 
     var body: some View {
-        Group {
-            switch section {
-            case .general:     GeneralSettingsView()
-            case .appearance:  AppearanceSettingsView()
-            case .opening:     OpeningSettingsView()
-            case .shortcuts:   ShortcutsSettingsView()
-            case .calendar:    CalendarSettingsView()
-            case .storage:     StorageSettingsView()
-            case .permissions: PermissionsSettingsView()
-            case .privacy:     PrivacySettingsView()
-            case .about:       AboutSettingsView()
-            }
+        switch section {
+        case .general:     GeneralSettingsView()
+        case .appearance:  AppearanceSettingsView()
+        case .opening:     OpeningSettingsView()
+        case .shortcuts:   ShortcutsSettingsView()
+        case .calendar:    CalendarSettingsView()
+        case .storage:     StorageSettingsView()
+        case .permissions: PermissionsSettingsView()
+        case .privacy:     PrivacySettingsView()
+        case .about:       AboutSettingsView()
         }
-        .tint(Color("SettingsAccent"))
     }
 }
 #endif

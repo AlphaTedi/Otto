@@ -247,7 +247,7 @@ enum DebugDriver {
                             }
                         }
                         let sidebarHost = NSHostingView(rootView: SettingsSidebar(selection: .constant(.appearance))
-                            .frame(width: 230, height: 520).tint(Color("SettingsAccent")))
+                            .frame(width: 230, height: 520))
                         pageWindow.contentView = sidebarHost
                         try? await Task.sleep(nanoseconds: 700_000_000)
                         if let rep = sidebarHost.bitmapImageRepForCachingDisplay(in: sidebarHost.bounds) {
