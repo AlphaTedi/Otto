@@ -37,7 +37,10 @@ struct NoteBodyView: NSViewRepresentable {
         // "more below" (Marcello, 2026-09-30).
         scroll.hasVerticalScroller = false
         scroll.autohidesScrollers = true
-        view.textContainerInset = NSSize(width: 28, height: 0)
+        // 14 top and bottom: the bottom half lets the last line scroll clear
+        // of the fade above the toolbar (NotesSpaceView); the page takes the
+        // same 14 off its own top padding, so nothing moves.
+        view.textContainerInset = NSSize(width: 28, height: 14)
         view.textContainer?.lineFragmentPadding = 0
         // The user's own text is never reformatted — no smart quotes, no
         // dash substitution, no automatic capitalisation. Lowercase, missing
@@ -595,6 +598,16 @@ final class ActionTextView: NSTextView {
 
     override func didChangeText() {
         if let storage = textStorage, storage.length > 0 {
+            // Re-kern around image chips after every edit (spaceChips): text
+            // typed against a chip gets its gap, text removed gives it back.
+            storage.beginEditing()
+            storage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+                guard value is ImageChipAttachment else { return }
+                let lo = max(0, range.location - 1)
+                storage.removeAttribute(.kern, range: NSRange(location: lo, length: NSMaxRange(range) - lo))
+            }
+            AttachmentStore.spaceChips(in: storage)
+            storage.endEditing()
             var missing: [NSRange] = []
             storage.enumerateAttribute(.foregroundColor, in: NSRange(location: 0, length: storage.length),
                                        options: []) { value, range, _ in

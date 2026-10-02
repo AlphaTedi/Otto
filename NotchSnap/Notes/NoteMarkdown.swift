@@ -288,6 +288,7 @@ enum NoteMarkdown {
                 ]))
             }
         }
+        AttachmentStore.spaceChips(in: out)
         return out
     }
 

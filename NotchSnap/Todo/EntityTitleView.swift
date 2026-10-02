@@ -156,6 +156,15 @@ struct EntityTitleView: NSViewRepresentable {
             }
             appendEntities(piece.text, to: result, bodyAttributes: bodyAttributes, chipOffset: chipOffset)
         }
+        AttachmentStore.spaceChips(in: result)
+        // A line holding an image chip is taller than the text, and a chip
+        // on the second line sat right under the letters above it; a little
+        // line spacing gives it room (Marcello, 2026-10-02).
+        if pieces.contains(where: { $0.image != nil }) {
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.lineSpacing = 4
+            result.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: result.length))
+        }
         return result
     }
 

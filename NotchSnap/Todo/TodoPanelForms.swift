@@ -288,6 +288,8 @@ struct HighlightingTitleField: NSViewRepresentable {
                     storage.addAttribute(.foregroundColor, value: NSColor(DSColor.focusAccent), range: shown)
                 }
             }
+            storage.removeAttribute(.kern, range: full)
+            AttachmentStore.spaceChips(in: storage)
             storage.endEditing()
             view.typingAttributes = [
                 .foregroundColor: NSColor(DSColor.textPrimaryBright),

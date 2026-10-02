@@ -38,6 +38,12 @@ enum ChecklistDisclosure {
 
 // MARK: - Height measurement
 
+/// The open panel menu's bottom edge, in the panel's coordinates.
+private struct MenuBottomKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 private struct TodoContentHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
@@ -349,6 +355,10 @@ struct TodoTabView: View {
     @State private var footBlurVisible = false
     /// Where the controls the panel menus open from are (MenuAnchor).
     @State private var menuAnchors: [MenuAnchor: CGRect] = [:]
+    /// The content's own height and, while a menu is open, how far down the
+    /// menu reaches — see `publishHeight`.
+    @State private var contentHeight: CGFloat = 0
+    @State private var menuBottom: CGFloat = 0
 
     /// The notch silhouette hugs its content, so its height moves with the
     /// section; the floating panels are a fixed 556 and do not.
@@ -397,7 +407,8 @@ struct TodoTabView: View {
         // this measurement.
         .measureHeight(TodoContentHeightKey.self)
         .onPreferenceChange(TodoContentHeightKey.self) { height in
-            AppState.shared.todoContentHeight = height
+            contentHeight = height
+            publishHeight()
         }
         // Width only — NOT maxHeight: .infinity. That frame took whatever
         // height was proposed, and in the panels layout the column proposes
@@ -455,12 +466,20 @@ struct TodoTabView: View {
                 ZStack {
                     if store.showsAvatarMenu, let gear = menuAnchors[.gear] {
                         AvatarMenu()
+                            .background(GeometryReader { menu in
+                                Color.clear.preference(key: MenuBottomKey.self,
+                                                       value: menu.frame(in: .named(OttoMenuStyle.space)).maxY)
+                            })
                             .anchoredMenu(to: gear, in: proxy.size, opensUpward: !isContainerLayout)
                             .transition(.opacity.combined(
                                 with: .offset(y: isContainerLayout ? -4 : 4)))
                     }
                     if notes.kindMenuOpen, let trigger = menuAnchors[.notesKind] {
                         NotesKindMenuList(meetings: store.panelMode == .calendar)
+                            .background(GeometryReader { menu in
+                                Color.clear.preference(key: MenuBottomKey.self,
+                                                       value: menu.frame(in: .named(OttoMenuStyle.space)).maxY)
+                            })
                             .anchoredMenu(to: trigger, in: proxy.size, opensUpward: false)
                             .transition(.opacity.combined(with: .offset(y: -4)))
                     }
@@ -470,7 +489,24 @@ struct TodoTabView: View {
         .animation(NotchAnimation.hintFade, value: notes.kindMenuOpen)
 
         .onPreferenceChange(MenuAnchorKey.self) { menuAnchors = $0 }
+        .onPreferenceChange(MenuBottomKey.self) { bottom in
+            menuBottom = bottom
+            publishHeight()
+        }
+        .onChange(of: store.showsAvatarMenu) { _ in publishHeight() }
+        .onChange(of: notes.kindMenuOpen) { _ in publishHeight() }
         .coordinateSpace(name: OttoMenuStyle.space)
+    }
+
+    /// The hugging height the silhouette follows. In the notch CONTAINER the
+    /// shape clips everything to itself, so a short list cut the gear's menu
+    /// in half (Marcello, 2026-10-02): while a menu is open the notch grows to
+    /// hold it. The floating panels draw menus inside their own block, which
+    /// is always tall enough, so they are left alone.
+    private func publishHeight() {
+        let menuOpen = store.showsAvatarMenu || notes.kindMenuOpen
+        let needed = isContainerLayout && menuOpen && menuBottom > 0 ? menuBottom + 16 : 0
+        AppState.shared.todoContentHeight = max(contentHeight, needed)
     }
 
     /// The normal to-do panel: tab row + the active mode's surface, with the
@@ -2200,8 +2236,9 @@ private struct InlineDraftRow: View {
         let estimate = max(120, panelWidth - CGFloat(DSSpacing.panelPadding) * 2 - 20 - 24 - 112)
         let width = measuredFieldWidth > 0 ? measuredFieldWidth : estimate
         let text = store.draftTitle.isEmpty ? " " : store.draftTitle
-        let measured = NSAttributedString(
-            string: text, attributes: [.font: NSFont.systemFont(ofSize: DSFont.todoTitleSize)]
+        // As displayed: an image token is one chip, not its long markdown.
+        let measured = AttachmentStore.chipped(
+            text, attributes: [.font: NSFont.systemFont(ofSize: DSFont.todoTitleSize)]
         ).boundingRect(
             with: NSSize(width: width, height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading]
@@ -2247,7 +2284,11 @@ private struct InlineDraftRow: View {
                         onFocusChange: { isFocused in
                             store.draftFocused = isFocused
                             if isFocused { store.draftWantsFocus = false }
-                        }
+                        },
+                        // Pasted and dropped images, like the floating
+                        // panels' field — this one never accepted them
+                        // (Marcello, 2026-10-02).
+                        allowsImages: true
                     )
                     .frame(height: fieldHeight)
                 }

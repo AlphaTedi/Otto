@@ -188,9 +188,9 @@ final class ImageChipCell: NSTextAttachmentCell {
     /// ✕ — the Conductor chip (Marcello, 2026-09-27).
     var hovered = false
     var showsRemove = false
-    /// Air on both sides of the chip, so typed text never touches it
-    /// (Marcello, 2026-09-27).
-    static let margin: CGFloat = 6
+    /// No air of its own: `AttachmentStore.spaceChips` kerns the gap in, and
+    /// only where text touches the chip (2026-10-02).
+    static let margin: CGFloat = 0
     /// The ✕ / icon slot, from the glyph's leading edge.
     static let removeZone: CGFloat = margin + 19
     private static let iconSide: CGFloat = 11
@@ -446,6 +446,30 @@ final class ImagePreviewPanel {
 
 extension AttachmentStore {
     /// `text` with each token drawn as a chip character.
+    /// Air between a chip and the text it touches — only where it touches.
+    ///
+    /// The chip used to carry 6pt on both sides in its own cell, so a chip
+    /// that wrapped to the start of a line stood 6pt right of the text
+    /// column above it (Marcello, 2026-10-02). Kerning the character before
+    /// it, and the chip itself, adds the gap only next to actual text.
+    nonisolated static func spaceChips(in text: NSMutableAttributedString) {
+        let string = text.string as NSString
+        let gap: CGFloat = 6
+        func isSpace(_ c: unichar) -> Bool {
+            c == 0x20 || c == 0x0A || c == 0x09 || c == 0x2009 || c == 0x00A0
+        }
+        text.enumerateAttribute(.attachment, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+            guard value is ImageChipAttachment else { return }
+            if range.location > 0, !isSpace(string.character(at: range.location - 1)) {
+                text.addAttribute(.kern, value: gap, range: NSRange(location: range.location - 1, length: 1))
+            }
+            let next = NSMaxRange(range)
+            if next < string.length, !isSpace(string.character(at: next)) {
+                text.addAttribute(.kern, value: gap, range: range)
+            }
+        }
+    }
+
     static func chipped(_ text: String, attributes: [NSAttributedString.Key: Any]) -> NSMutableAttributedString {
         let out = NSMutableAttributedString(string: text, attributes: attributes)
         for match in tokenPattern.matches(in: text, range: NSRange(location: 0, length: (text as NSString).length)).reversed() {
@@ -454,6 +478,7 @@ extension AttachmentStore {
             chipAttributes[.attachment] = ImageChipAttachment(path: path)
             out.replaceCharacters(in: match.range, with: NSAttributedString(string: "\u{FFFC}", attributes: chipAttributes))
         }
+        spaceChips(in: out)
         return out
     }
 

@@ -1147,14 +1147,23 @@ private struct NoteDetailView: View {
                 // Floating panels: 25 + the text view's 28 inset = 53, the
                 // title's column; the inset holds the linked checkboxes.
                 .padding(.horizontal, isContainer ? LabMetrics.blockPadding : SpaceChrome.textColumn - 28)
-                .padding(.top, 20)
-                .padding(.bottom, 8)
+                .padding(.top, 6)
                 // A document editor owns the remaining room; it is not sized
                 // to its current line count. Sizing it to `contentHeight`
                 // turns a short note into a tiny scroll well and leaves most
                 // of the card as dead space.
                 .frame(height: editorViewportHeight, alignment: .top)
-                .clipped()
+                // Fades out above the toolbar instead of stopping on a hard
+                // line: `.clipped()` cut a block quote in half with an empty
+                // band under it (Marcello, 2026-10-02).
+                .mask(
+                    VStack(spacing: 0) {
+                        Color.black
+                        LinearGradient(colors: [.black, .black.opacity(0)],
+                                       startPoint: .top, endPoint: .bottom)
+                            .frame(height: 28)
+                    }
+                )
 
             if note.meetingContext != nil && editor.pickerTarget == nil { MeetingTasksView(note: note) }
             if let target = editor.pickerTarget {

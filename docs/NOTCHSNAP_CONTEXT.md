@@ -995,3 +995,16 @@ EventKit traffic, no crash) — twice — and showed nothing. Causes and fixes:
   the mounted DMG, or the binary run from Terminal) posts `ottoShowRequest`
   to the running copy and quits. Debug builds are exempt so Xcode runs beside
   the installed app.
+
+### 2026-10-02 container fixes, chip spacing
+
+- Container: while the gear or Notes · Meetings menu is open the reported
+  hugging height covers the menu's bottom (`MenuBottomKey`,
+  `publishHeight()`), so the silhouette no longer clips it on a short list.
+- Container draft field accepts pasted/dropped images (`allowsImages`), and
+  measures its height from the chipped string.
+- Note body: a 28pt fade above the toolbar replaces `.clipped()`; the text
+  view's inset is 14 top and bottom so the last line can scroll clear.
+- Image chips carry no margin; `AttachmentStore.spaceChips` kerns 6pt only
+  where text touches a chip (to-do rows, both fields, notes), so a wrapped
+  chip sits on the text column. Titles holding a chip get 4pt line spacing.
