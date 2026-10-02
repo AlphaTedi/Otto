@@ -10,6 +10,9 @@ import SwiftUI
 class OnboardingWindowController: NSWindowController, NSWindowDelegate {
 
     private static var sharedController: OnboardingWindowController?
+    /// The onboarding is on screen (a reopen should bring it forward, not
+    /// open the notch behind it).
+    static var isShowing: Bool { sharedController != nil }
 
     private let model = OnboardingModel()
     private var keyMonitor: Any?

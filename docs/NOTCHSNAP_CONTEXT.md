@@ -976,3 +976,22 @@ exception to Lucide). Row hints lose their separator; the gutter is 52 (was
 edge). The Notes/lists divider is a dynamic overlay, visible in light. The
 Notes · Meetings dropdown sits 15pt from the right edge — the same as from
 the top.
+
+### 2026-10-02 "the app doesn't open" on a colleague's Mac
+
+Diagnosis from her troubleshooting log: Otto WAS running (notarized, alive,
+EventKit traffic, no crash) — twice — and showed nothing. Causes and fixes:
+- **Leftover preferences.** She had tried pre-Otto NotchSnap months earlier
+  and deleted it; ~/Library/Preferences/com.notchsnap.app.plist survived
+  with `onboardingVersion = 1`, so Otto skipped the onboarding and, having no
+  window or Dock icon, drew nothing. `AppDelegate.needsOnboarding()` now also
+  runs it when that flag is set but the usage question was never answered
+  and not one to-do or note exists.
+- **A launch that shows nothing.** Opening Otto by hand (not as a login
+  item — read from the launch Apple event in willFinishLaunching) now opens
+  the notch on the to-dos; so does clicking the app while it runs
+  (`applicationShouldHandleReopen`).
+- **Two copies.** Release builds are single-instance: a second launch (from
+  the mounted DMG, or the binary run from Terminal) posts `ottoShowRequest`
+  to the running copy and quits. Debug builds are exempt so Xcode runs beside
+  the installed app.

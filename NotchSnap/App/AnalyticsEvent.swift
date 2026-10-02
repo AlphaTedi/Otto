@@ -10,7 +10,7 @@ import Foundation
 
 enum AnalyticsEvent {
     enum LaunchKind: String { case cold, loginItem = "login_item", afterUpdate = "after_update" }
-    enum OpenTrigger: String { case hover, click, hotkey, intent, meetingAlert = "meeting_alert", drag, onboarding, other }
+    enum OpenTrigger: String { case hover, click, hotkey, intent, meetingAlert = "meeting_alert", drag, onboarding, appIcon = "app_icon", other }
     enum TodoSource: String { case draft, intent, note }
     enum CompleteSource: String { case keyboard, click, intent }
     enum Permission: String { case calendar, login }
