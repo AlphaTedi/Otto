@@ -2494,7 +2494,10 @@ private struct TodoItemRow: View {
         // looser than the rest of the list (Marcello, 2026-09-14).
         // Plain rows keep no padding and their 37pt floor, which already
         // insets them.
-        .padding(.horizontal, LabMetrics.rowPaddingH)
+        // The container's slab now starts at the field's edge, so its content
+        // keeps the field's own inner inset (20) — checkboxes still line up
+        // with the field's.
+        .padding(.horizontal, notchLayout == .container ? LabMetrics.barPaddingH : LabMetrics.rowPaddingH)
         // Plain rows get the same 6 top and bottom. A one-line row is still
         // exactly its 37pt floor (6 + 4 + 17 + 4 + 6); a WRAPPED one now keeps
         // the side inset's air above its first line and below its last

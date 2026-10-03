@@ -62,7 +62,8 @@ enum LabMetrics {
     static let barOuterInset: CGFloat = 16     // the wrapper's 0 16px
     static let barPaddingH: CGFloat = 20
     static let barPaddingV: CGFloat = 12
-    static let barRadius: CGFloat = 24
+    /// 16, was 24: the field read as a pill (Marcello, 2026-10-03).
+    static let barRadius: CGFloat = 16
     static let barHeight: CGFloat = 59
     static let barInnerGap: CGFloat = 6
 
@@ -72,7 +73,10 @@ enum LabMetrics {
     static let checkboxRadius: CGFloat = 6
 
     // List
-    static let listInset: CGFloat = 24
+    /// The container's ONE side line (2026-10-03): the field, the section
+    /// bar's ends, every row's slab and the notes stream all start and end
+    /// at the field's edge. Was 24, 8pt inside the field's 16.
+    static let listInset: CGFloat = barOuterInset
     /// Tightened from the export's 6. The rows were reading far too far
     /// apart against the previous build, and the gap plus the label's own box
     /// were compounding.
@@ -118,7 +122,7 @@ enum LabMetrics {
     static let rowActionsWidth: CGFloat = 52  // ⌘⏎ badge + gap + grip; no separator since 2026-10-02
 
     // Section tabs, now at the BOTTOM
-    static let tabsInset: CGFloat = 24
+    static let tabsInset: CGFloat = barOuterInset
     static let tabsDividerPaddingV: CGFloat = 12
     static let tabsTopPadding: CGFloat = 8
     // 24 → 16: with the block hugging, the foot read as a slab of empty

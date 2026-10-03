@@ -470,7 +470,7 @@ private struct StreamView: View {
                     // note rows start where the to-do rows do, their text on
                     // the checkbox column (22), and the first title sits 22
                     // under the bar like the first to-do.
-                    .padding(.horizontal, isContainer ? LabMetrics.barOuterInset + 10 : SpaceChrome.columnInset)
+                    .padding(.horizontal, isContainer ? LabMetrics.barOuterInset : SpaceChrome.columnInset)
                     .padding(.top, isContainer ? 16 : 12.5)
                     .padding(.bottom, 8)
                     .background(GeometryReader { geo in
@@ -1006,7 +1006,9 @@ private struct NoteEntryRow: View {
         // the moment the pointer arrived (Marcello, 2026-09-06). A hover state
         // that resizes the thing being hovered is a hover state that fights
         // the pointer.
-        .padding(.horizontal, NotesMetrics.entryInset)
+        // Container: the slab starts at the field's edge (16) and the text
+        // stays where it was (16 + 22).
+        .padding(.horizontal, notchLayout == .container ? NotesMetrics.entryInset + 10 : NotesMetrics.entryInset)
         .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(

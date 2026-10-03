@@ -1059,3 +1059,10 @@ brighter hover rows and one keycap per key (Raycast as the reference). The
 floating panels' menus are unchanged. `menu-status` reports the overflow
 rect. Verified: a 212pt notch stays 212 with the menu open, and the menu
 reaches ~220pt below the silhouette.
+
+### 2026-10-03 container: one side line
+
+`listInset` and `tabsInset` now equal `barOuterInset` (16): the field, the
+section bar's Notes pill and gear, every to-do slab and the notes stream
+share the field's edge. Row content keeps the field's inner 20 (to-dos) /
+22 (notes), so checkboxes and text did not move. `barRadius` 24 → 16.
