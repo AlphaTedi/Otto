@@ -343,7 +343,13 @@ final class CalendarStore: ObservableObject {
         // respect an outstanding snooze (CA-5).
         guard activeAlert == nil else { return }
         // Ambient state above keeps updating; editing never loses its surface.
-        guard !((TodoStore.shared.panelMode == .notes || TodoStore.shared.panelMode == .calendar)
+        //
+        // Only while the notch is OPEN on that note. The notch reopens where
+        // it was closed, so a note left open when the notch closed stayed
+        // "open" for good — and every meeting alert after that was silently
+        // skipped (found with the Meeting Lab, 2026-10-03).
+        guard !(NotchController.shared.state == .expanded
+                && (TodoStore.shared.panelMode == .notes || TodoStore.shared.panelMode == .calendar)
                 && NotesStore.shared.openNoteID != nil) else { return }
         let alertWindow = TimeInterval(alertLeadMinutes * 60)
         let due = upcomingToday.first { meeting in

@@ -384,7 +384,9 @@ enum DebugDriver {
                             + "activeAlert=\(cal.activeAlert?.title ?? "nil") "
                             + "alertLeaving=\(cal.alertLeaving) "
                             + "leads=\(cal.ambientLeadMinutes)m/\(cal.alertLeadMinutes)m "
-                            + "notch=\(NotchController.shared.state)")
+                            + "notch=\(NotchController.shared.state) "
+                            + "joinHotKey=\(HotkeyManager.shared.joinHotKeyActive) status=\(HotkeyManager.shared.joinHotKeyStatus) "
+                            + "panelKey=\(NSApp.keyWindow is NotchPanel)")
             } else if command == "cal-debug" {
                 let cal = CalendarStore.shared
                 appendState("cal-debug connected=\(cal.isConnected)")

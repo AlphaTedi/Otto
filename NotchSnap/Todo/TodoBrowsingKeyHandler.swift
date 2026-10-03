@@ -72,6 +72,24 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             let store = TodoStore.shared
             let lower = chars.lowercased()
 
+            // A meeting alert owns ⌘↩ and S while it is up — the two keys its
+            // card advertises. Neither was wired to the card itself: ⌘↩ fell
+            // to whatever the list did with it (complete a focused to-do), and
+            // S did nothing at all (Marcello, 2026-10-03). Plain S only when
+            // no text field is taking the letter.
+            let calendar = CalendarStore.shared
+            if let alert = calendar.activeAlert {
+                if cmd, !shift, !option, !control, keyCode == 36, alert.videoURL != nil {
+                    calendar.join()
+                    return true
+                }
+                let fieldTakesLetter = isEditingText() && !(draftHasCaret() && store.draftTitle.isEmpty)
+                if keyCode == 1, !cmd, !shift, !option, !control, !fieldTakesLetter {
+                    calendar.snooze(alert)
+                    return true
+                }
+            }
+
             let notes = NotesStore.shared
             if notes.meetingPicker {
                 let rows = CalendarStore.shared.upcomingToday

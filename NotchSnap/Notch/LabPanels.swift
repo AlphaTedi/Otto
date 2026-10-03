@@ -264,7 +264,10 @@ struct AutoSnoozeButton: View {
                 // the same capsule the label sits in, so there is one object
                 // here, not a button with a progress bar bolted underneath it.
                 GeometryReader { proxy in
-                    Capsule(style: .continuous)
+                    // A straight leading edge, clipped by the button's own
+                    // capsule — not a capsule of its own whose rounded end
+                    // rode across the button (Marcello, 2026-10-03).
+                    Rectangle()
                         .fill(Color.dynamicOverlay(light: 0.10, dark: 0.13))
                         .frame(width: proxy.size.width * progress)
                 }

@@ -45,6 +45,9 @@ class HotkeyManager {
     }
 
     private var joinHotKeyRef: EventHotKeyRef?
+    /// The last registration's result, for diagnostics (noErr = 0).
+    private(set) var joinHotKeyStatus: OSStatus = 0
+    var joinHotKeyActive: Bool { joinHotKeyRef != nil }
 
     /// ⌘↩ joins the alerting meeting from any app. Registered only for the
     /// alert's lifetime, so ⌘↩ belongs to every other app the rest of the time.
@@ -52,10 +55,10 @@ class HotkeyManager {
         if active, joinHotKeyRef == nil, eventHandler != nil {
             let id = EventHotKeyID(signature: signature, id: HotKeyID.joinMeeting.rawValue)
             var ref: EventHotKeyRef?
-            if RegisterEventHotKey(UInt32(kVK_Return), UInt32(cmdKey), id,
-                                   GetApplicationEventTarget(), 0, &ref) == noErr {
-                joinHotKeyRef = ref
-            }
+            let status = RegisterEventHotKey(UInt32(kVK_Return), UInt32(cmdKey), id,
+                                             GetApplicationEventTarget(), 0, &ref)
+            if status == noErr { joinHotKeyRef = ref }
+            joinHotKeyStatus = status
         } else if !active, let ref = joinHotKeyRef {
             UnregisterEventHotKey(ref)
             joinHotKeyRef = nil

@@ -1022,3 +1022,18 @@ against the alert lead ("Alert in 1 minute" starts at lead + 1). Replaces
 the old DEBUG-only `injectTestMeeting` (the `meeting <min>` driver command
 now goes through the lab). Verified: `meeting 6` with a 5-min lead shows the
 ambient dot at once and the alert 60 s later.
+
+### 2026-10-03 meeting alert keys and a silent-alert bug
+
+- Alerts were skipped for good whenever the notch had been closed on an open
+  note (the notch reopens where it was closed, so `openNoteID` stayed set);
+  the "don't interrupt a note" guard now applies only while the notch is
+  expanded. Found with the Meeting Lab.
+- While an alert is up, the panel's key handler owns ⌘↩ (Join) and plain S
+  (Snooze, unless a field is taking the letter) — S was never wired, and ⌘↩
+  fell to the list (completing a focused to-do). The Carbon ⌘↩ hot key
+  still covers Otto in the background; `cal-status` reports its
+  registration (it fails silently if another app already owns ⌘↩). Plain S
+  is deliberately NOT a global hot key: it would eat the letter from
+  whatever the user is typing in.
+- Auto-snooze fill: a straight-edged rectangle clipped by the capsule.
