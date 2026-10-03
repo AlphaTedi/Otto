@@ -2525,7 +2525,7 @@ private struct TodoItemRow: View {
         // 12pt either side and nothing above or below.
         .frame(minHeight: carriesDetails ? 0 : LabMetrics.rowMinHeight)
         .background(
-            RoundedRectangle(cornerRadius: isExpanded ? 14 : LabMetrics.rowRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: LabMetrics.rowRadius, style: .continuous)
                 .fill(isExpanded ? Self.openedRowFill
                                  : (isFocused ? DSColor.focusedRowBackground
                                               : (hover ? DSColor.rowHover(container: notchLayout == .container)
