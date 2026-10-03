@@ -11,6 +11,22 @@ class NotchController: ObservableObject {
     /// NotchSnap product surface.
     private static let legacyNotificationsAreAvailable = false
 
+    /// Container layout: where the gear / Notes · Meetings triggers sit, in
+    /// NotchRootView's space, so their menus can be drawn above the
+    /// silhouette instead of clipped inside it.
+    @Published var containerMenuAnchors: [MenuAnchor: CGRect] = [:]
+    /// The open container menu's frame on screen — it may hang past the
+    /// silhouette, and that part still counts as the panel for clicks and
+    /// for the pointer-left close.
+    private(set) var overflowMenuRect: NSRect?
+
+    func setOverflowMenuFrame(_ frame: CGRect?) {
+        guard let frame, let panel else { overflowMenuRect = nil; return }
+        overflowMenuRect = NSRect(x: panel.frame.minX + frame.minX,
+                                  y: panel.frame.maxY - frame.maxY,
+                                  width: frame.width, height: frame.height)
+    }
+
     @Published var state: NotchState = .idle {
         // An image chip's hover preview is its own window, so nothing closes
         // it when the notch does — a desktop swipe mid-hover left it floating
@@ -422,6 +438,7 @@ class NotchController: ObservableObject {
     func isInsidePanelContent(_ location: NSPoint) -> Bool {
         guard state == .expanded, AppState.shared.notchLayout == .panels else {
             return visibleShapeScreenRect().contains(location)
+                || (state == .expanded && overflowMenuRect?.contains(location) == true)
         }
         guard let panel else { return false }
         return panelContentFrames.contains { frame in
@@ -1147,6 +1164,7 @@ class NotchController: ObservableObject {
     private func scheduleCollapseIfOutsidePanel(_ point: NSPoint, screen: NSScreen) {
         let panelRect = expandedPanelRect(screen: screen)
         let paddedRect = panelRect.insetBy(dx: -30, dy: -30)
+        if let menu = overflowMenuRect, menu.insetBy(dx: -12, dy: -12).contains(point) { return }
         if !paddedRect.contains(point) {
             triggerCollapse()
         }
@@ -1557,6 +1575,7 @@ final class NotchHostingView: NSHostingView<AnyView> {
                 return controller.isInsidePanelContent(screenPoint)
             }
             return controller.visibleShapeScreenRect().contains(screenPoint)
+                || (controller.state == .expanded && controller.overflowMenuRect?.contains(screenPoint) == true)
         }
         guard acceptsClick else { return nil }
         return super.hitTest(point)

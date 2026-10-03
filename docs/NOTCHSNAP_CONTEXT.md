@@ -998,9 +998,7 @@ EventKit traffic, no crash) — twice — and showed nothing. Causes and fixes:
 
 ### 2026-10-02 container fixes, chip spacing
 
-- Container: while the gear or Notes · Meetings menu is open the reported
-  hugging height covers the menu's bottom (`MenuBottomKey`,
-  `publishHeight()`), so the silhouette no longer clips it on a short list.
+- Container menus: see 2026-10-03 (the height-growing fix was replaced).
 - Container draft field accepts pasted/dropped images (`allowsImages`), and
   measures its height from the chipped string.
 - Note body: a 28pt fade above the toolbar replaces `.clipped()`; the text
@@ -1047,3 +1045,17 @@ baseline, centred on the x-height. Zoom and Teams use real marks:
 `platform-zoom` (drawn as SVG) and `platform-teams` (the official SVG Marcello
 supplied); MeetingPlatformIcon already preferred a bundled asset. DEBUG
 `presence-snap-pid` renders every platform's indicator and the card icons.
+
+### 2026-10-03 container menus hang past the notch, glass look
+
+The notch keeps its height; the container's gear and Notes · Meetings menus
+are drawn by `ContainerMenuLayer` at NotchRootView level (above the
+silhouette's clip), placed from anchors TodoTabView publishes in the root's
+space (`NotchController.containerMenuAnchors`). The menu's screen frame
+(`overflowMenuRect`) counts as the panel: hit-tested, inside for outside
+clicks, and the pointer-left close ignores it. EXPERIMENT: those menus use
+`ottoMenuGlass` — real glass with a black tint, a lit gradient hairline,
+brighter hover rows and one keycap per key (Raycast as the reference). The
+floating panels' menus are unchanged. `menu-status` reports the overflow
+rect. Verified: a 212pt notch stays 212 with the menu open, and the menu
+reaches ~220pt below the silhouette.

@@ -36,6 +36,13 @@ struct NotchRootView: View {
                     .transition(.opacity.combined(with: .offset(y: -10)))
             }
             notchShape
+            // The container's menus, OVER the silhouette rather than inside
+            // its clip: on a short list the gear's menu was cut off, and
+            // growing the notch to fit it was not the fix (Marcello,
+            // 2026-10-03) — the menu hangs past the edge instead.
+            if notchLayout == .container, controller.state == .expanded {
+                ContainerMenuLayer(controller: controller)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .coordinateSpace(name: "notchPanelContent")
@@ -87,6 +94,48 @@ struct NotchRootView: View {
                 }
         } else {
             EmptyView()
+        }
+    }
+}
+
+/// The gear and Notes · Meetings menus of the notch container, drawn at the
+/// root so they can extend below the silhouette. Their frame is reported to
+/// the controller: that part of the screen still counts as the panel.
+private struct ContainerMenuLayer: View {
+    @ObservedObject var controller: NotchController
+    @ObservedObject private var store = TodoStore.shared
+    @ObservedObject private var notes = NotesStore.shared
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                if store.showsAvatarMenu, let gear = controller.containerMenuAnchors[.gear] {
+                    AvatarMenu()
+                        .background(frameReporter)
+                        .anchoredMenu(to: gear, in: proxy.size, opensUpward: false)
+                        .transition(.opacity.combined(with: .offset(y: -4)))
+                } else if notes.kindMenuOpen, let trigger = controller.containerMenuAnchors[.notesKind] {
+                    NotesKindMenuList(meetings: store.panelMode == .calendar)
+                        .background(frameReporter)
+                        .anchoredMenu(to: trigger, in: proxy.size, opensUpward: false)
+                        .transition(.opacity.combined(with: .offset(y: -4)))
+                }
+            }
+        }
+        .environment(\.ottoMenuGlass, true)
+        .animation(NotchAnimation.hintFade, value: store.showsAvatarMenu)
+        .animation(NotchAnimation.hintFade, value: notes.kindMenuOpen)
+        .onChange(of: store.showsAvatarMenu || notes.kindMenuOpen) { open in
+            if !open { controller.setOverflowMenuFrame(nil) }
+        }
+        .onDisappear { controller.setOverflowMenuFrame(nil) }
+    }
+
+    private var frameReporter: some View {
+        GeometryReader { menu in
+            Color.clear
+                .onAppear { controller.setOverflowMenuFrame(menu.frame(in: .named("notchPanelContent"))) }
+                .onChange(of: menu.frame(in: .named("notchPanelContent"))) { controller.setOverflowMenuFrame($0) }
         }
     }
 }

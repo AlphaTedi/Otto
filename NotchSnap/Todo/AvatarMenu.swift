@@ -156,6 +156,7 @@ private struct AvatarMenuRowView: View {
     let action: () -> Void
 
     @State private var hover = false
+    @Environment(\.ottoMenuGlass) private var glass
 
     var body: some View {
         Button(action: action) {
@@ -181,10 +182,25 @@ private struct AvatarMenuRowView: View {
                         .lineLimit(1)
                 }
                 if let shortcut = row.shortcut {
-                    Text(shortcut)
-                        .font(.system(size: 11))
-                        .foregroundStyle(DSColor.textHint)
+                    if glass {
+                        // One keycap per key, Raycast-style.
+                        HStack(spacing: 3) {
+                            ForEach(Array(shortcut.enumerated()), id: \.offset) { _, key in
+                                Text(String(key))
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(DSColor.textSecondary)
+                                    .frame(minWidth: 20, minHeight: 20)
+                                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+                            }
+                        }
                         .fixedSize()
+                    } else {
+                        Text(shortcut)
+                            .font(.system(size: 11))
+                            .foregroundStyle(DSColor.textHint)
+                            .fixedSize()
+                    }
                 }
             }
             .padding(.horizontal, OttoMenuStyle.rowPaddingH)
@@ -216,7 +232,9 @@ private struct AvatarMenuRowView: View {
     /// Only under the pointer or the keyboard: nothing is lit when the menu
     /// opens (Insights was, as a standing "destination" tint — 2026-09-27).
     private var background: Color {
-        OttoMenuStyle.rowFill(highlighted: hover || isHighlighted)
+        // On glass the highlight is a brighter wash, as in Raycast.
+        guard glass else { return OttoMenuStyle.rowFill(highlighted: hover || isHighlighted) }
+        return hover || isHighlighted ? Color.white.opacity(0.12) : .clear
     }
 
     @Environment(\.menuRowPressed) private var isPressed
@@ -327,14 +345,46 @@ extension View {
 }
 
 extension View {
-    /// The menu surface: ground, glass, hairline and shadow.
-    func ottoMenuSurface() -> some View {
+    /// The menu surface: ground, glass, hairline and shadow — or, in the
+    /// notch container, see-through glass (`ottoMenuGlass`).
+    func ottoMenuSurface() -> some View { modifier(OttoMenuSurface()) }
+}
+
+private struct OttoMenuSurface: ViewModifier {
+    @Environment(\.ottoMenuGlass) private var glass
+
+    func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: OttoMenuStyle.radius, style: .continuous)
-        return self
-            .background(shape.fill(OttoMenuStyle.ground))
-            .floatingGlass(in: shape)
-            .overlay(shape.strokeBorder(Color.white.opacity(0.20), lineWidth: 1))
-            .shadow(color: DSColor.shadowSoft, radius: 18, x: 0, y: 8)
+        if glass {
+            // EXPERIMENT (Marcello, 2026-10-03, Raycast as the reference): in
+            // the notch container the menu hangs past the silhouette over the
+            // desktop, so it is real glass — what is behind it shows through,
+            // blurred and darkened — with a lit hairline, instead of the
+            // floating panels' near-opaque ground.
+            content
+                .floatingGlass(in: shape, tint: Color.black.opacity(0.35))
+                .overlay(shape.strokeBorder(
+                    LinearGradient(colors: [Color.white.opacity(0.26), Color.white.opacity(0.08)],
+                                   startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1))
+                .shadow(color: .black.opacity(0.45), radius: 24, x: 0, y: 12)
+        } else {
+            content
+                .background(shape.fill(OttoMenuStyle.ground))
+                .floatingGlass(in: shape)
+                .overlay(shape.strokeBorder(Color.white.opacity(0.20), lineWidth: 1))
+                .shadow(color: DSColor.shadowSoft, radius: 18, x: 0, y: 8)
+        }
+    }
+}
+
+private struct OttoMenuGlassKey: EnvironmentKey { static let defaultValue = false }
+
+extension EnvironmentValues {
+    /// The container's glass menus (see OttoMenuSurface).
+    var ottoMenuGlass: Bool {
+        get { self[OttoMenuGlassKey.self] }
+        set { self[OttoMenuGlassKey.self] = newValue }
     }
 }
 
