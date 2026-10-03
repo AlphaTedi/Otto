@@ -247,8 +247,12 @@ struct NotchPresenceView: View {
         // glyph floated in the middle of all that space, which is why edge
         // anchoring looked like the fix — the real problem was the width.
         HStack(spacing: 0) {
+            // The glyph sits toward the OUTER edge, the same distance from it
+            // as the countdown on the other side: centred in the wing it read
+            // as pushed in from the left (Marcello, 2026-10-03).
             leading
-                .frame(width: wingWidth)
+                .padding(.leading, Self.glyphInset)
+                .frame(width: wingWidth, alignment: .leading)
             Color.clear.frame(width: notchWidth)
             trailing
                 .frame(width: wingWidth)
@@ -258,6 +262,9 @@ struct NotchPresenceView: View {
         .frame(maxHeight: .infinity, alignment: .center)
         .allowsHitTesting(false)
     }
+
+    /// From the silhouette's outer edge to the meeting glyph.
+    static let glyphInset: CGFloat = 10
 
     @ViewBuilder
     private var leading: some View {
@@ -291,11 +298,15 @@ struct NotchPresenceView: View {
             // all while resting, so the closed notch matches the hardware.
             EmptyView()
         case .countdown(let countdown):
-            HStack(spacing: 4) {
+            // On the TEXT's baseline, not centred on its box: the box includes
+            // the descender, which left the dot sitting low beside "now".
+            // Its centre lands ~3.5pt above the baseline, mid x-height.
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Circle()
                     .fill(countdown.dotColor)
                     .frame(width: 6, height: 6)
                     .shadow(color: countdown.dotColor.opacity(0.55), radius: 3)
+                    .alignmentGuide(.firstTextBaseline) { d in d.height + 0.5 }
                 Text(countdown.label)
                     // Monospaced digits so the label does not reflow — and so
                     // the width the wing is sized against is a constant.

@@ -237,6 +237,41 @@ enum DebugDriver {
                 }
                 NSApp.appearance = saved
                 appendState("entity-chip-snap done")
+            } else if command.hasPrefix("presence-snap-pid ") {
+                // presence-snap-pid <pid> <dir> — the collapsed notch's meeting
+                // indicator for each platform, and the card icons. Writes nothing.
+                let parts = command.split(separator: " ", maxSplits: 2)
+                guard parts.count == 3, Int32(parts[1]) == ProcessInfo.processInfo.processIdentifier else { return }
+                let directory = URL(fileURLWithPath: String(parts[2]))
+                try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                let platforms: [(String, MeetingPlatform)] = [("meet", .meet), ("zoom", .zoom), ("teams", .teams), ("other", .otherVideo)]
+                let view = VStack(spacing: 8) {
+                    ForEach(platforms, id: \.0) { item in
+                        NotchPresenceView(state: .countdown(.init(platform: item.1, minutes: 0)),
+                                          notchWidth: 180, wingWidth: 53)
+                            .frame(width: 286, height: 32)
+                            .background(Color.black)
+                    }
+                    HStack(spacing: 12) {
+                        ForEach(["Google Meet", "Zoom", "Microsoft Teams"], id: \.self) { name in
+                            MeetingPlatformIcon(platform: name).frame(width: 22, height: 22)
+                        }
+                    }
+                    .padding(8)
+                    .background(Color(white: 0.15))
+                }
+                .padding(10)
+                .background(Color(white: 0.3))
+                let host = NSHostingView(rootView: view)
+                host.frame = NSRect(x: 0, y: 0, width: 320, height: 220)
+                host.layoutSubtreeIfNeeded()
+                host.frame.size = host.fittingSize
+                if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                    host.cacheDisplay(in: host.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?
+                        .write(to: directory.appendingPathComponent("presence.png"))
+                }
+                appendState("presence-snap done")
             } else if command.hasPrefix("settings-snap-pid ") {
                 // settings-snap-pid <pid> <dir> — every Settings page, light
                 // and dark, rendered off screen. Writes nothing.

@@ -1037,3 +1037,13 @@ ambient dot at once and the alert 60 s later.
   is deliberately NOT a global hot key: it would eat the letter from
   whatever the user is typing in.
 - Auto-snooze fill: a straight-edged rectangle clipped by the capsule.
+
+### 2026-10-03 presence glyph placement, Zoom/Teams marks
+
+The collapsed notch's meeting glyph sits 10pt from the silhouette's outer
+edge (it was centred in the wing, ~20pt in) — the same distance the
+countdown keeps on the other side — and the dot sits on the label's
+baseline, centred on the x-height. Zoom and Teams use real marks:
+`platform-zoom` (drawn as SVG) and `platform-teams` (the official SVG Marcello
+supplied); MeetingPlatformIcon already preferred a bundled asset. DEBUG
+`presence-snap-pid` renders every platform's indicator and the card icons.
