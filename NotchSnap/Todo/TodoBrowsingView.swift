@@ -2531,17 +2531,9 @@ private struct TodoItemRow: View {
                                               : (hover ? DSColor.rowHover(container: notchLayout == .container)
                                                        : .clear)))
         )
-        // EXPERIMENT (Marcello, 2026-10-03): an opened to-do is a well sunk
-        // into the panel — darker than the list, no tinted outline — instead
-        // of a lighter card with a section-coloured stroke. The only edge is
-        // a soft shade along the top, like an inset.
-        .overlay(
-            RoundedRectangle(cornerRadius: isExpanded ? 14 : LabMetrics.rowRadius, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(colors: [Color.black.opacity(isExpanded ? 0.35 : 0), .clear],
-                                   startPoint: .top, endPoint: .center),
-                    lineWidth: 1)
-        )
+        // An opened to-do is a well sunk into the panel: darker than the
+        // list, and no outline at all — not the lighter card with a
+        // section-coloured stroke it was (Marcello, 2026-10-03).
         .animation(Motion.hintFade, value: isFocused)
         // Was a bare assignment. The row's own background snapped, and so did
         // the hover half of the RowActions reveal — its condition includes
