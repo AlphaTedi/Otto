@@ -2525,21 +2525,22 @@ private struct TodoItemRow: View {
         // 12pt either side and nothing above or below.
         .frame(minHeight: carriesDetails ? 0 : LabMetrics.rowMinHeight)
         .background(
-            RoundedRectangle(cornerRadius: LabMetrics.rowRadius, style: .continuous)
-                .fill(isExpanded ? DSColor.fieldBackground
+            RoundedRectangle(cornerRadius: isExpanded ? 14 : LabMetrics.rowRadius, style: .continuous)
+                .fill(isExpanded ? Self.openedRowFill
                                  : (isFocused ? DSColor.focusedRowBackground
                                               : (hover ? DSColor.rowHover(container: notchLayout == .container)
                                                        : .clear)))
         )
-        // Expanded rows borrow the section tint already used by their
-        // checkbox, but at a deliberately quiet opacity. `strokeBorder` keeps
-        // the entire hairline inside the card: a centered `stroke` put half a
-        // pixel outside the row and the scroll/clipping layers could shave it
-        // off along an edge or corner.
+        // EXPERIMENT (Marcello, 2026-10-03): an opened to-do is a well sunk
+        // into the panel — darker than the list, no tinted outline — instead
+        // of a lighter card with a section-coloured stroke. The only edge is
+        // a soft shade along the top, like an inset.
         .overlay(
-            RoundedRectangle(cornerRadius: LabMetrics.rowRadius, style: .continuous)
-                .strokeBorder(isExpanded ? accent.opacity(0.38) : .clear,
-                              lineWidth: 1)
+            RoundedRectangle(cornerRadius: isExpanded ? 14 : LabMetrics.rowRadius, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(colors: [Color.black.opacity(isExpanded ? 0.35 : 0), .clear],
+                                   startPoint: .top, endPoint: .center),
+                    lineWidth: 1)
         )
         .animation(Motion.hintFade, value: isFocused)
         // Was a bare assignment. The row's own background snapped, and so did
@@ -2608,6 +2609,11 @@ private struct TodoItemRow: View {
         }
         .frame(width: LabMetrics.rowActionsWidth, alignment: .trailing)
     }
+
+    /// The opened to-do's ground: darker than the panel in dark mode, a
+    /// faint grey well in light.
+    private static let openedRowFill = Color.dynamic(light: NSColor.black.withAlphaComponent(0.05),
+                                                     dark: NSColor.black.withAlphaComponent(0.30))
 
     private var titleRow: some View {
         // CENTER, per the export's `align-items: center`. Top-aligning while

@@ -555,6 +555,9 @@ enum DebugDriver {
                             store.focusedItemID = first.id
                             await snap("row-focused")
                             store.focusedItemID = nil
+                            store.expandedItemID = first.id
+                            await snap("row-expanded")
+                            store.expandedItemID = nil
                         }
                     }
                     // The longest list, walked down to its last to-do the way
