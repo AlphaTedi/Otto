@@ -540,7 +540,8 @@ enum NotchSizePreset: String, CaseIterable, Identifiable {
     }
     var width: Double {
         switch self {
-        case .compact: 520; case .wide: 680; case .extraWide: 820
+        // Wide 620, was 680 — too wide for the container (Marcello, 2026-10-03).
+        case .compact: 520; case .wide: 620; case .extraWide: 820
         }
     }
     var height: Double {
@@ -562,7 +563,7 @@ struct AppearanceSettingsView: View {
     @EnvironmentObject var appState: AppState
     @AppStorage("showNotchPresence") private var showNotchPresence: Bool = true
     @AppStorage("notchCornerRadius")   private var cornerRadius: Double = 10
-    @AppStorage("notchExpandedWidth")  private var expandedWidth: Double = 680
+    @AppStorage("notchExpandedWidth")  private var expandedWidth: Double = 620
     @AppStorage("notchExpandedHeight") private var expandedHeight: Double = 200
     @AppStorage("notchLayout")         private var notchLayout: NotchLayout = .panels
 
@@ -730,7 +731,7 @@ private struct ThemeThumbnail: View {
 struct OpeningSettingsView: View {
     @EnvironmentObject var appState: AppState
     @AppStorage("notchCornerRadius")   private var cornerRadius: Double = 10
-    @AppStorage("notchExpandedWidth")  private var expandedWidth: Double = 680
+    @AppStorage("notchExpandedWidth")  private var expandedWidth: Double = 620
     @AppStorage("notchExpandedHeight") private var expandedHeight: Double = 200
 
     var body: some View {

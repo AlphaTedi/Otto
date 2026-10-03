@@ -58,6 +58,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // bring those surfaces back.
         UserDefaults.standard.set(false, forKey: "showLegacyPanels")
 
+        // Wide became 620 (was 680, 2026-10-03). A Mac still on the old
+        // Wide moves with it; any other width was chosen and is kept.
+        if UserDefaults.standard.double(forKey: "notchExpandedWidth") == 680 {
+            UserDefaults.standard.set(620.0, forKey: "notchExpandedWidth")
+        }
+
         // Show onboarding if not completed
         let showsOnboarding = Self.needsOnboarding()
         if showsOnboarding {
