@@ -1008,3 +1008,17 @@ EventKit traffic, no crash) — twice — and showed nothing. Causes and fixes:
 - Image chips carry no margin; `AttachmentStore.spaceChips` kerns 6pt only
   where text touches a chip (to-do rows, both fields, notes), so a wrapped
   chip sits on the text column. Titles holding a chip get 4pt line spacing.
+
+### 2026-10-03 Meeting Lab
+
+Settings › System › Meeting Lab (Debug builds always; Release only with
+`defaults write com.notchsnap.app ottoDeveloperTools -bool true`, then
+reopen Settings). Schedules fake meetings in memory — never a calendar
+write — that go through the real path: merged into `meetings` on every
+refresh (sorted with the real ones; notes only see real ones), evaluated
+every 2 s by a lab ticker, so the ambient dot, the self-opening alert, Join,
+Snooze and auto-snooze all run as for a real invite. Quick tests are timed
+against the alert lead ("Alert in 1 minute" starts at lead + 1). Replaces
+the old DEBUG-only `injectTestMeeting` (the `meeting <min>` driver command
+now goes through the lab). Verified: `meeting 6` with a 5-min lead shows the
+ambient dot at once and the alert 60 s later.

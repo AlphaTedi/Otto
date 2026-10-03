@@ -224,14 +224,11 @@ final class CalendarStore: ObservableObject {
 
     func refresh() async {
         guard isConnected else { return }
-        #if DEBUG
-        // An injected test meeting has to survive the 10s tick, or the harness
-        // can never observe anything that takes longer than one tick to happen
-        // — the countdown, most obviously.
-        if debugHoldsInjectedMeetings { return }
-        #endif
-        let fetched = await provider.upcomingToday()
-        withAnimation(NotchAnimation.contentHug) { meetings = fetched }
+        let fetched = labHasMeetings && !realCalendarConnected ? [] : await provider.upcomingToday()
+        // Meeting Lab fixtures ride along with the real calendar, sorted in,
+        // and survive every tick; notes only ever see the real ones.
+        let merged = (fetched + labMeetings.filter { $0.end > Date() }).sorted { $0.start < $1.start }
+        withAnimation(NotchAnimation.contentHug) { meetings = merged }
         NotesStore.shared.observeMeetings(fetched)
         evaluateAlerts()
     }
@@ -565,38 +562,124 @@ final class CalendarStore: ObservableObject {
         }
     }
 
-    // MARK: Testing seam
+    // MARK: Meeting Lab — fake meetings to test the alert flow
+    //
+    // Meetings are the hardest part of Otto to see working: you wait for a
+    // real one (Marcello, 2026-10-03). The lab schedules synthetic meetings a
+    // few seconds or minutes out, in memory only — nothing is written to any
+    // calendar — and they go through exactly the path real ones do: the
+    // ambient dot, the self-opening alert, Join, Snooze, auto-snooze.
+    //
+    // Always on in Debug builds; in Release only with
+    // `defaults write com.notchsnap.app ottoDeveloperTools -bool true`.
 
-    #if DEBUG
-    /// Inject a synthetic meeting so the alert stages can be exercised
-    /// without waiting for a real one (see DebugDriver).
-    /// Set by `injectTestMeeting`, so a real provider refresh cannot replace
-    /// the fixture out from under a test.
-    private(set) var debugHoldsInjectedMeetings = false
+    nonisolated static var labEnabled: Bool {
+        #if DEBUG
+        return true
+        #else
+        return UserDefaults.standard.bool(forKey: "ottoDeveloperTools")
+        #endif
+    }
 
-    func debugReleaseInjectedMeetings() { debugHoldsInjectedMeetings = false }
+    @Published private(set) var labMeetings: [DetectedMeeting] = []
+    var labHasMeetings: Bool { !labMeetings.isEmpty }
+    /// Whether the real calendar was connected before the lab switched the
+    /// store on, so clearing the lab can switch it back off.
+    private var realCalendarConnected = false
+    private var labTicker: Timer?
 
-    func injectTestMeeting(minutesFromNow: Int, withLink: Bool) {
-        debugHoldsInjectedMeetings = true
-        let start = Date().addingTimeInterval(TimeInterval(minutesFromNow * 60))
+    enum LabLink: String, CaseIterable, Identifiable {
+        case meet, zoom, teams, other, none
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .meet: return "Google Meet"
+            case .zoom: return "Zoom"
+            case .teams: return "Microsoft Teams"
+            case .other: return "Other link"
+            case .none: return "No link"
+            }
+        }
+        var url: URL? {
+            switch self {
+            case .meet: return URL(string: "https://meet.google.com/abc-defg-hij")
+            case .zoom: return URL(string: "https://zoom.us/j/1234567890")
+            case .teams: return URL(string: "https://teams.microsoft.com/l/meetup-join/test")
+            case .other: return URL(string: "https://whereby.com/otto-test")
+            case .none: return nil
+            }
+        }
+        var platform: String? { self == .none || self == .other ? (self == .other ? "Whereby" : nil) : label }
+    }
+
+    /// Schedule one fake meeting `seconds` from now.
+    func labSchedule(title: String, inSeconds seconds: Int, minutes duration: Int = 30,
+                     link: LabLink = .meet, attendees: Int = 3, replacing: Bool = false) {
+        let names = ["Rose", "Wessel", "Giulia", "Thomas", "Amir", "Lena", "Marco", "Sofia"]
+        let people = Array(names.prefix(max(0, attendees)))
+        let start = Date().addingTimeInterval(TimeInterval(seconds))
         let meeting = DetectedMeeting(
-            id: "test-\(UUID().uuidString.prefix(6))",
-            title: "Design sync",
+            id: "lab-\(UUID().uuidString.prefix(8))",
+            title: title,
             start: start,
-            end: start.addingTimeInterval(1800),
-            attendees: ["Rose", "Wessel"],
-            organizer: "Rose",
-            attendeeEmails: ["rose@example.com", "wessel@example.com"],
-            participantNames: ["Rose", "Wessel", "You"],
-            participantEmails: ["rose@example.com", "wessel@example.com", ""],
-            location: nil,
-            videoURL: withLink ? URL(string: "https://meet.google.com/abc-defg-hij") : nil,
-            platform: withLink ? "Google Meet" : nil,
+            end: start.addingTimeInterval(TimeInterval(max(5, duration) * 60)),
+            attendees: people,
+            organizer: people.first,
+            attendeeEmails: people.map { "\($0.lowercased())@example.com" },
+            participantNames: people + ["You"],
+            participantEmails: people.map { "\($0.lowercased())@example.com" } + [""],
+            location: link == .none ? "Room 2" : nil,
+            videoURL: link.url,
+            platform: link.platform,
             isAllDay: false
         )
+        if labMeetings.isEmpty { realCalendarConnected = isConnected }
+        if replacing { labMeetings = [meeting] } else { labMeetings.append(meeting) }
         isConnected = true
-        withAnimation(NotchAnimation.contentHug) { meetings = [meeting] }
-        evaluateAlerts()
+        startLabTicker()
+        Task { @MainActor in await refresh() }
     }
+
+    /// Remove every fake meeting and give the real calendar back.
+    func labClear() {
+        labMeetings = []
+        labTicker?.invalidate()
+        labTicker = nil
+        if activeAlert?.id.hasPrefix("lab-") == true {
+            clearAlert(whileCollapsing: NotchController.shared.dismissMeetingAlert())
+        }
+        if !realCalendarConnected {
+            isConnected = false
+            withAnimation(NotchAnimation.contentHug) { meetings = [] }
+            ambientMeeting = nil
+        } else {
+            Task { @MainActor in await refresh() }
+        }
+    }
+
+    /// Re-evaluate every 2 s while fixtures exist: the real ticker is 10 s,
+    /// and may not run at all on a Mac with no calendar connected.
+    private func startLabTicker() {
+        guard labTicker == nil else { return }
+        let timer = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.labMeetings.removeAll { $0.end <= Date() }
+                if self.labMeetings.isEmpty { self.labClear(); return }
+                self.evaluateAlerts()
+                self.objectWillChange.send()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        labTicker = timer
+    }
+
+    #if DEBUG
+    /// DebugDriver's `meeting <minutes> [nolink]`.
+    func injectTestMeeting(minutesFromNow: Int, withLink: Bool) {
+        labSchedule(title: "Design sync", inSeconds: minutesFromNow * 60,
+                    link: withLink ? .meet : .none, replacing: true)
+    }
+    func debugReleaseInjectedMeetings() { labClear() }
     #endif
 }

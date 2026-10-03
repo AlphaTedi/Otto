@@ -110,6 +110,7 @@ struct SettingsView: View {
         case .storage:     StorageSettingsView()
         case .permissions: PermissionsSettingsView()
         case .privacy:     PrivacySettingsView()
+        case .meetingLab:  MeetingLabSettingsView()
         case .about:       AboutSettingsView()
         }
     }
@@ -172,7 +173,9 @@ enum SettingsGroup: String, CaseIterable, Identifiable {
         switch self {
         case .otto:        return [.general, .appearance, .opening, .shortcuts]
         case .connections: return [.calendar, .storage]
-        case .system:      return [.permissions, .privacy, .about]
+        case .system:
+            // The lab only exists where fake meetings are allowed.
+            return [.permissions, .privacy] + (CalendarStore.labEnabled ? [.meetingLab] : []) + [.about]
         }
     }
 }
@@ -180,7 +183,7 @@ enum SettingsGroup: String, CaseIterable, Identifiable {
 enum SettingsSection: String, CaseIterable, Identifiable {
     case general, appearance, opening, shortcuts
     case calendar, storage
-    case permissions, privacy, about
+    case permissions, privacy, meetingLab, about
     var id: String { rawValue }
 
     var title: String {
@@ -193,6 +196,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .storage:     return "Storage"
         case .permissions: return "Permissions"
         case .privacy:     return "Privacy"
+        case .meetingLab:  return "Meeting Lab"
         case .about:       return "About"
         }
     }
@@ -208,6 +212,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .storage:     return ["markdown", "folder", "finder", "obsidian", "files", "vault"]
         case .permissions: return ["access", "calendar", "sync", "internet accounts", "privacy & security"]
         case .privacy:     return ["usage", "data", "analytics", "anonymous", "id"]
+        case .meetingLab:  return ["test", "fake", "meeting", "alert", "debug", "simulate"]
         case .about:       return ["version", "update", "onboarding", "feedback"]
         }
     }
@@ -229,6 +234,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .storage:     return "folder.fill"
         case .permissions: return "checkmark.shield.fill"
         case .privacy:     return "lock.fill"
+        case .meetingLab:  return "video.fill"
         case .about:       return ""
         }
     }
@@ -246,6 +252,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .storage:     pair = ("#FFD27A", "#F0A020")
         case .permissions: pair = ("#FFAD85", "#F0642D")
         case .privacy:     pair = ("#8FB6FF", "#3D6CF0")
+        case .meetingLab:  pair = ("#FF9CC2", "#E0457B")
         case .about:       pair = ("#3A3A40", "#141416")
         }
         return [Color(hex: pair.0), Color(hex: pair.1)]
@@ -1011,6 +1018,144 @@ struct PrivacySettingsView: View {
     }
 }
 
+// MARK: - Meeting Lab
+
+/// Fake meetings on demand, to watch the whole meeting flow — the dot in the
+/// notch, the card, the self-opening alert, Join, Snooze — without waiting
+/// for a real invite. In memory only; see CalendarStore's Meeting Lab.
+struct MeetingLabSettingsView: View {
+    @ObservedObject private var calendar = CalendarStore.shared
+    @State private var title = "Design sync"
+    @State private var startsIn = 60
+    @State private var duration = 30
+    @State private var link: CalendarStore.LabLink = .meet
+    @State private var attendees = 3
+
+    private var lead: Int { calendar.alertLeadMinutes }
+
+    private let startOptions: [(String, Int)] = [
+        ("Now", 0), ("In 20 seconds", 20), ("In 1 minute", 60), ("In 2 minutes", 120),
+        ("In 5 minutes", 300), ("In 10 minutes", 600), ("In 20 minutes", 1200),
+    ]
+
+    var body: some View {
+        SettingsPage(section: .meetingLab) {
+            Section {
+                // Timed against the alert lead, so "in 1 minute" means the
+                // ALERT opens in a minute, whatever the lead is set to.
+                SettingRow(title: "Alert in 1 minute",
+                           subtitle: "Google Meet, 3 people, starting \(lead + 1) min from now.") {
+                    Button("Schedule") { calendar.labSchedule(title: "Design sync", inSeconds: (lead + 1) * 60) }
+                }
+                SettingRow(title: "Starting right now", subtitle: "Zoom, 6 people: the notch should open at once.") {
+                    Button("Schedule") { calendar.labSchedule(title: "Stand-up", inSeconds: 0, minutes: 15, link: .zoom, attendees: 6) }
+                }
+                SettingRow(title: "Back-to-back", subtitle: "Two alerts, 1 and 3 minutes from now.") {
+                    Button("Schedule") {
+                        calendar.labSchedule(title: "1:1 with Rose", inSeconds: (lead + 1) * 60, minutes: 2, link: .meet, attendees: 1)
+                        calendar.labSchedule(title: "Roadmap review", inSeconds: (lead + 3) * 60, link: .teams, attendees: 8)
+                    }
+                }
+                SettingRow(title: "No video link", subtitle: "In a room, alert in 1 minute: no Join button.") {
+                    Button("Schedule") { calendar.labSchedule(title: "Lunch with the team", inSeconds: (lead + 1) * 60, link: .none, attendees: 4) }
+                }
+            } header: {
+                Text("Quick tests")
+            } footer: {
+                Text("The ambient dot appears \(calendar.ambientLeadMinutes) min before a meeting and the alert opens the notch \(calendar.alertLeadMinutes) min before — change both in Calendar & Meetings.")
+            }
+
+            Section("Custom meeting") {
+                SettingRow(title: "Title") {
+                    TextField("Title", text: $title)
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 220)
+                }
+                SettingRow(title: "Starts", subtitle: "The alert opens \(calendar.alertLeadMinutes) min before the start.") {
+                    Picker("Starts", selection: $startsIn) {
+                        ForEach(startOptions, id: \.1) { Text($0.0).tag($0.1) }
+                    }
+                    .labelsHidden().pickerStyle(.menu).fixedSize()
+                }
+                SettingRow(title: "Length") {
+                    Picker("Length", selection: $duration) {
+                        Text("2 minutes").tag(2)
+                        Text("15 minutes").tag(15)
+                        Text("30 minutes").tag(30)
+                        Text("1 hour").tag(60)
+                    }
+                    .labelsHidden().pickerStyle(.menu).fixedSize()
+                }
+                SettingRow(title: "Call") {
+                    Picker("Call", selection: $link) {
+                        ForEach(CalendarStore.LabLink.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden().pickerStyle(.menu).fixedSize()
+                }
+                SettingRow(title: "People") {
+                    Picker("People", selection: $attendees) {
+                        Text("Just you").tag(0)
+                        Text("1").tag(1)
+                        Text("3").tag(3)
+                        Text("8").tag(8)
+                    }
+                    .labelsHidden().pickerStyle(.segmented).fixedSize()
+                }
+                HStack {
+                    Spacer()
+                    Button("Replace All") {
+                        calendar.labSchedule(title: title, inSeconds: startsIn, minutes: duration,
+                                             link: link, attendees: attendees, replacing: true)
+                    }
+                    Button("Add Meeting") {
+                        calendar.labSchedule(title: title, inSeconds: startsIn, minutes: duration,
+                                             link: link, attendees: attendees)
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+
+            Section {
+                if calendar.labMeetings.isEmpty {
+                    Text("No test meetings.").foregroundStyle(.secondary)
+                } else {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(calendar.labMeetings) { meeting in
+                                SettingRow(title: meeting.title,
+                                           subtitle: [meeting.platform ?? "No link",
+                                                      "\(meeting.attendees.count) people"].joined(separator: " \u{00B7} ")) {
+                                    Text(Self.countdown(to: meeting, now: context.date))
+                                        .monospacedDigit()
+                                        .foregroundStyle(calendar.activeAlert?.id == meeting.id ? .orange : .secondary)
+                                }
+                            }
+                        }
+                    }
+                    HStack {
+                        Spacer()
+                        Button("Clear Test Meetings", role: .destructive) { calendar.labClear() }
+                    }
+                }
+            } header: {
+                Text("Scheduled")
+            } footer: {
+                Text("Test meetings live only in Otto's memory — nothing is added to any calendar — and vanish when they end, when cleared, or when Otto quits.")
+            }
+        }
+    }
+
+    private static func countdown(to meeting: DetectedMeeting, now: Date) -> String {
+        let left = Int(meeting.start.timeIntervalSince(now))
+        if left <= 0 {
+            return CalendarStore.shared.activeAlert?.id == meeting.id ? "Alerting · started" : "Started"
+        }
+        let text = String(format: "in %d:%02d", left / 60, left % 60)
+        return CalendarStore.shared.activeAlert?.id == meeting.id ? "Alerting · " + text : text
+    }
+}
+
 // MARK: - About
 
 struct AboutSettingsView: View {
@@ -1100,6 +1245,7 @@ struct SettingsPageDebugHost: View {
         case .storage:     StorageSettingsView()
         case .permissions: PermissionsSettingsView()
         case .privacy:     PrivacySettingsView()
+        case .meetingLab:  MeetingLabSettingsView()
         case .about:       AboutSettingsView()
         }
     }
