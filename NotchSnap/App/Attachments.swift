@@ -515,12 +515,6 @@ extension AttachmentStore {
             .replacingOccurrences(of: "  ", with: " ").trimmingCharacters(in: .whitespaces)
     }
 
-    /// Title text without its image tokens — for places that show it plain.
-    nonisolated static func plainTitle(_ text: String) -> String {
-        tokenPattern.stringByReplacingMatches(in: text, range: NSRange(location: 0, length: (text as NSString).length),
-                                              withTemplate: "").replacingOccurrences(of: "  ", with: " ")
-            .trimmingCharacters(in: .whitespaces)
-    }
 }
 
 // MARK: - The chip, in SwiftUI (to-dos)

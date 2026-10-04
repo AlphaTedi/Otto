@@ -511,7 +511,7 @@ struct TodoTabView: View {
                 // U5 capture header — FLOATING PANELS ONLY. The notch
                 // container keeps its own field exactly as it is (Marcello,
                 // 2026-09-25).
-                if !isContainerLayout, store.panelMode == .browsing || store.panelMode == .voice {
+                if !isContainerLayout, store.panelMode == .browsing {
                     TodoCaptureHeader()
                         .notchEntry(index: 0)
                         // The first checkbox sits as far below the bar as it
@@ -520,7 +520,7 @@ struct TodoTabView: View {
                         .padding(.bottom, 11.5)
                         .measureHeight(DraftBlockKey.self)
                 }
-                if isContainerLayout, store.panelMode == .browsing || store.panelMode == .voice {
+                if isContainerLayout, store.panelMode == .browsing {
                     InlineDraftRow(accent: store.draftDestination?.color ?? LabMetrics.accent)
                         .padding(.horizontal, LabMetrics.barOuterInset)
                         .notchEntry(index: 0)
@@ -585,9 +585,6 @@ struct TodoTabView: View {
                             .transition(modeTransition)
                     case .find:
                         QuickFindView()
-                            .transition(modeTransition)
-                    case .voice:
-                        VoiceCaptureView()
                             .transition(modeTransition)
                     case .notes:
                         // The Notes space brings its own field — the composer
@@ -937,22 +934,6 @@ struct TodoTabRow: View {
                     }
                 }
 
-                // Voice brain-dump entry point (VC-1). Sits beside the "+"
-                // creation chip: same family of "start something" controls.
-                // SHELVED 2026-07-25 — hidden behind VoiceFeature.isEnabled;
-                // the implementation stays intact, just unreachable.
-                if VoiceFeature.isEnabled {
-                    VoiceChip(isActive: store.panelMode == .voice) {
-                        if store.panelMode == .voice {
-                            VoiceCaptureController.shared.toggle()
-                        } else {
-                            store.setMode(.voice)
-                            NotchController.shared.focusPanel()
-                            VoiceCaptureController.shared.start()
-                        }
-                    }
-                }
-
                 // CT-5 still holds — exactly ONE "+" in the row — but it now
                 // means "new section", and sits after the last tab rather
                 // than in front of the first. The extra 4pt is deliberate: at
@@ -1148,33 +1129,6 @@ private struct TabDropIndicator: View {
     }
 }
 
-// MARK: - VoiceChip — voice brain-dump entry (VC-1)
-
-private struct VoiceChip: View {
-    let isActive: Bool
-    let action: () -> Void
-    @State private var hover = false
-
-    var body: some View {
-        Button(action: action) {
-            OttoIcon(isActive ? "waveform" : "mic.fill", pointSize: 10)
-                .foregroundStyle(isActive ? DSColor.primaryText : DSColor.textPrimaryBright)
-                .frame(width: 26, height: 24)
-                .background(
-                    RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous)
-                        .fill(isActive ? DSColor.focusAccent
-                                       : Color(hex: "#333333").opacity(hover ? 1 : 0.85))
-                )
-                .contentShape(RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        // A highlight, not a state change: the shortest band there is.
-        .animation(Motion.hoverFade, value: hover)
-        .onHover { hover = $0 }
-        .help(L10n.t("voice.start") + "  \u{2318}\u{21E7}V")
-    }
-}
-
 // MARK: - NewSectionButton — "New section" at the end of the tabs
 //
 // A WORD, not a glyph. The "+" was two crossing lines with no label, which
@@ -1297,12 +1251,6 @@ struct TodoBrowsingView: View {
             - (isContainer ? completedInset : 0)
     }
 
-    /// One line of draft plus its padding and the gap under it. An estimate,
-    /// not a measurement: a draft that has wrapped to three lines is both rare
-    /// and short-lived, and the cost of being a little conservative here is
-    /// one row of scroll, while the cost of measuring is a layout round-trip
-    /// on every keystroke.
-    private static let draftRowAllowance: CGFloat = 54
     /// Negative on purpose: the capped, scrolling path is now the ONLY path.
     /// The inline path had no ceiling, so a list that grew past the panel's
     /// height simply kept going. `viewport = min(natural, cap)` still hugs a

@@ -8,8 +8,6 @@ import AppKit
 //   • Confirmations are soft and short (Tink / Pop).
 //   • UI expansion is silent unless a custom AIFF is bundled — macOS
 //     never sounds on open/close chrome by default.
-//   • Passive events (clipboard monitoring) are silent — they fire on
-//     every copy in any app and would nag.
 
 final class SoundManager: @unchecked Sendable {
     static let shared = SoundManager()
@@ -67,27 +65,15 @@ final class SoundManager: @unchecked Sendable {
 
     // Raw values match the AIFF filenames in Resources/Sounds/.
     enum SoundName: String, CaseIterable {
-        case capture            = "screenshot_capture"
         case expand             = "notch_expand"
         case collapse           = "notch_collapse"
-        case copy               = "copy_confirm"
         case delete             = "item_delete"
-        case clipboard          = "clipboard_item"      // no file yet — silent
-        case stepAdvance        = "step_advance"
-        case permissionGranted  = "permission_granted"
-        case onboardingComplete = "onboarding_complete"
 
         var volume: Float {
             switch self {
-            case .capture:            return 0.30
             case .expand:             return 0.18
             case .collapse:           return 0.14
-            case .copy:               return 0.25
             case .delete:             return 0.22
-            case .clipboard:          return 0.15
-            case .stepAdvance:        return 0.20
-            case .permissionGranted:  return 0.30
-            case .onboardingComplete: return 0.35
             }
         }
 
@@ -95,15 +81,9 @@ final class SoundManager: @unchecked Sendable {
         // Ref: /System/Library/Sounds/
         var systemFallback: NSSound? {
             switch self {
-            case .capture:            return NSSound(named: "Tink")
             case .expand:             return nil   // silent — haptic only
             case .collapse:           return nil   // silent — haptic only
-            case .copy:               return NSSound(named: "Pop")
             case .delete:             return NSSound(named: "Bottle")
-            case .clipboard:          return nil   // passive event — silent
-            case .stepAdvance:        return NSSound(named: "Pop")
-            case .permissionGranted:  return NSSound(named: "Glass")
-            case .onboardingComplete: return NSSound(named: "Glass")
             }
         }
     }

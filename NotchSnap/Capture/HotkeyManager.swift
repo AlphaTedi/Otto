@@ -153,7 +153,6 @@ class HotkeyManager {
         case .openNotesSpace:
             print("[HotkeyManager] \u{2303}\u{21E7}E \u{2192} Notes space")
             Task { @MainActor in
-                AppState.shared.pendingNotchFilter = .todos
                 NotchController.shared.triggerExpand(trigger: .hotkey)
                 NotesStore.shared.enterSpace()
                 // The space opens ready to write, and typing needs real
@@ -176,7 +175,6 @@ class HotkeyManager {
         case .openTodos:
             print("[HotkeyManager] ⌃⇧T → Notch on To-dos")
             Task { @MainActor in
-                AppState.shared.pendingNotchFilter = .todos
                 NotchController.shared.triggerExpand(trigger: .hotkey)
                 // Opening IS the intent to interact: the caret lands in the
                 // draft row so typing works immediately, and — since a

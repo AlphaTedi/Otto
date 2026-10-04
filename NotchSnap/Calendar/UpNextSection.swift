@@ -167,7 +167,7 @@ struct MeetingCard: View {
 
     private func open() {
         guard let url = event.videoURL else { return }
-        NSWorkspace.shared.open(CalendarStore.urlForJoining(url))
+        NSWorkspace.shared.open(url)
         // Policy rule 7 — see NotchController's auto-collapse policy.
         NotchController.shared.attentionLeft()
     }

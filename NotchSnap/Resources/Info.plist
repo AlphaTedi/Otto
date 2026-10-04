@@ -22,10 +22,6 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>GoogleOAuthClientID</key>
-	<string>$(GOOGLE_OAUTH_CLIENT_ID)</string>
-	<key>GoogleOAuthClientSecret</key>
-	<string>$(GOOGLE_OAUTH_CLIENT_SECRET)</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>LSUIElement</key>
@@ -38,12 +34,6 @@
 	<string>Otto matches meeting attendees to your contacts so it can show their photo next to a meeting. Contacts are read on this Mac only and never sent anywhere.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 Otto. All rights reserved.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Otto listens only while you hold a voice capture session open, so you can speak your to-dos instead of typing them. Audio is transcribed on this Mac and never leaves it.</string>
-	<key>NSRemindersFullAccessUsageDescription</key>
-	<string>Otto creates and completes reminders in your Otto list so they sync with Apple Reminders.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Otto turns your spoken brain-dump into to-dos using on-device speech recognition. Nothing is sent to Apple or any server.</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>OttoServiceHost</key>

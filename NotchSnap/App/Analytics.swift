@@ -156,7 +156,7 @@ enum Analytics {
             "lang": .string(lang.lowercased().filter { $0.isLetter }.prefix(3).description),
             "layout": .string(AppState.shared.notchLayout.rawValue),
             "has_notch": .bool(NSScreen.screens.contains { $0.safeAreaInsets.top > 0 }),
-            "calendar": .string(CalendarStore.shared.source == .google ? "google" : "eventkit"),
+            "calendar": .string("eventkit"),
             "env": .string(env),
         ]
     }

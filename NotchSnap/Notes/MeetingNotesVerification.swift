@@ -40,12 +40,6 @@ enum MeetingNotesVerification {
             expect(MeetingNoteResolver.conversation(for: ref, in: [first, conflict]) == nil, "ambiguous series")
             expect(MeetingNoteResolver.note(for: ref, in: [first, conflict]) == nil, "ambiguous occurrence")
 
-            let payload = #"{"items":[{"id":"i","summary":"1:1","recurringEventId":"r","originalStartTime":{"dateTime":"2026-09-14T10:00:00+02:00"},"start":{"dateTime":"2026-09-14T11:00:00+02:00"},"end":{"dateTime":"2026-09-14T11:30:00+02:00"}}]}"#
-            let parsed = GoogleCalendarProvider.parse(Data(payload.utf8), account: "test")
-            expect(parsed.count == 1, "Google fixture parses")
-            expect(parsed.first?.noteReference?.originalStart != parsed.first?.start, "Google original vs displayed start")
-            expect(GoogleCalendarProvider.parse(Data(payload.utf8)).first?.noteReference?.occurrenceKey == nil, "unknown account not exact")
-
             let storage = root.appendingPathComponent("Notes")
             let store = NotesStore(storageDirectory: storage)
             store.pendingMeetingNote = first

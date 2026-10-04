@@ -15,29 +15,12 @@ struct CalendarSettingsView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject private var calendar = CalendarStore.shared
     @State private var isConnecting = false
-    @State private var clientID = ""
-    @State private var clientSecret = ""
     #if DEBUG
     @State private var probeLines: [String] = []
     #endif
 
     var body: some View {
         SettingsPage(section: .calendar) {
-            // Only offered when there is more than one usable source; a
-            // one-option picker is just noise.
-            let sources = CalendarStore.Source.available
-            if sources.count > 1 {
-                Section {
-                    Picker(L10n.t("gcal.source"), selection: Binding(
-                        get: { calendar.source },
-                        set: { calendar.source = $0 }
-                    )) {
-                        ForEach(sources) { Text($0.label).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                }
-            }
-
             if SettingsPermissions.needsAttention(calendar) {
                 Section {
                     HStack {
@@ -55,8 +38,6 @@ struct CalendarSettingsView: View {
 
             if calendar.isConnected {
                 connected
-            } else if calendar.source == .google, sources.contains(.google) {
-                googleDisconnected
             } else {
                 disconnected
             }
@@ -80,54 +61,6 @@ struct CalendarSettingsView: View {
         } footer: {
             Text("Uses the calendars already in the Calendar app, including Google accounts added in Internet Accounts. Otto only reads them.")
         }
-    }
-
-    // MARK: Google (only when that source is offered)
-
-    @ViewBuilder
-    private var googleDisconnected: some View {
-        Section {
-            if !GoogleOAuth.hasBundledCredentials {
-                TextField(L10n.t("gcal.clientID"), text: $clientID)
-                SecureField(L10n.t("gcal.clientSecret"), text: $clientSecret)
-                Link(L10n.t("gcal.openConsole"),
-                     destination: URL(string: "https://console.cloud.google.com/apis/credentials")!)
-            }
-            SettingRow(title: L10n.t("gcal.title"), subtitle: L10n.t("gcal.subtitle")) {
-                Button(isConnecting ? "Connecting\u{2026}" : L10n.t("gcal.signIn")) {
-                    saveCredentialsAndConnect()
-                }
-                .disabled(isConnecting || !canSignIn)
-            }
-            if let error = calendar.lastError {
-                Text(error).foregroundStyle(.orange)
-            }
-        } header: {
-            Text("Account")
-        }
-        .onAppear {
-            if GoogleOAuth.shared.usesCustomCredentials {
-                clientID = KeychainStore.get(KeychainStore.Key.clientID) ?? ""
-                clientSecret = KeychainStore.get(KeychainStore.Key.clientSecret) ?? ""
-            }
-        }
-    }
-
-    /// Signing in needs a credential from somewhere: shipped, or typed in.
-    private var canSignIn: Bool {
-        GoogleOAuth.hasBundledCredentials || (!clientID.isEmpty && !clientSecret.isEmpty)
-    }
-
-    private func saveCredentialsAndConnect() {
-        // Only persist an override when one was actually typed; otherwise the
-        // shipped credential is used and nothing is written to the Keychain.
-        let id = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let secret = clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !id.isEmpty && !secret.isEmpty {
-            GoogleOAuth.shared.clientID = id
-            GoogleOAuth.shared.clientSecret = secret
-        }
-        connect()
     }
 
     // MARK: Connected (SU-5)

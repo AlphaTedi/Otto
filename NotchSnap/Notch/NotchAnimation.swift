@@ -32,40 +32,6 @@ enum NotchAnimation {
     // Must finish BEFORE the shape starts collapsing
     static let contentOut = Animation.spring(response: 0.16, dampingFraction: 1.0)
 
-    // CARD STAGGER: each thumbnail enters with increasing delay
-    static func cardEntry(index: Int) -> Animation {
-        .spring(response: 0.38, dampingFraction: 0.62)
-        .delay(Double(index) * 0.045)  // 0ms, 45ms, 90ms, 135ms...
-    }
-
-    // HOVER ON THUMBNAIL: light scale
-    static let thumbnailHover = Animation.spring(response: 0.22, dampingFraction: 0.72)
-
-    // NEW SCREENSHOT INSERTED: slide from right
-    static let newScreenshot = Animation.spring(response: 0.42, dampingFraction: 0.65)
-
-    // SCREENSHOT BOUNCE: notch pulses when screenshot arrives
-    static let bounce = Animation.spring(response: 0.18, dampingFraction: 0.5)
-
-    // MARK: - Capture Notification (Dynamic Island style)
-
-    // NOTIFICATION EXPAND: pill widens horizontally — visible overshoot
-    static let notificationExpand = Animation.spring(response: 0.45, dampingFraction: 0.6)
-
-    // NOTIFICATION THUMBNAIL: smooth slide-in (no bounce/scale)
-    static let notificationThumbnail = Animation.spring(response: 0.32, dampingFraction: 0.72)
-
-    // NOTIFICATION CONTENT FADE-IN: springs in just after the pill starts
-    // widening (the sequence in NotchController supplies the delay)
-    static let notificationContentIn = Animation.spring(response: 0.28, dampingFraction: 0.8)
-
-    // NOTIFICATION CONTENT FADE-OUT: fast critically-damped spring —
-    // disappears decisively, no bounce, blends if interrupted
-    static let notificationContentOut = Animation.spring(response: 0.14, dampingFraction: 1.0)
-
-    // NOTIFICATION CONTRACT: fast, decisive, no bounce
-    static let notificationContract = Animation.spring(response: 0.30, dampingFraction: 0.82)
-
     // MARK: - To-do hugging panel (PRD §8)
 
     // CONTENT HUG: the hero spring — panel height, row enter/exit, and the

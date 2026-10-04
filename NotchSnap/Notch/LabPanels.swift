@@ -65,7 +65,6 @@ enum LabMetrics {
     /// 16, was 24: the field read as a pill (Marcello, 2026-10-03).
     static let barRadius: CGFloat = 16
     static let barHeight: CGFloat = 59
-    static let barInnerGap: CGFloat = 6
 
     // Checkboxes — one size everywhere now, bar and rows alike
     static let checkboxSize: CGFloat = 18
@@ -135,7 +134,6 @@ enum LabMetrics {
     /// deliberate — it is what makes the active one read as selected rather
     /// than merely tinted.
     static let tabActiveRadius: CGFloat = 48
-    static let tabInactiveRadius: CGFloat = 8
     static let avatarSize: CGFloat = 24
 
     /// The to-do panel STOPS. 556 is the drawn height.
@@ -159,19 +157,6 @@ enum LabMetrics {
     static let blockPadding: CGFloat = 24
     static let meetingRadius: CGFloat = 32
 
-    /// CONCENTRIC CORNERS. An inner radius must be the outer one minus the gap
-    /// between them, or the two curves are not parallel and the inner box
-    /// visibly fights the corner it sits in.
-    static func concentric(outer: CGFloat, inset: CGFloat) -> CGFloat {
-        max(0, outer - inset)
-    }
-
-    /// The deck behind the top meeting.
-    static let stackOffset: CGFloat = 6
-    static let stackScaleStep: CGFloat = 0.04
-    static let maxStackPeek = 2
-    static let stackExpandedGap: CGFloat = 8
-    static let meetingBlockMaxHeight: CGFloat = 300
 
     /// How long the alert waits before snoozing itself.
     /// 25 was long enough that an alert nobody wanted sat there being
@@ -456,7 +441,7 @@ struct LabMeetingCard: View {
 
     private func join() {
         guard let url = meeting.videoURL else { return }
-        NSWorkspace.shared.open(CalendarStore.urlForJoining(url))
+        NSWorkspace.shared.open(url)
         NotchController.shared.attentionLeft()
     }
 }

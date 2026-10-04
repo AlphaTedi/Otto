@@ -263,22 +263,6 @@ extension View {
         modifier(FloatingGlassSurface(shape: shape, tint: tint))
     }
 
-    /// Glass for the space-bar pills — section chips, Notes, Calendar.
-    ///
-    /// Same three tiers as `floatingGlass` (real tinted glass on 26,
-    /// `.ultraThinMaterial` below it, opaque under Reduce Transparency) but
-    /// WITHOUT the hairline: each pill draws its own edge — Notes a dashed
-    /// stroke, Calendar a solid one, the section chips none — so a shared
-    /// stroke here would double every outline.
-    ///
-    /// The tint is used AS GIVEN, because "active" means different depths in
-    /// different places: a section chip needs a strong cast under dark
-    /// on-accent text, while Notes/Calendar carry the signal in coloured text
-    /// plus stroke and only want a whisper of fill. Pass nil for the resting
-    /// state — plain glass, no cast.
-    func pillGlass<S: InsettableShape>(in shape: S, tint: Color? = nil) -> some View {
-        modifier(PillGlassSurface(shape: shape, tint: tint))
-    }
 }
 
 extension View {
@@ -321,114 +305,6 @@ struct FloatingGlassSurface<S: InsettableShape>: ViewModifier {
                 .background(.ultraThinMaterial, in: shape)
                 .background(shape.fill((tint ?? .clear).opacity(0.13)))
                 .overlay(shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
-        }
-    }
-}
-
-/// Glass for the space-bar pills. Same tiers as `FloatingGlassSurface`, minus
-/// the hairline (each pill draws its own edge) and with the tint used as
-/// given — see `pillGlass(in:tint:)`.
-struct PillGlassSurface<S: InsettableShape>: ViewModifier {
-    let shape: S
-    /// nil ⇒ resting pill: plain glass, no colour cast.
-    var tint: Color?
-    @ObservedObject private var refresh = GlassRefresh.shared
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-
-    func body(content: Content) -> some View {
-        if reduceTransparency || GlassDebug.forceOpaque {
-            content.background(shape.fill(Color(hex: "#1C1C1E")))
-                   .overlay(shape.strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
-        } else if #available(macOS 26.0, *) {
-            content
-                .glassEffect(Glass.regular
-                    .tint((tint ?? Color.clear)
-                        .opacity(refresh.token % 2 == 0 ? 1.0 : 0.9995)),
-                             in: shape)
-        } else {
-            content
-                .background(.ultraThinMaterial, in: shape)
-                .background(shape.fill(tint ?? .clear))
-        }
-    }
-}
-
-/// Live within-window material with a continuous alpha ramp. This varies
-/// material coverage, not the Gaussian radius (AppKit does not expose that).
-/// The mask belongs to the effect view so AppKit masks the actual backdrop.
-struct SectionBarFrost: NSViewRepresentable {
-    var reversed = false
-    /// False for the BAR'S OWN GROUND, which must be uniform.
-    ///
-    /// Measured, not guessed: the view tree showed the bar's material at
-    /// y=354..421 and the list's ramp at y=421..473, touching exactly. Both
-    /// were ramped and both pointed the same way, so at the junction the bar
-    /// had faded to nothing and the overlay restarted at full — a sawtooth,
-    /// and the sawtooth is the hard line (2026-09-20). Solid under the pills,
-    /// ramping only above them, is one continuous fall.
-    var ramped = true
-    func makeNSView(context: Context) -> SectionBarFrostView {
-        SectionBarFrostView()
-    }
-    func updateNSView(_ view: SectionBarFrostView, context: Context) {
-        view.reversed = reversed
-        view.ramped = ramped
-        view.needsLayout = true
-    }
-}
-
-final class SectionBarFrostView: NSVisualEffectView {
-    var reversed = false
-    var ramped = true
-    private var lastSize = CGSize.zero
-    private var lastReversed = false
-    private var lastRamped = true
-
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        material = .hudWindow
-        blendingMode = .withinWindow
-        state = .active
-    }
-    required init?(coder: NSCoder) { fatalError("init(coder:) is unsupported") }
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-    override func layout() {
-        super.layout()
-        guard bounds.width > 0, bounds.height > 0,
-              bounds.size != lastSize || reversed != lastReversed
-                || ramped != lastRamped else { return }
-        lastSize = bounds.size
-        lastReversed = reversed
-        lastRamped = ramped
-        guard ramped else {
-            // Uniform: this is a ground, not a fade.
-            maskImage = nil
-            return
-        }
-        let size = bounds.size
-        let flip = reversed
-        // A LONG, CONTINUOUS ramp — the shape of it is the whole effect.
-        //
-        // It used to hold full strength for the first third and then fall away
-        // over the rest. A ramp with a flat section has a knee where the two
-        // meet, and a knee at this scale reads as an edge: it replaced the line
-        // it was meant to dissolve (Marcello, 2026-09-20).
-        //
-        // Seven stops easing out instead, opaque only at the very lip and
-        // reaching zero well before the top, so there is nowhere along it where
-        // the rate of change jumps. Fewer stops were tried; the banding is
-        // visible on a dark panel.
-        maskImage = NSImage(size: size, flipped: false) { rect in
-            guard let gradient = NSGradient(colorsAndLocations:
-                (.black, 0),
-                (.black.withAlphaComponent(0.97), 0.18),
-                (.black.withAlphaComponent(0.86), 0.36),
-                (.black.withAlphaComponent(0.64), 0.54),
-                (.black.withAlphaComponent(0.36), 0.70),
-                (.black.withAlphaComponent(0.14), 0.85),
-                (.clear, 1)) else { return false }
-            gradient.draw(in: rect, angle: flip ? 270 : 90)
-            return true
         }
     }
 }

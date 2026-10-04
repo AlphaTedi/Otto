@@ -100,22 +100,6 @@ struct FrostedGlassBackground: View {
     }
 }
 
-struct GlassTile: View {
-    var cornerRadius: CGFloat = SharedGlassStyle.cardRadius
-
-    var body: some View {
-        // rgba(0,0,0,0.3) with a hairline, per the export. It used to be
-        // `.ultraThinMaterial`, which resolves LIGHT — on the new dark purple
-        // surface every grouped row came out as a pale slab.
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(SharedGlassStyle.card)
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
-            )
-    }
-}
-
 // MARK: - Visual Effect Background (blur wallpaper)
 
 struct VisualEffectBackground: NSViewRepresentable {
@@ -149,5 +133,4 @@ enum SharedGlassStyle {
     )
     /// Grouped surfaces: deliberately dark under the light glass buttons.
     static let card = Color.black.opacity(0.3)
-    static let cardRadius: CGFloat = 24
 }

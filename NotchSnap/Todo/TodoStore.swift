@@ -35,9 +35,6 @@ enum TodoPanelMode: Equatable {
     case browsing
     case newCategory
     case find
-    /// Voice brain-dump: listening → parsing → review (see
-    /// VoiceCaptureController). Owned by that controller, not this store.
-    case voice
     /// The Notes space. A SPACE, not a mode of the list: there are many lists
     /// and exactly one Notes, which is why it takes the head of the bar and
     /// never scrolls with them. State lives in NotesStore.
@@ -534,7 +531,7 @@ final class TodoStore: ObservableObject {
         // The way out is the chevron, which now answers the pointer, plus
         // Esc and ⌘[ through the key router.
         if (panelMode == .notes || panelMode == .calendar), NotesStore.shared.openNoteID != nil { return false }
-        return panelMode == .browsing || panelMode == .voice || panelMode == .notes || panelMode == .calendar
+        return panelMode == .browsing || panelMode == .notes || panelMode == .calendar
             || panelMode == .insights
     }
 
@@ -564,17 +561,8 @@ final class TodoStore: ObservableObject {
         firstUserCollection?.id
     }
 
-    /// Leaving voice mode must also tear the capture session down, so mode
-    /// changes route through here rather than assigning panelMode directly.
-    func exitVoiceIfNeeded(_ newMode: TodoPanelMode) {
-        if panelMode == .voice, newMode != .voice {
-            VoiceCaptureController.shared.cancel()
-        }
-    }
-
     func setMode(_ mode: TodoPanelMode) {
         guard panelMode != mode else { return }
-        exitVoiceIfNeeded(mode)
         withAnimation(Motion.contentHug) {
             panelMode = mode
             if mode == .find { findQuery = ""; findSelection = 0 }
@@ -593,7 +581,7 @@ final class TodoStore: ObservableObject {
     func settleForClose() {
         switch panelMode {
         case .browsing, .notes, .calendar, .insights: break
-        case .find, .newCategory, .voice: setMode(.browsing)
+        case .find, .newCategory: setMode(.browsing)
         }
     }
 
@@ -605,7 +593,7 @@ final class TodoStore: ObservableObject {
         case .notes: notes.openNoteID != nil ? notes.focusBody() : notes.focusComposer()
         case .calendar:
             if notes.openNoteID != nil { notes.focusBody() } else { notes.meetingSearchFocus = true }
-        case .find, .newCategory, .voice, .insights: break
+        case .find, .newCategory, .insights: break
         }
     }
 
@@ -1133,12 +1121,6 @@ final class TodoStore: ObservableObject {
     /// Re-toggling mid-settle cancels cleanly — springs preserve velocity, so
     /// an interrupted exit reverses instead of snapping.
     // MARK: - Image attachments
-
-    func setAttachments(_ paths: [String], for id: UUID) {
-        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
-        items[index].attachments = paths
-        scheduleSave()
-    }
 
     func removeAttachment(_ path: String, from id: UUID) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }

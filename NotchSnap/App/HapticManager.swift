@@ -58,52 +58,13 @@ final class HapticManager: @unchecked Sendable {
 
     // MARK: - Screenshot Events
 
-    /// Screenshot captured: primary action
-    func screenshotCaptured() {
-        SoundManager.shared.play(.capture)
-        guard isEnabled else { return }
-        performer.perform(.generic, performanceTime: .now)
-    }
-
-    func captureFeedback() { screenshotCaptured() }
-
     // MARK: - Clipboard & Actions
-
-    /// Copy confirmed: double tap for "doppio click" feeling
-    func copyConfirmed() {
-        SoundManager.shared.play(.copy)
-        guard isEnabled else { return }
-        performer.perform(.alignment, performanceTime: .now)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
-            self?.performer.perform(.alignment, performanceTime: .now)
-        }
-    }
-
-    /// New clipboard item added (passive event — very light)
-    func clipboardItemAdded() {
-        SoundManager.shared.play(.clipboard)
-        guard isEnabled else { return }
-        performer.perform(.generic, performanceTime: .now)
-    }
-
-    /// Thumbnail selected (tap)
-    func thumbnailSelect() {
-        guard isEnabled else { return }
-        performer.perform(.alignment, performanceTime: .now)
-    }
-
-    func thumbnailSelected() { thumbnailSelect() }
 
     // MARK: - Drag & Drop
 
     func dragBegan() {
         guard isEnabled else { return }
         performer.perform(.levelChange, performanceTime: .now)
-    }
-
-    func dropCompleted() {
-        guard isEnabled else { return }
-        performer.perform(.alignment, performanceTime: .drawCompleted)
     }
 
     // MARK: - To-do events

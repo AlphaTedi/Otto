@@ -64,67 +64,9 @@ final class CalendarStore: ObservableObject {
     /// Set once the user connects, so we don't re-prompt on every launch.
     @AppStorage("calendarConnected") private var connectedPreference = false
 
-    /// Which backend supplies meetings. Google exists because macOS's own
-    /// Google sync can be broken (it was, on Marcello's Mac, for months) and
-    /// because it needs no calendar permission at all — which matters on a
-    /// machine where an unsigned build can't get one.
-    enum Source: String, CaseIterable, Identifiable {
-        case macOS, google
-        var id: String { rawValue }
-        var label: String {
-            self == .macOS ? L10n.t("gcal.sourceMac") : L10n.t("gcal.sourceGoogle")
-        }
-
-        /// Sources this build can actually use.
-        ///
-        /// A build with no OAuth credential compiled in cannot sign in to
-        /// Google, so offering it produces a dead end — a picker option whose
-        /// only outcome is a setup form (Marcello, 2026-07-28). It reappears
-        /// automatically once Config/GoogleOAuth.xcconfig is filled in, and
-        /// stays visible for anyone already signed in so they are never
-        /// stranded by a rebuild.
-        ///
-        /// Google is switched off for now (Marcello, 2026-09-27): the Mac's
-        /// own Calendar carries Google accounts — Meet links included, in the
-        /// event notes — and a direct Google sign-in needs Google's app
-        /// verification before it can be offered to anyone. The provider and
-        /// its OAuth code stay, ready to come back.
-        @MainActor
-        static var available: [Source] { [.macOS] }
-    }
-
-    @AppStorage("calendarSource") private var storedSource: String = Source.macOS.rawValue
-    var source: Source {
-        // Only the Mac's Calendar while Google is off — an install that had
-        // chosen Google is moved back without touching its stored choice.
-        get { Source.available.contains(Source(rawValue: storedSource) ?? .macOS)
-                ? (Source(rawValue: storedSource) ?? .macOS) : .macOS }
-        set {
-            guard newValue != source else { return }
-            // Switching backends invalidates everything derived from the old
-            // one — never leave one provider's meetings on screen under the
-            // other's name.
-            disconnect()
-            storedSource = newValue.rawValue
-            provider = Self.makeProvider(newValue)
-            objectWillChange.send()
-        }
-    }
-
-    private static func makeProvider(_ source: Source) -> MeetingProvider {
-        source == .google ? GoogleCalendarProvider() : EventKitCalendarProvider()
-    }
-
-    /// If a stored preference names a source this build cannot use — an old
-    /// setting carried into a build without Google credentials — fall back to
-    /// macOS rather than starting up with a provider that can never connect.
-    private var effectiveSource: Source {
-        Source.available.contains(source) ? source : .macOS
-    }
-
-    private lazy var provider: MeetingProvider = Self.makeProvider(effectiveSource)
+    private lazy var provider: MeetingProvider = EventKitCalendarProvider()
     /// The concrete provider, for the EventKit-specific diagnostics shown in
-    /// Settings. Nil while the Google provider is selected.
+    /// Settings.
     private var eventKit: EventKitCalendarProvider? { provider as? EventKitCalendarProvider }
 
     /// Every calendar NotchSnap can see — shown in Settings so "Connected"
@@ -442,30 +384,6 @@ final class CalendarStore: ObservableObject {
 
     // MARK: Alert actions
 
-    /// Hints Google Meet toward the account Otto is actually connected to,
-    /// rather than whichever Google session the browser happens to have
-    /// active. A browser signed into several Google accounts otherwise joins
-    /// with the wrong one — not the identity that was actually invited to the
-    /// meeting (Marcello, 2026-08-09). `authuser` is Google's own, documented
-    /// mechanism for this across every one of its own properties (Meet,
-    /// Calendar, Drive, Docs); it is meaningless outside google.com and left
-    /// untouched there, so a Zoom or Teams link is never rewritten.
-    ///
-    /// Exact host match, not a suffix check: `"x.evil-google.com".hasSuffix(
-    /// "google.com")` would also be true, which is the wrong kind of "close
-    /// enough" for something that decides which account a browser signs
-    /// requests as.
-    static func urlForJoining(_ url: URL) -> URL {
-        guard url.host == "meet.google.com",
-              let account = GoogleOAuth.shared.account,
-              var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        else { return url }
-        var items = (components.queryItems ?? []).filter { $0.name != "authuser" }
-        items.append(URLQueryItem(name: "authuser", value: account))
-        components.queryItems = items
-        return components.url ?? url
-    }
-
     /// ⌘↩ from the panel: open the next meeting that actually has a link.
     /// Returns false when there is nothing to join, so the key handler can let
     /// the keystroke fall through instead of swallowing it.
@@ -474,7 +392,7 @@ final class CalendarStore: ObservableObject {
         guard isConnected,
               let next = upcomingToday.first(where: { $0.videoURL != nil }),
               let url = next.videoURL else { return false }
-        NSWorkspace.shared.open(Self.urlForJoining(url))
+        NSWorkspace.shared.open(url)
         NotchController.shared.attentionLeft()
         return true
     }
@@ -482,7 +400,7 @@ final class CalendarStore: ObservableObject {
     /// CA-4 — open the detected call link.
     func join() {
         guard let url = activeAlert?.videoURL else { return }
-        NSWorkspace.shared.open(Self.urlForJoining(url))
+        NSWorkspace.shared.open(url)
         dismissAlert()
         // Policy rule 7: the browser is taking over, so the notch is done.
         NotchController.shared.attentionLeft()

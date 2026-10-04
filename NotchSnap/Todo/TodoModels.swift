@@ -3,11 +3,8 @@ import SwiftUI
 
 // MARK: - Todo models
 //
-// NotchSnap's own lightweight to-do system. This is DELIBERATELY distinct
-// from the EventKit-backed reminders in ReminderStore: a TodoItem is local,
-// collection-scoped, and never touches Apple Reminders. The two coexist —
-// the Notes composer still promotes to EKReminder; to-dos are their own
-// keyboard-first system.
+// Otto's own lightweight to-do system: a TodoItem is local, collection-scoped,
+// and never touches Apple Reminders.
 
 struct TodoCollection: Identifiable, Codable, Equatable {
     let id: UUID
@@ -71,8 +68,6 @@ struct TodoItem: Identifiable, Codable, Equatable {
     /// (`Attachments/…`, see Attachments.swift). Shown as chips on the row;
     /// in the vault they ride at the end of the to-do's line as `![…](…)`.
     var attachments: [String] = []
-
-    var hasDetails: Bool { !note.isEmpty || !checklist.isEmpty }
 
     init(id: UUID, title: String, collectionID: UUID,
          isCompleted: Bool, completedAt: Date?, dueDate: Date?,

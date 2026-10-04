@@ -76,11 +76,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyManager = HotkeyManager.shared
         hotkeyManager?.start()
 
-        // A user can revoke Otto from their Apple ID's own settings without
-        // telling this app — check once per launch so a stale sign-in never
-        // lingers in the tab-row avatar or Settings.
-        AppleSignIn.shared.refreshCredentialState()
-
         #if DEBUG
         // Scriptable side door for agent/CI verification (see DebugDriver).
         DebugDriver.install()
@@ -116,7 +111,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             OnboardingWindowController.show()
             return
         }
-        AppState.shared.pendingNotchFilter = .todos
         NotchController.shared.triggerExpand(trigger: .appIcon)
         NotchController.shared.makeKeyForTyping()
     }
@@ -178,6 +172,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 extension Notification.Name {
     /// A second Otto asking the running one to show itself (distributed).
     static let ottoShowRequest = Notification.Name("com.notchsnap.app.show")
+    static let openSettingsRequest = Notification.Name("otto.openSettings")
+    static let settingsWindowClosed = Notification.Name("otto.settingsClosed")
+    /// Posted whenever the global quick-entry hotkey actually fires. Onboarding
+    /// listens for this so its practice step advances on the REAL keypress
+    /// rather than a "Next" button — the user performs the app's core action
+    /// for real before onboarding ends.
+    static let quickEntryFired = Notification.Name("otto.quickEntryFired")
+    /// Posted when a to-do is actually committed. Onboarding uses it to know
+    /// the user finished the job, not just opened the panel.
+    static let todoCreated = Notification.Name("otto.todoCreated")
+    /// Posted by the key router when Escape lands while a row's title or
+    /// step editor holds the caret. The editors listen and DISCARD their
+    /// draft — the router must consume Esc itself (letting it through would
+    /// close the notch), so "Escape means cancel" has to travel this way.
+    static let todoEditorEscape = Notification.Name("otto.todoEditorEscape")
 }
 
 // MARK: - Main App
@@ -235,61 +244,5 @@ struct HiddenContextView: View {
                     }
                 }
             }
-    }
-}
-
-// MARK: - Menu Bar View
-
-struct MenuBarView: View {
-    var body: some View {
-        VStack(spacing: 8) {
-            Text("Otto")
-                .font(.headline)
-
-            Divider()
-
-            Button("Open Otto") {
-                NotchController.shared.triggerExpand()
-                NotchController.shared.makeKeyForTyping()
-            }
-
-            Divider()
-
-            Button("Settings…") {
-                NotificationCenter.default.post(name: .openSettingsRequest, object: nil)
-            }
-            .keyboardShortcut(",", modifiers: .command)
-
-            Button("Esci da Otto") {
-                NSApplication.shared.terminate(nil)
-            }
-            .keyboardShortcut("q", modifiers: .command)
-        }
-        .padding(8)
-    }
-}
-
-// MARK: - Menu Bar Icon with Badge
-
-struct MenuBarIconView: View {
-    let count: Int
-
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            OttoIcon("camera.viewfinder")
-
-            if count > 0 {
-                Text(count > 9 ? "9+" : "\(count)")
-                    .font(.system(size: 7, weight: .bold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 3)
-                    .padding(.vertical, 1)
-                    .background(
-                        Capsule()
-                            .fill(Color(red: 1.0, green: 0.58, blue: 0.0)) // Orange #FF9500
-                    )
-                    .offset(x: 6, y: -4)
-            }
-        }
     }
 }

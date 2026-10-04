@@ -25,9 +25,6 @@ struct QuickNote: Identifiable, Codable, Equatable {
     var content: String
     let createdAt: Date
     var updatedAt: Date
-    /// EKReminder identifier if this note was promoted to a reminder.
-    /// Promotion keeps both — the note stays in history, linked.
-    var promotedReminderID: String?
     /// Proposed, never required. A note is filed by its body; the title is a
     /// way to find it again, which is why nothing waits for one.
     var title: String
@@ -54,13 +51,12 @@ struct QuickNote: Identifiable, Codable, Equatable {
     }
 
     init(id: UUID = UUID(), content: String, createdAt: Date = Date(),
-         updatedAt: Date = Date(), promotedReminderID: String? = nil,
+         updatedAt: Date = Date(),
          title: String, titleSource: NoteTitleSource) {
         self.id = id
         self.content = content
         self.createdAt = createdAt
         self.updatedAt = updatedAt
-        self.promotedReminderID = promotedReminderID
         self.title = title
         self.titleSource = titleSource
     }
@@ -75,7 +71,7 @@ struct QuickNote: Identifiable, Codable, Equatable {
     // Every new field gets a decodeIfPresent line here.
 
     enum CodingKeys: String, CodingKey {
-        case id, content, createdAt, updatedAt, promotedReminderID, title, titleSource, meetingContext
+        case id, content, createdAt, updatedAt, title, titleSource, meetingContext
     }
 
     init(from decoder: Decoder) throws {
@@ -85,7 +81,6 @@ struct QuickNote: Identifiable, Codable, Equatable {
         content = try c.decode(String.self, forKey: .content)
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         updatedAt = try c.decode(Date.self, forKey: .updatedAt)
-        promotedReminderID = try c.decodeIfPresent(String.self, forKey: .promotedReminderID)
         // A note written before titles existed is named from its own first
         // line rather than from the date: the text is right there, and
         // "Note del 3 agosto" for a note that plainly says what it is would
@@ -285,12 +280,11 @@ final class NotesStore: ObservableObject {
     /// The title is requested AFTER the entry lands, never while the user is
     /// typing: a title that mutates mid-sentence is noise.
     @discardableResult
-    func commitDraft(promotedReminderID: String? = nil) -> QuickNote? {
+    func commitDraft() -> QuickNote? {
         let content = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else { return nil }
         let note = QuickNote(
             content: content,
-            promotedReminderID: promotedReminderID,
             // Named from its own words for the instant between landing and the
             // model answering, so the row never appears blank and never has to
             // shift when the real title arrives.

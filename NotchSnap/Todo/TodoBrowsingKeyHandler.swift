@@ -235,8 +235,6 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             }
 
             switch store.panelMode {
-            case .voice:
-                return handleVoice(store, keyCode: keyCode)
             case .find:
                 return handleFind(store, cmd: cmd, option: option, control: control,
                                   chars: chars, keyCode: keyCode)
@@ -548,34 +546,6 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             }
         }
 
-        // MARK: Voice mode (VC-1)
-
-        @MainActor
-        private static func handleVoice(_ store: TodoStore, keyCode: UInt16) -> Bool {
-            let voice = VoiceCaptureController.shared
-            switch keyCode {
-            case 53:                            // Esc — abandon the capture
-                voice.cancel()
-                store.setMode(.browsing)
-                return true
-            case 36:                            // Return
-                switch voice.phase {
-                case .listening: voice.finishListening()   // stop + parse
-                case .review:    voice.confirm()           // VC-6: create all
-                                 store.setMode(.browsing)
-                default:         break
-                }
-                return true
-            case 126:                           // ↑ move between drafts
-                voice.moveFocus(-1); return true
-            case 125:                           // ↓
-                voice.moveFocus(1); return true
-            default:
-                // Everything else flows to the focused draft's text field.
-                return false
-            }
-        }
-
         // MARK: The inline draft row
         //
         // Scoped by FIRST RESPONDER, not by a store flag. A draft can be open
@@ -869,15 +839,6 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             if cmd, shift, lower == "n" {
                 store.setMode(.newCategory)
                 NotchController.shared.focusPanel()
-                return true
-            }
-
-            // VC-1: ⇧⌘V starts the voice brain-dump (panel-only, per
-            // Marcello — no global audio trigger).
-            if cmd, shift, lower == "v", VoiceFeature.isEnabled {
-                store.setMode(.voice)
-                NotchController.shared.focusPanel()
-                VoiceCaptureController.shared.start()
                 return true
             }
 

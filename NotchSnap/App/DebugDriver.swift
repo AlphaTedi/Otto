@@ -430,19 +430,6 @@ enum DebugDriver {
                 }
             } else if command == "collections" {
                 appendState("collections: " + store.collections.map(\.name).joined(separator: " > "))
-            } else if command.hasPrefix("braindump ") {
-                let transcript = String(command.dropFirst(10))
-                let collections = store.collections
-                Task { @MainActor in
-                    let parsed = await BrainDumpParser.parse(transcript: transcript,
-                                                             collections: collections)
-                    let rendered = parsed.map { todo in
-                        "{title='\(todo.title)' cat=\(todo.suggestedCategoryName ?? "nil") "
-                        + "date=\(todo.dueDatePhrase ?? "nil")}"
-                    }.joined(separator: " | ")
-                    appendState("braindump engine=\(BrainDumpParser.activeEngine) "
-                                + "count=\(parsed.count) -> \(rendered)")
-                }
             } else if command.hasPrefix("meeting ") {
                 // meeting <minutesFromNow> [nolink]
                 let args = command.dropFirst(8).split(separator: " ")
@@ -1324,10 +1311,6 @@ enum DebugDriver {
                 CalendarStore.shared.dismissAlert()
             } else if command == "cal-disconnect" {
                 CalendarStore.shared.disconnect()
-            } else if command == "voice-status" {
-                appendState("voiceOnDevice=\(VoiceTranscriber.isOnDeviceAvailable) "
-                            + "engine=\(BrainDumpParser.activeEngine) "
-                            + "phase=\(VoiceCaptureController.shared.phase)")
             } else if command == "create-fresh" {
                 NotchController.shared.openCreateFresh()
             } else if command.hasPrefix("movecat-before ") {

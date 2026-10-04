@@ -7,9 +7,6 @@ import SwiftUI
 @MainActor
 class NotchController: ObservableObject {
     static let shared = NotchController()
-    /// Screenshot and clipboard notifications belonged to the retired
-    /// NotchSnap product surface.
-    private static let legacyNotificationsAreAvailable = false
 
     /// Container layout: where the gear / Notes · Meetings triggers sit, in
     /// NotchRootView's space, so their menus can be drawn above the
@@ -69,17 +66,6 @@ class NotchController: ObservableObject {
     }
     /// Visibility follows presentation; cancelled tasks cannot strand an empty panel.
     var contentVisible: Bool { state == .expanded }
-    @Published var screenshotJustArrived: Bool = false
-
-    // Notification state (Dynamic Island style)
-    @Published var notificationContentVisible: Bool = false
-    @Published var notificationThumbnail: NSImage? = nil
-    @Published var notificationIcon: String? = nil
-    @Published var notificationIconColor: Color = .white
-    @Published var notificationIconFill: Color? = nil
-    @Published var notificationRightText: String? = nil
-    @Published var notificationShowCheckmark: Bool = false
-    @Published var notificationWide: Bool = false
 
     private var panel: NSPanel?
     /// The drawn floating cards in the hosting view's top-left coordinate space.
@@ -95,7 +81,6 @@ class NotchController: ObservableObject {
     private var keyMonitor: Any?
     private var hoverTask: Task<Void, Never>?
     private var collapseTask: Task<Void, Never>?
-    private var notificationTask: Task<Void, Never>?
     private var autoCollapseTimer: Timer?
 
     // Mouse velocity tracking
@@ -127,7 +112,6 @@ class NotchController: ObservableObject {
     private var hoverDebounceNanos: UInt64 {
         UInt64(AppState.shared.settings.hoverDelayMs) * 1_000_000
     }
-    private let collapseDelayNanos: UInt64 = 300_000_000  // 300ms delay before collapse
     private let maxTriggerSpeed: CGFloat = 300  // px/sec — ignore fast mouse transits
 
     // Geometry — @AppStorage for live Settings preview propagation
@@ -568,10 +552,6 @@ class NotchController: ObservableObject {
             autoCollapseTimer?.invalidate()
             autoCollapseTimer = nil
 
-            // Tear down any open Quick Look + clear hover state.
-            QuickLookPreviewController.shared.close()
-            AppState.shared.hoveredQuickLookItem = nil
-
             // Revoke key status + stop intercepting mouse events
             (panel as? NotchPanel)?.allowKey = false
             panel?.resignKey()
@@ -621,114 +601,6 @@ class NotchController: ObservableObject {
         collapseTask = nil
         autoCollapseTimer?.invalidate()
         autoCollapseTimer = nil
-    }
-
-    // MARK: - Show New Screenshot (Dynamic Island notification instead of full expand)
-
-    func showNewScreenshot() {
-        // Screenshot capture was retired from Otto.
-    }
-
-    // MARK: - Capture Notification (thumbnail + checkmark)
-
-    func triggerCaptureNotification(screenshot: ScreenshotItem) {
-        guard Self.legacyNotificationsAreAvailable else { return }
-        // If already in notification, cancel and restart
-        notificationTask?.cancel()
-        resetNotificationContent()
-
-        // If expanded, don't interrupt
-        guard state != .expanded else { return }
-
-        // Set notification content
-        notificationThumbnail = screenshot.cachedThumbnail
-        notificationIcon = nil
-        notificationRightText = nil
-        notificationShowCheckmark = true
-        notificationWide = false
-
-        startNotificationSequence()
-    }
-
-    // MARK: - Clipboard Notification (icon + contextual text)
-
-    func triggerClipboardNotification(item: ClipboardItem) {
-        guard Self.legacyNotificationsAreAvailable else { return }
-        notificationTask?.cancel()
-        resetNotificationContent()
-        guard state != .expanded else { return }
-
-        notificationThumbnail = nil
-        notificationIcon = item.notchIcon
-        notificationIconColor = item.notchIconColor
-        notificationIconFill = nil
-
-        // URL: show text snippet, no checkmark; everything else: checkmark only
-        if item.type == .url {
-            notificationRightText = item.notchRightLabel
-            notificationShowCheckmark = false
-            notificationWide = true
-        } else {
-            notificationRightText = nil
-            notificationShowCheckmark = true
-            notificationWide = false
-        }
-
-        startNotificationSequence()
-    }
-
-    private func resetNotificationContent() {
-        notificationContentVisible = false
-        notificationThumbnail = nil
-        notificationIcon = nil
-        notificationRightText = nil
-        notificationShowCheckmark = false
-        notificationWide = false
-        notificationIconColor = .white
-        notificationIconFill = nil
-    }
-
-    // MARK: - Notification Timing Sequence
-
-    private func startNotificationSequence() {
-        hoverTask?.cancel()
-        collapseTask?.cancel()
-
-        notificationTask = Task { @MainActor in
-            // t=0ms: expand the pill
-            HapticManager.shared.hoverTap()
-            withAnimation(NotchAnimation.notificationExpand) {
-                state = .captureNotification
-            }
-
-            // t=80ms: content fades in
-            try? await Task.sleep(nanoseconds: 80_000_000)
-            guard !Task.isCancelled else { return }
-            withAnimation(NotchAnimation.notificationContentIn) {
-                notificationContentVisible = true
-            }
-
-            // t=2080ms: content fades out
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            guard !Task.isCancelled else { return }
-            withAnimation(NotchAnimation.notificationContentOut) {
-                notificationContentVisible = false
-            }
-
-            // t=2130ms: contract the pill while the content is still mid-fade —
-            // the two motions overlap so the close reads as one continuous
-            // gesture instead of fade… pause… shrink.
-            try? await Task.sleep(nanoseconds: 50_000_000)
-            guard !Task.isCancelled else { return }
-            withAnimation(NotchAnimation.notificationContract) {
-                state = .idle
-            }
-
-            // Clean up
-            notificationThumbnail = nil
-            notificationIcon = nil
-            notificationRightText = nil
-        }
     }
 
     // Legacy compatibility
@@ -939,16 +811,8 @@ class NotchController: ObservableObject {
             }
         }
 
-        // Spacebar Quick Look — works while the expanded notch is showing and
-        // a tile is hovered. Mirrors Finder's spacebar preview.
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
-            if event.keyCode == 49 { // spacebar
-                // NSEvent local monitors fire on the main thread; this class
-                // is @MainActor, so we can call into it directly.
-                let handled = MainActor.assumeIsolated { self.handleSpacebar() }
-                if handled { return nil }
-            }
             if event.keyCode == 53 { // escape — close the notch even while
                                      // engaged (engagement blocks auto-collapse)
                 let handled = MainActor.assumeIsolated { () -> Bool in
@@ -1036,50 +900,6 @@ class NotchController: ObservableObject {
         // the target is now the notch itself plus a small forgiveness margin,
         // and it has to be held there.
         if isDragSessionActive {
-            // Holding a drag over the notch opened it onto the file tray. The
-            // tray is gone from Otto (showLegacyPanels is always false), so
-            // this only ever opened the to-dos in the way of whatever was
-            // being dragged (Marcello, 2026-09-30: "molto fastidioso"). The
-            // no-collapse-mid-drag rule below still holds.
-            if AppState.shared.showLegacyPanels,
-               state != .expanded && dragTargetRect().contains(location) {
-                if dragDwellTask == nil {
-                    // Polls its own clock rather than waiting on mouse events.
-                    // A hand held still emits NO events, so an event-driven
-                    // timer can never confirm the one thing it needs to know —
-                    // that the pointer stopped.
-                    dragDwellTask = Task { @MainActor in
-                        defer { self.dragDwellTask = nil }
-                        var anchor = NSEvent.mouseLocation
-                        var settled: UInt64 = 0
-                        let tick: UInt64 = 50_000_000
-                        while !Task.isCancelled {
-                            try? await Task.sleep(nanoseconds: tick)
-                            guard !Task.isCancelled, self.isDragSessionActive,
-                                  self.state != .expanded else { return }
-                            let now = NSEvent.mouseLocation
-                            guard self.dragTargetRect().contains(now) else { return }
-                            if hypot(now.x - anchor.x, now.y - anchor.y) > 24 {
-                                // Still travelling — a drag crossing the top of
-                                // the screen never accumulates settled time, no
-                                // matter how slowly it passes through.
-                                anchor = now
-                                settled = 0
-                            } else {
-                                settled += tick
-                                if settled >= self.dragDwellNanos {
-                                    AppState.shared.pendingNotchFilter = .tray
-                                    self.triggerExpand(trigger: .drag)
-                                    return
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                dragDwellTask?.cancel()
-                dragDwellTask = nil
-            }
             cancelCollapse()
             return
         }
@@ -1087,11 +907,6 @@ class NotchController: ObservableObject {
         if inZone && lastMouseSpeed < maxTriggerSpeed {
             if state == .idle {
                 triggerHover()
-            } else if state == .captureNotification {
-                // Mouse approached during notification — interrupt and expand
-                notificationTask?.cancel()
-                notificationContentVisible = false
-                triggerExpand(trigger: .hover)
             }
             cancelCollapse()
         } else if !inZone && state == .expanded {
@@ -1105,23 +920,6 @@ class NotchController: ObservableObject {
         } else if !inZone && state == .idle {
             hoverTask?.cancel()
         }
-    }
-
-    /// Spacebar Quick Look. Returns true if the event was consumed.
-    private func handleSpacebar() -> Bool {
-        // If a Quick Look panel is already up, close it regardless of state.
-        if QuickLookPreviewController.shared.isVisible {
-            QuickLookPreviewController.shared.close()
-            return true
-        }
-        // Otherwise only react when the notch is actually expanded AND a
-        // tile is currently being hovered.
-        guard state == .expanded,
-              let item = AppState.shared.hoveredQuickLookItem else {
-            return false
-        }
-        QuickLookPreviewController.shared.show(item)
-        return true
     }
 
     private func handleClick(at location: NSPoint, inNotchWindow: Bool) {
@@ -1163,14 +961,6 @@ class NotchController: ObservableObject {
                 // user came from. Hover-opens deliberately do NOT do this:
                 // stealing keyboard focus on a mouse pass-over would yank
                 // typing out of whatever the user is writing in.
-                makeKeyForTyping()
-            }
-        case .captureNotification:
-            if onNotch {
-                // Interrupt notification → expand to full gallery
-                notificationTask?.cancel()
-                notificationContentVisible = false
-                triggerExpand(trigger: .click)
                 makeKeyForTyping()
             }
         case .expanded:
@@ -1254,9 +1044,6 @@ class NotchController: ObservableObject {
         case .hovering:
             width = notchSize.width + 28 + fillet * 2
             height = notchSize.height + 6 + Self.cursorApron
-        case .captureNotification:
-            width = notificationWide ? 320 : notchSize.width + 80 + fillet * 2
-            height = notchSize.height
         case .expanded:
             switch AppState.shared.notchLayout {
             case .panels:
@@ -1451,7 +1238,6 @@ class NotchController: ObservableObject {
     /// self-triggered open is indistinguishable in feel from a manual one —
     /// same spring, same sequencing, no special "alert" animation.
     func presentMeetingAlert() {
-        AppState.shared.pendingNotchFilter = .todos
         triggerExpand(trigger: .meetingAlert)
     }
 
@@ -1493,11 +1279,6 @@ class NotchController: ObservableObject {
 
     /// The window a dialog opened from the panel must stand in front of.
     var dialogHostWindow: NSWindow? { panel }
-
-    #if DEBUG
-    /// The panel window, for the DEBUG render command only.
-    var debugPanelWindow: NSWindow? { panel }
-    #endif
 
     func focusPanel() {
         (panel as? NotchPanel)?.allowKey = true
@@ -1614,229 +1395,5 @@ final class NotchHostingView: NSHostingView<AnyView> {
         }
         guard acceptsClick else { return nil }
         return super.hitTest(point)
-    }
-}
-// MARK: - QuickLookPreviewController
-// (QuickLookItem is defined in AppState.swift so it's always in scope.)
-//
-// Mimics Finder's spacebar Quick Look. While the expanded notch is up and
-// the user hovers a thumbnail or clipboard tile, pressing the spacebar
-// surfaces a centered, borderless NSPanel with a large preview. Spacebar /
-// Escape / outside click dismisses it.
-
-@MainActor
-final class QuickLookPreviewController {
-    static let shared = QuickLookPreviewController()
-
-    private var panel: NSPanel?
-    private var keyMonitor: Any?
-    private var clickMonitor: Any?
-
-    var isVisible: Bool { panel != nil }
-
-    func toggle(for item: QuickLookItem) {
-        if isVisible {
-            close()
-        } else {
-            show(item)
-        }
-    }
-
-    func show(_ item: QuickLookItem) {
-        close()
-
-        guard let screen = NSScreen.main else { return }
-
-        // Size: cap at 80% of the screen, with a comfortable minimum.
-        let maxW = screen.visibleFrame.width  * 0.8
-        let maxH = screen.visibleFrame.height * 0.8
-        let size = NSSize(width: min(900, maxW), height: min(640, maxH))
-
-        let frame = NSRect(
-            x: screen.frame.midX - size.width / 2,
-            y: screen.frame.midY - size.height / 2,
-            width: size.width,
-            height: size.height
-        )
-
-        let panel = NSPanel(
-            contentRect: frame,
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-        panel.level = .floating
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
-        panel.hasShadow = true
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.isMovableByWindowBackground = false
-
-        let host = NSHostingView(rootView: QuickLookPreviewView(item: item))
-        host.frame = panel.contentView?.bounds ?? .zero
-        host.autoresizingMask = [.width, .height]
-        panel.contentView = host
-        panel.orderFrontRegardless()
-
-        self.panel = panel
-        installMonitors()
-    }
-
-    func close() {
-        panel?.orderOut(nil)
-        panel = nil
-        if let m = keyMonitor   { NSEvent.removeMonitor(m); keyMonitor = nil }
-        if let m = clickMonitor { NSEvent.removeMonitor(m); clickMonitor = nil }
-    }
-
-    // MARK: - Monitors (key + click-outside)
-
-    private func installMonitors() {
-        // Spacebar / Escape close — global so it works even though the panel
-        // is non-activating and our app may not be frontmost.
-        keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self else { return }
-            if event.keyCode == 49 || event.keyCode == 53 { // space / escape
-                Task { @MainActor in self.close() }
-            }
-        }
-        // Local fallback (when our own panel happens to be key, e.g. after a
-        // click): same keys, but consume the event.
-        let local = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self else { return event }
-            if event.keyCode == 49 || event.keyCode == 53 {
-                self.close()
-                return nil
-            }
-            return event
-        }
-        // Stash the local monitor on top of the global one — close() removes both.
-        if keyMonitor == nil { keyMonitor = local } else { clickMonitor = local }
-    }
-}
-
-// MARK: - QuickLookPreviewView — SwiftUI body of the Quick Look panel
-
-struct QuickLookPreviewView: View {
-    let item: QuickLookItem
-
-    var body: some View {
-        ZStack {
-            // Soft, blurred backdrop with a subtle stroke to feel like macOS Quick Look.
-            VisualEffectBlur(material: .hudWindow, blendingMode: .behindWindow)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(DSColor.hairlineOnPanel, lineWidth: 1)
-                )
-
-            content
-                .padding(24)
-        }
-        .shadow(color: DSColor.shadowStrong, radius: 28, y: 10)
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        switch item {
-        case .screenshot(let s):
-            ScreenshotPreview(item: s)
-        case .clipboard(let c):
-            ClipboardPreview(item: c)
-        }
-    }
-}
-
-// MARK: - Screenshot preview body
-
-private struct ScreenshotPreview: View {
-    let item: ScreenshotItem
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(nsImage: item.flattenedImage)
-                .resizable()
-                .interpolation(.high)
-                .aspectRatio(contentMode: .fit)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-            HStack(spacing: 8) {
-                Text(item.dimensions)
-                    .font(.system(size: 11).monospacedDigit())
-                    .foregroundStyle(.secondary)
-                Text("·").foregroundStyle(.secondary)
-                Text(item.relativeTime)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text("Press Space to close")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-}
-
-// MARK: - Clipboard preview body
-
-private struct ClipboardPreview: View {
-    let item: ClipboardItem
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                OttoIcon(item.iconName, pointSize: 14)
-                    .foregroundStyle(.secondary)
-                Text(item.relativeTime)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text("Press Space to close")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-
-            Group {
-                switch item.type {
-                case .screenshot, .image:
-                    if let img = item.previewImage {
-                        Image(nsImage: img)
-                            .resizable()
-                            .interpolation(.high)
-                            .aspectRatio(contentMode: .fit)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    }
-                case .color:
-                    HStack(spacing: 16) {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(colorFromItem)
-                            .frame(width: 160, height: 160)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(DSColor.panelBorder, lineWidth: 1)
-                            )
-                        Text(item.previewText ?? "")
-                            .font(.system(size: 24, weight: .semibold).monospacedDigit())
-                        Spacer()
-                    }
-                default:
-                    ScrollView {
-                        Text(item.previewText ?? "")
-                            .font(.system(size: 14, design: item.type == .code ? .monospaced : .default))
-                            .foregroundStyle(.primary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }
-    }
-
-    private var colorFromItem: Color {
-        if let nsColor = item.previewColor { return Color(nsColor) }
-        if let hex = item.previewText, let c = NSColor.fromHex(hex) { return Color(nsColor: c) }
-        return .gray
     }
 }

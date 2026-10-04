@@ -335,12 +335,6 @@ final class NoteEditorController: ObservableObject {
         setBlock(activeBlock == block ? .body : block)
     }
 
-    /// Tick the checklist row the caret is on.
-    func toggleCheck() {
-        guard activeBlock.isChecklist else { return }
-        setBlock(activeBlock == .checklistDone ? .checklistOpen : .checklistDone)
-    }
-
     // MARK: Markdown as you type
     //
     // `# `, `## `, `- `, `1. `, `[] ` at the head of a line become the block

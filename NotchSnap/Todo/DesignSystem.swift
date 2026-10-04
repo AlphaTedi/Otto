@@ -62,11 +62,9 @@ enum DSColor {
     static func rowHover(container: Bool) -> Color { container ? containerRowHover : rowHover }
     // Panel & structure
     static let panelBackground = Color.dynamic(light: .white, dark: NSColor(white: 0.067, alpha: 1))
-    static let outerBackground = Color.dynamic(light: .white, dark: .black)
     /// Apple's own hairline. It already differs per appearance.
     static let panelBorder = Color(nsColor: .separatorColor)
     static let divider = Color(nsColor: .separatorColor)
-    static let dividerSubtle = Color.dynamicOverlay(light: 0.06, dark: 0.07)
 
     // Text — Apple's semantic ladder, which is what Spotlight and Raycast
     // draw with. Dark-on-light and light-on-dark come for free, at the
@@ -107,7 +105,6 @@ enum DSColor {
     /// same way, so they take the icon end of the same ladder rather than a
     /// hand-mixed grey.
     static let glyph = Color(nsColor: .secondaryLabelColor)
-    static let glyphStrong = Color(nsColor: .labelColor)
 
     /// Anything drawn ON a filled accent, category dot or checkbox.
     ///
@@ -121,7 +118,6 @@ enum DSColor {
     /// the panel's own material, and a translucent menu over a translucent
     /// panel is two blurs stacked and text you cannot read through either.
     static let menuBackground = Color(nsColor: NSColor(calibratedWhite: 0.10, alpha: 0.985))
-    static let onAccentFillMuted = Color.black.opacity(0.5)
 
     /// The ring that marks a chosen swatch. It has to beat both the swatch's
     /// own colour and the panel behind it, which is what `labelColor` is:
@@ -141,25 +137,6 @@ enum DSColor {
     static let onNotchSurface = Color.white
     static let onNotchSurfaceMuted = Color.white.opacity(0.75)
 
-    /// A grouped card in an ordinary window — the Settings sections.
-    ///
-    /// Settings used to borrow the ONBOARDING's tile, which is a flat 30%
-    /// black built for that flow's dark purple ground. In a Light window that
-    /// drew every section as a dark slab carrying dark system text, which is
-    /// the single biggest reason Settings was unreadable in Light mode.
-    ///
-    /// Elevation flips with the appearance, the way Apple's own grouped boxes
-    /// do: a card rises ABOVE a light window and sinks BELOW a dark one.
-    static let cardSurface = Color.dynamic(light: NSColor.white.withAlphaComponent(0.70),
-                                           dark: NSColor.black.withAlphaComponent(0.30))
-
-    /// The meeting cards peeking out from under the one in front. They are
-    /// the same surface seen from further back, so they take the appearance's
-    /// side: deeper than the panel in Dark, lighter-but-greyer in Light. A
-    /// fixed black read as a shadow cast by nothing on a light panel.
-    static let stackedCardFill = Color.dynamic(light: NSColor.black.withAlphaComponent(0.10),
-                                               dark: NSColor.black.withAlphaComponent(0.45))
-
     /// A field that sits IN a panel — the new-section name box. The same
     /// idea as the creation bar's well (which varies with hover and focus and
     /// so stays local to it): it goes DOWN from the panel, and how far down
@@ -167,11 +144,6 @@ enum DSColor {
     /// well on a dark panel and a hole punched in a light one.
     static let fieldWell = Color.dynamic(light: NSColor.black.withAlphaComponent(0.05),
                                          dark: NSColor.black.withAlphaComponent(0.40))
-
-    /// The disc behind an attendee with no photo and no address to colour it
-    /// by. A wash of the appearance's opposite, like every other surface that
-    /// sits on the panel.
-    static let placeholderFill = Color.dynamicOverlay(light: 0.07, dark: 0.08)
 
     // Shadows.
     //
@@ -245,9 +217,7 @@ enum DSColor {
 
 enum DSSpacing {
     static let panelPadding: CGFloat = 16
-    static let rowGap: CGFloat = 12
     static let rowInternalGap: CGFloat = 10
-    static let tabRowBottomPadding: CGFloat = 12
     static let tabRowBottomMargin: CGFloat = 14
     static let checklistIndent: CGFloat = 24
 }
@@ -261,13 +231,9 @@ enum DSSpacing {
 /// Never write a raw `cornerRadius:` literal in a view — take one from here, or
 /// the shapes drift apart again (there were 24 distinct values before this).
 enum DSRadius {
-    static let panelCorner: CGFloat = 18
-    static let cardCorner: CGFloat = 14
     static let controlCorner: CGFloat = 10
     static let chipCorner: CGFloat = 7
-    static let checkboxCorner: CGFloat = 4
     static let checklistCheckboxCorner: CGFloat = 3
-    static let hintChipCorner: CGFloat = 4
 }
 
 /// The app's shape vocabulary, so a view never has to decide.
@@ -412,29 +378,6 @@ struct CategoryTabChip: View {
     }
 }
 
-/// The dedicated "+" creation tab — always present, no category color of
-/// its own. See Section 6.1 of notchsnap_todo_pivot_prd.md.
-///
-/// RETIRED from the tab row (2026-08-16), like ProgressRing before it. A to-do
-/// is now made by typing into a draft row inside the list, so there is no
-/// creation surface for a chip to lead to, and the filled treatment was
-/// advertising an action that no longer exists. The row's "+" is now
-/// NewSectionButton — plain, muted, and at the END of the tabs. Kept here
-/// because the design PRD still names the type; do not put it back in a tab
-/// row without changing the PRD first.
-struct CreationTabChip: View {
-    let isActive: Bool
-
-    var body: some View {
-        OttoIcon("plus", pointSize: 12)
-            .foregroundColor(isActive ? DSColor.primaryText : DSColor.textPrimaryBright)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
-            .background(isActive ? DSColor.primaryFill : Color(hex: "#333333"))
-            .clipShape(RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous))
-    }
-}
-
 // MARK: - Reusable component: Progress ring (Section 9.2)
 //
 // RETIRED from the tab row (2026-07-23): at 14pt the arc was unreadable —
@@ -443,57 +386,7 @@ struct CreationTabChip: View {
 // referenced by the design PRD; use it only where an arc is genuinely legible
 // (i.e. considerably larger than the tab chip).
 
-struct ProgressRing: View {
-    let progress: Double   // 0...1
-    let tint: Color
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(tint.opacity(0.3), lineWidth: 1.5)
-            Circle()
-                .trim(from: 0, to: progress)
-                .stroke(tint, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-        }
-        .animation(Motion.contentHug, value: progress)
-    }
-}
-
 // MARK: - Reusable component: To-do row
-
-struct TodoRow: View {
-    let title: String
-    let categoryColor: Color
-    let isFocused: Bool
-    let shortcutHint: String?   // only the focused row ever passes non-nil here
-
-    var body: some View {
-        HStack(spacing: DSSpacing.rowInternalGap) {
-            RoundedRectangle(cornerRadius: DSRadius.checkboxCorner, style: .continuous)
-                .strokeBorder(categoryColor, lineWidth: 1.5)
-                .frame(width: 14, height: 14)
-
-            Text(title)
-                .font(DSFont.todoTitle)
-                .foregroundColor(DSColor.textPrimary)
-
-            Spacer()
-
-            if let shortcutHint {
-                ShortcutHintBadge(text: shortcutHint)
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 7)
-        .background(isFocused ? DSColor.focusedRowBackground : Color.clear)
-        .overlay(
-            RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
-                .stroke(isFocused ? DSColor.focusAccent : Color.clear, lineWidth: 0.5)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous))
-    }
-}
 
 // MARK: - Reusable component: Drop indicator
 //
@@ -588,34 +481,6 @@ struct Keycap: View {
     }
 }
 
-/// A keycap for a NAMED key — Tab, Esc, Space.
-///
-/// `Keycap` draws one cap per CHARACTER, deliberately, because "⌘↩" is two
-/// keys. That makes it exactly wrong for a word: "tab" came out as three
-/// separate caps reading t · a · b, which "looks like you need to press a
-/// combination of 3 different keys at the same time" (Marcello, 2026-08-16).
-///
-/// A named key is ONE key, so it gets one cap wide enough to hold its name —
-/// outlined rather than filled, which is how Raycast draws the same hint and
-/// reads as a key rather than as a chip.
-struct WordKeycap: View {
-    let text: String
-    var size: CGFloat = 10
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: size, weight: .medium))
-            .foregroundStyle(DSColor.textPrimary.opacity(0.80))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(
-                RoundedRectangle(cornerRadius: 4.5, style: .continuous)
-                    .strokeBorder(Color.dynamicOverlay(light: 0.22, dark: 0.20),
-                                  lineWidth: 1)
-            )
-    }
-}
-
 // MARK: - Reusable component: Shortcut hint badge
 
 struct ShortcutHintBadge: View {
@@ -670,38 +535,6 @@ struct PrimaryActionButton: View {
 }
 
 // MARK: - Reusable component: Category color-picker swatch (Section 4 form)
-
-struct ColorSwatchButton: View {
-    let color: Color
-    let isSelected: Bool
-    /// Explicit size: `aspectRatio(.fit)` alone collapsed these to a few
-    /// points inside an HStack (nothing proposed a size), which made them
-    /// "super small and not selectable" (Marcello, 2026-07-23). A concrete
-    /// frame gives both a comfortable hit target and a visible swatch.
-    var size: CGFloat = 34
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(color)
-            .frame(width: size, height: size)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(isSelected ? DSColor.selectionRing : DSColor.panelBorder,
-                            lineWidth: isSelected ? 2 : 1)
-            )
-            .overlay {
-                if isSelected {
-                    OttoIcon("checkmark", pointSize: 14)
-                        .foregroundColor(DSColor.primaryText)
-                }
-            }
-            // Lift the selected swatch slightly so the choice reads at a glance.
-            .scaleEffect(isSelected ? 1.0 : 0.92)
-            .shadow(color: DSColor.shadowSoft.opacity(isSelected ? 1 : 0), radius: 4, y: 1)
-            // Selection is NEVER implied by position alone — always pair
-            // the border + checkmark, per CT-6 in notchsnap_todo_pivot_prd.md.
-    }
-}
 
 // MARK: - Addendum: inline entity highlighting
 // (notchsnap_urgency_entity_prd.md §3 — supplied by Marcello 2026-07-14.
@@ -772,34 +605,6 @@ enum DSEntityChip {
     /// underscores and `l` vs `1` have to be unambiguous — so it renders
     /// monospaced while every other chip stays in the UI face.
     static func isMonospaced(_ kind: EntityKind) -> Bool { kind == .code }
-}
-
-// NOTE: this SwiftUI view is a visual reference for a SINGLE chip's styling.
-// It cannot be dropped into a Text concatenation to achieve inline flow —
-// see §2.3 of the entity PRD. EntityTitleView's NSTextAttachment
-// renderer reproduces these exact metrics.
-struct EntityChipReference: View {
-    let kind: EntityKind
-    let label: String
-
-    var body: some View {
-        HStack(spacing: 4) {
-            if let symbol = DSEntityChip.sfSymbol(for: kind) {
-                OttoIcon(symbol, pointSize: 10)
-            }
-            Text(label)
-                .font(kind == .code ? .system(size: 12, design: .monospaced) : .system(size: 12))
-        }
-        .foregroundColor(DSEntityChip.text(for: kind))
-        .padding(.horizontal, 7)
-        .padding(.vertical, 1)
-        .background(DSEntityChip.background(for: kind))
-        .overlay(
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .stroke(DSEntityChip.border(for: kind), lineWidth: 0.5)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-    }
 }
 
 // MARK: - Attendee avatars (calendar PRD §3.3, AV-4..6)
@@ -895,52 +700,6 @@ struct AttendeeAvatar: View {
 
 /// AV-6: overlapping stack, capped, with a "+N" disc for the remainder.
 // MARK: - AccountAvatar — the signed-in user, wherever they are shown
-//
-// One implementation for the onboarding sign-in screen and the notch's tab
-// row, so the face in the corner and the face in onboarding can never be two
-// different treatments of the same person.
-//
-// Falls back to the first letter of the address on the same pastel tones the
-// attendee avatars use — a signed-out user gets a neutral glyph rather than a
-// stock silhouette.
-struct AccountAvatar: View {
-    /// nil ⇒ nobody is signed in.
-    var email: String?
-    var diameter: CGFloat = 20
-
-    @ObservedObject private var photos = AttendeePhotoStore.shared
-
-    var body: some View {
-        Group {
-            if let email, let image = photos.photo(for: email) {
-                Image(nsImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: diameter, height: diameter)
-                    .clipShape(Circle())
-            } else if let email, !email.isEmpty {
-                let tone = AttendeeAvatar.tone(for: email)
-                Circle()
-                    .fill(tone.background)
-                    .frame(width: diameter, height: diameter)
-                    .overlay(
-                        Text(AttendeeAvatar.initial(for: email))
-                            .font(.system(size: diameter * 0.4375, weight: .medium))
-                            .foregroundStyle(tone.foreground)
-                    )
-            } else {
-                Circle()
-                    .fill(DSColor.placeholderFill)
-                    .frame(width: diameter, height: diameter)
-                    .overlay(
-                        OttoIcon("person.fill", pointSize: diameter * 0.46)
-                            .foregroundStyle(DSColor.textSecondary)
-                    )
-            }
-        }
-        .overlay(Circle().strokeBorder(DSColor.AvatarPalette.innerStroke, lineWidth: 1))
-    }
-}
 
 struct AvatarStack: View {
     let names: [String]

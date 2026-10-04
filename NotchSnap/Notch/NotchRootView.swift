@@ -66,14 +66,8 @@ struct NotchRootView: View {
             // content the tab is showing.
             extraExpandedHeight: appState.notchExtraHeight,
             hasPhysicalNotch: controller.hasPhysicalNotch,
-            screenshotJustArrived: controller.screenshotJustArrived,
             contentVisible: controller.contentVisible,
-            notificationContentVisible: controller.notificationContentVisible,
-            notificationWide: controller.notificationWide,
-            content: AnyView(expandedContent),
-            notificationContent: AnyView(
-                NotchNotificationContent(controller: controller)
-            )
+            content: AnyView(expandedContent)
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }

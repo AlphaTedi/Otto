@@ -6,7 +6,6 @@ enum NotchState: Equatable {
     case idle
     case hovering
     case expanded
-    case captureNotification  // micro-expand: thumbnail + checkmark, auto-dismiss
 }
 
 // MARK: - NotchShape — Custom shape replicating Alcove's notch
@@ -76,12 +75,6 @@ struct NotchShape: Shape {
 
 // MARK: - Squish/Stretch values for KeyframeAnimator
 
-struct NotchSquishValues {
-    var scaleX: CGFloat = 1.0
-    var scaleY: CGFloat = 1.0
-    var verticalOffset: CGFloat = 0.0
-}
-
 // MARK: - NotchShapeView — Animated notch with Dynamic Island bounciness
 
 struct NotchShapeView: View {
@@ -93,12 +86,8 @@ struct NotchShapeView: View {
     /// eight rows is taller than one with two, but never wider.
     var extraExpandedHeight: CGFloat = 0
     let hasPhysicalNotch: Bool
-    var screenshotJustArrived: Bool = false
     var contentVisible: Bool = false
-    var notificationContentVisible: Bool = false
-    var notificationWide: Bool = false
     let content: AnyView
-    var notificationContent: AnyView? = nil
 
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @AppStorage("notchCornerRadius") private var userCornerRadius: Double = 10
@@ -116,7 +105,6 @@ struct NotchShapeView: View {
         case .idle:                 return 12
         case .hovering:             return 14
         case .expanded:             return 12
-        case .captureNotification:  return 12
         }
     }
 
@@ -163,10 +151,9 @@ struct NotchShapeView: View {
             case .hovering:
                 return notchSize.width + max(28, presenceExtraWidth) + currentFilletRadius * 2
             case .expanded:             return expandedSize.width
-            case .captureNotification:  return notificationWide ? 320 : notchSize.width + 80 + currentFilletRadius * 2
             }
         }()
-        return screenshotJustArrived ? base + 16 : base
+        return base
     }
 
     private var currentHeight: CGFloat {
@@ -179,10 +166,9 @@ struct NotchShapeView: View {
             case .idle:                 return notchSize.height
             case .hovering:             return notchSize.height + 6
             case .expanded:             return expandedSize.height + extraExpandedHeight
-            case .captureNotification:  return notchSize.height
             }
         }()
-        return screenshotJustArrived ? base + 12 : base
+        return base
     }
 
     private var bottomCornerRadius: CGFloat {
@@ -196,7 +182,6 @@ struct NotchShapeView: View {
         case .idle:                 return base
         case .hovering:             return base + 2
         case .expanded:             return scaled + 4
-        case .captureNotification:  return base
         }
     }
 
@@ -207,7 +192,6 @@ struct NotchShapeView: View {
         case .idle:                 return .clear
         case .hovering:             return .black.opacity(0.35)
         case .expanded:             return .clear
-        case .captureNotification:  return .clear
         }
     }
 
@@ -216,7 +200,6 @@ struct NotchShapeView: View {
         case .idle:                 return 0
         case .hovering:             return 20
         case .expanded:             return 0
-        case .captureNotification:  return 0
         }
     }
 
@@ -224,12 +207,10 @@ struct NotchShapeView: View {
 
     private var shapeAnimation: Animation {
         if reduceMotion { return .easeInOut(duration: 0.15) }
-        if screenshotJustArrived { return NotchAnimation.bounce }
         switch state {
         case .expanded:             return NotchAnimation.expand
         case .hovering:             return NotchAnimation.hover
         case .idle:                 return NotchAnimation.collapse
-        case .captureNotification:  return NotchAnimation.notificationExpand
         }
     }
 
@@ -255,7 +236,6 @@ struct NotchShapeView: View {
             .shadow(color: shadowColor, radius: shadowRadius, x: 0, y: 4)
             .scaleEffect(x: squishScaleX, y: squishScaleY, anchor: .top)
             .animation(shapeAnimation, value: state)
-            .animation(NotchAnimation.bounce, value: screenshotJustArrived)
             // Hugging height (§8.3): the silhouette grows/shrinks on the SAME
             // spring as row enter/exit, so container and content move as one.
             .animation(reduceMotion ? .easeInOut(duration: 0.15) : NotchAnimation.contentHug,
@@ -337,24 +317,6 @@ struct NotchShapeView: View {
                                value: extraExpandedHeight)
             }
 
-            // Notification content — icon in left wing, text in right wing
-            // The physical notch (~notchSize.width) sits in the center of the 280pt pill,
-            // so content must stay in the lateral wings to avoid the safe area.
-            if state == .captureNotification, let notificationContent = notificationContent {
-                let pillWidth: CGFloat = notificationWide ? 320 : notchSize.width + 80 + currentFilletRadius * 2
-                let wingWidth = (pillWidth - notchSize.width) / 2 - currentFilletRadius
-                notificationContent
-                    .frame(width: pillWidth - currentFilletRadius * 2, height: notchSize.height - 4)
-                    .padding(.top, 2)
-                    .opacity(notificationContentVisible ? 1.0 : 0.0)
-                    .scaleEffect(notificationContentVisible ? 1.0 : 0.9)
-                    .blur(radius: notificationContentVisible ? 0 : 4)
-                    .animation(
-                        reduceMotion ? .easeInOut(duration: 0.1) : NotchAnimation.notificationContentIn,
-                        value: notificationContentVisible
-                    )
-                    .environment(\.notchWingWidth, wingWidth)
-            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         // EVERYTHING here is drawn on `Color.black` — the silhouette is
@@ -421,18 +383,6 @@ struct NotchShapeView: View {
                     squishScaleY = 1.0
                 }
 
-            case .captureNotification:
-                // Horizontal stretch — pill widens
-                withAnimation(.spring(duration: 0.12, bounce: 0.2)) {
-                    squishScaleX = 1.03
-                    squishScaleY = 0.97
-                }
-                try? await Task.sleep(nanoseconds: 120_000_000)
-                guard !Task.isCancelled else { return }
-                withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
-                    squishScaleX = 1.0
-                    squishScaleY = 1.0
-                }
             }
         }
     }

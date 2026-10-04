@@ -37,16 +37,6 @@ struct DetectedMeeting: Identifiable, Equatable {
         Int((start.timeIntervalSinceNow / 60).rounded(.down))
     }
 
-    var hasStarted: Bool { Date() >= start }
-
-    /// "10:00" — the compact time shown in the Today list.
-    var startTimeLabel: String {
-        let formatter = DateFormatter()
-        formatter.locale = L10n.locale
-        formatter.setLocalizedDateFormatFromTemplate("j:mm")
-        return formatter.string(from: start)
-    }
-
     /// Who to show an avatar for: attendees if there are any, else the
     /// organizer, else the meeting title (so a solo event still gets a disc
     /// rather than a blank space).
@@ -62,31 +52,12 @@ struct DetectedMeeting: Identifiable, Equatable {
         return attendeeEmails
     }
 
-    /// "3 guests" — the count label beside the composite.
-    var participantCountLabel: String? {
-        let total = max(participantNames.count, attendees.count + 1)
-        guard total > 1 else { return nil }
-        return String(format: L10n.t("cal.guests"), total)
-    }
-
     /// "10:00 – 10:30" — the full span, so a row says how long it runs.
     var timeRangeLabel: String {
         let formatter = DateFormatter()
         formatter.locale = L10n.locale
         formatter.setLocalizedDateFormatFromTemplate("j:mm")
         return "\(formatter.string(from: start)) \u{2013} \(formatter.string(from: end))"
-    }
-
-    /// "Rose, Wessel" / "Rose, Wessel +2" / the location when nobody is
-    /// listed — the second line of a row, so it always carries context.
-    var contextLabel: String {
-        if !attendees.isEmpty {
-            let names = attendees.prefix(2).joined(separator: ", ")
-            let extra = attendees.count - min(2, attendees.count)
-            return extra > 0 ? "\(names) +\(extra)" : names
-        }
-        if let location, !location.isEmpty { return location }
-        return ""
     }
 
     /// "with Rose, Wessel · Google Meet"

@@ -182,10 +182,6 @@ private enum NotesFormatters {
 enum NotesMetrics {
     /// The same field, the same radius, the same place as the capture bar.
     static let composerMinHeight: CGFloat = 76
-    static let composerMaxHeight: CGFloat = 240
-    static let fieldRadius: CGFloat = LabMetrics.barRadius   // 24
-    static let fieldPaddingH: CGFloat = 24
-    static let fieldPaddingV: CGFloat = 16
     static let entryGap: CGFloat = 18
     static let entryInset: CGFloat = 12
     /// The row radius every list shares (was 16).
@@ -193,11 +189,6 @@ enum NotesMetrics {
     /// Includes the breathing room that keeps floating controls concentric
     /// with the lower corners of the expanded notch.
     static let bottomBarHeight: CGFloat = 76
-    /// Under the notch the height is a cost, not a resource: the composer
-    /// stops at two lines and the text scrolls inside it instead of pushing
-    /// the silhouette down.
-    static let notchComposerMaxHeight: CGFloat = 62
-    static let notchStreamMaxHeight: CGFloat = 190
     /// The Notes pill's own colour. A literal, and deliberately so: every
     /// other active pill wears its category's colour, so the one permanent
     /// pill in the bar needs a colour that belongs to no category.
@@ -207,9 +198,6 @@ enum NotesMetrics {
     /// its right say. Notes is a different kind of thing and the broken
     /// outline is what says so without a second shape or an icon.
     static let pillStroke = Color(hex: "#E8C15A")
-    /// Kept for the search highlight, which needs a solid ground to sit on.
-    static let pillFill = Color(hex: "#A9D8E9")
-    static let pillLabel = Color(hex: "#16283A")
 }
 
 // MARK: - The space
@@ -1452,39 +1440,4 @@ enum SpacePillStyle {
     /// 11 + border, which lands the text where the section pills' 12 does.
     static let paddingH: CGFloat = 12.4
     static let onFill = Color(hex: "#1A1622")
-}
-
-struct CalendarPill: View {
-    @ObservedObject private var store = TodoStore.shared
-    @ObservedObject private var notes = NotesStore.shared
-    @State private var hover = false
-
-    private var isActive: Bool { store.panelMode == .calendar }
-    private var count: Int { notes.notes.filter { $0.meetingContext != nil }.count }
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(L10n.t("filter.calendar"))
-                .font(.system(size: 13, weight: .semibold))
-            Text("\(count)")
-                .font(.system(size: 13, weight: .semibold))
-                .monospacedDigit()
-                .opacity(0.55)
-        }
-        .foregroundStyle(isActive ? SpacePillStyle.onFill : DSColor.textPrimary)
-        .padding(.horizontal, SpacePillStyle.paddingH)
-        .frame(height: 28)
-        .fixedSize()
-        // U5 §5.1: a 1.4-pt solid teal edge at 45%; selected, a teal fill.
-        .background(Capsule(style: .continuous).fill(isActive ? SpaceTint.calendar.base.color.opacity(0.85)
-                                             : (hover ? SpaceTint.calendar.base.color.opacity(0.10) : Color.clear)))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .circular)
-            .strokeBorder(SpaceTint.calendar.base.color.opacity(isActive ? 0.85 : 0.45), lineWidth: 1.4))
-        .contentShape(Capsule(style: .continuous))
-        .onTapGesture { NotesStore.shared.enterCalendarSpace() }
-        .onHover { hover = $0 }
-        .animation(Motion.hoverFade, value: hover)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(L10n.t("filter.calendar"))
-    }
 }

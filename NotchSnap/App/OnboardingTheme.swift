@@ -109,8 +109,6 @@ struct OBPalette {
     var pink: Color { Color(obHex: dark ? 0xFF9EC7 : 0xE0508F) }
     var success: Color { Color(obHex: dark ? 0x8FE3B0 : 0x1F9D5A) }
 
-    /// Keycap idle fill: `bg.panel` lifted 4% in lightness.
-    var keycapIdle: Color { Color(obHex: dark ? 0x16141D : 0xF7F6FB) }
 }
 
 private struct OBPaletteReader<Content: View>: View {

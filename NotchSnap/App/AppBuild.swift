@@ -35,13 +35,6 @@ enum AppBuild {
     /// the app you actually depend on.
     static var supportRoot: String { isLab ? "NotchSnapLab" : "NotchSnap" }
 
-    /// Keychain items are scoped by service string. A separate one keeps the
-    /// lab's Google tokens out of the shipped app's, so signing out of one
-    /// cannot sign the other out.
-    static var keychainService: String {
-        isLab ? "com.notchsnap.app.lab.google" : "com.notchsnap.app.google"
-    }
-
     /// Previous default folder name for the Markdown storage folder under
     /// ~/Documents, retained to recognize that implicit default on upgrade.
     static var vaultFolderName: String { isLab ? "Otto Lab" : "Otto" }
