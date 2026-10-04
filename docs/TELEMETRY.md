@@ -44,8 +44,8 @@ drops them. The lab build never sends (`AppBuild.analyticsEnabled`).
 
 ## App side
 
-- `NotchSnap/App/AnalyticsEvent.swift` — the catalogue.
-- `NotchSnap/App/Analytics.swift` — `Analytics.track`, consent, identity,
+- `Otto/Telemetry/AnalyticsEvent.swift` — the catalogue.
+- `Otto/Telemetry/Analytics.swift` — `Analytics.track`, consent, identity,
   `AnalyticsQueue` (JSONL in Application Support, flushed every 60 s / at 20
   events / on quit, batches of 100, exponential back-off to 1 h, capped at
   2,000 events or 7 days), `ConsentCard`.

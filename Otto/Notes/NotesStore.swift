@@ -1,0 +1,887 @@
+import Foundation
+import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
+
+// MARK: - QuickNote — one note in the stream
+
+/// Where a note's title came from.
+///
+/// It is stored, not inferred, because the whole disclosure contract hangs off
+/// it: a generated title wears a badge and can be regenerated, a hand-typed
+/// one wears nothing and must never be touched by the model again.
+enum NoteTitleSource: String, Codable {
+    /// The model proposed it. Shows the badge, answers ⌘⇧R.
+    case generated
+    /// The date fallback — no subject found, or no engine available.
+    case date
+    /// The user typed it. Permanent: generation is off for this note forever.
+    case user
+    case meeting
+}
+
+struct QuickNote: Identifiable, Codable, Equatable {
+    let id: UUID
+    var content: String
+    let createdAt: Date
+    var updatedAt: Date
+    /// Proposed, never required. A note is filed by its body; the title is a
+    /// way to find it again, which is why nothing waits for one.
+    var title: String
+    var titleSource: NoteTitleSource
+    var meetingContext: MeetingNoteContext? = nil
+
+    var firstLine: String {
+        content.split(separator: "\n").first.map(String.init) ?? content
+    }
+
+    /// Everything after the first line, for the stream's preview when the
+    /// title came from that first line.
+    var previewLine: String {
+        let lines = content.split(separator: "\n", omittingEmptySubsequences: true)
+        let body = lines.dropFirst().first.map(String.init)
+        return (body?.isEmpty == false ? body! : firstLine)
+    }
+
+    /// Words, not markers: `# `, `- ` and `**` are formatting, and counting
+    /// them would make the number climb every time the note was styled.
+    var wordCount: Int {
+        NoteMarkdown.plainText(content)
+            .split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+    }
+
+    init(id: UUID = UUID(), content: String, createdAt: Date = Date(),
+         updatedAt: Date = Date(),
+         title: String, titleSource: NoteTitleSource) {
+        self.id = id
+        self.content = content
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.title = title
+        self.titleSource = titleSource
+    }
+
+    // MARK: Hand-rolled decoding
+    //
+    // Synthesized Codable REJECTS a file that is missing a key, so adding
+    // `title` and `titleSource` to the struct would have made every existing
+    // notes.json undecodable — and the store's loader silently falls back to
+    // an empty array on a decode failure, so the failure mode is not an error
+    // message, it is the user's notes being gone (CLAUDE.md, storage rules).
+    // Every new field gets a decodeIfPresent line here.
+
+    enum CodingKeys: String, CodingKey {
+        case id, content, createdAt, updatedAt, title, titleSource, meetingContext
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        meetingContext = try c.decodeIfPresent(MeetingNoteContext.self, forKey: .meetingContext)
+        id = try c.decode(UUID.self, forKey: .id)
+        content = try c.decode(String.self, forKey: .content)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        // A note written before titles existed is named from its own first
+        // line rather than from the date: the text is right there, and
+        // "Note del 3 agosto" for a note that plainly says what it is would
+        // be a worse name than the one the note already gives itself.
+        let stored = try c.decodeIfPresent(String.self, forKey: .title)
+        if let stored, !stored.isEmpty {
+            title = stored
+            titleSource = try c.decodeIfPresent(NoteTitleSource.self, forKey: .titleSource) ?? .generated
+        } else if let drawn = NoteTitler.heuristicTitle(for: content) {
+            // Drawn from the body, so it is a PROPOSAL: it wears the badge and
+            // answers ⌘⇧R like any other. Filing it as `.date` would have hidden
+            // the badge on exactly the notes whose names the user is most likely
+            // to want to change.
+            title = drawn
+            titleSource = .generated
+        } else {
+            title = NoteTitler.dateTitle(for: createdAt)
+            titleSource = .date
+        }
+    }
+}
+
+// MARK: - Pending delete — the 5-second undo window
+
+struct PendingNoteDelete: Equatable {
+    let note: QuickNote
+    /// Where it was, so undo puts it back where the eye left it rather than
+    /// at the top of the stream.
+    let index: Int
+    let title: String
+}
+
+// MARK: - NotesStore — notes.json persistence (same pattern as ShelfStore)
+//
+// Notes persist indefinitely (a running log, no expiry — unlike the tray).
+// The composer auto-saves into a draft — on disk from the first keystroke —
+// and ↩ closes that draft into the stream. It does NOT mean "persist":
+// persistence already happened.
+
+@MainActor
+final class NotesStore: ObservableObject {
+    static let shared = NotesStore()
+
+    @Published private(set) var notes: [QuickNote] = []
+    /// Live composer text — auto-saved to disk with the notes list.
+    @Published var draft: String = ""
+
+    // MARK: UI state
+    //
+    // The note model is unchanged by any of this; it is all "which one is
+    // open" and "what is the composer doing".
+
+    /// Non-nil while one note fills the space instead of the stream.
+    @Published var openNoteID: UUID?
+    /// The row the keyboard is on in the stream. Independent of `openNoteID`.
+    @Published var selectedNoteID: UUID?
+    /// The entry that just landed — drives the drop and the brief highlight.
+    @Published private(set) var landingNoteID: UUID?
+    /// Two words, and only two: `Saved`, or `Saving…` while a write is in
+    /// flight. No timestamps, no "all changes saved".
+    @Published private(set) var isWriting = false
+    @Published private(set) var saveError: String?
+    @Published var pendingMeetingNote: QuickNote?
+    @Published var meetingQuery = ""
+    @Published var meetingLinkQuery = ""
+    @Published var meetingSearchFocus = false
+    /// The Notes · Meetings dropdown in the header is open; while it is, it
+    /// owns ↑↓ ⏎ Esc (TodoBrowsingKeyHandler).
+    @Published var kindMenuOpen = false
+    /// The highlighted row in that menu: 0 Notes, 1 Meetings.
+    @Published var kindMenuSelection = 0
+    @Published var meetingPicker = false
+    @Published var meetingSelection = 0
+    @Published var meetingHistory = false
+    @Published var meetingLinkPicker = false
+    @Published var meetingTaskDrafts: [UUID: String] = [:]
+    @Published var meetingFocus = 0
+    @Published var meetingTaskSelection = 0
+    @Published var meetingReturnNoteID: UUID?
+    private var meetingReturnMode: TodoPanelMode?
+    private var meetingReturnCollection: UUID?
+    private var meetingPreviousGroup: (UUID, MeetingNoteContext)?
+    private var recoveryBlocked = false
+    var canExportNotes: Bool { !recoveryBlocked }
+    private var unresolvedMeetingNotes: [String: UUID] = [:]
+    /// The row is gone from the stream immediately; the file follows only when
+    /// this expires. No confirmation dialog anywhere in this surface.
+    @Published private(set) var pendingDelete: PendingNoteDelete?
+
+    /// One-shot requests, the same pattern the to-do panel uses for its own
+    /// focus: the store knows where the caret belongs, the view answers after
+    /// the redraw rather than racing it.
+    @Published private(set) var composerFocusRequest: UInt = 0
+    @Published private(set) var renameRequest: UInt = 0
+
+    private var saveWork: Task<Void, Never>?
+    private var landingWork: Task<Void, Never>?
+    private var deleteWork: Task<Void, Never>?
+    private var titleWork: [UUID: Task<Void, Never>] = [:]
+
+    private let storageOverride: URL?
+    private var notesDirectory: URL {
+        if let storageOverride { return storageOverride }
+        return AppBuild.supportDirectory.appendingPathComponent("Notes", isDirectory: true)
+    }
+    private var indexURL: URL { notesDirectory.appendingPathComponent("notes.json") }
+    private var draftURL: URL { notesDirectory.appendingPathComponent("draft.txt") }
+    private var backupURL: URL { notesDirectory.appendingPathComponent("notes.backup.json") }
+    private var meetingDraftURL: URL { notesDirectory.appendingPathComponent("meeting-drafts.json") }
+
+    init(storageDirectory: URL? = nil) {
+        storageOverride = storageDirectory
+        try? FileManager.default.createDirectory(at: notesDirectory, withIntermediateDirectories: true)
+        let fm = FileManager.default
+        if fm.fileExists(atPath: indexURL.path) || fm.fileExists(atPath: backupURL.path) {
+            if let data = try? Data(contentsOf: indexURL), let decoded = try? JSONDecoder().decode([QuickNote].self, from: data) {
+                notes = decoded
+            } else if let data = try? Data(contentsOf: backupURL), let decoded = try? JSONDecoder().decode([QuickNote].self, from: data) {
+                notes = decoded
+                saveError = L10n.t("meeting.recovered")
+            } else {
+                recoveryBlocked = true
+                saveError = L10n.t("meeting.recoveryFailed")
+            }
+        }
+        if let data = try? Data(contentsOf: meetingDraftURL),
+           let envelope = try? JSONDecoder().decode(MeetingDraftEnvelope.self, from: data), envelope.version == 1 {
+            pendingMeetingNote = envelope.pendingNote
+            meetingTaskDrafts = envelope.taskDrafts
+        }
+        draft = (try? String(contentsOf: draftURL, encoding: .utf8)) ?? ""
+        loadDismissals()
+        repairStoredNotesIfNeeded()
+    }
+
+    /// One-time repairs over every stored note (NoteRepair), so damage the app
+    /// did before a fix is undone in OLD notes too, not only avoided in new
+    /// ones. Runs once per `NoteRepair.version`, and only after the untouched
+    /// file has been copied aside to `notes.pre-repair-<version>.json`.
+    private func repairStoredNotesIfNeeded() {
+        let key = "notes.repairVersion"
+        guard storageOverride == nil, !recoveryBlocked,
+              UserDefaults.standard.integer(forKey: key) < NoteRepair.version else { return }
+        var changed = false
+        for index in notes.indices {
+            let repaired = NoteRepair.repairMarkdown(notes[index].content)
+            if repaired != notes[index].content {
+                notes[index].content = repaired
+                changed = true
+            }
+        }
+        if let pending = pendingMeetingNote {
+            let repaired = NoteRepair.repairMarkdown(pending.content)
+            if repaired != pending.content { pendingMeetingNote?.content = repaired; changed = true }
+        }
+        if changed {
+            let aside = notesDirectory.appendingPathComponent("notes.pre-repair-\(NoteRepair.version).json")
+            if !FileManager.default.fileExists(atPath: aside.path) {
+                do { try FileManager.default.copyItem(at: indexURL, to: aside) } catch {
+                    // No safety copy, no repair: leave the notes exactly as found.
+                    print("[NotesStore] repair skipped, backup failed: \(error)")
+                    return
+                }
+            }
+            guard saveNow() else { return }
+        }
+        UserDefaults.standard.set(NoteRepair.version, forKey: key)
+    }
+
+    // MARK: - Reading
+
+    /// The stream, in the order the user has it.
+    ///
+    /// Was `sorted(by: updatedAt)`. A sort and a drag cannot both own the
+    /// order: every manual move would have been undone by the next edit, and
+    /// silently, because the row would spring back only when something else
+    /// touched it. The array IS the order now — new notes go in at the top,
+    /// which is the same default the sort produced — and a drag rewrites it.
+    var stream: [QuickNote] {
+        if TodoStore.shared.panelMode == .calendar {
+            return notes.filter { $0.meetingContext != nil && (meetingQuery.isEmpty ||
+                ($0.title + "\n" + $0.content).range(of: meetingQuery, options: [.caseInsensitive, .diacriticInsensitive]) != nil) }
+                .sorted { $0.meetingContext!.start > $1.meetingContext!.start }
+        }
+        return notes.filter { $0.meetingContext == nil }
+    }
+
+    func note(id: UUID) -> QuickNote? { notes.first { $0.id == id } }
+
+    var openNote: QuickNote? { openNoteID.flatMap { note(id: $0) ?? (pendingMeetingNote?.id == $0 ? pendingMeetingNote : nil) } }
+
+    // MARK: - Mutations
+
+    /// Close the draft into the stream and ask for a title.
+    ///
+    /// The title is requested AFTER the entry lands, never while the user is
+    /// typing: a title that mutates mid-sentence is noise.
+    @discardableResult
+    func commitDraft() -> QuickNote? {
+        let content = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !content.isEmpty else { return nil }
+        let note = QuickNote(
+            content: content,
+            // Named from its own words for the instant between landing and the
+            // model answering, so the row never appears blank and never has to
+            // shift when the real title arrives.
+            title: NoteTitler.heuristicTitle(for: content) ?? NoteTitler.dateTitle(for: Date()),
+            titleSource: .date
+        )
+        Analytics.track(.noteCreated(meeting: false))
+        withAnimation(Motion.contentHug) {
+            notes.insert(note, at: 0)
+            landingNoteID = note.id
+        }
+        draft = ""
+        scheduleSave()
+        holdLanding(note.id)
+        requestTitle(for: note.id)
+        return note
+    }
+
+    func draftChanged() {
+        scheduleSave()
+    }
+
+    /// Take the row out of the stream now; move the file later.
+    ///
+    /// No confirmation. A dialog asks the user to be certain about something
+    /// they can simply undo, and the undo is the honest version of the same
+    /// safety (handoff, decision 7).
+    func delete(_ id: UUID) {
+        guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        let note = notes[index]
+        if openNoteID == id { openNoteID = nil }
+        withAnimation(Motion.swap) {
+            notes.remove(at: index)
+            pendingDelete = PendingNoteDelete(note: note, index: index, title: note.title)
+        }
+        HapticManager.shared.itemDeleted()
+        scheduleSave()
+        deleteWork?.cancel()
+        deleteWork = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled, let self else { return }
+            withAnimation(Motion.hintFade) { self.pendingDelete = nil }
+        }
+    }
+
+    /// Put it back where it was. The state is rewritten, not recovered from a
+    /// file — nothing has been moved yet, which is the point of the window.
+    func undoDelete() {
+        guard let pending = pendingDelete else { return }
+        deleteWork?.cancel()
+        deleteWork = nil
+        withAnimation(Motion.contentHug) {
+            notes.insert(pending.note, at: min(pending.index, notes.count))
+            pendingDelete = nil
+        }
+        scheduleSave()
+    }
+
+    /// Load a history note back into the composer for editing.
+    func edit(_ id: UUID) {
+        guard let idx = notes.firstIndex(where: { $0.id == id }) else { return }
+        // Anything already in the composer is committed first, not lost.
+        commitDraft()
+        draft = notes[idx].content
+        notes.remove(at: idx)
+        scheduleSave()
+    }
+
+    /// Edit a note's body in place. There is no edit mode and no Save button:
+    /// the open note IS the editor.
+    func setBody(_ text: String, for id: UUID) {
+        if pendingMeetingNote?.id == id, !text.isEmpty {
+            pendingMeetingNote?.content = text
+            _ = ensureMeetingNote()
+        }
+        guard let idx = notes.firstIndex(where: { $0.id == id }), notes[idx].content != text else { return }
+        TodoStore.shared.unlinkEditedNotePhrases(noteID: id, text: NoteMarkdown.attributed(
+            from: text, textColor: .labelColor, accent: .labelColor, mutedColor: .tertiaryLabelColor).string)
+        notes[idx].content = text
+        notes[idx].updatedAt = Date()
+        scheduleSave()
+    }
+
+    /// A hand-typed title is final. The badge goes, and the model is locked
+    /// out of this note permanently.
+    func rename(_ id: UUID, to title: String) {
+        let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let idx = notes.firstIndex(where: { $0.id == id }), !clean.isEmpty else { return }
+        titleWork[id]?.cancel()
+        titleWork[id] = nil
+        notes[idx].title = clean
+        notes[idx].titleSource = .user
+        notes[idx].updatedAt = Date()
+        scheduleSave()
+    }
+
+    func duplicate(_ id: UUID) {
+        guard let idx = notes.firstIndex(where: { $0.id == id }) else { return }
+        let source = notes[idx]
+        let copy = QuickNote(content: source.content,
+                             title: source.title,
+                             titleSource: source.meetingContext == nil ? source.titleSource : .user)
+        withAnimation(Motion.contentHug) { notes.insert(copy, at: idx) }
+        scheduleSave()
+    }
+
+    // MARK: - Navigation
+    //
+    // Switching space is a TodoStore mode change, because the space bar and
+    // the panel chrome belong to it. Notes owns only what happens inside.
+
+    /// Enter the Notes space with the caret in the composer.
+    func enterSpace() {
+        closeNoteState()
+        TodoStore.shared.setMode(.notes)
+        focusComposer()
+    }
+
+    /// Meeting notes are a sibling space, reached by the Calendar pill.
+    func enterCalendarSpace() {
+        closeNoteState()
+        TodoStore.shared.setMode(.calendar)
+        meetingSearchFocus = true
+    }
+
+    /// Opens the dropdown with the active view highlighted.
+    func openKindMenu() {
+        // Nothing lit until the pointer or an arrow asks, like the gear menu.
+        kindMenuSelection = -1
+        kindMenuOpen = true
+    }
+
+    func closeKindMenu() { kindMenuOpen = false }
+
+    /// Notes or meeting notes — from the menu, ⌘1/⌘2 or ⌥⇥. The two fields
+    /// keep their own text, so a draft survives the switch, and the caret
+    /// goes back to the field of the view chosen.
+    func chooseKind(meetings: Bool) {
+        kindMenuOpen = false
+        if meetings { enterCalendarSpace() } else { enterSpace() }
+    }
+
+    /// Leave Notes and go back to the list that was on screen.
+    func leaveSpace() {
+        closeNoteState()
+        TodoStore.shared.setMode(.browsing)
+    }
+
+    /// The caret goes to the composer — and the stream's highlight goes out.
+    ///
+    /// The invariant: THE CARET AND THE HIGHLIGHT ARE THE SAME CURSOR, and
+    /// there is only one of them. Clearing it here rather than at the three
+    /// call sites is what keeps that true: entering the space, closing a note
+    /// and filing a draft all arrive through this one function.
+    ///
+    /// The space used to open with a row already lit, which reads as "this one
+    /// is about to happen" on a surface where the only thing about to happen
+    /// is the sentence you have not typed yet (Marcello, 2026-09-06). A
+    /// highlight appears on the first ↑ or ↓ and not before.
+    func focusComposer() {
+        selectedNoteID = nil
+        composerFocusRequest &+= 1
+    }
+
+    func beginRename() {
+        renameRequest &+= 1
+    }
+
+    func open(_ id: UUID) {
+        guard note(id: id) != nil || pendingMeetingNote?.id == id else { return }
+        saveNow()
+        meetingFocus = 0
+        meetingHistory = false
+        meetingLinkPicker = false
+        withAnimation(Motion.swap) {
+            openNoteID = id
+            selectedNoteID = id
+        }
+        // The CONTENT, not the title. Opening a note is "let me get at what I
+        // wrote", and landing in the title with it selected offered a rename
+        // nobody asked for — one keystroke from replacing the name of the note
+        // you meant to read (Marcello, 2026-09-06). Renaming is still a click
+        // into the title, or Rename in the row menu.
+        focusBody()
+    }
+
+    /// ⌘[, the chevron, or Esc. One level, not all the way out.
+    func closeNote() {
+        saveNow()
+        if meetingHistory || meetingLinkPicker { meetingHistory = false; meetingLinkPicker = false; return }
+        if let previous = meetingReturnNoteID {
+            meetingReturnNoteID = nil
+            open(previous)
+            return
+        }
+        withAnimation(Motion.swap) { openNoteID = nil }
+        if let mode = meetingReturnMode {
+            meetingReturnMode = nil
+            if let collection = meetingReturnCollection { TodoStore.shared.activeCollectionID = collection }
+            meetingReturnCollection = nil
+            TodoStore.shared.setMode(mode)
+        }
+        else { focusComposer() }
+    }
+
+    private func closeNoteState() {
+        saveNow()
+        meetingHistory = false; meetingLinkPicker = false; meetingPicker = false
+        meetingReturnMode = nil; meetingReturnNoteID = nil
+        openNoteID = nil
+    }
+
+    /// Move the keyboard selection through the stream. Not animated: this is a
+    /// key repeated dozens of times a minute, and animating it would put the
+    /// highlight permanently behind the user's fingers.
+    func moveSelection(_ offset: Int) {
+        let entries = stream
+        guard !entries.isEmpty else { return }
+        guard let current = selectedNoteID,
+              let index = entries.firstIndex(where: { $0.id == current }) else {
+            // Nothing selected yet: this key IS the selection. It enters from
+            // the side it was pressed from — ↓ at the top of the stream, ↑ at
+            // the bottom — rather than always landing on the first row, which
+            // made ↑ walk the wrong way on its first press.
+            selectedNoteID = offset < 0 ? entries.last?.id : entries.first?.id
+            return
+        }
+        let next = min(max(index + offset, 0), entries.count - 1)
+        selectedNoteID = entries[next].id
+    }
+
+    // MARK: - Export
+    //
+    // A standalone .md for ONE note, written where the user chooses. It does
+    // not touch the Notes.md mirror and does not become a second writer of it:
+    // the mirror is the app's copy of everything, this is the user's copy of
+    // one thing.
+    func exportOpenNote() {
+        guard let note = openNote else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.init(filenameExtension: "md") ?? .plainText]
+        panel.nameFieldStringValue = Self.fileName(for: note)
+        panel.canCreateDirectories = true
+        let document = MarkdownVault.shared.markdown(for: note)
+
+        // IN FRONT OF OTTO, with the focus. `runModal()` opened it at the
+        // normal level while the notch panel lives in a space of its own
+        // above the desktops (SpaceAnchor), so the dialog came up BEHIND the
+        // window that asked for it (2026-09-25 spec). It now joins that same
+        // space one level above the panel, the app takes focus, the panel is
+        // held open while it is up, and Esc / Cancel hand the caret back to
+        // the note. Path and file content are unchanged.
+        let controller = NotchController.shared
+        let host = controller.dialogHostWindow
+        panel.level = NSWindow.Level(rawValue: (host?.level.rawValue ?? NSWindow.Level.modalPanel.rawValue) + 1)
+        controller.isPresentingDialog = true
+        NSApp.activate(ignoringOtherApps: true)
+        panel.begin { [weak self] response in
+            controller.isPresentingDialog = false
+            if response == .OK, let url = panel.url {
+                try? document.write(to: url, atomically: true, encoding: .utf8)
+            }
+            controller.focusPanel()
+            self?.focusBody()
+        }
+        if host != nil { SpaceAnchor.pin(panel) }
+        panel.makeKeyAndOrderFront(nil)
+    }
+
+    private static func fileName(for note: QuickNote) -> String {
+        var base = note.title
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if base.isEmpty { base = "Note" }
+        return base + ".md"
+    }
+
+    /// Move a note in front of another. Reordering the array, not a field:
+    /// there is nothing to sort by any more.
+    func reorder(_ id: UUID, before targetID: UUID) {
+        guard id != targetID,
+              let from = notes.firstIndex(where: { $0.id == id }),
+              let target = notes.firstIndex(where: { $0.id == targetID }) else { return }
+        withAnimation(Motion.contentHug) {
+            let note = notes.remove(at: from)
+            let insertAt = notes.firstIndex(where: { $0.id == targetID }) ?? target
+            notes.insert(note, at: insertAt)
+        }
+        HapticManager.shared.reorderCommitted()
+        scheduleSave()
+    }
+
+    func moveToEnd(_ id: UUID) {
+        guard let from = notes.firstIndex(where: { $0.id == id }), from != notes.count - 1 else { return }
+        withAnimation(Motion.contentHug) {
+            let note = notes.remove(at: from)
+            notes.append(note)
+        }
+        HapticManager.shared.reorderCommitted()
+        scheduleSave()
+    }
+
+    /// One-shot: put the caret in the OPEN note's body.
+    /// Phrases the user has said are NOT tasks, per note.
+    ///
+    /// The only thing this feature persists. Detections themselves are
+    /// recomputed on every open — they are a guess, and a stale guess written
+    /// to disk is a guess that outlives the text it was about. A dismissal is
+    /// a decision, and a decision the detector forgets is one that reappears on
+    /// the next keystroke.
+    @Published private(set) var dismissedActions: [UUID: Set<String>] = [:]
+
+    /// File an underlined phrase as a to-do, and leave the note alone.
+    ///
+    /// The note is not touched — not the text, not the file. The only thing
+    /// that changes is that a to-do now exists pointing back at this phrase,
+    /// which is what lets the underline show a tick afterwards.
+    func createTodo(from phrase: String, in collectionID: UUID, note noteID: UUID) {
+        if note(id: noteID)?.meetingContext != nil, !saveNow() { return }
+        let due = ActionItemDetector.dueDate(in: phrase)
+        let title = ActionItemDetector.title(forPhrase: phrase)
+        guard TodoStore.shared.addItem(fromNote: noteID, phrase: phrase, title: title,
+                                      collectionID: collectionID, dueDate: due) != nil else {
+            saveError = L10n.t("meeting.saveFailed"); return
+        }
+        NoteEditorController.shared.pickerTarget = nil
+        NoteEditorController.shared.refreshDetections(noteID: noteID)
+    }
+
+    func dismissAction(_ phrase: String, in noteID: UUID) {
+        dismissedActions[noteID, default: []].insert(phrase)
+        persistDismissals()
+    }
+
+    func dismissed(in noteID: UUID) -> Set<String> { dismissedActions[noteID] ?? [] }
+
+    private static let dismissalsKey = "noteDismissedActions"
+
+    private func persistDismissals() {
+        let encodable = dismissedActions.reduce(into: [String: [String]]()) {
+            $0[$1.key.uuidString] = Array($1.value)
+        }
+        UserDefaults.standard.set(encodable, forKey: Self.dismissalsKey)
+    }
+
+    func loadDismissals() {
+        guard let raw = UserDefaults.standard.dictionary(forKey: Self.dismissalsKey)
+                as? [String: [String]] else { return }
+        dismissedActions = raw.reduce(into: [UUID: Set<String>]()) {
+            if let id = UUID(uuidString: $1.key) { $0[id] = Set($1.value) }
+        }
+    }
+
+    @Published private(set) var bodyFocusRequest: UInt = 0
+    func focusBody() { bodyFocusRequest &+= 1 }
+
+    // MARK: - Titles
+
+    /// Ask for a title, unless the user has already given one.
+    func requestTitle(for id: UUID, force: Bool = false) {
+        guard let note = note(id: id), note.meetingContext == nil else { return }
+        guard force || note.titleSource != .user else { return }
+        titleWork[id]?.cancel()
+        titleWork[id] = Task { @MainActor [weak self] in
+            let proposed = await NoteTitler.title(for: note.content)
+            guard !Task.isCancelled, let self,
+                  let idx = self.notes.firstIndex(where: { $0.id == id }) else { return }
+            // The user may have typed a title while the request was in flight.
+            // Theirs wins, always.
+            guard self.notes[idx].titleSource != .user else { return }
+            guard let proposed else { return }
+            withAnimation(Motion.hintFade) {
+                self.notes[idx].title = proposed.text
+                self.notes[idx].titleSource = proposed.source
+            }
+            self.scheduleSave()
+        }
+    }
+
+    /// Hold the landing highlight, then let it fade. Skipped entirely under
+    /// Reduce Motion — there is no drop to explain.
+    private func holdLanding(_ id: UUID) {
+        landingWork?.cancel()
+        guard !Motion.isReduced else { landingNoteID = nil; return }
+        landingWork = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled, let self, self.landingNoteID == id else { return }
+            withAnimation(Motion.hintFade) { self.landingNoteID = nil }
+        }
+    }
+
+    // MARK: - Persistence (debounced)
+
+    private func scheduleSave() {
+        // Notes ride along in the Markdown storage folder too (Notes.md).
+        // ONE writer: nothing in this surface writes a second copy anywhere.
+        if storageOverride == nil { MarkdownVault.shared.scheduleExport() }
+        isWriting = true
+        saveWork?.cancel()
+        saveWork = Task { @MainActor [weak self] in
+            // 400ms, the handoff's debounce. Short enough that "Saved" is true
+            // by the time the eye reaches it.
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled, let self else { return }
+            self.write()
+            self.isWriting = false
+        }
+    }
+
+    /// A successful JSON write is the only source of the Saved state.
+    @discardableResult
+    func saveNow() -> Bool {
+        saveWork?.cancel(); saveWork = nil
+        let success = write()
+        isWriting = false
+        return success
+    }
+
+    @discardableResult
+    private func write() -> Bool {
+        guard !recoveryBlocked else { return false }
+        do {
+            let data = try JSONEncoder().encode(notes)
+            if let previous = try? Data(contentsOf: indexURL),
+               (try? JSONDecoder().decode([QuickNote].self, from: previous)) != nil {
+                try previous.write(to: backupURL, options: .atomic)
+            }
+            try data.write(to: indexURL, options: .atomic)
+            try draft.write(to: draftURL, atomically: true, encoding: .utf8)
+            let envelope = MeetingDraftEnvelope(pendingNote: pendingMeetingNote.flatMap {
+                (meetingTaskDrafts[$0.id] ?? "").isEmpty ? nil : $0
+            }, taskDrafts: meetingTaskDrafts)
+            try JSONEncoder().encode(envelope).write(to: meetingDraftURL, options: .atomic)
+            saveError = nil
+            return true
+        } catch {
+            saveError = L10n.t("meeting.saveFailed")
+            return false
+        }
+    }
+}
+
+extension NotesStore {
+    func beginMeetingPicker() {
+        if TodoStore.shared.panelMode != .calendar {
+            meetingReturnMode = TodoStore.shared.panelMode
+            meetingReturnCollection = TodoStore.shared.activeCollectionID
+        }
+        meetingPicker = true; meetingSelection = 0
+        TodoStore.shared.setMode(.calendar)
+    }
+
+    func cancelMeetingPicker() {
+        meetingPicker = false
+        if openNoteID == nil { closeNote() }
+    }
+
+    func observeMeetings(_ meetings: [DetectedMeeting]) {
+        var changed = false
+        for meeting in meetings {
+            guard let note = meetingNote(for: meeting), let index = notes.firstIndex(where: { $0.id == note.id }),
+                  let context = note.meetingContext else { continue }
+            if context.title != meeting.title || context.start != meeting.start || context.end != meeting.end {
+                var updated = MeetingNoteContext(meeting: meeting, conversationID: context.conversationID)
+                updated.manuallyLinked = context.manuallyLinked
+                notes[index].meetingContext = updated
+                if notes[index].titleSource == .meeting { notes[index].title = meeting.title }
+                changed = true
+            }
+        }
+        if changed { scheduleSave() }
+    }
+
+    var meetingHistoryRows: [QuickNote] {
+        guard let note = openNote else { return [] }
+        let source = meetingLinkPicker ? notes.filter { $0.meetingContext != nil && $0.id != note.id } : sessions(for: note)
+        return source.filter { meetingLinkQuery.isEmpty || $0.title.range(of: meetingLinkQuery, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+    }
+
+    func meetingNote(for meeting: DetectedMeeting) -> QuickNote? {
+        MeetingNoteResolver.note(for: meeting.noteReference, in: notes)
+            ?? unresolvedMeetingNotes[meeting.id].flatMap { id in note(id: id) ?? (pendingMeetingNote?.id == id ? pendingMeetingNote : nil) }
+    }
+
+    func openMeetingContext(_ meeting: DetectedMeeting) {
+        let existing = meetingNote(for: meeting)
+        if TodoStore.shared.panelMode != .calendar {
+            meetingReturnMode = TodoStore.shared.panelMode
+            meetingReturnCollection = TodoStore.shared.activeCollectionID
+        }
+        else if let current = openNoteID, current != existing?.id { meetingReturnNoteID = current }
+        if let existing {
+            if let index = notes.firstIndex(where: { $0.id == existing.id }), let old = existing.meetingContext {
+                var updated = MeetingNoteContext(meeting: meeting, conversationID: old.conversationID)
+                updated.manuallyLinked = old.manuallyLinked
+                notes[index].meetingContext = updated
+                if notes[index].titleSource == .meeting { notes[index].title = meeting.title }
+                scheduleSave()
+            }
+            open(existing.id)
+        } else if let pending = pendingMeetingNote,
+                  let key = meeting.noteReference?.occurrenceKey,
+                  pending.meetingContext?.eventReference?.occurrenceKey == key {
+            open(pending.id)
+        } else {
+            // Persist any unfinished task draft before changing its context.
+            if let pending = pendingMeetingNote, !(meetingTaskDrafts[pending.id] ?? "").isEmpty {
+                _ = ensureMeetingNote()
+            }
+            var pending = QuickNote(content: "", title: meeting.title, titleSource: .meeting)
+            pending.meetingContext = MeetingNoteContext(meeting: meeting,
+                conversationID: MeetingNoteResolver.conversation(for: meeting.noteReference, in: notes) ?? UUID())
+            pendingMeetingNote = pending
+            if meeting.noteReference?.occurrenceKey == nil { unresolvedMeetingNotes[meeting.id] = pending.id }
+            openNoteID = pending.id
+            meetingFocus = 0
+            focusBody()
+        }
+        meetingPicker = false
+        TodoStore.shared.setMode(.calendar)
+        CompletedArchive.shared.reloadIfNeeded()
+    }
+
+    @discardableResult
+    func ensureMeetingNote() -> QuickNote? {
+        guard let pending = pendingMeetingNote, pending.id == openNoteID else {
+            guard let note = openNote, saveNow() else { return nil }
+            return note
+        }
+        if let canonical = MeetingNoteResolver.note(for: pending.meetingContext?.eventReference, in: notes) {
+            openNoteID = canonical.id; pendingMeetingNote = nil
+            return saveNow() ? canonical : nil
+        }
+        notes.insert(pending, at: 0)
+        pendingMeetingNote = nil
+        guard saveNow() else { return nil }
+        if storageOverride == nil { MarkdownVault.shared.scheduleExport() }
+        return pending
+    }
+
+    func meetingDraftChanged(_ text: String, noteID: UUID) {
+        meetingTaskDrafts[noteID] = text
+        scheduleSave()
+    }
+
+    @discardableResult
+    func submitMeetingTask(to collection: UUID) -> Bool {
+        guard let id = openNoteID else { return false }
+        let raw = (meetingTaskDrafts[id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty, let note = ensureMeetingNote() else { return false }
+        let parsed = NLDateParser.parse(raw)
+        guard TodoStore.shared.addMeetingItem(title: parsed?.cleanedTitle ?? raw, collectionID: collection,
+                                             dueDate: parsed?.date, noteID: note.id) != nil else {
+            saveError = L10n.t("meeting.saveFailed"); return false
+        }
+        meetingTaskDrafts[id] = ""
+        saveNow()
+        return true
+    }
+
+    func sessions(for note: QuickNote) -> [QuickNote] {
+        guard let context = note.meetingContext else { return [] }
+        return notes.filter { $0.meetingContext?.conversationID == context.conversationID && $0.id != note.id }
+            .sorted { $0.meetingContext!.start > $1.meetingContext!.start }
+    }
+
+    func openSession(_ id: UUID) {
+        if meetingReturnNoteID == nil { meetingReturnNoteID = openNoteID }
+        open(id)
+    }
+
+    func linkMeeting(to conversation: UUID) {
+        if let pending = pendingMeetingNote, pending.id == openNoteID, let old = pending.meetingContext {
+            meetingPreviousGroup = (pending.id, old)
+            pendingMeetingNote?.meetingContext?.conversationID = conversation
+            pendingMeetingNote?.meetingContext?.manuallyLinked = true
+            meetingLinkPicker = false
+            return
+        }
+        guard let note = ensureMeetingNote(), let index = notes.firstIndex(where: { $0.id == note.id }),
+              let old = note.meetingContext else { return }
+        meetingPreviousGroup = (note.id, old)
+        notes[index].meetingContext?.conversationID = conversation
+        notes[index].meetingContext?.manuallyLinked = true
+        meetingLinkPicker = false
+        scheduleSave()
+    }
+
+    func undoMeetingLink() {
+        if let (id, old) = meetingPreviousGroup, pendingMeetingNote?.id == id {
+            pendingMeetingNote?.meetingContext = old; meetingPreviousGroup = nil; return
+        }
+        guard let (id, old) = meetingPreviousGroup, let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        notes[index].meetingContext = old
+        meetingPreviousGroup = nil
+        scheduleSave()
+    }
+
+    var canUndoMeetingLink: Bool { meetingPreviousGroup != nil }
+}

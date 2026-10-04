@@ -1,16 +1,16 @@
 ---
 name: verify
-description: Build, launch, and headlessly drive NotchSnap to verify changes at runtime. Use whenever a change needs runtime verification in this repo.
+description: Build, launch, and headlessly drive Otto to verify changes at runtime. Use whenever a change needs runtime verification in this repo.
 ---
 
-# Verifying NotchSnap
+# Verifying Otto
 
 ## Build & launch
 
 `Package.swift` is a decoy (empty targets) — build with xcodebuild:
 
 ```bash
-xcodebuild -project NotchSnap.xcodeproj -scheme NotchSnap -configuration Debug build
+xcodebuild -project Otto.xcodeproj -scheme Otto -configuration Debug build
 ```
 
 **Build Release too before running `release.sh`.** Debug and Release do not
@@ -19,22 +19,20 @@ added at the END of that file lands outside it and loses the file's own imports
 — which fails only in Release, after the tag is already pushed.
 
 ```bash
-xcodebuild -project NotchSnap.xcodeproj -scheme NotchSnap -configuration Release -derivedDataPath /tmp/rd build
+xcodebuild -project Otto.xcodeproj -scheme Otto -configuration Release -derivedDataPath /tmp/rd build
 ```
 
-New source files must be added to `NotchSnap.xcodeproj/project.pbxproj` by hand
-(4 entries: PBXBuildFile, PBXFileReference, group child, Sources phase — copy
-the pattern of a sibling file; Todo-group files use `path = ../Todo/...`).
+`Otto/` is a synchronized folder: a new `.swift` file dropped anywhere under it
+is compiled with no project-file edit (and anything else there is bundled as a
+resource — keep scratch files out of `Otto/`).
 
 Launch detached (a `&` background job dies with the Bash tool's shell):
 
-The product is **Otto.app**, not NotchSnap.app — the project, scheme and target
-are still called NotchSnap, only the built bundle was renamed. So the process to
-kill is `Otto` too.
+The product is **Otto.app**, so the process to kill is `Otto`.
 
 ```bash
 pkill -x Otto   # needs dangerouslyDisableSandbox; sandboxed kill is silently dropped
-open "$(xcodebuild -project NotchSnap.xcodeproj -scheme NotchSnap -configuration Debug -showBuildSettings 2>/dev/null | awk '/ BUILT_PRODUCTS_DIR/{print $3; exit}')/Otto.app"
+open "$(xcodebuild -project Otto.xcodeproj -scheme Otto -configuration Debug -showBuildSettings 2>/dev/null | awk '/ BUILT_PRODUCTS_DIR/{print $3; exit}')/Otto.app"
 ```
 
 If pkill leaves survivors in `SX` state, they're held by Xcode's debugserver —
@@ -53,7 +51,7 @@ So: no pixels, no fake input. Don't burn time rediscovering this.
 ## Headless driving — DebugDriver
 
 Debug builds install a DistributedNotificationCenter listener
-([DebugDriver.swift](NotchSnap/App/DebugDriver.swift), `#if DEBUG` only).
+([DebugDriver.swift](Otto/Debug/DebugDriver.swift), `#if DEBUG` only).
 Compile a fast poster once (swift -e has ~1s latency, too slow to observe
 sub-second sequences like the 350ms completion-settle window):
 
@@ -61,7 +59,7 @@ sub-second sequences like the 350ms completion-settle window):
 cat > /tmp/poster.swift <<'EOF'
 import Foundation
 DistributedNotificationCenter.default().postNotificationName(
-    Notification.Name("com.notchsnap.debug.command"),
+    Notification.Name("otto.debug.command"),
     object: CommandLine.arguments[1], userInfo: nil, deliverImmediately: true)
 EOF
 swiftc -O /tmp/poster.swift -o /tmp/poster
@@ -105,7 +103,7 @@ through the bottom edge, which no probe reports directly.
 (first open item in active collection).
 `dump` appends state (notch state, panel mode, active collection,
 open/completed/settling counts, ring progress, find query/matches, draft,
-todoContentHeight, notchExtraHeight) to `/tmp/notchsnap-debug-state.txt`.
+todoContentHeight, notchExtraHeight) to `/tmp/otto-debug-state.txt`.
 
 If posted commands never arrive (no `dump` lines appear), launch with
 `open -n Otto.app --args -debugCommand "<command>"` instead — it runs 3s after
@@ -122,8 +120,9 @@ App stdout is block-buffered when redirected — don't rely on prints; use `dump
   interact with it mid-test and mutate state under you. Check timestamps
   before calling something a bug.
 - Test items land in the real store
-  (`~/Library/Application Support/NotchSnap/Todo/todos.json`).
-- `defaults write com.notchsnap.app <key>` + `dump` verifies settings-driven
-  behavior (e.g. `showLegacyPanels`) without UI.
+  (`~/Library/Application Support/Otto/Todo/todos.json`).
+- `defaults write com.notchsnap.app <key>` (the bundle id keeps its pre-Otto
+  name) + `dump` verifies settings-driven behavior (e.g. `notchLayout`)
+  without UI.
 - Keyboard shortcuts, hover, drag-reorder, and animation feel remain
   human-verified — TCC blocks them here.

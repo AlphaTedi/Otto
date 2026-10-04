@@ -1,5 +1,5 @@
 #!/bin/bash
-# Why can't NotchSnap get calendar access on this Mac?
+# Why can't Otto get calendar access on this Mac?
 #
 # Run it on the machine that is failing:
 #   bash Scripts/diagnose-calendar.sh
@@ -17,18 +17,17 @@ sw_vers | sed 's/^/  /'
 echo
 
 # --- Where is the app, and is it the one that's running? -------------------
-RUNNING_PATH=$(ps -Ao comm= | grep -iE "(Otto|NotchSnap).app/Contents/MacOS" | head -1)
+RUNNING_PATH=$(ps -Ao comm= | grep -iE "Otto.app/Contents/MacOS" | head -1)
 APP=""
 for candidate in "$RUNNING_PATH" /Applications/Otto.app ~/Applications/Otto.app \
-                 ~/Downloads/Otto.app ~/Desktop/Otto.app \
-                 /Applications/NotchSnap.app ~/Applications/NotchSnap.app; do
+                 ~/Downloads/Otto.app ~/Desktop/Otto.app; do
     [ -z "$candidate" ] && continue
     p="${candidate%%/Contents/MacOS*}"
     if [ -d "$p" ]; then APP="$p"; break; fi
 done
 
 if [ -z "$APP" ]; then
-    echo "  Could not find Otto.app. Pass its path:  bash $0 /path/to/NotchSnap.app"
+    echo "  Could not find Otto.app. Pass its path:  bash $0 /path/to/Otto.app"
     [ $# -ge 1 ] && APP="$1" || exit 1
 fi
 echo "1. Location"
@@ -124,11 +123,11 @@ else
     [[ "$VERDICT" == *TRANSLOCATED* || "$VERDICT" == *QUARANTINED* ]] && {
         echo "    1. Quit Otto."
         echo "    2. mv \"$APP\" /Applications/       # if not already there"
-        echo "    3. xattr -dr com.apple.quarantine /Applications/NotchSnap.app"
+        echo "    3. xattr -dr com.apple.quarantine /Applications/Otto.app"
         echo "       (note the -d: without it, xattr only LISTS attributes)"
     }
     [[ "$VERDICT" == *BADSIG* ]] && \
-        echo "    4. codesign --force --deep --sign - /Applications/NotchSnap.app"
+        echo "    4. codesign --force --deep --sign - /Applications/Otto.app"
     echo "    5. tccutil reset Calendar ${REAL_ID:-$BUNDLE_ID}"
     echo "    6. Open Otto from /Applications and press Connect."
 fi

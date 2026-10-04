@@ -24,12 +24,12 @@ Mac App Store, but so that a downloaded app opens by double-clicking.
 
 Team ID: `5N7QPZ6H87` · Bundle id: `com.notchsnap.app`
 
-> **The app was renamed NotchSnap → Otto on 2026-08-06.** The bundle id was
-> deliberately NOT changed: it is the app's TCC identity (renaming it re-locks
-> calendar access, which took days to recover) and the key its data directory
-> hangs off. Users never see it. The Xcode target, scheme and source folders
-> are also still called NotchSnap — only `PRODUCT_NAME` changed, so the shipped
-> bundle is `Otto.app`.
+> **The bundle id is the one thing that keeps the pre-Otto name, deliberately.**
+> It is the app's TCC identity (changing it re-locks calendar access, which took
+> days to recover), its preferences domain and Sparkle's update identity. Users
+> never see it. Everything else — project, scheme, target, folders — is `Otto`
+> since the 2026-10 cleanup; the data folder moves itself to
+> `~/Library/Application Support/Otto` on first launch (`AppBuild.supportDirectory`).
 
 ---
 
@@ -41,15 +41,14 @@ Gitignored; `Config/Local.xcconfig.example` is the committed template. Defines:
 |---|---|
 | `CODE_SIGN_IDENTITY` | `Developer ID Application: Marcello Zanetta (5N7QPZ6H87)` |
 | `DEVELOPMENT_TEAM` | `5N7QPZ6H87` |
-| `NOTARY_PROFILE` | `NotchSnap` — the keychain item holding the notary credential |
+| `NOTARY_PROFILE` | name of the keychain profile holding the notary credential |
 | `ENABLE_HARDENED_RUNTIME[config=Release]` | `YES` — required for notarization |
 | `CODE_SIGN_INJECT_BASE_ENTITLEMENTS[config=Release]` | `NO` — see §7.4 |
-| `GoogleOAuthClientID` / `GoogleOAuthClientSecret` | shipped OAuth credential |
 
 The notary credential is created **once**, by Marcello, and never by the agent:
 
 ```bash
-xcrun notarytool store-credentials "NotchSnap" \
+xcrun notarytool store-credentials "<NOTARY_PROFILE>" \
   --apple-id marcello.zanetta1@gmail.com --team-id 5N7QPZ6H87 \
   --password APP-SPECIFIC-PASSWORD
 ```
@@ -65,11 +64,10 @@ and had to be revoked.
 
 ---
 
-## 3. Entitlements — `NotchSnap/Resources/NotchSnap.entitlements`
+## 3. Entitlements — `Config/Otto.entitlements`
 
 ```xml
 com.apple.security.app-sandbox                        false
-com.apple.security.device.audio-input                 true
 com.apple.security.files.downloads.read-write         true
 com.apple.security.files.user-selected.read-write     true
 com.apple.security.personal-information.addressbook   true
@@ -81,7 +79,7 @@ access to calendars, contacts, microphone and camera behind entitlements. Withou
 matching entitlement, macOS refuses the resource **with no prompt and no entry in the
 Privacy list** — behaviour indistinguishable from the user having denied it. See §7.1.
 
-Not sandboxed, deliberately: it keeps `~/Library/Application Support/NotchSnap/` data
+Not sandboxed, deliberately: it keeps `~/Library/Application Support/Otto/` data
 alive across reinstalls.
 
 ---
@@ -112,7 +110,7 @@ prints the command but does not run it.
 
 ## 5. Auto-update — Sparkle
 
-- Sparkle 2.9.5 via SPM; `UpdateController` in `NotchSnap/App/`.
+- Sparkle 2.9.5 via SPM; `UpdateController` in `Otto/App/`.
 - Feed: `SUFeedURL` → `https://raw.githubusercontent.com/AlphaTedi/Otto/main/appcast.xml`
 - `SUPublicEDKey` = `kcZvheYIHq5NOS3hoB4As0+TCzkyBxNRXn+BSRFJnA8=`; the matching private
   key lives in Marcello's keychain. The app **refuses any update that does not verify**,
@@ -141,7 +139,7 @@ It used to create releases too, which is the single most expensive bug in this d
 ### 7.1 Hardened Runtime without the calendar entitlement (the big one)
 
 **Symptom:** "Calendar access was denied." on every machine. No permission prompt ever
-appeared. NotchSnap never showed up in System Settings → Privacy → Calendars. Granting
+appeared. The app never showed up in System Settings → Privacy → Calendars. Granting
 Full Access, running `tccutil reset Calendar com.notchsnap.app`, deleting duplicate app
 copies, and rebuilding the `EKEventStore` all changed **nothing**.
 
@@ -225,8 +223,8 @@ construct before shipping a localization change.
 
 ### 7.9 A stale app copy poisons the diagnosis
 
-`~/Downloads/NotchSnap.app` — bundle id `NotchSnap`, v1.0, unsigned — created a Privacy
-entry named "NotchSnap" that had nothing to do with the running app. Hours went into
+A pre-Otto v1.0 copy in `~/Downloads` — a different bundle id, unsigned — created a
+Privacy entry under its old name that had nothing to do with the running app. Hours went into
 toggling a switch that governed a different binary. `Scripts/diagnose-calendar.sh` now
 reports the **real** bundle id from the signature.
 

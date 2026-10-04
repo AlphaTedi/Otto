@@ -1,0 +1,763 @@
+//
+//  DesignSystem.swift
+//  Otto
+//
+//  Concrete design tokens and reusable SwiftUI components matching the
+//  approved mockups in the design reference PRD.
+//
+//  PURPOSE: Fable 5 has been drifting from the approved look because prior
+//  PRDs described styling in prose ("border radius 8px", "muted gray text").
+//  This file gives literal, importable constants and components instead —
+//  there is no separate "design system library," this Swift file IS the
+//  design system for this app. Reference these types directly in every
+//  screen rather than re-specifying colors/spacing/radii inline per view.
+//
+
+import SwiftUI
+
+// MARK: - Design Tokens
+
+// MARK: - Dynamic tokens
+//
+// Every colour here used to be a fixed hex, chosen for a dark panel. With the
+// system in Light the panels went pale and the TEXT STAYED WHITE, so nothing
+// could be read at all (Marcello, 2026-08-22) — the tokens had no opposite to
+// switch to, because there was only ever one value.
+//
+// A token is now a PAIR, resolved by AppKit at draw time against whatever
+// appearance the view is actually being drawn in. That is the same mechanism
+// Spotlight and Raycast use, and it is why they simply work in both: they do
+// not pick colours, they name roles and let the system resolve them.
+//
+// Wherever Apple already has a semantic colour for the role, that is used
+// directly rather than hand-mixing a pair. `labelColor` IS the text colour
+// Spotlight draws with, in both appearances, including the exact contrast
+// Apple ships for accessibility — reinventing it with two hex values would be
+// strictly worse and would drift.
+
+extension Color {
+    /// One token, two values. Resolved per appearance, at draw time.
+    static func dynamic(light: NSColor, dark: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
+        })
+    }
+
+    /// Same, for a pair expressed as translucent white/black — the usual way
+    /// to state a surface that has to sit on top of a material.
+    static func dynamicOverlay(light: Double, dark: Double) -> Color {
+        .dynamic(light: NSColor.black.withAlphaComponent(light),
+                 dark: NSColor.white.withAlphaComponent(dark))
+    }
+}
+
+enum DSColor {
+    /// THE row hover — to-dos and notes alike (Marcello, 2026-09-25: the
+    /// to-do's is the right one). A 4% wash; selection keeps its own fill.
+    static var rowHover: Color { .dynamicOverlay(light: 0.04, dark: 0.04) }
+    /// The notch container sits on pure black (or white), where 4% all but
+    /// disappears (Marcello, 2026-09-27: "I almost don't see the hover").
+    /// Stronger there, in both appearances.
+    static var containerRowHover: Color { .dynamicOverlay(light: 0.06, dark: 0.10) }
+    static func rowHover(container: Bool) -> Color { container ? containerRowHover : rowHover }
+    // Panel & structure
+    static let panelBackground = Color.dynamic(light: .white, dark: NSColor(white: 0.067, alpha: 1))
+    /// Apple's own hairline. It already differs per appearance.
+    static let panelBorder = Color(nsColor: .separatorColor)
+    static let divider = Color(nsColor: .separatorColor)
+
+    // Text — Apple's semantic ladder, which is what Spotlight and Raycast
+    // draw with. Dark-on-light and light-on-dark come for free, at the
+    // contrast Apple ships.
+    static let textPrimary = Color(nsColor: .labelColor)
+    static let textPrimaryBright = Color(nsColor: .labelColor)
+    static let textSecondary = Color(nsColor: .secondaryLabelColor)
+    static let textMuted = Color(nsColor: .secondaryLabelColor)
+    static let textFaint = Color(nsColor: .tertiaryLabelColor)
+    static let textHint = Color(nsColor: .placeholderTextColor)
+
+    // Interactive / focus
+    /// The system accent, so a panel matches the rest of the user's Mac.
+    static let focusAccent = Color(nsColor: .controlAccentColor)
+    /// Surfaces that sit ON the glass: a wash of the OPPOSITE of the
+    /// appearance, never a fixed near-black — which on a light panel read as a
+    /// hole punched through it.
+    static let fieldBackground = Color.dynamicOverlay(light: 0.05, dark: 0.08)
+    /// The focused row's slab. #525252 in the export — a plainly visible
+    /// block, not a tint. It reads stronger than it used to because it is now
+    /// carrying the focus signal ALONE: the accent stroke that used to ring a
+    /// focused row is gone (Marcello, 2026-08-22 — "looks pretty weird, and I
+    /// really don't like it").
+    static let focusedRowBackground = Color.dynamicOverlay(light: 0.10, dark: 0.17)
+
+    /// The ⏎ badge and the drag grip on a row. #878787 in the export.
+    static let rowAffordance = Color.dynamic(light: NSColor(white: 0.463, alpha: 1),
+                                             dark: NSColor(white: 0.529, alpha: 1))
+
+    /// A rule drawn INSIDE a panel — under the tab row, between two row
+    /// affordances. Deliberately not `panelBorder`: that is Apple's window
+    /// separator, which is meant to divide one surface from another and is far
+    /// too strong for a line within one.
+    static let hairlineOnPanel = Color.dynamicOverlay(light: 0.08, dark: 0.06)
+
+    /// Glyphs that are DRAWN rather than set — the "+" cross, the six-dot
+    /// grip. They carry the same weight as secondary text and must fade the
+    /// same way, so they take the icon end of the same ladder rather than a
+    /// hand-mixed grey.
+    static let glyph = Color(nsColor: .secondaryLabelColor)
+
+    /// Anything drawn ON a filled accent, category dot or checkbox.
+    ///
+    /// This is the one place a near-black is correct in BOTH appearances, and
+    /// it is not an oversight: those fills are light in both — a pastel
+    /// category colour, the system accent, a cyan checkbox — so the thing on
+    /// top of them is always dark. Making these semantic would turn the
+    /// checkmark white on a pale blue box in Dark mode.
+    static let onAccentFill = Color.black
+    /// The avatar menu's own ground. Nearly opaque on purpose: it floats over
+    /// the panel's own material, and a translucent menu over a translucent
+    /// panel is two blurs stacked and text you cannot read through either.
+    static let menuBackground = Color(nsColor: NSColor(calibratedWhite: 0.10, alpha: 0.985))
+
+    /// The ring that marks a chosen swatch. It has to beat both the swatch's
+    /// own colour and the panel behind it, which is what `labelColor` is:
+    /// white on a dark panel, near-black on a light one.
+    static let selectionRing = Color(nsColor: .labelColor)
+
+    /// Text and glyphs drawn ON the notch silhouette.
+    ///
+    /// Literal white on purpose, and the one token in this file that has no
+    /// opposite — because its GROUND has none either. The silhouette is
+    /// `Color.black` in every appearance (it is pretending to be a hole in the
+    /// hardware), so a semantic label colour is exactly wrong there: on a
+    /// Light system it resolved near-black and the countdown line disappeared
+    /// into the notch. Views on the notch also sit under
+    /// `darkGroundSurface()`; this states the same thing in the one place it
+    /// must hold even if that environment is ever lost.
+    static let onNotchSurface = Color.white
+    static let onNotchSurfaceMuted = Color.white.opacity(0.75)
+
+    /// A field that sits IN a panel — the new-section name box. The same
+    /// idea as the creation bar's well (which varies with hover and focus and
+    /// so stays local to it): it goes DOWN from the panel, and how far down
+    /// depends on how much room there is beneath it. A fixed 40% black is a
+    /// well on a dark panel and a hole punched in a light one.
+    static let fieldWell = Color.dynamic(light: NSColor.black.withAlphaComponent(0.05),
+                                         dark: NSColor.black.withAlphaComponent(0.40))
+
+    // Shadows.
+    //
+    // A shadow is not appearance-neutral. The same 40% black that reads as
+    // depth under a dark panel reads as dirt under a light one, because on
+    // white there is nothing for it to sink into — Apple's own light surfaces
+    // carry a far softer one. Two levels, both stated here so no view has to
+    // guess: `shadowSoft` lifts a chip off its panel, `shadowStrong` lifts a
+    // whole panel off the desktop.
+    static let shadowSoft = Color.dynamic(light: NSColor.black.withAlphaComponent(0.10),
+                                          dark: NSColor.black.withAlphaComponent(0.30))
+    static let shadowStrong = Color.dynamic(light: NSColor.black.withAlphaComponent(0.18),
+                                            dark: NSColor.black.withAlphaComponent(0.45))
+
+    // Primary action. The pair inverts together: a near-white button carries
+    // near-black text in Dark, and the reverse in Light, so the button never
+    // disappears into the panel behind it.
+    static let primaryFill = Color.dynamic(light: NSColor(white: 0.12, alpha: 1),
+                                           dark: NSColor(white: 0.93, alpha: 1))
+    static let primaryText = Color.dynamic(light: NSColor(white: 0.98, alpha: 1),
+                                           dark: NSColor(white: 0.07, alpha: 1))
+
+    // Reference category palette (actual colors are user-assigned per
+    // category at creation time — see CT-1 in the to-do pivot PRD.
+    // These are the values used across every mockup for consistency when
+    // building preview/seed data.)
+    enum CategoryPalette {
+        static let blue = Color(hex: "#7FB8E0")     // "Work" in mockups
+        static let purple = Color(hex: "#C99EE0")   // "Personal" in mockups
+        static let amber = Color(hex: "#E8C15A")
+        static let green = Color(hex: "#8FBF7A")
+        static let coral = Color(hex: "#E07A5F")
+
+        static let all: [Color] = [blue, purple, amber, green, coral]
+    }
+
+    /// Attendee avatars. A separate family from CategoryPalette, which is
+    /// tuned to carry meaning at 7pt as a category dot — at 24pt behind a
+    /// letter those same colours were "too pushy" (Marcello, 2026-08-05).
+    ///
+    /// Each entry is a PAIR: a pastel ground and a saturated letter of the
+    /// same hue. That relationship is what makes the reference set read as one
+    /// system rather than ten unrelated chips — the letter is never black, it
+    /// is the ground turned up.
+    enum AvatarPalette {
+        struct Tone {
+            let background: Color
+            let foreground: Color
+        }
+
+        static let all: [Tone] = [
+            Tone(background: Color(hex: "#C9D6FB"), foreground: Color(hex: "#22409E")), // blue
+            Tone(background: Color(hex: "#F6EDC8"), foreground: Color(hex: "#8A6A12")), // gold
+            Tone(background: Color(hex: "#CBE8D2"), foreground: Color(hex: "#22683C")), // green
+            Tone(background: Color(hex: "#FAD6CC"), foreground: Color(hex: "#A94526")), // coral
+            Tone(background: Color(hex: "#E1D4F6"), foreground: Color(hex: "#5A34A0")), // violet
+            Tone(background: Color(hex: "#C8E7E6"), foreground: Color(hex: "#166C69")), // teal
+            Tone(background: Color(hex: "#F8D3E2"), foreground: Color(hex: "#9C2F68")), // pink
+            Tone(background: Color(hex: "#FADFC3"), foreground: Color(hex: "#95530F")), // amber
+            Tone(background: Color(hex: "#E3EFC2"), foreground: Color(hex: "#566E1C")), // lime
+            Tone(background: Color(hex: "#D7DEE7"), foreground: Color(hex: "#3D4B5C")), // slate
+        ]
+
+        /// The hairline inside every avatar's edge. Dark and nearly invisible
+        /// on its own — it exists so a pale disc still has a defined boundary
+        /// against a pale photo or a neighbouring disc.
+        static let innerStroke = Color.black.opacity(0.10)
+    }
+
+}
+
+enum DSSpacing {
+    static let panelPadding: CGFloat = 16
+    static let rowInternalGap: CGFloat = 10
+    static let tabRowBottomMargin: CGFloat = 14
+    static let checklistIndent: CGFloat = 24
+}
+
+/// Corner scale. Every rounded rectangle in the app is a **squircle**
+/// (`style: .continuous`) — the superellipse macOS uses, not the circular-arc
+/// corner. Radii step with the element's size (concentric corners) rather than
+/// all being one number; that is what keeps a chip inside a card inside a panel
+/// looking correct.
+///
+/// Never write a raw `cornerRadius:` literal in a view — take one from here, or
+/// the shapes drift apart again (there were 24 distinct values before this).
+enum DSRadius {
+    static let controlCorner: CGFloat = 10
+    static let chipCorner: CGFloat = 7
+    static let checklistCheckboxCorner: CGFloat = 3
+}
+
+/// The app's shape vocabulary, so a view never has to decide.
+///
+/// macOS 26 draws its push buttons as capsules and its containers as
+/// continuous-corner rectangles. Following that gives exactly one rule:
+/// **if you can click it to do something, it is a capsule; if it holds
+/// content, it is a squircle.** Toggles, checkboxes and colour swatches are
+/// the deliberate exceptions — those are selection controls, not actions,
+/// and macOS keeps them rectangular too.
+enum DSShape {
+    /// Containers: cards, fields, popovers, chips.
+    static func squircle(_ radius: CGFloat) -> RoundedRectangle {
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+    }
+
+    /// Actions: Join, Create, Continue, Cancel — anything that performs.
+    static var action: Capsule { Capsule(style: .continuous) }
+}
+
+enum DSFont {
+    /// The scale has two steps, deliberately (Marcello, 2026-08-04):
+    ///
+    ///   cardTitleSize 15  — the meeting card. One item, needs to carry.
+    ///   todoTitleSize 13  — a to-do row. There are twenty of these; at 15 they
+    ///                       dominated the panel and ate the vertical space.
+    ///
+    /// They were briefly the same size, which flattened the hierarchy and made
+    /// the list feel oversized. Anything rendering a to-do title must use
+    /// todoTitleSize — EntityTitleView's TextKit body attributes included, or
+    /// the measured row height stops matching the drawn text.
+    static let cardTitleSize: CGFloat = 15
+    /// 14/17 medium, per the Figma export. EntityTitleView mirrors this in
+    /// its own TextKit attributes — if the two drift the measured row height
+    /// stops matching the drawn text.
+    static let todoTitleSize: CGFloat = 14
+    static let todoTitle: Font = .system(size: todoTitleSize, weight: .medium)
+    static let tabLabel: Font = .system(size: 11)
+    static let sectionLabel: Font = .system(size: 10, weight: .regular)
+    static let hint: Font = .system(size: 9)
+    static let checklistItem: Font = .system(size: 11)
+    static let buttonLabel: Font = .system(size: 12, weight: .medium)
+}
+
+// DSAnimation is gone.
+//
+// It was a second, near-duplicate token set — its own comment conceded it was
+// a "rough SwiftUI equivalent" of the PRD spring — and by the end it had one
+// live call site, on a component that had already been retired. Two vocabularies
+// for one idea is how a codebase ends up with sixty hand-written springs:
+// whichever one you happen to reach for is defensible, so neither wins.
+// NotchAnimation, and Motion in front of it, is the whole vocabulary now.
+
+
+// MARK: - Color hex convenience
+
+extension Color {
+    init(hex: String) {
+        let hexString = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var rgbValue: UInt64 = 0
+        Scanner(string: hexString).scanHexInt64(&rgbValue)
+        let r = Double((rgbValue & 0xFF0000) >> 16) / 255
+        let g = Double((rgbValue & 0x00FF00) >> 8) / 255
+        let b = Double(rgbValue & 0x0000FF) / 255
+        self.init(red: r, green: g, blue: b)
+    }
+}
+
+// MARK: - Reusable component: Category tab chip
+
+/// A single tab in the browsing view's tab row. Only the ACTIVE tab is
+/// rendered in its category color — inactive tabs are always neutral.
+/// See TD-9 / TD-2 in the to-do pivot PRD — this is not optional
+/// styling, it's a functional requirement.
+struct CategoryTabChip: View {
+    let title: String
+    /// The space's tint: the selected fill is its LIGHT colour, the shadow its
+    /// base (U5 §5.1, §7).
+    let tint: SpaceTint
+    let isActive: Bool
+    /// How many to-dos are still OPEN in this category. nil = the category is
+    /// empty (no indicator at all); 0 = everything done (checkmark).
+    ///
+    /// This replaces the circular progress ring: a 14pt arc couldn't tell you
+    /// how much was left — "I don't understand from that view how much I am
+    /// still missing" (Marcello, 2026-07-23). A remaining COUNT answers that
+    /// directly, the way Reminders/Things do.
+    let remaining: Int?
+
+    /// Whether the pointer is on this chip. The lists had NO hover state at
+    /// all, so the only chip in the bar that answered the pointer was the one
+    /// already selected — a row of controls that looked inert until clicked
+    /// (Marcello, 2026-09-06).
+    @State private var hover = false
+
+    /// Text on the section-coloured fill: dark on the light tone (dark mode),
+    /// white on the deepened one (light mode).
+    private static let onFill = Color.dynamic(light: .white,
+                                              dark: NSColor(srgbRed: 0x16 / 255, green: 0x1A / 255,
+                                                            blue: 0x24 / 255, alpha: 1))
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(isActive ? Self.onFill : DSColor.textPrimary)
+
+            if let remaining {
+                if remaining == 0 {
+                    // Nothing left — a quiet "all clear", not a zero.
+                    OttoIcon("checkmark", pointSize: 9)
+                        .foregroundColor(isActive ? Self.onFill : DSColor.textPrimary)
+                        .opacity(0.5)
+                } else {
+                    Text("\(remaining)")
+                        .font(.system(size: 13, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundColor(isActive ? Self.onFill : DSColor.textPrimary)
+                        .opacity(0.5)
+                        .contentTransition(.numericText())
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 28)
+        // ONE shape, in every state — a capsule; selection is a fill, not a
+        // silhouette (Marcello, 2026-09-06). Still no matchedGeometryEffect:
+        // it resolved frames outside the scroller and cut the first chip.
+        .background(
+            Capsule(style: .continuous)
+                .fill(isActive ? tint.sectionColor
+                      : (hover ? DSColor.fieldBackground : Color.clear))
+        )
+        .clipShape(Capsule(style: .continuous))
+        // No glow: the strip scrolls, and a scroller clips whatever reaches
+        // past it — the shadow was being cut off square (2026-09-25).
+        .contentShape(Capsule(style: .continuous))
+        .onHover { hover = $0 }
+        // No implicit animation on selection: a click animates it (180 ms,
+        // at the call site), the keyboard switches instantly (U5 §5.1).
+        .animation(Motion.hoverFade, value: hover)
+    }
+}
+
+// MARK: - Reusable component: Progress ring (Section 9.2)
+//
+// RETIRED from the tab row (2026-07-23): at 14pt the arc was unreadable —
+// it couldn't answer "how much is left in this category?". CategoryTabChip
+// now shows a remaining COUNT instead. Kept here because the type is still
+// referenced by the design PRD; use it only where an arc is genuinely legible
+// (i.e. considerably larger than the tab chip).
+
+// MARK: - Reusable component: To-do row
+
+// MARK: - Reusable component: Drop indicator
+//
+// Arc's sidebar convention (Marcello, 2026-07-26): while a row is being
+// dragged, the slot it would land in is drawn as a bright line with a dot on
+// the leading end. It replaces the old six-dot grip handle entirely — the grip
+// had to reserve space beside every checkbox, which pushed the whole list
+// inward and made the rows look like they were floating away from the left
+// edge. The row is now the drag handle, so nothing is indented.
+
+struct DropIndicator: View {
+    var tint: Color = DSColor.textPrimaryBright
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Circle()
+                .fill(tint)
+                .frame(width: 6, height: 6)
+            Rectangle()
+                .fill(tint)
+                .frame(height: 1.5)
+        }
+        .frame(height: 6)
+        .transition(.opacity)
+        .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Reusable component: Keycap
+//
+// The old shortcut chip was a flat capsule filled at 22% opacity — it read as
+// a smudge rather than a key, and on the light Create/Join buttons it was
+// barely visible at all (Marcello, 2026-07-26).
+//
+// This follows the convention GitHub, Linear, Raycast, Arc and every
+// command-palette app converged on: a RECTANGULAR cap (keys are not pills),
+// a hairline highlight along the top edge, a darker bottom edge plus a 1pt
+// drop shadow for physical depth, and a high-contrast label. The depth is
+// what makes it read as a key instead of a badge.
+
+struct Keycap: View {
+    let text: String
+    /// Keycaps sit on both the light action buttons and the dark panel, and a
+    /// single tone cannot serve both — the light one needs a DARKER cap, the
+    /// dark one a LIGHTER cap, or the shading inverts and looks wrong.
+    enum Tone { case onLight, onDark }
+    var tone: Tone = .onDark
+    var size: CGFloat = 10
+
+    /// Flat, not glass. The cap used to carry a gradient edge, a top
+    /// highlight, a bottom shade and a drop shadow — a tiny glossy button
+    /// stuck onto a real button, which read as "fake and clumsy"
+    /// (Marcello, 2026-08-05). Every design system that shows shortcuts well
+    /// — Stripe, Linear, Raycast — draws them as a quiet tint of the surface
+    /// they sit on and nothing more. The hint belongs to the control; it
+    /// should not compete with it.
+    /// `.onDark` means "on the panel", `.onLight` means "on a primary-filled
+    /// button" — which is itself the inverse of the appearance. So the panel
+    /// tone flips with the system and the button tone flips against it, and
+    /// both stay readable in Light and Dark.
+    private var capFill: Color {
+        tone == .onLight ? DSColor.primaryText.opacity(0.14)
+                         : Color.dynamicOverlay(light: 0.08, dark: 0.10)
+    }
+    private var label: Color {
+        tone == .onLight ? DSColor.primaryText.opacity(0.75)
+                         : DSColor.textPrimary.opacity(0.80)
+    }
+
+    /// "⌘↩" is TWO keys, so it draws as two caps. One wide cap containing
+    /// both glyphs is the thing that looked homemade — and at 9pt a pair of
+    /// symbols crammed into one box is genuinely hard to read.
+    private var keys: [String] { text.map(String.init) }
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(Array(keys.enumerated()), id: \.offset) { _, key in
+                Text(key)
+                    .font(.system(size: size, weight: .medium))
+                    .foregroundStyle(label)
+                    // Symbol glyphs (⌘ ⇧ ⌥ ↩) have wildly different widths;
+                    // a floor keeps a row of caps from jittering.
+                    .frame(minWidth: size + 3)
+                    .padding(.horizontal, 3)
+                    .padding(.vertical, 1.5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                            .fill(capFill)
+                    )
+            }
+        }
+    }
+}
+
+// MARK: - Reusable component: Shortcut hint badge
+
+struct ShortcutHintBadge: View {
+    let text: String
+
+    var body: some View {
+        // One keycap implementation for the whole app.
+        Keycap(text: text, tone: .onDark, size: 9)
+    }
+}
+
+// MARK: - Reusable component: Primary action button (Create, etc.)
+
+/// A capsule, like every other action in the app and like macOS 26's own push
+/// buttons. It used to be a rounded rectangle while Join was a capsule — the
+/// same control in two shapes (Marcello, 2026-07-26).
+struct PrimaryActionButton: View {
+    let title: String
+    let shortcutHint: String
+    /// Filled by default; `false` gives the outlined secondary treatment, so
+    /// Cancel/Snooze pair with a filled primary instead of inventing a style.
+    var isProminent: Bool = true
+    /// Form buttons span the panel; a button sitting inline next to other
+    /// content (Join, on a meeting card) hugs its label instead.
+    var fillsWidth: Bool = true
+    /// Inline buttons are smaller so they sit inside a card without dominating.
+    var isCompact: Bool = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Text(title)
+                .font(isCompact ? .system(size: 11, weight: .medium) : DSFont.buttonLabel)
+                .foregroundColor(isProminent ? DSColor.primaryText : DSColor.textSecondary)
+            if !shortcutHint.isEmpty {
+                // The shortcut lives ON the control, so the keyboard path is
+                // discoverable without opening the reference sheet.
+                Keycap(text: shortcutHint,
+                       tone: isProminent ? .onLight : .onDark,
+                       size: isCompact ? 9 : 10)
+            }
+        }
+        .padding(.horizontal, fillsWidth ? 0 : (isCompact ? 12 : 16))
+        .frame(maxWidth: fillsWidth ? .infinity : nil)
+        .padding(.vertical, isCompact ? 5 : 9)
+        .background(isProminent ? DSColor.primaryFill : Color.clear)
+        .overlay(
+            DSShape.action.strokeBorder(isProminent ? .clear : DSColor.panelBorder,
+                                        lineWidth: 1)
+        )
+        .clipShape(DSShape.action)
+    }
+}
+
+// MARK: - Reusable component: Category color-picker swatch (Section 4 form)
+
+// MARK: - Addendum: inline entity highlighting
+// (urgency & entity PRD §3 — supplied by Marcello 2026-07-14.
+// The urgency half of that PRD is gone — priority was removed entirely on
+// 2026-09-14, dot, tooltip, model field and all. What remains is the entity
+// half: links, dates, @mentions and code chips.)
+
+// MARK: Inline entity chips (§2)
+
+enum EntityKind {
+    case link, date, mention, code, channel
+}
+
+enum DSEntityChip {
+    /// Light and dark pairs. The chips were dark-only, so on a light panel
+    /// every date, link and @name was a near-black lozenge — far louder than
+    /// the words around it (Marcello, 2026-10-02). Light mode: a pale wash
+    /// of the same hue, a soft edge, and the hue darkened for the text.
+    private static func pair(_ light: String, _ dark: String) -> Color {
+        .dynamic(light: NSColor(Color(hex: light)), dark: NSColor(Color(hex: dark)))
+    }
+
+    static func background(for kind: EntityKind) -> Color {
+        switch kind {
+        case .link: return pair("#E5EFF8", "#1A2733")
+        case .date: return pair("#F7EED5", "#231F14")
+        case .mention: return pair("#F1E6F8", "#2A1F33")
+        // Code sits on a warm ground rather than neutral grey — the
+        // orange-on-dark convention Slack, Jira and every code review tool
+        // share, which is what makes a snippet findable by scanning rather
+        // than reading (Marcello's tester, 2026-08-10).
+        case .code: return pair("#FBE9DE", "#2A1A14")
+        case .channel: return pair("#DFF2F4", "#14262A")
+        }
+    }
+
+    static func border(for kind: EntityKind) -> Color {
+        switch kind {
+        case .link: return pair("#BDD4E8", "#2F4A5C")
+        case .date: return pair("#E5D29A", "#4A3F22")
+        case .mention: return pair("#D9C2E9", "#493459")
+        case .code: return pair("#EEC3AA", "#5C3524")
+        case .channel: return pair("#A8D8DE", "#245259")
+        }
+    }
+
+    static func text(for kind: EntityKind) -> Color {
+        switch kind {
+        case .link: return pair("#2B6A9A", "#7FB8E0")
+        case .date: return pair("#8A6A0E", "#E8C15A")
+        case .mention: return pair("#7A479B", "#C99EE0")
+        case .code: return pair("#AD5326", "#E8905C")
+        case .channel: return pair("#1F7F8C", "#5CC5D6")
+        }
+    }
+
+    static func sfSymbol(for kind: EntityKind) -> String? {
+        switch kind {
+        case .link: return "link"
+        case .date: return "calendar"
+        case .mention: return "at"
+        case .code: return nil // monospace font is the signal, no icon
+        case .channel: return "number"
+        }
+    }
+
+    /// Code is the one kind whose glyph shapes carry meaning — brackets,
+    /// underscores and `l` vs `1` have to be unambiguous — so it renders
+    /// monospaced while every other chip stays in the UI face.
+    static func isMonospaced(_ kind: EntityKind) -> Bool { kind == .code }
+}
+
+// MARK: - Attendee avatars (calendar PRD §3.3, AV-4..6)
+//
+// Replaces the "with Rose, Wessel" text line and the colored accent stripe —
+// the stripe-plus-text layout is exactly what read as generic/AI-templated
+// (Marcello, 2026-07-25). A real avatar stack is the product signal.
+//
+// NOTE on AV-5: profile photos would come from the Google Calendar API. The
+// EventKit provider has no access to attendee photos, so this renders the
+// initial-based fallback on every avatar today. `imageURL` is the seam for
+// photos once a Google OAuth provider exists — never a person-outline glyph.
+
+struct AttendeeAvatar: View {
+    let name: String
+    /// Used to resolve a real photo from Contacts; nil ⇒ initial only.
+    var email: String? = nil
+    var diameter: CGFloat = 24
+    /// Dim non-urgent rows without changing the layout (Today's later events).
+    var isMuted: Bool = false
+    /// Ring colour — matches whatever surface the avatar sits on, so an
+    /// overlapping stack reads as separate discs.
+    var ringColor: Color = DSColor.fieldBackground
+
+    @ObservedObject private var photos = AttendeePhotoStore.shared
+
+    /// Separator width between overlapping discs.
+    private var ringWidth: CGFloat { diameter > 20 ? 2 : 1.5 }
+
+    var body: some View {
+        Group {
+            if let email, let image = photos.photo(for: email) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: diameter, height: diameter)
+                    .clipShape(Circle())
+                    .opacity(isMuted ? 0.65 : 1)
+            } else {
+                // Prefer the contact's real name for the initial — an
+                // address-only attendee would otherwise read as its domain.
+                let display = email.flatMap { photos.name(for: $0) } ?? name
+                let tone = Self.tone(for: display)
+                Circle()
+                    .fill(tone.background.opacity(isMuted ? 0.55 : 1))
+                    .frame(width: diameter, height: diameter)
+                    .overlay(
+                        // Proportions from Marcello's spec: a 14pt letter on a
+                        // 32pt disc, medium weight, line-height 100%.
+                        Text(Self.initial(for: display))
+                            .font(.system(size: diameter * 0.4375, weight: .medium))
+                            .foregroundStyle(tone.foreground.opacity(isMuted ? 0.7 : 1))
+                    )
+            }
+        }
+        // Inside the edge, under the ring: a pale disc or a light photo would
+        // otherwise dissolve into whatever sits behind it.
+        .overlay(
+            Circle().strokeBorder(DSColor.AvatarPalette.innerStroke, lineWidth: 1)
+        )
+        // The separator sits OUTSIDE the disc rather than on top of it, so it
+        // cannot eat into the artwork or hide the hairline above. Drawn as a
+        // background it adds no layout size — neighbours still overlap by the
+        // stack's own ratio.
+        .background(
+            Circle()
+                .fill(ringColor)
+                .frame(width: diameter + ringWidth * 2,
+                       height: diameter + ringWidth * 2)
+        )
+    }
+
+    static func initial(for name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Emails ("rose@x.com") should key off the local part, not the "@".
+        let base = trimmed.split(separator: "@").first.map(String.init) ?? trimmed
+        guard let first = base.first(where: { $0.isLetter || $0.isNumber }) else { return "?" }
+        return String(first).uppercased()
+    }
+
+    /// AV-5: stable per-person tone from the pastel avatar family.
+    /// Hash is computed by hand — Swift's `hashValue` is randomly seeded per
+    /// process, so a person's colour would change on every launch.
+    static func tone(for name: String) -> DSColor.AvatarPalette.Tone {
+        let palette = DSColor.AvatarPalette.all
+        var hash: UInt64 = 5381
+        for byte in name.lowercased().utf8 {
+            hash = (hash &* 33) &+ UInt64(byte)
+        }
+        return palette[Int(hash % UInt64(palette.count))]
+    }
+}
+
+/// AV-6: overlapping stack, capped, with a "+N" disc for the remainder.
+// MARK: - AccountAvatar — the signed-in user, wherever they are shown
+
+struct AvatarStack: View {
+    let names: [String]
+    /// Parallel to `names` where known — drives the Contacts photo lookup.
+    var emails: [String] = []
+    var diameter: CGFloat = 24
+    var maxVisible: Int = 3
+    var isMuted: Bool = false
+    var ringColor: Color = DSColor.fieldBackground
+
+    /// How far each disc slides under the previous one. 0.42 buried the
+    /// initial of every avatar but the last — legible only when every
+    /// attendee happens to have a Contacts photo.
+    var overlapRatio: CGFloat = 0.30
+    private var overlap: CGFloat { diameter * overlapRatio }
+
+    var body: some View {
+        // Kick off (idempotent) photo resolution for whoever is on screen.
+        let _ = AttendeePhotoStore.shared.prefetch(emails: emails)
+        let shown = Array(names.prefix(maxVisible))
+        let extra = names.count - shown.count
+        HStack(spacing: -overlap) {
+            ForEach(Array(shown.enumerated()), id: \.offset) { index, name in
+                AttendeeAvatar(name: name,
+                               email: index < emails.count ? emails[index] : nil,
+                               diameter: diameter,
+                               isMuted: isMuted, ringColor: ringColor)
+            }
+            if extra > 0 {
+                // Deliberately NOT pastel: this disc is a count, not a person,
+                // and the dark ground is what separates "and 3 more" from the
+                // faces beside it.
+                Circle()
+                    .fill(Color(hex: "#3A3A3A"))
+                    .frame(width: diameter, height: diameter)
+                    .overlay(
+                        // Same ratio as an initial — it used to be smaller
+                        // (0.34) to make room for two glyphs, which just made
+                        // the count unreadable (Marcello, 2026-07-26). A big
+                        // overflow ("+57") shrinks to fit instead of forcing
+                        // every count to be tiny.
+                        Text("+\(extra)")
+                            .font(.system(size: diameter * 0.40, weight: .semibold))
+                            .foregroundStyle(DSColor.textPrimaryBright)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                            .padding(.horizontal, diameter * 0.1)
+                    )
+                    .overlay(
+                        Circle().strokeBorder(DSColor.AvatarPalette.innerStroke, lineWidth: 1)
+                    )
+                    .background(
+                        Circle()
+                            .fill(ringColor)
+                            .frame(width: diameter + (diameter > 20 ? 4 : 3),
+                                   height: diameter + (diameter > 20 ? 4 : 3))
+                    )
+            }
+        }
+    }
+}

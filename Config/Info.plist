@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIconFile</key>
+	<string></string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Otto reads your calendar to show today's meetings in the notch and warn you before they start. It never creates or changes events.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Otto reads your calendar to show today's meetings in the notch and warn you before they start. It never creates or changes events.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Otto matches meeting attendees to your contacts so it can show their photo next to a meeting. Contacts are read on this Mac only and never sent anywhere.</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 Otto. All rights reserved.</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>OttoServiceHost</key>
+	<string>$(OTTO_SERVICE_HOST)</string>
+	<key>OttoServiceKey</key>
+	<string>$(OTTO_SERVICE_KEY)</string>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/AlphaTedi/Otto/main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>kcZvheYIHq5NOS3hoB4As0+TCzkyBxNRXn+BSRFJnA8=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Otto internal item</string>
+			<key>UTTypeIdentifier</key>
+			<string>otto.internal-item</string>
+			<key>UTTypeTagSpecification</key>
+			<dict/>
+		</dict>
+	</array>
+</dict>
+</plist>
