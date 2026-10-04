@@ -2999,7 +2999,12 @@ private struct StepRow: View {
     /// step so an abandoned edit never touches what is stored — the same
     /// arrangement TodoItemRow uses for a to-do's title.
     @State private var draft: String?
-    @FocusState private var focused: Bool
+    /// Whether this step's field holds the caret, as reported by the field.
+    @State private var isFocused = false
+    /// A request for the caret, not a state: raised to ask, lowered as soon
+    /// as the field has it or the caret is wanted elsewhere. Left raised, the
+    /// field would take the caret back from whichever row it moved to.
+    @State private var wantsFocus = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 7) {
@@ -3028,25 +3033,56 @@ private struct StepRow: View {
             // Click the words to change them. No pencil, for the reason the
             // to-do row has none: opening a thing to work on it and putting a
             // caret in it are one gesture, not two.
-            if let draft {
-                TextField("", text: Binding(get: { draft }, set: { self.draft = $0 }))
-                    .textFieldStyle(.plain)
-                    .font(DSFont.checklistItem)
-                    .foregroundStyle(DSColor.textPrimaryBright)
-                    .focused($focused)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            //
+            // HighlightingTitleField, not SwiftUI's TextField — TextField is
+            // backed by NSTextField, which draws its text through TWO
+            // different paths depending on first-responder status: its own
+            // cell when idle, the shared "field editor" (an NSTextView) once
+            // focused. The two don't agree on vertical centering, which is
+            // what made an unfocused step's text sit visibly off its
+            // checkbox until you clicked it (Sameer, 2026-10-04) — no manual
+            // offset fixes that for every font size and display, because
+            // it's AppKit disagreeing with itself, not a layout we control.
+            // HighlightingTitleField is built on NSTextView alone, used for
+            // BOTH states, so there is no second path to disagree with — the
+            // same reason it already existed for the draft title field.
+            ZStack(alignment: .leading) {
+                HighlightingTitleField(
+                    text: Binding(
+                        get: { draft ?? step.title },
+                        set: { if draft != nil { draft = $0 } }
+                    ),
+                    highlightRange: nil,
+                    accent: accent,
+                    wantsFocus: wantsFocus,
+                    onFocusChange: { focused in
+                        isFocused = focused
+                        wantsFocus = false
+                        // Clicking away is a save everywhere else in this app.
+                        if focused { store.focusedDetail = (parentID, .step(step.id)) }
+                        if !focused { commit() }
+                    },
+                    fontSize: DSFont.checklistItemSize,
+                    singleLine: true,
+                    textColor: step.isDone ? DSColor.textFaint
+                               : (draft != nil ? DSColor.textPrimaryBright : DSColor.textSecondary),
+                    strikethrough: step.isDone,
+                    // MUST be false — true would make this field answer to
+                    // ⏎/⇥/Esc meant for the one draft title row (see
+                    // `identifies` on HighlightingTitleField).
+                    identifies: false,
                     // Return confirms and moves ON, the same rhythm as the
-                    // draft slot below: a checklist is written in one pass, so
-                    // finishing a step should land you in the next one rather
-                    // than back in the list.
-                    .onSubmit {
+                    // draft slot below: a checklist is written in one pass,
+                    // so finishing a step should land you in the next one
+                    // rather than back in the list.
+                    onReturn: { [store, parentID, step] in
                         commit()
                         // A closed to-do shows its first steps only and no
-                        // draft slot, so the step after this one did not exist
-                        // to take the caret and ⏎ just ended the edit
+                        // draft slot, so the step after this one did not
+                        // exist to take the caret and ⏎ just ended the edit
                         // (Marcello, 2026-09-30). Open the to-do first, then
                         // move once its rows are there.
-                        let moveOn = { [store, parentID, step] in
+                        let moveOn = {
                             store.focusedDetail = (parentID, .step(step.id))
                             if !store.moveDetailFocus(1, in: parentID) {
                                 store.focusStepDraft(in: parentID)
@@ -3059,25 +3095,20 @@ private struct StepRow: View {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: moveOn)
                         }
                     }
-                    // Clicking away is a save everywhere else in this app.
-                    .onChange(of: focused) { isFocused in
-                        if isFocused { store.focusedDetail = (parentID, .step(step.id)) }
-                        if !isFocused { commit() }
-                    }
-                    .onExitCommand { self.draft = nil }   // Escape discards
-            } else {
-                Text(step.title)
-                    .font(DSFont.checklistItem)
-                    .strikethrough(step.isDone)
-                    .foregroundStyle(step.isDone ? DSColor.textFaint : DSColor.textSecondary)
-                    // Same crop as the note field had: an HStack proposes a Text
-                    // its ideal width, so a long step lost its tail off the right
-                    // edge instead of running onto a second line.
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .onTapGesture { beginEditing() }
+                )
+                .frame(height: HighlightingTitleField.lineHeight(DSFont.checklistItemSize), alignment: .leading)
+                // Hit-tested only while editing, so a browsing-mode click
+                // can't hand the field native focus before beginEditing() has
+                // set the draft — the overlay below is what starts editing.
+                .allowsHitTesting(draft != nil)
+
+                if draft == nil {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture { beginEditing() }
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             // Deleting a step was right-click only, which is not a thing
             // anyone finds. The gutter is always reserved and only the glyph
@@ -3112,13 +3143,13 @@ private struct StepRow: View {
         .onReceive(store.$detailFocusRequest) { _ in
             let wanted = store.focusedDetail?.item == parentID
                 && store.focusedDetail?.target == .step(step.id)
-            guard wanted else { return }
+            guard wanted else { wantsFocus = false; return }
             if draft == nil { draft = step.title }
-            DispatchQueue.main.async { focused = true }
+            if !isFocused { wantsFocus = true }
             FieldCaret.collapseToEnd()
         }
         .onReceive(NotificationCenter.default.publisher(for: .todoEditorEscape)) { _ in
-            if focused { draft = nil }
+            if isFocused { draft = nil; wantsFocus = false }
         }
         .contextMenu {
             Button(L10n.t("todo.editTitle")) { beginEditing() }
@@ -3134,8 +3165,7 @@ private struct StepRow: View {
     private func beginEditing() {
         guard !step.isDone else { return }
         draft = step.title
-        // The field has to exist before it can take focus.
-        DispatchQueue.main.async { focused = true }
+        wantsFocus = true
     }
 
     /// Save and leave edit mode. An empty title is refused by the store, so
@@ -3159,7 +3189,8 @@ private struct StepDraftRow: View {
     let accent: Color
     @ObservedObject private var store = TodoStore.shared
     @State private var text = ""
-    @FocusState private var focused: Bool
+    @State private var isFocused = false
+    @State private var wantsFocus = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 7) {
@@ -3182,50 +3213,61 @@ private struct StepDraftRow: View {
                 .frame(width: 10, height: 10)
                 .padding(.top, 1.5)
 
-            // Single-line deliberately: on a vertical-axis field Return
-            // inserts a newline instead of submitting, and Return is the
-            // entire interaction here.
-            TextField(L10n.t("todo.stepPlaceholder"), text: $text)
-                .textFieldStyle(.plain)
-                .font(DSFont.checklistItem)
-                .foregroundStyle(DSColor.textSecondary)
-                .focused($focused)
-                .onSubmit {
-                    TodoStore.shared.addChecklistItem(text, to: parentID)
-                    text = ""
-                    // Ask the store to put the caret back, rather than
-                    // assigning it here.
-                    //
-                    // The commit mutates `items`, which rebuilds this row's
-                    // parent; a synchronous `focused = true` could be lost in
-                    // that rebuild, and whether it survived came down to
-                    // timing — which is why Return chained here and stopped
-                    // after one step on another Mac (Marcello, 2026-09-05).
-                    // As a request, it is answered after the redraw instead of
-                    // racing it.
-                    TodoStore.shared.focusStepDraft(in: parentID)
+            // HighlightingTitleField, matching StepRow — see its comment for
+            // why this isn't a plain TextField. `singleLine` deliberately: on
+            // a vertical-axis field Return inserts a newline instead of
+            // submitting, and Return is the entire interaction here.
+            ZStack(alignment: .leading) {
+                if text.isEmpty {
+                    Text(L10n.t("todo.stepPlaceholder"))
+                        .font(DSFont.checklistItem)
+                        .foregroundStyle(DSColor.textHint)
+                        .allowsHitTesting(false)
                 }
-                // The store is the one that knows where the caret should be,
-                // including when it should come back to a slot it never left.
-                .onReceive(store.$detailFocusRequest) { _ in
-                    let wanted = store.focusedDetail?.item == parentID
-                        && store.focusedDetail?.target == .stepDraft
-                    guard wanted else {
-                        if focused { focused = false }
-                        return
+                HighlightingTitleField(
+                    text: $text,
+                    highlightRange: nil,
+                    accent: accent,
+                    wantsFocus: wantsFocus,
+                    onFocusChange: { focused in
+                        isFocused = focused
+                        wantsFocus = false
+                        // Clicking straight into the field is still a way in,
+                        // so the store has to learn about it too or the arrow
+                        // keys would move from a stale position.
+                        if focused { store.focusedDetail = (parentID, .stepDraft) }
+                    },
+                    fontSize: DSFont.checklistItemSize,
+                    singleLine: true,
+                    textColor: DSColor.textSecondary,
+                    identifies: false,   // see StepRow — must not claim the draft title's identifier
+                    onReturn: {
+                        TodoStore.shared.addChecklistItem(text, to: parentID)
+                        text = ""
+                        // Ask the store to put the caret back, rather than
+                        // assigning it here.
+                        //
+                        // The commit mutates `items`, which rebuilds this
+                        // row's parent; a synchronous focus request could be
+                        // lost in that rebuild, and whether it survived came
+                        // down to timing — which is why Return chained here
+                        // and stopped after one step on another Mac
+                        // (Marcello, 2026-09-05). As a request, it is
+                        // answered after the redraw instead of racing it.
+                        TodoStore.shared.focusStepDraft(in: parentID)
                     }
-                    // One runloop hop: SwiftUI is mid-update when the store
-                    // publishes, and focus asked for inside that pass is
-                    // exactly what used to get dropped.
-                    DispatchQueue.main.async { focused = true }
-                    FieldCaret.collapseToEnd()
-                }
-                // Clicking straight into the field is still a way in, so the
-                // store has to learn about it too or the arrow keys would move
-                // from a stale position.
-                .onChange(of: focused) { isFocused in
-                    if isFocused { store.focusedDetail = (parentID, .stepDraft) }
-                }
+                )
+                .frame(height: HighlightingTitleField.lineHeight(DSFont.checklistItemSize), alignment: .leading)
+            }
+            // The store is the one that knows where the caret should be,
+            // including when it should come back to a slot it never left.
+            .onReceive(store.$detailFocusRequest) { _ in
+                let wanted = store.focusedDetail?.item == parentID
+                    && store.focusedDetail?.target == .stepDraft
+                guard wanted else { wantsFocus = false; return }
+                if !isFocused { wantsFocus = true }
+                FieldCaret.collapseToEnd()
+            }
 
             // Matches StepRow's delete gutter so the two align.
             Color.clear.frame(width: 12, height: 12)

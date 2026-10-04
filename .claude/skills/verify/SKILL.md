@@ -102,7 +102,10 @@ block's ceiling, and three separate bugs have been a new section drawn without
 being subtracted from the budget — the symptom is the space bar sliding out
 through the bottom edge, which no probe reports directly.
 `expand-focused` / `collapse-row` (NC details), `note <text>` / `step <text>`
-(first open item in active collection).
+(first open item in active collection),
+`step-responder` (which control really holds the caret in the notch panel —
+the view half of step focus; `step-down` and friends only report where the
+store thinks it is).
 `dump` appends state (notch state, panel mode, active collection,
 open/completed/settling counts, ring progress, find query/matches, draft,
 todoContentHeight, notchExtraHeight) to `/tmp/notchsnap-debug-state.txt`.
