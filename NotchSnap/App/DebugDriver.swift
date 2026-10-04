@@ -897,6 +897,32 @@ enum DebugDriver {
                         .write(to: directory.appendingPathComponent(dark ? "format-dark.png" : "format-light.png"))
                 }
                 appendState("notes-format-snap: wrote \(directory.path)")
+            } else if command == "notes-copy-test" || command == "notes-copy-test general" {
+                // Copy a note holding an image chip, the way ⌘C does, onto a
+                // private pasteboard: what would another app receive?
+                guard let path = (try? FileManager.default.contentsOfDirectory(atPath: AttachmentStore.directory.path))?
+                    .first(where: { AttachmentStore.isImage(URL(fileURLWithPath: $0)) })
+                    .map({ AttachmentStore.folderName + "/" + $0 }) else {
+                    appendState("notes-copy-test: no image in Attachments/"); return
+                }
+                let scroll = ActionTextView.scrollableTextView()
+                let view = scroll.documentView as! ActionTextView
+                view.textStorage!.setAttributedString(NoteMarkdown.attributed(
+                    from: "- Prima riga \(AttachmentStore.token(for: path)) dopo\n**fine**",
+                    textColor: .labelColor, accent: .labelColor, mutedColor: .tertiaryLabelColor))
+                view.selectAll(nil)
+                let board = command.hasSuffix("general") ? NSPasteboard.general
+                    : NSPasteboard(name: NSPasteboard.Name("com.notchsnap.copy-test"))
+                board.clearContents()
+                _ = view.writeSelection(to: board, types: view.writablePasteboardTypes)
+                let rtfd = board.data(forType: .rtfd).flatMap { NSAttributedString(rtfd: $0, documentAttributes: nil) }
+                var embedded = 0
+                rtfd?.enumerateAttribute(.attachment, in: NSRange(location: 0, length: rtfd?.length ?? 0)) { value, _, _ in
+                    if (value as? NSTextAttachment)?.fileWrapper?.regularFileContents != nil { embedded += 1 }
+                }
+                let html = board.string(forType: .html) ?? ""
+                appendState("notes-copy-test: types=\(board.types?.map(\.rawValue) ?? []) rtfdImages=\(embedded) rtfdText=\(rtfd?.string.debugDescription ?? "nil") htmlImg=\(html.contains("src=\"data:image/")) htmlColor=\(html.contains("color: #ffffff")) png=\(board.data(forType: .png)?.count ?? 0) string=\((board.string(forType: .string) ?? "nil").debugDescription) markdown=\((board.string(forType: NoteEditorController.markdownPasteboardType) ?? "nil").debugDescription)")
+                if !command.hasSuffix("general") { board.releaseGlobally() }
             } else if command == "notes-editor-tests" {
                 let editor = NoteEditorController.shared
                 let previousView = editor.textView

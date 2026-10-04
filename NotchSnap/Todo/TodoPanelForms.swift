@@ -238,6 +238,14 @@ struct HighlightingTitleField: NSViewRepresentable {
             super.mouseDown(with: event)
         }
 
+        override func menu(for event: NSEvent) -> NSMenu? {
+            let point = convert(event.locationInWindow, from: nil)
+            nonisolated(unsafe) var chipMenu: NSMenu?
+            MainActor.assumeIsolated { chipMenu = chips.menu(at: point) }
+            if let chipMenu { return chipMenu }
+        return super.menu(for: event)
+        }
+
         override func becomeFirstResponder() -> Bool {
             let accepted = super.becomeFirstResponder()
             if accepted { onFocusChange?(true) }

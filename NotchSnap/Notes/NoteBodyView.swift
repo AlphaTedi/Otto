@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - NoteBodyView — the NSTextView the note is written in
 //
@@ -531,16 +532,120 @@ final class ActionTextView: NSTextView {
     // MARK: Copy and paste keep the note's formatting (NoteEditorController.paste)
 
     override var writablePasteboardTypes: [NSPasteboard.PasteboardType] {
-        [NoteEditorController.markdownPasteboardType] + super.writablePasteboardTypes
+        let types: [NSPasteboard.PasteboardType] = [NoteEditorController.markdownPasteboardType, .rtfd, .rtf, .html, .string]
+        return selectionHasChip ? types + [.png] : types
     }
 
+    private var selectionHasChip: Bool {
+        guard let storage = textStorage, NSMaxRange(selectedRange()) <= storage.length else { return false }
+        var found = false
+        storage.enumerateAttribute(.attachment, in: selectedRange()) { value, _, stop in
+            if value is ImageChipAttachment { found = true; stop.pointee = true }
+        }
+        return found
+    }
+
+    /// Other apps get the images too (Marcello, 2026-10-04: copying a note
+    /// with a screenshot pasted only its words). A chip is drawn by Otto and
+    /// carries no image of its own, so the text system wrote it as nothing.
+    /// Rich text gets each image embedded (Notes, Mail, Pages, TextEdit), HTML
+    /// gets it inline as data (Docs, Notion, Gmail), plain text stays words.
+    /// The note's own ink is left behind: labelColor written out is white on
+    /// a dark Mac, invisible in a white document.
+    ///
+    /// A chat box (ChatGPT, Claude) reads neither: it takes the words as text
+    /// and an image only as PNG data, which it attaches (Marcello,
+    /// 2026-10-04: notes are written to be handed to an AI). So the first
+    /// image also rides as PNG on the same item — one item, so an app that
+    /// pastes rich text never gets the image twice. Only the first: a
+    /// pasteboard item holds one PNG, and a second item would be pasted as
+    /// a second copy by apps that read every item.
     override func writeSelection(to pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
-        guard type == NoteEditorController.markdownPasteboardType else {
+        guard let storage = textStorage, selectedRange().length > 0 else { return false }
+        let selection = storage.attributedSubstring(from: selectedRange())
+        switch type {
+        case NoteEditorController.markdownPasteboardType:
+            return pboard.setString(NoteMarkdown.markdown(from: selection), forType: type)
+        case .rtfd, .rtf:
+            let export = Self.exportable(selection, embedImages: type == .rtfd)
+            let range = NSRange(location: 0, length: export.length)
+            let data = type == .rtfd ? export.rtfd(from: range) : export.rtf(from: range)
+            return data.map { pboard.setData($0, forType: type) } ?? false
+        case .html:
+            return Self.html(for: selection).map { pboard.setString($0, forType: type) } ?? false
+        case .string:
+            return pboard.setString(Self.exportable(selection, embedImages: false).string, forType: type)
+        case .png:
+            var first: String?
+            selection.enumerateAttribute(.attachment, in: NSRange(location: 0, length: selection.length)) { value, _, stop in
+                if let chip = value as? ImageChipAttachment { first = chip.path; stop.pointee = true }
+            }
+            guard let first, let png = AttachmentStore.pngData(at: MainActor.assumeIsolated({ AttachmentStore.url(for: first) }))
+            else { return false }
+            return pboard.setData(png, forType: type)
+        default:
             return super.writeSelection(to: pboard, type: type)
         }
-        guard let storage = textStorage, selectedRange().length > 0 else { return false }
-        let markdown = NoteMarkdown.markdown(from: storage.attributedSubstring(from: selectedRange()))
-        return pboard.setString(markdown, forType: type)
+    }
+
+    /// The selection as other apps should see it: no colours, and each chip
+    /// either the image file itself or gone.
+    static func exportable(_ selection: NSAttributedString, embedImages: Bool) -> NSMutableAttributedString {
+        let out = NSMutableAttributedString(attributedString: selection)
+        let all = NSRange(location: 0, length: out.length)
+        out.removeAttribute(.foregroundColor, range: all)
+        out.removeAttribute(.backgroundColor, range: all)
+        out.removeAttribute(.kern, range: all)
+        var chips: [(NSRange, String)] = []
+        out.enumerateAttribute(.attachment, in: all) { value, range, _ in
+            if let chip = value as? ImageChipAttachment { chips.append((range, chip.path)) }
+        }
+        for (range, path) in chips.reversed() {
+            let url = MainActor.assumeIsolated { AttachmentStore.url(for: path) }
+            if embedImages, let wrapper = try? FileWrapper(url: url) {
+                wrapper.preferredFilename = url.lastPathComponent
+                let attributes = out.attributes(at: range.location, effectiveRange: nil)
+                    .filter { $0.key != .attachment }
+                let image = NSMutableAttributedString(attachment: NSTextAttachment(fileWrapper: wrapper))
+                image.addAttributes(attributes, range: NSRange(location: 0, length: image.length))
+                out.replaceCharacters(in: range, with: image)
+            } else {
+                out.replaceCharacters(in: range, with: "")
+            }
+        }
+        return out
+    }
+
+    /// HTML with each image inline as a data URL — a file:// source would not
+    /// load in a browser-based editor.
+    static func html(for selection: NSAttributedString) -> String? {
+        let export = NSMutableAttributedString(attributedString: selection)
+        let all = NSRange(location: 0, length: export.length)
+        var images: [String: String] = [:]
+        var chips: [(NSRange, String)] = []
+        export.enumerateAttribute(.attachment, in: all) { value, range, _ in
+            if let chip = value as? ImageChipAttachment { chips.append((range, chip.path)) }
+        }
+        for (range, path) in chips.reversed() {
+            let marker = "OTTOIMAGE\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
+            let url = MainActor.assumeIsolated { AttachmentStore.url(for: path) }
+            if let data = try? Data(contentsOf: url) {
+                let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "image/png"
+                let alt = AttachmentStore.displayName(for: path)
+                    .replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "\"", with: "&quot;")
+                images[marker] = "<img src=\"data:\(mime);base64,\(data.base64EncodedString())\" alt=\"\(alt)\" style=\"max-width:100%\">"
+            }
+            // A plain string here would inherit the chip's attachment.
+            let attributes = export.attributes(at: range.location, effectiveRange: nil).filter { $0.key != .attachment }
+            export.replaceCharacters(in: range, with: NSAttributedString(string: images[marker] == nil ? "" : marker,
+                                                                         attributes: attributes))
+        }
+        let plain = exportable(export, embedImages: false)
+        guard let data = try? plain.data(from: NSRange(location: 0, length: plain.length),
+                                         documentAttributes: [.documentType: NSAttributedString.DocumentType.html]),
+              var html = String(data: data, encoding: .utf8) else { return nil }
+        for (marker, tag) in images { html = html.replacingOccurrences(of: marker, with: tag) }
+        return html
     }
 
     override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
@@ -684,6 +789,9 @@ final class ActionTextView: NSTextView {
     /// for; anywhere else the ordinary text menu is untouched.
     override func menu(for event: NSEvent) -> NSMenu? {
         let point = convert(event.locationInWindow, from: nil)
+        nonisolated(unsafe) var chipMenu: NSMenu?
+        MainActor.assumeIsolated { chipMenu = chips.menu(at: point) }
+        if let chipMenu { return chipMenu }
         guard noteID != nil,
               let hit = MainActor.assumeIsolated({ NoteEditorController.shared.action(at: point) })
         else { return super.menu(for: event) }

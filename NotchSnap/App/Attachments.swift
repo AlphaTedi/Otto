@@ -119,6 +119,26 @@ enum AttachmentStore {
         NSWorkspace.shared.open(url(for: relativePath))
     }
 
+    /// The image as PNG — what a chat box (ChatGPT, Claude) takes as an
+    /// attachment when it is pasted.
+    nonisolated static func pngData(at url: URL) -> Data? {
+        if UTType(filenameExtension: url.pathExtension) == .png { return try? Data(contentsOf: url) }
+        guard let image = NSImage(contentsOf: url), let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff) else { return nil }
+        return rep.representation(using: .png, properties: [:])
+    }
+
+    /// "Copy image": the picture and its file, one item — pastes as an image
+    /// in a chat box, a document or the Finder.
+    static func copy(_ relativePath: String) {
+        let file = url(for: relativePath)
+        let item = NSPasteboardItem()
+        if let png = pngData(at: file) { item.setData(png, forType: .png) }
+        item.setString(file.absoluteString, forType: .fileURL)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([item])
+    }
+
     private static func uniqueName(base: String, ext: String) -> String {
         // No spaces: the markdown link must stay one unbroken path.
         let clean = base.replacingOccurrences(of: " ", with: "-")
@@ -340,10 +360,46 @@ final class ImageChipInteraction {
         return true
     }
 
+    /// Right-click on a chip: copy, open, remove. Nil off a chip, so the text
+    /// view's own menu shows there.
+    func menu(at point: NSPoint) -> NSMenu? {
+        guard let hit = chip(at: point) else { return nil }
+        clear()
+        let menu = NSMenu()
+        menu.addItem(ChipMenuItem(L10n.t("attach.copy")) { AttachmentStore.copy(hit.cell.path) })
+        menu.addItem(ChipMenuItem(L10n.t("attach.open")) { AttachmentStore.open(hit.cell.path) })
+        if canRemove {
+            menu.addItem(ChipMenuItem(L10n.t("attach.remove")) { [weak self] in
+                guard let self else { return }
+                if let onRemove { onRemove(hit.cell.path) }
+                else if let view = textView, view.isEditable {
+                    view.insertText("", replacementRange: NSRange(location: hit.index, length: 1))
+                }
+            })
+        }
+        return menu
+    }
+
     private func redraw(_ index: Int) {
         guard let view = textView, let storage = view.textStorage, index < storage.length else { return }
         view.layoutManager?.invalidateDisplay(forCharacterRange: NSRange(location: index, length: 1))
     }
+}
+
+/// A menu item that runs a closure.
+@MainActor
+private final class ChipMenuItem: NSMenuItem {
+    private let run: @MainActor () -> Void
+
+    init(_ title: String, _ run: @escaping @MainActor () -> Void) {
+        self.run = run
+        super.init(title: title, action: #selector(fire), keyEquivalent: "")
+        target = self
+    }
+
+    required init(coder: NSCoder) { fatalError("init(coder:) is unsupported") }
+
+    @objc private func fire() { run() }
 }
 
 /// The floating preview above a hovered chip: the image, fitted into at most

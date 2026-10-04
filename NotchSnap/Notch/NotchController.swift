@@ -118,10 +118,10 @@ class NotchController: ObservableObject {
         }
     }
     private var dragDwellTask: Task<Void, Never>?
-    /// How long a drag must be HELD over the notch before the tray opens.
+    /// How long a drag must be HELD over the notch before it opens.
     /// Long enough that crossing the top of the screen never triggers it,
     /// short enough that aiming at the notch still feels immediate.
-    private let dragDwellNanos: UInt64 = 450_000_000
+    private let dragDwellNanos: UInt64 = 300_000_000
 
     // Tuned parameters — hoverDebounce is read from settings (0-500ms, configurable)
     private var hoverDebounceNanos: UInt64 {
@@ -909,10 +909,12 @@ class NotchController: ObservableObject {
             let isDrag = event.type == .leftMouseDragged
             let isUp = event.type == .leftMouseUp
             let isDown = event.type == .leftMouseDown || event.type == .rightMouseDown
+            let isLeftDown = event.type == .leftMouseDown
             let location = NSEvent.mouseLocation
             Task { @MainActor in
                 guard let self else { return }
                 if isDown {
+                    if isLeftDown { self.armDragCatcher() }
                     // Global monitor = the click landed in ANOTHER app or the
                     // desktop. Even if that window overlaps the card's screen
                     // coordinates, the click did not land in Otto's panel.
@@ -1282,6 +1284,69 @@ class NotchController: ObservableObject {
                       height: height)
     }
 
+    // ── Opening for an image drag (Marcello, 2026-10-04) ─────────────
+    // Drag a picture from the Finder onto the notch and hold it there: the
+    // notch opens on the page it was left on, so the image can be dropped
+    // into a note or the to-do field. Only an image opens it — a browser tab
+    // crossing the top of the screen never does (2026-09-30).
+    //
+    // Nothing outside a drop target can see a drag: the system drag
+    // session's pasteboard is its own, not the shared `.drag` one the old
+    // tray code read (that stayed empty through every Finder drag), and the
+    // global monitor hears no events while it runs. So while the button is
+    // held after a press elsewhere, a small invisible drop target sits over
+    // the notch. Mouse events go to the window that was pressed, so it costs
+    // a click or a window drag nothing; a drag passing over it is offered to
+    // it, and it says yes only to images. Held there (`dragDwellNanos`), it
+    // opens the notch and steps aside so the drop lands in the text below.
+    private var dragCatcher: DragCatcherPanel?
+    private var dragCatcherWatch: Timer?
+    private var dragCatcherPress = NSPoint.zero
+
+    /// A press elsewhere: watch it until release. The target goes up only
+    /// once the pointer travels with the button down — a plain click never
+    /// puts a window over the menu bar, so a quick second click can't land
+    /// on it.
+    private func armDragCatcher() {
+        guard state != .expanded else { return }
+        dragCatcherPress = NSEvent.mouseLocation
+        dragCatcherWatch?.invalidate()
+        dragCatcherWatch = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.dragCatcherTick() }
+        }
+    }
+
+    private func dragCatcherTick() {
+        guard NSEvent.pressedMouseButtons & 1 != 0 else {
+            // Released — dropped, or let go. The global mouse-up never
+            // arrives after a system drag, so the drag ends here.
+            dragCatcherWatch?.invalidate()
+            dragCatcherWatch = nil
+            dragCatcher?.disarm()
+            isDragSessionActive = false
+            return
+        }
+        guard state != .expanded, dragCatcher?.isVisible != true, let screen = notchScreen else { return }
+        let now = NSEvent.mouseLocation
+        guard hypot(now.x - dragCatcherPress.x, now.y - dragCatcherPress.y) > 6 else { return }
+        let catcher = dragCatcher ?? DragCatcherPanel()
+        dragCatcher = catcher
+        catcher.dwell = TimeInterval(dragDwellNanos) / 1_000_000_000
+        catcher.onHeld = { [weak self] in
+            guard let self, self.state != .expanded else { return }
+            self.dragCatcher?.disarm()
+            // Through the release that ends the drag, nothing may close it.
+            self.isDragSessionActive = true
+            self.triggerExpand(trigger: .drag)
+        }
+        let target = dragTargetRect()
+        // Up to the screen's top edge: the pointer pins there when the drag
+        // is pushed into the menu bar.
+        catcher.setFrame(NSRect(x: target.minX, y: target.minY,
+                                width: target.width, height: screen.frame.maxY - target.minY), display: false)
+        catcher.orderFrontRegardless()
+    }
+
     /// Where a drag has to be HELD to open the tray: the drawn notch plus a
     /// small forgiveness margin. Big enough to hit while carrying something,
     /// nowhere near big enough to catch a drag crossing the top of the screen.
@@ -1540,6 +1605,92 @@ class NotchController: ObservableObject {
 // canBecomeKey is dynamic:
 // - true when expanded (needed for drag-and-drop & context menu)
 // - false when idle/hovering (prevents stealing focus from other apps)
+
+/// The invisible drop target over the notch while a press is held
+/// (NotchController.armDragCatcher). Accepts only drags carrying an image,
+/// and calls `onHeld` once one has rested on it for `dwell` seconds.
+final class DragCatcherPanel: NSPanel {
+    var onHeld: (() -> Void)?
+    var dwell: TimeInterval = 0.3
+
+    init() {
+        super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
+        isOpaque = false
+        // Not clear: a window ignores the pointer, drags included, wherever
+        // it draws nothing.
+        backgroundColor = NSColor(white: 0, alpha: 0.001)
+        hasShadow = false
+        level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()) + 1)
+        collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        let target = DropView()
+        target.owner = self
+        contentView = target
+    }
+
+    override var canBecomeKey: Bool { false }
+
+    func disarm() {
+        (contentView as? DropView)?.cancel()
+        orderOut(nil)
+    }
+
+    private final class DropView: NSView {
+        weak var owner: DragCatcherPanel?
+        private var anchor = NSPoint.zero
+        private var restingSince: Date?
+        private var timer: Timer?
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            registerForDraggedTypes([.fileURL, .png, .tiff])
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) is unsupported") }
+
+        override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+            let isImage = MainActor.assumeIsolated { AttachmentStore.hasImage(sender.draggingPasteboard) }
+            guard isImage else { return [] }
+            anchor = NSEvent.mouseLocation
+            restingSince = Date()
+            // Polls rather than waits on draggingUpdated: a hand held still
+            // sends nothing, and still is the one thing to confirm.
+            timer?.invalidate()
+            timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.tick() }
+            }
+            return .copy
+        }
+
+        override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+            restingSince == nil ? [] : .copy
+        }
+
+        override func draggingExited(_ sender: NSDraggingInfo?) { cancel() }
+
+        /// Nothing is dropped here: by the time a drop could land, the notch
+        /// is open and this window is gone.
+        override func performDragOperation(_ sender: NSDraggingInfo) -> Bool { cancel(); return false }
+
+        func cancel() {
+            timer?.invalidate()
+            timer = nil
+            restingSince = nil
+        }
+
+        private func tick() {
+            guard let since = restingSince else { return }
+            let now = NSEvent.mouseLocation
+            if hypot(now.x - anchor.x, now.y - anchor.y) > 24 {
+                // Still travelling — a drag crossing the notch never opens it.
+                anchor = now
+                restingSince = Date()
+            } else if Date().timeIntervalSince(since) >= owner?.dwell ?? 0.3 {
+                cancel()
+                owner?.onHeld?()
+            }
+        }
+    }
+}
 
 class NotchPanel: NSPanel {
     var allowKey = false

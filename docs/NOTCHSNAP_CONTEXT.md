@@ -1096,3 +1096,24 @@ the to-do panel in the container. The card's screen rect
 testing, outside clicks and the pointer-left close all treat it as panel.
 The panel window is 190pt taller to leave room for it. `menu-status` reports
 the card rect. Verified: 621 wide, 12pt under a 253pt silhouette.
+
+### 2026-10-04 copy keeps images; an image drag opens the notch
+
+- **Copy out of a note** (`ActionTextView.writeSelection`): RTFD embeds each
+  chip's image file (Notes, Mail, Pages, TextEdit), HTML inlines it as a
+  data URL (Docs, Notion, Gmail), plain text keeps the words only. Colours
+  are stripped on the way out — labelColor written out was white. Note-to-note
+  paste still reads the private markdown type first. Probe: `notes-copy-test`.
+  Chat boxes (ChatGPT, Claude) read neither RTFD nor inline HTML images, so
+  the FIRST image also goes as `public.png` on the same item (one item: no
+  app pastes it twice). Right-click on any chip → Copia immagine.
+- **Drag an image onto the notch** opens it on the page it was left on, held
+  300 ms; only an image (a browser tab crossing the top never opens it). Two
+  dead ends first: the shared `.drag` pasteboard stays EMPTY through a Finder
+  drag (the session has its own — the old tray code read the wrong one), and
+  the global monitor hears no events mid-drag. What works: after a press
+  elsewhere, once the pointer travels with the button down,
+  `DragCatcherPanel` — an invisible drop target over the notch — goes up
+  until release. Being a drop target is the only way to see what a drag
+  carries. It accepts images only, opens the notch, and steps aside so the
+  drop lands in the note or the to-do draft field.
