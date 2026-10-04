@@ -420,9 +420,8 @@ private struct StreamView: View {
     private var streamBody: some View {
         let entries = store.stream
         if entries.isEmpty, !isCalendarSpace {
-            // The lists' sleeping page (empty state B); Meetings keeps its own.
-            EmptyListView(tint: SpaceTint.notes.sectionColor,
-                          compact: isContainer,
+            // The lists' empty state (Otto peeking); Meetings keeps its own.
+            EmptyListView(compact: isContainer,
                           showsSubtitle: !isContainer || streamBudget >= 180,
                           subtitleKey: "notes.emptySubtitle",
                           fillHeight: isContainer ? nil : streamBudget)

@@ -1066,3 +1066,19 @@ reaches ~220pt below the silhouette.
 section bar's Notes pill and gear, every to-do slab and the notes stream
 share the field's edge. Row content keeps the field's inner 20 (to-dos) /
 22 (notes), so checkboxes and text did not move. `barRadius` 24 → 16.
+
+### 2026-10-04 empty state "Peekaboo"
+
+From the otto-empty-state handoff. `EmptyListView` (lists and the Notes
+stream, both layouts) now draws `OttoPeekLogo`: the mint logo rising from an
+invisible edge, looking around, blinking once and sinking, on the handoff's
+own TimelineView + Canvas keyframes (unchanged). Copy: "All clear in here" /
+"Otto is peeking for your next to-do." (notes: "…next note."), IT
+translated; the Markdown placeholder follows. Floating: 200pt logo, 26/16
+type; container: 150pt logo, 22/14 type. The old hugging / budget-centring
+rules are kept (principle 2), not the handoff's `maxHeight: .infinity`.
+Animates only while the notch is expanded; static under Reduce Motion.
+Departure: on the floating panels' glass the pupils are erased with
+`.destinationOut` inside the Canvas (no flat colour behind to fill them
+with); the container fills them black as the handoff does. The sleeping-page
+drawing is gone. DEBUG `empty-snap-pid` renders both variants over the loop.

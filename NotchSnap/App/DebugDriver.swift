@@ -237,6 +237,46 @@ enum DebugDriver {
                 }
                 NSApp.appearance = saved
                 appendState("entity-chip-snap done")
+            } else if command.hasPrefix("empty-snap-pid ") {
+                // empty-snap-pid <pid> <dir> — the empty state, floating and
+                // container, a few moments apart in its loop. Writes nothing.
+                let parts = command.split(separator: " ", maxSplits: 2)
+                guard parts.count == 3, Int32(parts[1]) == ProcessInfo.processInfo.processIdentifier else { return }
+                let directory = URL(fileURLWithPath: String(parts[2]))
+                try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                NotchController.shared.triggerExpand()
+                let floating = NSHostingView(rootView: EmptyListView(fillHeight: 380)
+                    .frame(width: 657, height: 420, alignment: .top)
+                    .background(LinearGradient(colors: [Color(hex: "#1B1F35"), Color(hex: "#261F35")],
+                                               startPoint: .top, endPoint: .bottom))
+                    .environment(\.colorScheme, .dark))
+                floating.frame = NSRect(x: 0, y: 0, width: 657, height: 420)
+                let container = NSHostingView(rootView: EmptyListView(compact: true)
+                    .frame(width: 560)
+                    .background(Color.black)
+                    .environment(\.colorScheme, .dark))
+                container.frame = NSRect(x: 0, y: 0, width: 560, height: 260)
+                let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: 700, height: 700),
+                                      styleMask: [.borderless], backing: .buffered, defer: false)
+                let holder = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 700))
+                holder.addSubview(floating); holder.addSubview(container)
+                window.contentView = holder
+                window.orderBack(nil)
+                Task { @MainActor in
+                    for i in 0..<6 {
+                        try? await Task.sleep(nanoseconds: 1_300_000_000)
+                        for (name, host) in [("floating", floating), ("container", container)] {
+                            host.layoutSubtreeIfNeeded()
+                            if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                                host.cacheDisplay(in: host.bounds, to: rep)
+                                try? rep.representation(using: .png, properties: [:])?
+                                    .write(to: directory.appendingPathComponent("\(name)-\(i).png"))
+                            }
+                        }
+                    }
+                    window.orderOut(nil)
+                    appendState("empty-snap done")
+                }
             } else if command.hasPrefix("presence-snap-pid ") {
                 // presence-snap-pid <pid> <dir> — the collapsed notch's meeting
                 // indicator for each platform, and the card icons. Writes nothing.

@@ -243,7 +243,7 @@ final class MarkdownVault: ObservableObject {
 
         var out = "# \(collection.name)\n\n"
         if open.isEmpty && done.isEmpty {
-            out += "*This list is napping.*\n"
+            out += "*All clear in here.*\n"
             return out
         }
         for item in open { out += taskLine(item) }

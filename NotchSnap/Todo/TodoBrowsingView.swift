@@ -1659,11 +1659,10 @@ struct TodoBrowsingView: View {
             // Today says nothing when it is empty — an empty Today already
             // means "you're done", and a sentence restating that is one more
             // thing to read (Marcello, 2026-07-26). A user list gets the
-            // sleeping page (empty state B, 2026-09-26), because an empty one
+            // peeking Otto (empty state, 2026-10-04), because an empty one
             // there looks broken rather than done.
             if !collection.isSystemToday {
-                EmptyListView(tint: collection.color,
-                              compact: isContainerLayout,
+                EmptyListView(compact: isContainerLayout,
                               showsSubtitle: !isContainerLayout || room >= 180,
                               fillHeight: isContainerLayout ? nil : room)
                     .transition(EmptyListView.transition)
