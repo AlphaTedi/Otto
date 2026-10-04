@@ -48,11 +48,15 @@ enum AppBuild {
         // Another copy still running (an older build, or the installed app
         // beside a Debug build) has its files open in the old folder. Moving
         // it out from under that copy would split the data in two, so this
-        // run uses the folder where it is; a launch that runs alone moves it.
+        // run moves nothing and reads whichever folder actually holds the
+        // data; a launch that runs alone does the move.
         if otherInstanceIsRunning {
-            return fm.fileExists(atPath: current.path) ? current : legacy
+            guard fm.fileExists(atPath: current.path) else { return legacy }
+            return byteSize(of: current) >= byteSize(of: legacy) ? current : legacy
         }
-        adoptLegacySupportFolder(legacy, into: current)
+        // The move failed outright (permissions, a locked file): the data
+        // stays where it is and is read from there — never an empty folder.
+        guard adoptLegacySupportFolder(legacy, into: current) else { return legacy }
         // Leave the old name pointing at the new folder. A build from before
         // the rename — the installed release beside a Debug build, or a
         // downgrade — still opens the old path; without this it found
@@ -75,25 +79,58 @@ enum AppBuild {
     /// an upgraded install's data across; nothing is ever written there.
     private nonisolated static var legacySupportRoot: String { isLab ? "NotchSnapLab" : "NotchSnap" }
 
-    /// Moves the pre-Otto data folder to its new name. A plain rename when the
-    /// new folder does not exist yet (the normal upgrade); otherwise item by
-    /// item, never overwriting anything already in the new folder, so running
-    /// an old and a new build side by side cannot lose a file either way.
-    private nonisolated static func adoptLegacySupportFolder(_ legacy: URL, into current: URL) {
+    /// Moves the pre-Otto data folder to its new name. Returns false only when
+    /// nothing could be moved, so the caller keeps reading the old folder.
+    ///
+    /// The normal upgrade is one rename: the new folder does not exist yet.
+    /// When it does (a build that ran beside an older one), each item moves
+    /// across on its own, and an item present in BOTH folders keeps the copy
+    /// that holds more data — a store a stray launch just created is empty,
+    /// the user's real one is not. The other copy is never deleted: it goes
+    /// to `Set aside <date>/` inside the new folder.
+    private nonisolated static func adoptLegacySupportFolder(_ legacy: URL, into current: URL) -> Bool {
         let fm = FileManager.default
-        guard fm.fileExists(atPath: legacy.path) else { return }
         guard fm.fileExists(atPath: current.path) else {
-            try? fm.moveItem(at: legacy, to: current)
-            return
+            return (try? fm.moveItem(at: legacy, to: current)) != nil
         }
+        let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        let setAside = current.appendingPathComponent("Set aside \(stamp)", isDirectory: true)
         let items = (try? fm.contentsOfDirectory(atPath: legacy.path)) ?? []
-        for name in items where !fm.fileExists(atPath: current.appendingPathComponent(name).path) {
-            try? fm.moveItem(at: legacy.appendingPathComponent(name),
-                             to: current.appendingPathComponent(name))
+        for name in items {
+            let old = legacy.appendingPathComponent(name)
+            let new = current.appendingPathComponent(name)
+            if fm.fileExists(atPath: new.path) {
+                try? fm.createDirectory(at: setAside, withIntermediateDirectories: true)
+                if byteSize(of: old) > byteSize(of: new) {
+                    guard (try? fm.moveItem(at: new, to: setAside.appendingPathComponent(name))) != nil else { continue }
+                    try? fm.moveItem(at: old, to: new)
+                } else {
+                    try? fm.moveItem(at: old, to: setAside.appendingPathComponent("\(legacySupportRoot) \(name)"))
+                }
+            } else {
+                try? fm.moveItem(at: old, to: new)
+            }
         }
         if (try? fm.contentsOfDirectory(atPath: legacy.path))?.isEmpty == true {
             try? fm.removeItem(at: legacy)
         }
+        return true
+    }
+
+    /// Total bytes of the files under `url` (or of the file itself).
+    private nonisolated static func byteSize(of url: URL) -> Int {
+        let fm = FileManager.default
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: url.path, isDirectory: &isDir) else { return 0 }
+        guard isDir.boolValue else {
+            return (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+        }
+        var total = 0
+        let files = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey])
+        while let file = files?.nextObject() as? URL {
+            total += (try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+        }
+        return total
     }
 
     /// A stored path that pointed inside the pre-Otto folder, rewritten to the

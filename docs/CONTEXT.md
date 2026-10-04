@@ -1125,7 +1125,11 @@ Three commits on `refactor/cleanup` (Marcello: "non c'è ordine, non c'è archit
   (`otto.settings`) and the stored vault path follow it. The old name is left
   as a symlink to the new folder: the installed 1.73.0, opened beside a Debug
   build after the move, found no folder, started empty and looked like every
-  note and to-do was lost (they were intact under `Otto/`).
+  note and to-do was lost (they were intact under `Otto/`). Upgrade rules,
+  tested in a fake home: a failed move keeps reading the old folder; with both
+  folders present each store keeps the copy holding more data and the other
+  goes to `Otto/Set aside <date>/` — nothing is ever deleted; while another
+  copy runs nothing moves and the fuller folder is read.
 - **Refactor.** The "Lab" panels became `FloatingPanelsView` / `PanelMetrics` (they are
   the default layout, not an experiment). `TodoBrowsingView.swift` (3,300 lines) was
   split into one file per component, `DesignSystem.swift` into tokens and components,
