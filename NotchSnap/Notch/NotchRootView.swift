@@ -41,6 +41,7 @@ struct NotchRootView: View {
             // growing the notch to fit it was not the fix (Marcello,
             // 2026-10-03) — the menu hangs past the edge instead.
             if notchLayout == .container, controller.state == .expanded {
+                ContainerMeetingCard(controller: controller)
                 ContainerMenuLayer(controller: controller)
             }
         }
@@ -137,5 +138,50 @@ private struct ContainerMenuLayer: View {
                 .onAppear { controller.setOverflowMenuFrame(menu.frame(in: .named("notchPanelContent"))) }
                 .onChange(of: menu.frame(in: .named("notchPanelContent"))) { controller.setOverflowMenuFrame($0) }
         }
+    }
+}
+
+/// The notch container's meeting: a detached black card hanging under the
+/// silhouette, the container's version of the floating panels' meeting block
+/// (Marcello, 2026-10-04). Before, the container showed a meeting only as an
+/// alert that took over the whole panel, so an upcoming one was invisible.
+private struct ContainerMeetingCard: View {
+    @ObservedObject var controller: NotchController
+    @ObservedObject private var calendar = CalendarStore.shared
+    @ObservedObject private var store = TodoStore.shared
+    @EnvironmentObject private var appState: AppState
+
+    /// Same rule as the floating panels: at the root only, never over a page.
+    private var meeting: DetectedMeeting? {
+        guard store.panelPath.count == 1 else { return nil }
+        return calendar.activeAlert ?? calendar.upcomingToday.first
+    }
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 30, style: .continuous)
+        VStack(spacing: 0) {
+            Color.clear.frame(height: controller.containerSilhouetteHeight + 12)
+            if let meeting {
+                LabMeetingCard(meeting: meeting, isNext: true)
+                    .padding(LabMetrics.blockPadding)
+                    .frame(width: controller.expandedSize.width, alignment: .leading)
+                    .background(shape.fill(Color.black))
+                    .overlay(shape.strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                    .shadow(color: .black.opacity(0.35), radius: 18, y: 8)
+                    .background(GeometryReader { card in
+                        Color.clear
+                            .onAppear { controller.setContainerCardFrame(card.frame(in: .named("notchPanelContent"))) }
+                            .onChange(of: card.frame(in: .named("notchPanelContent"))) { controller.setContainerCardFrame($0) }
+                    })
+                    .environment(\.colorScheme, .dark)
+                    .transition(.opacity.combined(with: .offset(y: -8)))
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity)
+        .animation(NotchAnimation.contentHug, value: appState.notchExtraHeight)
+        .animation(NotchAnimation.contentHug, value: meeting?.id)
+        .onChange(of: meeting == nil) { gone in if gone { controller.setContainerCardFrame(nil) } }
+        .onDisappear { controller.setContainerCardFrame(nil) }
     }
 }

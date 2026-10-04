@@ -1082,3 +1082,17 @@ Departure: on the floating panels' glass the pupils are erased with
 `.destinationOut` inside the Canvas (no flat colour behind to fill them
 with); the container fills them black as the handoff does. The sleeping-page
 drawing is gone. DEBUG `empty-snap-pid` renders both variants over the loop.
+
+### 2026-10-04 container: a detached meeting card under the notch
+
+The container had no upcoming-meeting surface: a meeting appeared only as
+the alert that took over the whole panel (MeetingAlertView, now deleted).
+`ContainerMeetingCard` (NotchRootView) hangs a black card 12pt under the
+silhouette, the notch's width, with the floating panels' `LabMeetingCard`
+inside — same rule (root level only; the active alert, else the next meeting
+today), Join / Snooze / auto-snooze included. The alert no longer replaces
+the to-do panel in the container. The card's screen rect
+(`containerCardRect`) joins the overflow menu in `isInExtraPanelArea`: hit
+testing, outside clicks and the pointer-left close all treat it as panel.
+The panel window is 190pt taller to leave room for it. `menu-status` reports
+the card rect. Verified: 621 wide, 12pt under a 253pt silhouette.

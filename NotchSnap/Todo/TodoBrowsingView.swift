@@ -382,16 +382,10 @@ struct TodoTabView: View {
             // twice, one above the other. The column hides this whole panel
             // while an alert is live — see LabPanelsView.
             //
-            // In `.container` there is no block above, so the panel carries
-            // the alert again as it did before the split, and it OWNS the
-            // panel while it is up: the notch opened itself for this, so it
-            // must not compete with the list underneath (CA-3).
-            if notchLayout == .container, let alert = calendar.activeAlert {
-                MeetingAlertView(meeting: alert)
-                    .transition(.opacity)
-            } else {
-                todoPanelContent
-            }
+            // In `.container` it is not drawn here either any more: the
+            // meeting is a detached card under the notch (ContainerMeetingCard,
+            // 2026-10-04), like the floating panels' block.
+            todoPanelContent
         }
         // The floating panels' capture header starts at the very top edge
         // (U5 §2: top padding 0); the container keeps its 16.

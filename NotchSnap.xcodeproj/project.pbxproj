@@ -59,7 +59,6 @@
 		AA01BB02CC03DD04EE05FB07 /* AttendeePhotoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB07AA01BB02CC03DD04EE05 /* AttendeePhotoStore.swift */; };
 		AA01BB02CC03DD04EE05FB06 /* CalendarSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB06AA01BB02CC03DD04EE05 /* CalendarSettingsView.swift */; };
 		AA01BB02CC03DD04EE05FB05 /* UpNextSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB05AA01BB02CC03DD04EE05 /* UpNextSection.swift */; };
-		AA01BB02CC03DD04EE05FB04 /* MeetingAlertView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB04AA01BB02CC03DD04EE05 /* MeetingAlertView.swift */; };
 		AA01BB02CC03DD04EE05FB03 /* CalendarStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB03AA01BB02CC03DD04EE05 /* CalendarStore.swift */; };
 		AA00BB11CC22DD33EE44FD010 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00BB11CC22DD33EE44FD011 /* KeychainStore.swift */; };
 		AA00BB11CC22DD33EE44FD020 /* GoogleOAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00BB11CC22DD33EE44FD021 /* GoogleOAuth.swift */; };
@@ -210,7 +209,6 @@
 		FB07AA01BB02CC03DD04EE05 /* AttendeePhotoStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AttendeePhotoStore.swift; path = ../Calendar/AttendeePhotoStore.swift; sourceTree = "<group>"; };
 		FB06AA01BB02CC03DD04EE05 /* CalendarSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CalendarSettingsView.swift; path = ../Calendar/CalendarSettingsView.swift; sourceTree = "<group>"; };
 		FB05AA01BB02CC03DD04EE05 /* UpNextSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = UpNextSection.swift; path = ../Calendar/UpNextSection.swift; sourceTree = "<group>"; };
-		FB04AA01BB02CC03DD04EE05 /* MeetingAlertView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MeetingAlertView.swift; path = ../Calendar/MeetingAlertView.swift; sourceTree = "<group>"; };
 		FB03AA01BB02CC03DD04EE05 /* CalendarStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CalendarStore.swift; path = ../Calendar/CalendarStore.swift; sourceTree = "<group>"; };
 		AA00BB11CC22DD33EE44FD011 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = KeychainStore.swift; path = ../Calendar/KeychainStore.swift; sourceTree = "<group>"; };
 		AA00BB11CC22DD33EE44FD021 /* GoogleOAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GoogleOAuth.swift; path = ../Calendar/GoogleOAuth.swift; sourceTree = "<group>"; };
@@ -471,7 +469,6 @@
 				FB07AA01BB02CC03DD04EE05 /* AttendeePhotoStore.swift */,
 				FB06AA01BB02CC03DD04EE05 /* CalendarSettingsView.swift */,
 				FB05AA01BB02CC03DD04EE05 /* UpNextSection.swift */,
-				FB04AA01BB02CC03DD04EE05 /* MeetingAlertView.swift */,
 				FB03AA01BB02CC03DD04EE05 /* CalendarStore.swift */,
 				AA00BB11CC22DD33EE44FD011 /* KeychainStore.swift */,
 				AA00BB11CC22DD33EE44FD021 /* GoogleOAuth.swift */,
@@ -691,7 +688,6 @@
 				AA01BB02CC03DD04EE05FB07 /* AttendeePhotoStore.swift in Sources */,
 				AA01BB02CC03DD04EE05FB06 /* CalendarSettingsView.swift in Sources */,
 				AA01BB02CC03DD04EE05FB05 /* UpNextSection.swift in Sources */,
-				AA01BB02CC03DD04EE05FB04 /* MeetingAlertView.swift in Sources */,
 				AA01BB02CC03DD04EE05FB03 /* CalendarStore.swift in Sources */,
 				AA00BB11CC22DD33EE44FD010 /* KeychainStore.swift in Sources */,
 				AA00BB11CC22DD33EE44FD020 /* GoogleOAuth.swift in Sources */,

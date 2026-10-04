@@ -20,6 +20,29 @@ class NotchController: ObservableObject {
     /// for the pointer-left close.
     private(set) var overflowMenuRect: NSRect?
 
+    /// Container layout: the detached meeting card under the silhouette, on
+    /// screen. Like the overflow menu, it counts as the panel.
+    private(set) var containerCardRect: NSRect?
+
+    func setContainerCardFrame(_ frame: CGRect?) {
+        guard let frame, let panel else { containerCardRect = nil; return }
+        containerCardRect = NSRect(x: panel.frame.minX + frame.minX,
+                                   y: panel.frame.maxY - frame.maxY,
+                                   width: frame.width, height: frame.height)
+    }
+
+    /// The container silhouette's height while expanded — where the meeting
+    /// card hangs from.
+    var containerSilhouetteHeight: CGFloat { expandedSize.height + AppState.shared.notchExtraHeight }
+
+    /// Extra live areas outside the silhouette (container layout).
+    func isInExtraPanelArea(_ point: NSPoint, padding: CGFloat = 0) -> Bool {
+        guard state == .expanded else { return false }
+        return [overflowMenuRect, containerCardRect].contains { rect in
+            rect.map { $0.insetBy(dx: -padding, dy: -padding).contains(point) } ?? false
+        }
+    }
+
     func setOverflowMenuFrame(_ frame: CGRect?) {
         guard let frame, let panel else { overflowMenuRect = nil; return }
         overflowMenuRect = NSRect(x: panel.frame.minX + frame.minX,
@@ -437,8 +460,7 @@ class NotchController: ObservableObject {
     /// area above them, the meeting gap, and the shadow all count as outside.
     func isInsidePanelContent(_ location: NSPoint) -> Bool {
         guard state == .expanded, AppState.shared.notchLayout == .panels else {
-            return visibleShapeScreenRect().contains(location)
-                || (state == .expanded && overflowMenuRect?.contains(location) == true)
+            return visibleShapeScreenRect().contains(location) || isInExtraPanelArea(location)
         }
         guard let panel else { return false }
         return panelContentFrames.contains { frame in
@@ -1164,7 +1186,7 @@ class NotchController: ObservableObject {
     private func scheduleCollapseIfOutsidePanel(_ point: NSPoint, screen: NSScreen) {
         let panelRect = expandedPanelRect(screen: screen)
         let paddedRect = panelRect.insetBy(dx: -30, dy: -30)
-        if let menu = overflowMenuRect, menu.insetBy(dx: -12, dy: -12).contains(point) { return }
+        if isInExtraPanelArea(point, padding: 12) { return }
         if !paddedRect.contains(point) {
             triggerCollapse()
         }
@@ -1479,7 +1501,9 @@ class NotchController: ObservableObject {
         // Taken from the SAME value the hugging height clamps against, plus a
         // small margin — a window smaller than the shape's own ceiling would
         // silently clip the bottom of the panel.
-        let height = expandedSize.height + AppState.maxExtraHeight + 24
+        // + room under the container's silhouette for its detached meeting
+        // card (2026-10-04).
+        let height = expandedSize.height + AppState.maxExtraHeight + 24 + 190
         // Wide enough for the panels AND their shadows.
         //
         // This is the window everything is drawn into, and it was still
@@ -1575,7 +1599,7 @@ final class NotchHostingView: NSHostingView<AnyView> {
                 return controller.isInsidePanelContent(screenPoint)
             }
             return controller.visibleShapeScreenRect().contains(screenPoint)
-                || (controller.state == .expanded && controller.overflowMenuRect?.contains(screenPoint) == true)
+                || controller.isInExtraPanelArea(screenPoint)
         }
         guard acceptsClick else { return nil }
         return super.hitTest(point)

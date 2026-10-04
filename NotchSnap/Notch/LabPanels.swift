@@ -378,7 +378,7 @@ struct LabMeetingBlock: View {
 
 // MARK: - One meeting card
 
-private struct LabMeetingCard: View {
+struct LabMeetingCard: View {
     let meeting: DetectedMeeting
     var isNext: Bool = true
 

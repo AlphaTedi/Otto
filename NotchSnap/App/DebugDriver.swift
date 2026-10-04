@@ -1227,6 +1227,7 @@ enum DebugDriver {
                 var report = "menu open=\(store.showsAvatarMenu)"
                 report += " overflow=\(NotchController.shared.overflowMenuRect.map { "\(Int($0.minX)),\(Int($0.minY)) \(Int($0.width))x\(Int($0.height))" } ?? "nil")"
                 report += " shape=\(NotchController.shared.visibleShapeScreenRect().integral)"
+                report += " card=\(NotchController.shared.containerCardRect.map { "\($0.integral)" } ?? "nil")"
                 report += " highlight=\(store.avatarMenuHighlight)"
                 report += " rows=[" + rows.map { $0.label }.joined(separator: "|") + "]"
                 report += " folder=" + (rows.first { $0.id == .notesFolder }?.detail ?? "-")
