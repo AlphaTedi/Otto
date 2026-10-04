@@ -1,0 +1,114 @@
+import Foundation
+import SwiftUI
+
+// MARK: - Todo models
+//
+// Otto's own lightweight to-do system: a TodoItem is local, collection-scoped,
+// and never touches Apple Reminders.
+
+struct TodoCollection: Identifiable, Codable, Equatable {
+    let id: UUID
+    var name: String
+    var colorHex: String
+    var sortOrder: Int
+    var shortcutKey: String?
+    /// TD-8: true only for the built-in smart Today aggregation. Today is a
+    /// live query across every collection, not a membership bucket.
+    var isSystemToday: Bool = false
+    /// The space's ambient tint (U5): a key into `SpaceTint.palette`. Optional
+    /// so files written before it decode — the store fills it in on load.
+    var tint: String? = nil
+
+    /// The section colour — ONE source for the pill, the checkboxes, the
+    /// capture circle, the caret and the selection. It comes from the tint;
+    /// `colorHex` is kept only so files written before tints still decode.
+    var color: Color { spaceTint.sectionColor }
+}
+
+/// NC-3: a step inside a to-do's checklist — a sub-detail, never a peer of
+/// top-level to-dos (no collection, no completion timestamp).
+struct ChecklistItem: Identifiable, Codable, Equatable {
+    let id: UUID
+    var title: String
+    var isDone: Bool = false
+}
+
+struct TodoItem: Identifiable, Codable, Equatable {
+    let id: UUID
+    var title: String
+    var collectionID: UUID
+    var isCompleted: Bool = false
+    var completedAt: Date?
+    var dueDate: Date?
+    var sortOrder: Int
+    let createdAt: Date
+    /// NC-1: freeform note, shown only in the row's expanded state.
+    var note: String = ""
+    /// NC-3: sub-steps, shown only in the expanded state.
+    var checklist: [ChecklistItem] = []
+
+    /// The note this to-do was lifted out of, and the phrase it was lifted
+    /// from — the link that lets an underline in a note show whether it is
+    /// done.
+    ///
+    /// THE LINK LIVES HERE, and that is the whole storage decision. The other
+    /// option was writing `- [ ] phrase` into the note's markdown, which would
+    /// be readable in Obsidian and would also EDIT THE USER'S FILE — the one
+    /// thing this feature promises not to do. A to-do pointing back at a phrase
+    /// costs nothing on the note's side: the `.md` stays exactly what the user
+    /// typed.
+    ///
+    /// The phrase, not a character range: ranges do not survive editing the
+    /// text above them, and a link that silently points at the wrong words is
+    /// worse than one that quietly stops matching.
+    var sourceNoteID: UUID?
+    var sourcePhrase: String?
+    var meetingNoteID: UUID? = nil
+    /// Images attached to the to-do, as vault-relative paths
+    /// (`Attachments/…`, see Attachments.swift). Shown as chips on the row;
+    /// in the vault they ride at the end of the to-do's line as `![…](…)`.
+    var attachments: [String] = []
+
+    init(id: UUID, title: String, collectionID: UUID,
+         isCompleted: Bool, completedAt: Date?, dueDate: Date?,
+         sortOrder: Int, createdAt: Date,
+         note: String = "", checklist: [ChecklistItem] = [],
+         sourceNoteID: UUID? = nil, sourcePhrase: String? = nil) {
+        self.id = id
+        self.title = title
+        self.collectionID = collectionID
+        self.isCompleted = isCompleted
+        self.completedAt = completedAt
+        self.dueDate = dueDate
+        self.sortOrder = sortOrder
+        self.createdAt = createdAt
+        self.note = note
+        self.checklist = checklist
+        self.sourceNoteID = sourceNoteID
+        self.sourcePhrase = sourcePhrase
+    }
+
+    // Hand-rolled decode so pre-note/checklist todos.json files (which lack
+    // the new keys) keep loading — synthesized Codable would throw on them.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        collectionID = try c.decode(UUID.self, forKey: .collectionID)
+        isCompleted = try c.decodeIfPresent(Bool.self, forKey: .isCompleted) ?? false
+        completedAt = try c.decodeIfPresent(Date.self, forKey: .completedAt)
+        dueDate = try c.decodeIfPresent(Date.self, forKey: .dueDate)
+        sortOrder = try c.decode(Int.self, forKey: .sortOrder)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
+        checklist = try c.decodeIfPresent([ChecklistItem].self, forKey: .checklist) ?? []
+        // decodeIfPresent, like every field added after the first release: a
+        // todos.json written before this feature existed has neither key, and
+        // synthesized Codable would throw on the whole file rather than on the
+        // two values it cannot find.
+        sourceNoteID = try c.decodeIfPresent(UUID.self, forKey: .sourceNoteID)
+        sourcePhrase = try c.decodeIfPresent(String.self, forKey: .sourcePhrase)
+        meetingNoteID = try c.decodeIfPresent(UUID.self, forKey: .meetingNoteID)
+        attachments = try c.decodeIfPresent([String].self, forKey: .attachments) ?? []
+    }
+}

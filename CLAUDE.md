@@ -1,9 +1,10 @@
-# Otto (NotchSnap) — agent instructions
+# Otto — agent instructions
 
-Read `docs/NOTCHSNAP_CONTEXT.md` before changing anything: product principles,
-architecture, platform traps, and the decision log live there. Build with
-xcodebuild (never SwiftPM — `Package.swift` is a decoy); verify at runtime via
-the `verify` skill (`.claude/skills/verify/SKILL.md`).
+Read `docs/ARCHITECTURE.md` (where the code lives and how it fits together)
+and `docs/CONTEXT.md` (product principles, platform traps, decision log)
+before changing anything. Build with
+`xcodebuild -project Otto.xcodeproj -scheme Otto`; verify at runtime via the
+`verify` skill (`.claude/skills/verify/SKILL.md`).
 
 Hard requirements for every change:
 
@@ -20,7 +21,10 @@ Hard requirements for every change:
   storage folder via `MarkdownVault`; new persisted fields need a
   `decodeIfPresent` line in the hand-rolled decoders (`TodoItem`,
   `AppSettings`) or old files/settings are silently lost.
-- **New system verbs go through App Intents** (`NotchSnap/Intents/`), thin
+- **New system verbs go through App Intents** (`Otto/Intents/`), thin
   wrappers over `TodoStore` — never a second logic path.
-- New source files must be registered by hand in
-  `NotchSnap.xcodeproj/project.pbxproj` (4 entries; copy a sibling's pattern).
+- `Otto/` is a synchronized folder: new source files need no project-file
+  edit. Put each file in the feature folder it belongs to
+  (`docs/ARCHITECTURE.md`); everything else under `Otto/` ships as a resource.
+- The bundle id `com.notchsnap.app` is the only place the pre-Otto name may
+  stay (TCC identity, preferences domain, Sparkle). Never rename it.

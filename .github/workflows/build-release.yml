@@ -62,8 +62,8 @@ jobs:
         run: |
           set -e
           xcodebuild \
-            -project NotchSnap.xcodeproj \
-            -scheme NotchSnap \
+            -project Otto.xcodeproj \
+            -scheme Otto \
             -configuration Release \
             -derivedDataPath build \
             CODE_SIGNING_REQUIRED=NO \

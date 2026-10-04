@@ -1,44 +1,33 @@
-# NotchSnap
+# Otto
 
-A macOS app that leverages the MacBook notch for screenshots and quick actions.
+A to-do list, notes and meeting companion that lives in the MacBook notch.
 
 ## Requirements
 
 - macOS 13.0 or later
-- (For development) Xcode 16+, [XcodeGen](https://github.com/yonaskolb/XcodeGen)
+- For development: Xcode 26+
 
-## Installation (users)
+## Installation
 
-1. Go to the [Releases](../../releases) section of this repository.
-2. Download the latest `NotchSnap.zip` (or `.dmg`).
-3. Unzip and drag `NotchSnap.app` into your **Applications** folder.
-4. On first launch, if macOS shows "app is not verified":
-   - Right-click `NotchSnap.app` → **Open** → confirm.
-   - Or: System Settings → Privacy & Security → **Open Anyway**.
-
-> The app is not signed with an Apple Developer ID, so macOS will show a warning on first launch. This is expected.
+Download the latest `Otto.dmg` from [Releases](../../releases), open it and drag
+`Otto.app` into **Applications**. Builds are signed with a Developer ID and
+notarized, and Otto updates itself through Sparkle.
 
 ## Build from source
 
 ```bash
-# Generate the Xcode project (if you modified project.yml)
-xcodegen generate
-
-# Open in Xcode
-open NotchSnap.xcodeproj
-
-# Or build from the command line
-xcodebuild -project NotchSnap.xcodeproj -scheme NotchSnap -configuration Release
+cp Config/Local.xcconfig.example Config/Local.xcconfig   # optional settings
+open Otto.xcodeproj
+# or
+xcodebuild -project Otto.xcodeproj -scheme Otto -configuration Debug build
 ```
 
-## Automated releases
+## Documentation
 
-Pushing a tag matching `v*` (e.g. `v1.0.0`) triggers a GitHub Actions workflow that builds the app and publishes a Release with a ready-to-download `.zip`.
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — how the code is organised
+- [`docs/CONTEXT.md`](docs/CONTEXT.md) — product principles, platform traps, decision log
+- [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md) — signing, notarization, releases, Sparkle
+- [`docs/TELEMETRY.md`](docs/TELEMETRY.md) — opt-in usage data and the feedback relay
 
 ## License
 

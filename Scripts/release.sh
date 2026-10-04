@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build, sign, notarize and staple NotchSnap for distribution.
+# Build, sign, notarize and staple Otto for distribution.
 #
 #   bash Scripts/release.sh
 #
@@ -48,7 +48,7 @@ if [ -z "$TEAM" ]; then
 fi
 if [ -z "$PROFILE" ]; then
     echo "  NOTARY_PROFILE is not set in $CONFIG. Create it once with:"
-    echo "       xcrun notarytool store-credentials \"NotchSnap\" \\"
+    echo "       xcrun notarytool store-credentials \"Otto\" \\"
     echo "         --apple-id you@example.com --team-id TEAMID --password APP-SPECIFIC-PW"
     MISSING=1
 fi
@@ -95,7 +95,7 @@ mkdir -p "$OUT"
 # at all — "this does not happen with normal Apps", and they were right
 # (Marcello's testers, 2026-08-06). Cross-compiling arm64 from Intel is fine;
 # the toolchain ships both.
-xcodebuild -project NotchSnap.xcodeproj -scheme NotchSnap -configuration Release \
+xcodebuild -project Otto.xcodeproj -scheme Otto -configuration Release \
     -derivedDataPath "$OUT/dd" CONFIGURATION_BUILD_DIR="$PWD/$OUT/Release" \
     MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
     ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
@@ -141,7 +141,7 @@ if [ -d "$APP/Contents/Frameworks/Sparkle.framework" ]; then
     codesign --force --options runtime --timestamp --sign "$IDENTITY" "$SPK" 2>&1 | sed 's/^/   /'
     # The app's own signature is invalidated by the above, so redo it last.
     codesign --force --options runtime --timestamp \
-        --entitlements NotchSnap/Resources/NotchSnap.entitlements \
+        --entitlements Config/Otto.entitlements \
         --sign "$IDENTITY" "$APP" 2>&1 | sed 's/^/   /'
     echo "   nested helpers signed"
 fi
@@ -200,7 +200,7 @@ do
         *"$required"*) ;;
         *) echo "   MISSING entitlement: $required"
            echo "   Hardened Runtime will deny that resource silently at runtime."
-           echo "   Add it to NotchSnap/Resources/NotchSnap.entitlements"
+           echo "   Add it to Config/Otto.entitlements"
            exit 1 ;;
     esac
 done

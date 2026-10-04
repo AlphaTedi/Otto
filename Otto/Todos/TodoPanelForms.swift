@@ -1,0 +1,579 @@
+import SwiftUI
+import AppKit
+
+// MARK: - In-panel surfaces (design PRD §§3-5)
+//
+// Category creation and Quick Find render INSIDE the panel, replacing the
+// browsing content — no floating windows (CT-5/CT-6). Mode swaps animate on
+// contentHug so the panel re-hugs each surface's height. Every visual value
+// comes from the DesignSystem folder; where a reusable component exists there
+// (PrimaryActionButton, ColorSwatchButton, ShortcutHintBadge) it is used
+// directly, wrapped in Buttons for behavior.
+//
+// TO-DO CREATION IS NO LONGER ONE OF THESE. It was `TodoCreateView` — a card
+// with a title field, a category combo and a Create button,
+// which replaced the whole panel and so was detached from the section it was
+// filing into. It is now a draft row pinned above the list itself (see
+// InlineDraftRow in TodoBrowsingView.swift). What survived the deletion is
+// HighlightingTitleField below, which the draft row reuses: the inline date
+// coloring and the grow-with-your-text behaviour were the parts of that card
+// worth keeping.
+
+// MARK: - HighlightingTitleField — auto-growing NSTextView w/ inline NL coloring
+//
+// TextField can't color a substring while editing; an NSTextView can. The
+// field GROWS with its content (FB5): one line by default, wrapping and
+// getting taller as you type, up to `maxHeight`, then scrolling. Height is
+// always clamped to [lineHeight, maxHeight] and the field NEVER accepts the
+// panel's proposed height — that feedback loop is what made it balloon a
+// little more on every visit in the previous build. Return/Esc are consumed
+// by the mode-aware key monitor before they reach the view, so newlines only
+// ever arrive via paste (collapsed to spaces).
+
+struct HighlightingTitleField: NSViewRepresentable {
+    @Binding var text: String
+    let highlightRange: NSRange?
+    /// The destination section's color — the caret and the selection wear it,
+    /// so "where is my cursor" and "where is this going" are one answer.
+    var accent: Color = DSColor.focusAccent
+    /// Set by the store when something asks for the caret (⌃⇧N, ⌘N, a click
+    /// on the row). Cleared here once taken, so it is a request, not a state.
+    var wantsFocus: Bool = false
+    /// Reports first-responder changes back to the store. Focus is what pins
+    /// the panel open, so it has to be observed rather than assumed.
+    var onFocusChange: (Bool) -> Void = { _ in }
+    /// 13 everywhere except U5's floating capture header, which is 18.
+    var fontSize: CGFloat = 13
+    /// One line that scrolls sideways under the caret (the floating capture
+    /// header, 2026-09-27) instead of wrapping and growing.
+    var singleLine = false
+    /// Images pasted or dropped into the field land AT THE CARET, as chips in
+    /// the text (the title carries their `![…](…)` tokens), the way
+    /// Conductor's input does. Off: text only, as before.
+    var allowsImages = false
+
+    static let lineHeight: CGFloat = 17
+    static let maxHeight: CGFloat = 102   // ~6 lines, then it scrolls
+
+    /// One line at `size`: the 13-pt field keeps its historical 17.
+    static func lineHeight(_ size: CGFloat) -> CGFloat {
+        size <= 13 ? lineHeight : ceil(NSFont.systemFont(ofSize: size).boundingRectForFont.height * 0.92)
+    }
+
+    /// Stamped on the text view so the key monitor can ask "is the caret in
+    /// the draft row?" rather than "is a draft open?". Those are different
+    /// questions once a note or step field can hold focus at the same time,
+    /// and ⏎ / ⇥ / Esc belong to whichever field the user is actually in.
+    static let fieldIdentifier = NSUserInterfaceItemIdentifier("otto.todo.draftTitleField")
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scroll = NSScrollView()
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = false
+        scroll.hasHorizontalScroller = false
+        scroll.autohidesScrollers = true
+        scroll.verticalScrollElasticity = .allowed
+
+        let view = FocusReportingTextView()
+        view.identifier = Self.fieldIdentifier
+        view.allowsImages = allowsImages
+        view.onFocusChange = { focused in
+            // Async: this fires from inside AppKit's responder change, and
+            // publishing store state synchronously from there re-enters
+            // SwiftUI layout mid-transaction.
+            DispatchQueue.main.async { onFocusChange(focused) }
+        }
+        view.delegate = context.coordinator
+        view.drawsBackground = false
+        // Rich only to hold image chips (a plain text view would flatten an
+        // attachment to U+FFFC); what can be pasted stays plain text.
+        view.isRichText = allowsImages
+        view.font = .systemFont(ofSize: fontSize)
+        view.textContainerInset = .zero
+        view.textContainer?.lineFragmentPadding = 0
+        if singleLine {
+            // The classic single-line NSTextView: the text container is as
+            // wide as the text, the view grows sideways inside the scroll
+            // view, and AppKit keeps the caret in sight as you type.
+            view.isVerticallyResizable = false
+            view.isHorizontallyResizable = true
+            view.textContainer?.widthTracksTextView = false
+            view.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
+                                                       height: CGFloat.greatestFiniteMagnitude)
+            view.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
+                                  height: CGFloat.greatestFiniteMagnitude)
+            view.autoresizingMask = [.height]
+            scroll.horizontalScrollElasticity = .none
+            scroll.verticalScrollElasticity = .none
+        } else {
+            view.isVerticallyResizable = true
+            view.isHorizontallyResizable = false
+            view.textContainer?.widthTracksTextView = true
+            view.autoresizingMask = [.width]
+        }
+        view.textStorage?.setAttributedString(AttachmentStore.chipped(text, attributes: [
+            .font: NSFont.systemFont(ofSize: fontSize),
+            .foregroundColor: NSColor(DSColor.textPrimaryBright),
+        ]))
+        context.coordinator.restyle(view, highlight: highlightRange)
+
+        scroll.documentView = view
+        // Deliberately NOT grabbing focus on appear. The draft row is now
+        // permanent, so it is built every time the panel opens — and a field
+        // that took the caret on sight would pin the notch open forever and
+        // swallow every keystroke meant for Quick Find.
+        return scroll
+    }
+
+    func updateNSView(_ scroll: NSScrollView, context: Context) {
+        guard let view = scroll.documentView as? NSTextView else { return }
+        (view as? FocusReportingTextView)?.allowsImages = allowsImages
+        // The view holds chips where the text holds tokens: compare in token
+        // form, and rebuild only when they really differ (a rebuild would move
+        // the caret).
+        if let storage = view.textStorage, AttachmentStore.unchipped(storage) != text {
+            storage.setAttributedString(AttachmentStore.chipped(text, attributes: [
+                .font: NSFont.systemFont(ofSize: fontSize),
+                .foregroundColor: NSColor(DSColor.textPrimaryBright),
+            ]))
+        }
+        view.insertionPointColor = NSColor(accent)
+        view.selectedTextAttributes = [
+            .backgroundColor: NSColor(accent).withAlphaComponent(0.32),
+            .foregroundColor: NSColor(DSColor.textPrimaryBright),
+        ]
+        context.coordinator.restyle(view, highlight: highlightRange)
+        if wantsFocus, view.window?.firstResponder !== view {
+            view.window?.makeFirstResponder(view)
+        }
+    }
+
+    /// FB5: report the wrapped content height for the proposed width, clamped
+    /// so the field hugs its text and never stretches to the panel.
+    ///
+    /// Measures the CURRENT `text` directly with boundingRect rather than
+    /// reading the live text view's layout manager — the latter goes stale
+    /// (an updateNSView that just changed the string may not have re-laid-out
+    /// yet when SwiftUI asks for the size), so the field failed to grow.
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView,
+                      context: Context) -> CGSize? {
+        let width = (proposal.width.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }) ?? 200
+        if singleLine { return CGSize(width: width, height: Self.lineHeight(fontSize)) }
+        let measured = NSAttributedString(
+            string: text.isEmpty ? " " : text,
+            attributes: [.font: NSFont.systemFont(ofSize: fontSize)]
+        ).boundingRect(
+            with: NSSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        ).height
+        let clamped = max(Self.lineHeight(fontSize), min(ceil(measured), Self.maxHeight))
+        return CGSize(width: width, height: clamped)
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    /// NSTextView tells nobody when it gains or loses the caret, and the
+    /// delegate's textDidBegin/EndEditing only fire on an actual edit — so
+    /// clicking in and out of an empty field is silent. Overriding the
+    /// responder calls is the only account of focus that is always right.
+    final class FocusReportingTextView: NSTextView {
+        var onFocusChange: ((Bool) -> Void)?
+        var allowsImages = false
+        private lazy var chips = MainActor.assumeIsolated { ImageChipInteraction(textView: self, canRemove: true) }
+        private var chipTracking: NSTrackingArea?
+
+        /// Images, or plain text — never someone else's styled text: the view
+        /// is rich only so it can hold chips.
+        override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
+            allowsImages ? [.fileURL, .png, .tiff, .string] : super.readablePasteboardTypes
+        }
+
+        override var acceptableDragTypes: [NSPasteboard.PasteboardType] {
+            allowsImages ? [.fileURL, .png, .tiff] + super.acceptableDragTypes : super.acceptableDragTypes
+        }
+
+        override func readSelection(from pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
+            if allowsImages, MainActor.assumeIsolated({ AttachmentStore.hasImage(pboard) }) {
+                let paths = MainActor.assumeIsolated { AttachmentStore.importFrom(pasteboard: pboard) }
+                if !paths.isEmpty { insertImageChips(paths); return true }
+            }
+            return super.readSelection(from: pboard, type: type)
+        }
+
+        /// At the caret (or the drop point), like typing a word.
+        func insertImageChips(_ paths: [String]) {
+            var attributes = typingAttributes
+            let chips = NSMutableAttributedString()
+            for path in paths {
+                attributes[.attachment] = ImageChipAttachment(path: path)
+                chips.append(NSAttributedString(string: "\u{FFFC}", attributes: attributes))
+                attributes[.attachment] = nil
+                chips.append(NSAttributedString(string: " ", attributes: attributes))
+            }
+            insertText(chips, replacementRange: selectedRange())
+        }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            if let chipTracking { removeTrackingArea(chipTracking) }
+            let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                      owner: self)
+            addTrackingArea(area)
+            chipTracking = area
+        }
+
+        override func mouseMoved(with event: NSEvent) {
+            let point = convert(event.locationInWindow, from: nil)
+            if !MainActor.assumeIsolated({ chips.mouseMoved(point) }) { super.mouseMoved(with: event) }
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            MainActor.assumeIsolated { chips.clear() }
+            super.mouseExited(with: event)
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            let point = convert(event.locationInWindow, from: nil)
+            if MainActor.assumeIsolated({ chips.mouseDown(point) }) { return }
+            super.mouseDown(with: event)
+        }
+
+        override func menu(for event: NSEvent) -> NSMenu? {
+            let point = convert(event.locationInWindow, from: nil)
+            nonisolated(unsafe) var chipMenu: NSMenu?
+            MainActor.assumeIsolated { chipMenu = chips.menu(at: point) }
+            if let chipMenu { return chipMenu }
+        return super.menu(for: event)
+        }
+
+        override func becomeFirstResponder() -> Bool {
+            let accepted = super.becomeFirstResponder()
+            if accepted { onFocusChange?(true) }
+            return accepted
+        }
+
+        override func resignFirstResponder() -> Bool {
+            let resigned = super.resignFirstResponder()
+            if resigned { onFocusChange?(false) }
+            return resigned
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: HighlightingTitleField
+        init(_ parent: HighlightingTitleField) { self.parent = parent }
+
+        func textDidChange(_ notification: Notification) {
+            guard let view = notification.object as? NSTextView else { return }
+            // Newlines only arrive via paste — collapse them (single logical
+            // line of title text, even though it wraps visually).
+            if let storage = view.textStorage {
+                var newline = (storage.string as NSString).range(of: "\n")
+                while newline.location != NSNotFound {
+                    storage.replaceCharacters(in: newline, with: " ")
+                    newline = (storage.string as NSString).range(of: "\n")
+                }
+            }
+            // Token form: a chip in the view is `![…](…)` in the title.
+            parent.text = view.textStorage.map(AttachmentStore.unchipped) ?? view.string
+        }
+
+        func restyle(_ view: NSTextView, highlight: NSRange?) {
+            let full = NSRange(location: 0, length: (view.string as NSString).length)
+            guard let storage = view.textStorage else { return }
+            storage.beginEditing()
+            // addAttributes, not setAttributes: an image chip's attachment
+            // must survive the restyle.
+            storage.addAttributes([
+                .foregroundColor: NSColor(DSColor.textPrimaryBright),
+                .font: NSFont.systemFont(ofSize: parent.fontSize),
+            ], range: full)
+            // The date phrase is found in the TITLE, where a chip is a whole
+            // token; move its range to where it sits among single chips.
+            if let highlight {
+                let shown = AttachmentStore.displayRange(highlight, in: parent.text)
+                if shown.location >= 0, NSMaxRange(shown) <= full.length {
+                    storage.addAttribute(.foregroundColor, value: NSColor(DSColor.focusAccent), range: shown)
+                }
+            }
+            storage.removeAttribute(.kern, range: full)
+            AttachmentStore.spaceChips(in: storage)
+            storage.endEditing()
+            view.typingAttributes = [
+                .foregroundColor: NSColor(DSColor.textPrimaryBright),
+                .font: NSFont.systemFont(ofSize: parent.fontSize),
+            ]
+        }
+    }
+}
+
+// MARK: - CategoryFormView — inline "New category" (§4, CT-5/CT-6)
+
+struct CategoryFormView: View {
+    @ObservedObject private var store = TodoStore.shared
+    @State private var name = ""
+    @State private var colorHex = Self.paletteHex[0]
+    @FocusState private var nameFocused: Bool
+    @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
+
+    /// The section tints a new list can take — the same palette the pill,
+    /// checkboxes and capture circle read, so the swatch IS the colour.
+    private static let paletteHex = SpaceTint.palette.map(\.key)
+
+    private var chosen: Color { (SpaceTint.named(colorHex) ?? .work).sectionColor }
+    private var canCreate: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    // Rebuilt in the panel's own vocabulary rather than the old form's.
+    //
+    // It was still wearing the pre-glass styling — full-bleed fills, 12pt
+    // corners, a blue system caret — inside a 40pt glass panel, and it
+    // stretched to the panel's full fixed height because nothing told it to
+    // stop. So it read as a different app opening inside this one.
+    //
+    // Same field shape as the creation bar, same checkbox-sized swatches, same
+    // pill for the primary action, and it hugs its content.
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if notchLayout == .container {
+                Text(L10n.t("todo.newCollection").uppercased())
+                    .font(.system(size: 10, weight: .medium))
+                    .tracking(0.4)
+                    .foregroundStyle(DSColor.textFaint)
+            } else {
+                // Floating panels: the one top bar, one level in.
+                ContextBar(parentTitle: store.panelPath.first?.title ?? "",
+                           title: L10n.t("todo.newSection"),
+                           onBack: { store.goBack() })
+                    .padding(.horizontal, -PanelMetrics.listInset)
+            }
+
+            // The name field IS the creation bar, one radius step smaller for
+            // sitting inside the panel's inset.
+            TextField("", text: $name, prompt:
+                Text(L10n.t("todo.categoryName")).foregroundColor(DSColor.textHint))
+                .textFieldStyle(.plain)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(DSColor.textPrimary)
+                .focused($nameFocused)
+                .padding(.horizontal, PanelMetrics.barPaddingH)
+                .padding(.vertical, PanelMetrics.barPaddingV)
+                .background(
+                    RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
+                        .fill(DSColor.fieldWell)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
+                        .strokeBorder(nameFocused ? chosen.opacity(0.8)
+                                                  : DSColor.hairlineOnPanel, lineWidth: 1)
+                        // After the stroke, not before: `.animation` on a
+                        // Shape returns a View, and a View has no strokeBorder.
+                        .animation(Motion.hoverFade, value: nameFocused)
+                )
+                .onSubmit(create)
+
+            // Swatches at checkbox size, so choosing a colour previews the
+            // thing the colour is actually for.
+            HStack(spacing: 12) {
+                ForEach(Self.paletteHex, id: \.self) { hex in
+                    Button {
+                        withAnimation(NotchAnimation.hintFade) { colorHex = hex }
+                    } label: {
+                        RoundedRectangle(cornerRadius: PanelMetrics.checkboxRadius,
+                                         style: .continuous)
+                            .fill((SpaceTint.named(hex) ?? .work).sectionColor)
+                            .frame(width: 26, height: 26)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: PanelMetrics.checkboxRadius,
+                                                 style: .continuous)
+                                    .strokeBorder(DSColor.selectionRing,
+                                                  lineWidth: colorHex == hex ? 2 : 0)
+                            // A 0→2 stroke width is a pop, not a transition;
+                            // the fill around it already animates, so the ring
+                            // was the one part that jumped.
+                            .animation(Motion.swap, value: colorHex)
+                            )
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: 10) {
+                Button { store.setMode(.browsing) } label: {
+                    Text(L10n.t("snippet.cancel"))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(DSColor.textSecondary)
+                        .padding(.horizontal, PanelMetrics.tabPaddingH)
+                        .padding(.vertical, PanelMetrics.tabPaddingV)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: PanelMetrics.tabActiveRadius,
+                                             style: .continuous)
+                                .strokeBorder(DSColor.panelBorder, lineWidth: 1)
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                // The primary action wears the colour being chosen — the one
+                // preview that says what the section will look like.
+                Button(action: create) {
+                    Text(L10n.t("todo.create"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, PanelMetrics.tabPaddingH)
+                        .padding(.vertical, PanelMetrics.tabPaddingV)
+                        .background(
+                            RoundedRectangle(cornerRadius: PanelMetrics.tabActiveRadius,
+                                             style: .continuous)
+                                .fill(chosen)
+                        )
+                        .opacity(canCreate ? 1 : 0.35)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!canCreate)
+
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, PanelMetrics.listInset)
+        // Hugs its content and sits at the TOP. Without this it stretched down
+        // the panel's whole fixed height.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onAppear { DispatchQueue.main.async { nameFocused = true } }
+    }
+
+    private func create() {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        let collection = store.addCollection(name: trimmed, colorHex: "#9CC0FF", tint: colorHex)
+        store.selectCollection(collection.id)
+    }
+}
+
+// MARK: - QuickFindView — cross-category search (§5, QF-1..4)
+
+struct QuickFindView: View {
+    @ObservedObject private var store = TodoStore.shared
+    @State private var caretVisible = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // QF-2 "type anywhere": the query is fed by the key monitor, not
+            // a focused TextField — a real field grabbed mid-word would
+            // select-all and eat the seeding character. The caret is ours.
+            HStack(spacing: 8) {
+                OttoIcon("magnifyingglass", pointSize: 12)
+                    .foregroundStyle(DSColor.textSecondary)
+                Text(store.findQuery)
+                    .font(.system(size: 13))
+                    .foregroundStyle(DSColor.textPrimaryBright)
+                    .lineLimit(1)
+                Rectangle()
+                    .fill(DSColor.textHint)
+                    .frame(width: 1, height: 14)
+                    .opacity(caretVisible ? 1 : 0)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
+                    .fill(DSColor.focusedRowBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: DSRadius.controlCorner, style: .continuous)
+                    .stroke(DSColor.focusAccent, lineWidth: 0.5)
+            )
+            .padding(.bottom, 14)
+
+            let matches = store.findMatches
+            if !matches.isEmpty {
+                Text(L10n.t("todo.matches").uppercased())
+                    .font(.system(size: 9, weight: .medium))
+                    .tracking(0.4)
+                    .foregroundStyle(DSColor.textFaint)
+                    .padding(.bottom, 8)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(matches.enumerated()), id: \.element.id) { index, item in
+                        matchRow(item, selected: index == store.findSelection)
+                    }
+                }
+            } else if !store.findQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+                Text(L10n.t("todo.noMatches"))
+                    .font(DSFont.checklistItem)
+                    .foregroundStyle(DSColor.textHint)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
+                caretVisible = false
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func matchRow(_ item: TodoItem, selected: Bool) -> some View {
+        let collection = store.collection(id: item.collectionID)
+        VStack(alignment: .leading, spacing: 3) {
+            Button {
+                withAnimation(NotchAnimation.contentHug) {
+                    store.panelMode = .browsing
+                    store.activeCollectionID = item.collectionID
+                    store.focusedItemID = item.id
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(collection?.color ?? .gray)
+                        .frame(width: 8, height: 8)
+                    Text(highlightedTitle(item.title))
+                        .font(.system(size: 12))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous)
+                        // NOT animated, deliberately.
+                        //
+                        // The selection here moves under ↑/↓ while the user is
+                        // typing a query — dozens of times in a few seconds.
+                        // The animation guidance is explicit that keyboard
+                        // paths and actions repeated a hundred times a day get
+                        // no animation: a highlight that eases between rows at
+                        // that rate reads as lag, and it lands late enough to
+                        // be behind the key you already pressed. It should
+                        // snap, and it does.
+                        .fill(selected ? DSColor.fieldBackground : .clear)
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            // QF-4: say where the match lives.
+            if let collection {
+                Text("\(L10n.t("todo.inCategory")) \(collection.name)")
+                    .font(.system(size: 10))
+                    .foregroundStyle(DSColor.textHint)
+                    .padding(.leading, 16)
+            }
+        }
+    }
+
+    /// Matched substring bolded in the focus accent, rest stays bright (§5).
+    private func highlightedTitle(_ title: String) -> AttributedString {
+        var attributed = AttributedString(title)
+        attributed.foregroundColor = DSColor.textPrimaryBright
+        let query = store.findQuery.trimmingCharacters(in: .whitespaces)
+        if !query.isEmpty, let range = attributed.range(of: query, options: .caseInsensitive) {
+            attributed[range].foregroundColor = DSColor.focusAccent
+            attributed[range].font = .system(size: 12, weight: .semibold)
+        }
+        return attributed
+    }
+}

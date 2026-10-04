@@ -32,9 +32,8 @@ release/
 .claude/settings.local.json
 
 # graphify knowledge-graph output — a regenerable cache (~5MB of ASTs)
-NotchSnap/graphify-out/
 graphify-out/
 
-# Google OAuth credentials — public repo, so the real values stay local.
-# Copy Config/GoogleOAuth.xcconfig.example to set yours up.
+# Signing, notarization and telemetry settings — public repo, so the real
+# values stay local. Copy Config/Local.xcconfig.example to set yours up.
 Config/Local.xcconfig

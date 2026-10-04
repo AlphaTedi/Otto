@@ -1,0 +1,1443 @@
+import SwiftUI
+import AppKit
+
+// MARK: - Notes space (design handoff "flusso continuo", 2026-09-06)
+//
+// One space, not many lists — so it takes the head of the space bar and never
+// scrolls with them. Inside, ONE recurring object carries three roles: the
+// 76pt rounded field at the top of the panel is the capture field in a list,
+// the composer here, and an open note's title bar. It keeps its position and
+// its radius in all three, which is why an open note gets no header of its own.
+//
+// The governing idea: WRITING COMES BEFORE NAMING. The space opens with the
+// caret in the composer. The user types the note; on ↩ it drops into the
+// stream and the model proposes a name afterwards. The title is a proposal,
+// never a gate — people offloading a thought do not want to file it first.
+
+// MARK: Metrics
+
+/// A real NSView that answers the mouse, laid over a SwiftUI row.
+///
+/// The rows were a `.onTapGesture`, then a `Button`, and neither ever fired.
+/// Measured rather than guessed at: an in-process hitTest at each row's screen
+/// point returns NotchHostingView with insideShape true, and a dump of the
+/// panel's AppKit tree shows nothing at all covering them — so the click
+/// reaches the window and is lost inside SwiftUI's own gesture resolution,
+/// where the row competes with the composer, the panel catcher and the scroll
+/// view for the same point (Marcello, 2026-09-06, three times).
+///
+/// This stops competing. AppKit hit-testing runs BEFORE SwiftUI gestures and
+/// finds real subviews first, which is exactly why the to-do rows have always
+/// been clickable — their taps go through EntityTextView, an NSView, not
+/// through SwiftUI at all. Same route here.
+///
+/// It also carries hover, so the row can light up under the pointer.
+private struct RowClickCatcher: NSViewRepresentable {
+    let onClick: () -> Void
+    let onHover: (Bool) -> Void
+    /// Screen-space pointer Y and the vertical distance dragged so far.
+    let onDrag: (CGFloat, CGFloat) -> Void
+    let onDragEnd: () -> Void
+    /// This row's rect in SCREEN coordinates, so the drag can work out which
+    /// gap the pointer is over.
+    let onFrame: (CGRect) -> Void
+
+    final class CatcherView: NSView {
+        var onClick: () -> Void = {}
+        var onHover: (Bool) -> Void = { _ in }
+        var onDrag: (CGFloat, CGFloat) -> Void = { _, _ in }
+        var onDragEnd: () -> Void = {}
+        var onFrame: (CGRect) -> Void = { _ in }
+
+        private var tracking: NSTrackingArea?
+        private var downAt: NSPoint?
+        private var dragging = false
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            if let tracking { removeTrackingArea(tracking) }
+            let area = NSTrackingArea(rect: bounds,
+                                      options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                      owner: self)
+            addTrackingArea(area)
+            tracking = area
+            syncHover()
+            reportFrame()
+        }
+
+        /// Swapping the tracking area can drop its pending exit while the
+        /// list scrolls. Recheck the current screen pointer after each swap
+        /// and on enter/exit; the window's last event location can be stale
+        /// when this nonactivating panel opens beneath a stationary pointer.
+        private func syncHover() {
+            // Next turn of the loop: this can run inside SwiftUI's layout
+            // pass, where writing the row's @State is not allowed.
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                guard let window = self.window else { return self.onHover(false) }
+                let windowPoint = window.convertFromScreen(NSRect(origin: NSEvent.mouseLocation, size: .zero)).origin
+                let point = self.convert(windowPoint, from: nil)
+                self.onHover(self.visibleRect.contains(point))
+            }
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            reportFrame()
+            syncHover()
+        }
+
+        private func reportFrame() {
+            guard let window else { return }
+            onFrame(window.convertToScreen(convert(bounds, to: nil)))
+        }
+
+        override func mouseEntered(with event: NSEvent) { syncHover() }
+        override func mouseExited(with event: NSEvent) { syncHover() }
+
+        // Click and drag live in the SAME view, and they have to.
+        //
+        // The catcher takes mouseDown, so a SwiftUI DragGesture underneath it
+        // would never begin — putting the click back would have taken the
+        // reorder away. AppKit gives both here: a press that barely moves is a
+        // click, and one that travels is a drag.
+        override func mouseDown(with event: NSEvent) {
+            downAt = NSEvent.mouseLocation
+            dragging = false
+        }
+
+        override func mouseDragged(with event: NSEvent) {
+            guard let start = downAt else { return }
+            let now = NSEvent.mouseLocation
+            let travelled = now.y - start.y
+            // A few points of slop, so a hand that is not quite still while
+            // clicking still reads as a click.
+            if !dragging, abs(travelled) < 6 { return }
+            dragging = true
+            onDrag(now.y, travelled)
+        }
+
+        override func mouseUp(with event: NSEvent) {
+            defer { downAt = nil; dragging = false }
+            if dragging { onDragEnd() } else { onClick() }
+        }
+
+        /// The panel is a nonactivating panel in an accessory app, so the
+        /// first click into it would otherwise be spent activating rather than
+        /// acting — the "why does it take two clicks" family of bug.
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+        /// AppKit views win every hit test against SwiftUI, so with the
+        /// Notes · Meetings menu open over this row the row took the click
+        /// meant for the menu (Marcello, 2026-09-26). Stand aside while it is.
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            NotesStore.shared.kindMenuOpen ? nil : super.hitTest(point)
+        }
+        /// Let the scroll wheel through to the ScrollView underneath: this
+        /// view is here for clicks, and swallowing scrolls would trade one
+        /// broken interaction for another.
+        override func scrollWheel(with event: NSEvent) { nextResponder?.scrollWheel(with: event) }
+    }
+
+    func makeNSView(context: Context) -> CatcherView { CatcherView() }
+
+    func updateNSView(_ view: CatcherView, context: Context) {
+        view.onClick = onClick
+        view.onHover = onHover
+        view.onDrag = onDrag
+        view.onDragEnd = onDragEnd
+        view.onFrame = onFrame
+    }
+}
+
+/// The composer's drawn height, reported upward so the stream below it knows
+/// how much room is actually left.
+///
+/// Measured, not assumed — the composer is the one piece of this surface whose
+/// height genuinely moves (76pt empty, up to 240 with a long draft), and the
+/// panel has already been overflowed twice by a budget that subtracted a
+/// constant for something that changes size. See PanelChrome.
+private struct ComposerHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// This file's own formatter cache. MarkdownVault's is private to that file,
+/// and a DateFormatter built per row is an allocation on every redraw of a
+/// scrolling list.
+private enum NotesFormatters {
+    nonisolated(unsafe) private static var cache: [String: DateFormatter] = [:]
+    static func cached(_ format: String) -> DateFormatter {
+        if let existing = cache[format] { return existing }
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.setLocalizedDateFormatFromTemplate(format)
+        cache[format] = formatter
+        return formatter
+    }
+}
+
+
+enum NotesMetrics {
+    /// The same field, the same radius, the same place as the capture bar.
+    static let composerMinHeight: CGFloat = 76
+    static let entryGap: CGFloat = 18
+    static let entryInset: CGFloat = 12
+    /// The row radius every list shares (was 16).
+    static var highlightRadius: CGFloat { PanelMetrics.rowRadius }
+    /// Includes the breathing room that keeps floating controls concentric
+    /// with the lower corners of the expanded notch.
+    static let bottomBarHeight: CGFloat = 76
+    /// The Notes pill's own colour. A literal, and deliberately so: every
+    /// other active pill wears its category's colour, so the one permanent
+    /// pill in the bar needs a colour that belongs to no category.
+    ///
+    /// Outlined rather than filled, and dashed (Marcello, 2026-09-06): a
+    /// filled pill says "this list is selected", which is what the lists to
+    /// its right say. Notes is a different kind of thing and the broken
+    /// outline is what says so without a second shape or an icon.
+    static let pillStroke = Color(hex: "#E8C15A")
+}
+
+// MARK: - The space
+
+struct NotesSpaceView: View {
+    @ObservedObject private var store = NotesStore.shared
+    @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
+
+    private var isContainer: Bool { notchLayout == .container }
+    private var isCalendarSpace: Bool { TodoStore.shared.panelMode == .calendar }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if store.meetingPicker {
+                MeetingSelectionView()
+            } else if let open = store.openNote, store.meetingHistory || store.meetingLinkPicker {
+                MeetingHistoryView(note: open)
+            } else if let open = store.openNote {
+                NoteDetailView(note: open, isContainer: isContainer)
+                    // Per NOTE, not per surface. Without it SwiftUI reuses the
+                    // same view for the next note opened, `onAppear` does not
+                    // run again, and the body field still holds the previous
+                    // note's text — you open one note and read another.
+                    .id(open.id)
+                    .transition(.opacity)
+            } else {
+                StreamView(isContainer: isContainer, isCalendarSpace: isCalendarSpace)
+                    .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .animation(Motion.swap, value: store.openNoteID)
+        // The undo window floats over the stream rather than displacing it:
+        // a row that vanished and a bar that pushed everything down would be
+        // two movements for one event.
+        .overlay(alignment: .bottom) {
+            if let pending = store.pendingDelete {
+                UndoBar(title: pending.title)
+                    .padding(.bottom, 8)
+                    .transition(.opacity.combined(with: .offset(y: 8)))
+            }
+        }
+    }
+}
+
+// MARK: - Stream level: composer on top, history below
+
+private struct StreamView: View {
+    let isContainer: Bool
+    let isCalendarSpace: Bool
+
+    @ObservedObject private var store = NotesStore.shared
+    @ObservedObject private var chrome = PanelChrome.shared
+    @FocusState private var composerFocused: Bool
+    @State private var composerHeight: CGFloat = NotesMetrics.composerMinHeight
+    // Reordering, as a plain drag — the same recipe the to-do list uses, and
+    // for the same reason: `.onDrag` rides the system pasteboard, which was
+    // never really meant for a non-activating panel and never moved a row.
+    @State private var rowFrames: [UUID: CGRect] = [:]
+    // The stream has one pointer. A per-row hover flag let missed exit events
+    // leave multiple rows highlighted at once.
+    @State private var hoveredNoteID: UUID?
+    @State private var draggedNoteID: UUID?
+    @State private var dropBeforeID: UUID?
+    @State private var dropAtEnd = false
+    @State private var dragOffset: CGFloat = 0
+    /// The stream's scroll position and drawn height, for the same soft,
+    /// blurred foot a list has.
+    @State private var streamOffset: CGFloat = 0
+    @State private var streamNatural: CGFloat = 0
+
+
+    /// What is left of the panel once the composer and the space bar have
+    /// taken theirs.
+    ///
+    /// This has to be a NUMBER, and that is the whole of the first bug in this
+    /// surface. `maxHeight: .infinity` on a ScrollView means "grow to what you
+    /// are offered", and in a VStack whose other flexible child is a Spacer
+    /// the offer is the content's own ideal height — so twenty notes laid out
+    /// 1180pt tall inside a 556pt panel. They drew past the bottom of the
+    /// panel and, in the floating layout, past `visibleShapeScreenRect` as
+    /// well: outside that rect the hosting view returns nil from hitTest, so
+    /// the rows were not merely overflowing, they were unclickable
+    /// (Marcello, 2026-09-06). Under the notch the same overflow is what ran
+    /// them out of the silhouette.
+    private var streamBudget: CGFloat {
+        // ONE budget for both layouts, and the same one a list uses: the
+        // block, less the furniture standing in it.
+        //
+        // The container used to take a flat 190 here. A list in the same panel
+        // computes its budget and gets roughly twice that, so switching from
+        // Work to Notes visibly collapsed the panel to half its height — two
+        // spaces in one container drawn to two different rulers (Marcello,
+        // 2026-09-09). `min(natural, budget)` still applies at the call site,
+        // so a stream of three notes hugs exactly as before.
+        //
+        // The floating header is measured whole (`composerHeight`), so the
+        // container's 36 of field gap is not taken again there: it was, and
+        // the stream stopped ~36pt short of the pills and cut its last note
+        // on a hard line no list has (Marcello, 2026-09-26).
+        //
+        // Floating: the stream runs under the pills to the panel's foot, as a
+        // list does, so the progressive blur has rows to blur. The space bar
+        // is not subtracted there; an end spacer gives the last note travel.
+        guard isContainer else {
+            return max(120, PanelMetrics.todoBlockMaxHeight - composerHeight)
+        }
+        return max(120, PanelMetrics.todoBlockMaxHeight
+                   - PanelMetrics.panelTopPadding
+                   - composerHeight - 36
+                   - chrome.tabRow)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if !isContainer {
+                // U5 capture header, floating panels only: the same chrome
+                // as a list's field, so switching space never moves it.
+                Group {
+                    if isCalendarSpace {
+                        CalendarCaptureHeader(focused: $composerFocused)
+                    } else {
+                        NotesCaptureHeader(focused: $composerFocused)
+                    }
+                }
+                .notchEntry(index: 0)
+                .background(GeometryReader { geo in
+                    Color.clear.preference(key: ComposerHeightKey.self, value: geo.size.height)
+                })
+                .onPreferenceChange(ComposerHeightKey.self) { composerHeight = $0 }
+                // Over the stream, so the open dropdown is drawn above it.
+                .zIndex(1)
+            } else if isCalendarSpace {
+                CalendarComposer(focused: $composerFocused)
+                    .padding(.horizontal, PanelMetrics.barOuterInset)
+                    .notchEntry(index: 0)
+                    .padding(.bottom, PanelMetrics.fieldToTabsGap)
+                    .background(GeometryReader { geo in
+                        Color.clear.preference(key: ComposerHeightKey.self, value: geo.size.height)
+                    })
+                    .onPreferenceChange(ComposerHeightKey.self) { composerHeight = $0 }
+            } else {
+                Composer(focused: $composerFocused, isContainer: isContainer)
+                .padding(.horizontal, PanelMetrics.barOuterInset)
+                // Index 0 and the same gap as a list's capture field, so this
+                // field and that one are the SAME piece of furniture: same
+                // place, same size, same settle as the panel opens. They are
+                // one bar in three roles by the handoff's own rule, and a role
+                // that sits 26pt higher than the others is a fourth one.
+                .notchEntry(index: 0)
+                .padding(.bottom, PanelMetrics.fieldToTabsGap)
+                .background(GeometryReader { geo in
+                    Color.clear.preference(key: ComposerHeightKey.self, value: geo.size.height)
+                })
+                .onPreferenceChange(ComposerHeightKey.self) { composerHeight = $0 }
+            }
+
+            // THE FIELD FIRST, THE SECTIONS UNDER IT — the same order every
+            // list has, and the reason this row is drawn here rather than at
+            // the panel level with the others.
+            //
+            // In a list the container draws its draft row and then the
+            // sections, as siblings. Notes brings its own field, so drawing
+            // the row up there put the sections above the composer and made
+            // this the one space whose furniture was in the other order
+            // (Marcello, 2026-09-06). Here it sits between the composer and
+            // the stream, which is exactly where a list's is.
+            //
+            // Stream level only: `showsSpaceBar` is already false while a note
+            // is open, and this view is not on screen then either.
+            if isContainer, TodoStore.shared.showsSpaceBar {
+                TodoTabRow(rulePosition: .below)
+                    .notchEntry(index: 1)
+                    .measureHeight(TabRowHeightKey.self)
+                // No Notes · Meetings switcher here any more (Marcello,
+                // 2026-10-04); ⌘1 / ⌘2 still switch.
+            }
+
+            streamBody
+                // Dimmed while something is BEING WRITTEN, not merely while
+                // the field has focus.
+                //
+                // The composer takes the caret on appear and keeps it, so
+                // "focused" is permanently true and the whole history sat at
+                // half opacity for ever — every note read as disabled, which
+                // is exactly what it looked like (Marcello, 2026-09-06). The
+                // design's intent was the composing state, and the honest
+                // test for that is whether there is a draft in the field.
+                .opacity(store.draft.isEmpty ? 1 : 0.55)
+                .animation(Motion.hintFade, value: store.draft.isEmpty)
+        }
+        .onAppear {
+            // The space opens ready to write. Nothing to read first, nothing
+            // to click.
+            DispatchQueue.main.async { composerFocused = true }
+        }
+        .onReceive(store.$composerFocusRequest) { _ in
+            DispatchQueue.main.async { composerFocused = true }
+        }
+    }
+
+    @ViewBuilder
+    private var streamBody: some View {
+        let entries = store.stream
+        if entries.isEmpty, !isCalendarSpace {
+            // The lists' empty state (Otto peeking); Meetings keeps its own.
+            EmptyListView(compact: isContainer,
+                          showsSubtitle: !isContainer || streamBudget >= 180,
+                          subtitleKey: "notes.emptySubtitle",
+                          fillHeight: isContainer ? nil : streamBudget)
+                .transition(EmptyListView.transition)
+        } else if entries.isEmpty {
+            EmptyStreamState()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.top, 28)
+        } else {
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: NotesMetrics.entryGap) {
+                        ForEach(entries) { note in
+                            NoteEntryRow(
+                                note: note,
+                                isHovered: hoveredNoteID == note.id,
+                                onHover: { hovering in
+                                    if hovering {
+                                        hoveredNoteID = note.id
+                                    } else if hoveredNoteID == note.id {
+                                        hoveredNoteID = nil
+                                    }
+                                },
+                                isDragged: draggedNoteID == note.id,
+                                showsDropIndicator: dropBeforeID == note.id,
+                                dragOffset: draggedNoteID == note.id ? dragOffset : 0,
+                                onDrag: { pointerY, travelled in
+                                    if draggedNoteID != note.id {
+                                        draggedNoteID = note.id
+                                        HapticManager.shared.dragBegan()
+                                    }
+                                    // Screen y grows UPWARD; the row follows
+                                    // the pointer, so the offset is negated.
+                                    dragOffset = -travelled
+                                    updateDropTarget(pointerY: pointerY,
+                                                     dragged: note.id, rows: entries)
+                                },
+                                onDragEnd: { commitReorder(dragged: note.id) },
+                                onFrame: { rowFrames[note.id] = $0 }
+                            )
+                            .id(note.id)
+                        }
+                    }
+                    // Floating panels: the list column every row shares — the
+                    // note rows start where the to-do rows do, their text on
+                    // the checkbox column (22), and the first title sits 22
+                    // under the bar like the first to-do.
+                    .padding(.horizontal, isContainer ? PanelMetrics.barOuterInset : SpaceChrome.columnInset)
+                    .padding(.top, isContainer ? 16 : 12.5)
+                    .padding(.bottom, 8)
+                    .background(GeometryReader { geo in
+                        Color.clear
+                            .preference(key: NotesStreamOffsetKey.self,
+                                        value: -geo.frame(in: .named(NotesStreamOffsetKey.space)).minY)
+                            .preference(key: NotesStreamHeightKey.self, value: geo.size.height)
+                    })
+                    // Travel for the last note to clear the floating pills.
+                    // Outside the measurement, so it cannot feed its own test.
+                    .padding(.bottom, overlapsFooter(entries) ? PanelMetrics.floatingFooterDepth : 0)
+                }
+                .coordinateSpace(name: NotesStreamOffsetKey.space)
+                .onPreferenceChange(NotesStreamOffsetKey.self) { streamOffset = $0 }
+                .onPreferenceChange(NotesStreamHeightKey.self) { streamNatural = $0 }
+                // The arrows moved a selection the list was not following, so
+                // past the sixth note you were selecting rows you could not
+                // see — still moving, still invisible. The same fault the
+                // to-do list had, and the same fix.
+                .onChange(of: store.selectedNoteID) { selected in
+                    guard let selected else { return }
+                    withAnimation(Motion.hintFade) {
+                        proxy.scrollTo(selected, anchor: .center)
+                    }
+                }
+            }
+            .frame(height: streamViewport(entries), alignment: .top)
+            // The stream ENDS at its own bottom edge. Without this a run of
+            // notes taller than the budget kept drawing into the space bar and
+            // past the panel, which is how they became unclickable. The edge
+            // is the lists' own — a fade under a progressive blur — rather
+            // than `.clipped()`, which cut the last note on a straight line.
+            .modifier(TodoScrollEdgeEffect(
+                isScrollable: natural(entries) > streamBudget,
+                scrollOffset: streamOffset,
+                hasBelow: natural(entries) > streamViewport(entries) + max(streamOffset, 0) + 2,
+                isContainer: isContainer,
+                showsFootBlur: !isContainer))
+            .preference(key: FootBlurVisibleKey.self, value: overlapsFooter(entries))
+            // While the Notes · Meetings menu is open it sits over these rows,
+            // and their click catchers are AppKit views, which win every hit
+            // test against SwiftUI — the click went to the note underneath.
+            .allowsHitTesting(!store.kindMenuOpen)
+            // A click anywhere else closes it: the panel's MenuDismissCatcher,
+            // the same one the gear's menu uses.
+        }
+    }
+
+    /// Insert before the first row the pointer has dropped past the middle of.
+    ///
+    /// Screen coordinates, reported by the rows' own catchers: the drag is
+    /// handled in AppKit (see RowClickCatcher), and screen y grows UPWARD, so
+    /// "further down the list" means a SMALLER y — hence `>` where the to-do
+    /// list, working in flipped SwiftUI space, uses `<`.
+    private func updateDropTarget(pointerY: CGFloat, dragged: UUID, rows: [QuickNote]) {
+        let landing = rows.first { row in
+            guard let frame = rowFrames[row.id] else { return false }
+            return pointerY > frame.midY
+        }
+        guard let landing else {
+            let toEnd = rows.last?.id != dragged
+            if toEnd && !dropAtEnd { HapticManager.shared.reorderTick() }
+            dropBeforeID = nil
+            dropAtEnd = toEnd
+            return
+        }
+        let landingIndex = rows.firstIndex { $0.id == landing.id }
+        let draggedIndex = rows.firstIndex { $0.id == dragged }
+        // Landing on itself, or in the gap directly above itself, is where it
+        // already is — say nothing rather than promise a move that won't happen.
+        if landing.id == dragged || landingIndex.map({ $0 - 1 }) == draggedIndex {
+            dropBeforeID = nil
+            dropAtEnd = false
+            return
+        }
+        if dropBeforeID != landing.id { HapticManager.shared.reorderTick() }
+        dropBeforeID = landing.id
+        dropAtEnd = false
+    }
+
+    private func commitReorder(dragged: UUID) {
+        if let before = dropBeforeID, before != dragged {
+            store.reorder(dragged, before: before)
+        } else if dropAtEnd {
+            store.moveToEnd(dragged)
+        }
+        draggedNoteID = nil
+        dropBeforeID = nil
+        dropAtEnd = false
+        dragOffset = 0
+    }
+
+    /// Roughly how tall the entries want to be, so a short stream hugs instead
+    /// of reserving the whole budget — the panel's second principle. An
+    /// estimate on purpose: measuring would cost a layout round-trip on every
+    /// keystroke, and being a row out costs one row of scroll.
+    private func naturalHeight(of entries: [QuickNote]) -> CGFloat {
+        24 + CGFloat(entries.count) * 62
+    }
+
+    /// Measured once drawn; the estimate covers the first frame.
+    private func natural(_ entries: [QuickNote]) -> CGFloat {
+        streamNatural > 0 ? streamNatural : naturalHeight(of: entries)
+    }
+
+    /// Notes reach the floating footer's blur band.
+    private func overlapsFooter(_ entries: [QuickNote]) -> Bool {
+        !isContainer && natural(entries) > streamBudget - PanelMetrics.floatingFooterBlurDepth
+    }
+
+    private func streamViewport(_ entries: [QuickNote]) -> CGFloat {
+        min(natural(entries), streamBudget)
+    }
+}
+
+private struct NotesStreamOffsetKey: PreferenceKey {
+    static let space = "otto.notesStream"
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+private struct NotesStreamHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+// MARK: The composer
+
+private struct Composer: View {
+    @FocusState.Binding var focused: Bool
+    let isContainer: Bool
+
+    @ObservedObject private var store = NotesStore.shared
+    @State private var hover = false
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// The same well the to-do capture field sits in, at the same depths.
+    ///
+    /// It was a flat `fieldWell` fill with a 24pt radius and a 16pt font, and
+    /// beside the list's own field it read as another product: different type,
+    /// different depth, different key hints (Marcello, 2026-09-06 — "sembrano
+    /// veramente due prodotti diversi"). One bar, three roles, was the
+    /// handoff's own rule; three roles cannot mean three appearances.
+    private var wellOpacity: Double {
+        if colorScheme == .dark {
+            return focused ? 0.14 : (hover ? 0.18 : 0.22)
+        }
+        return focused ? 0.03 : (hover ? 0.04 : 0.05)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: PanelMetrics.rowInnerGap) {
+                OttoIcon("note.text", pointSize: 14)
+                    .foregroundStyle(NotesMetrics.pillStroke)
+                    .frame(width: PanelMetrics.checkboxSize, height: PanelMetrics.checkboxSize)
+
+                ZStack(alignment: .topLeading) {
+                    if store.draft.isEmpty {
+                        Text(L10n.t("notes.composerPlaceholder"))
+                            .font(DSFont.todoTitle)
+                            .foregroundStyle(focused ? DSColor.textFaint : DSColor.textHint)
+                            .allowsHitTesting(false)
+                    }
+                    // The user's text is NEVER reformatted — lowercase,
+                    // missing punctuation and typos are preserved exactly.
+                    TextField("", text: $store.draft, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(DSFont.todoTitle)
+                        .foregroundStyle(DSColor.textPrimaryBright)
+                        .focused($focused)
+                        .lineLimit(isContainer ? 2 : 10)
+                        .onChange(of: store.draft) { _ in store.draftChanged() }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                hint
+            }
+        }
+        // 20 / 12, the creation bar's own insets.
+        .padding(.horizontal, PanelMetrics.barPaddingH)
+        .padding(.vertical, PanelMetrics.barPaddingV)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minHeight: PanelMetrics.barHeight)
+        // A WELL: darker than the panel, with the edge doing the finding —
+        // the same reasoning, and the same numbers, as InlineDraftRow.
+        .background(
+            RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
+                .fill(Color.black.opacity(wellOpacity))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
+                .strokeBorder(focused ? NotesMetrics.pillStroke.opacity(0.7)
+                                      : Color.dynamicOverlay(light: 0.07, dark: 0.08),
+                              lineWidth: 1)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous))
+        .onTapGesture { focused = true }
+        .onHover { hovering in
+            withAnimation(Motion.hintFade) { hover = hovering }
+        }
+        .animation(Motion.hintFade, value: focused)
+    }
+
+    /// Two keys at the right edge, drawn the way the creation bar draws its
+    /// own — a word and a bordered cap at 10pt, not a pair of filled Keycaps.
+    private var hint: some View {
+        HStack(spacing: 8) {
+            if !store.draft.isEmpty {
+                Text(store.saveError != nil ? L10n.t("meeting.saveFailed") : (store.isWriting ? L10n.t("notes.saving") : L10n.t("notes.saved")))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(NotesMetrics.pillStroke.opacity(0.8))
+                    .fixedSize()
+                    .transition(.opacity)
+            }
+            Text(L10n.t("notes.save"))
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(DSColor.textFaint)
+                .fixedSize()
+            // ⏎, not ⌘S. Return is the confirm key everywhere else in the
+            // app — it files a to-do, it commits a step — and Notes was the
+            // one surface asking for a modifier to do the same thing.
+            // ⇧⏎ still puts in a line break.
+            Text("\u{21A9}")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(DSColor.textFaint)
+                .frame(width: 32, height: 19)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(DSColor.textFaint, lineWidth: 1)
+                )
+        }
+        .animation(Motion.hintFade, value: store.draft.isEmpty)
+    }
+}
+
+/// The Calendar space uses the same stable leading slot as the to-do checkbox
+/// and Notes icon, so switching spaces never shifts the field's text.
+private struct CalendarComposer: View {
+    @FocusState.Binding var focused: Bool
+    @ObservedObject private var store = NotesStore.shared
+    @State private var hover = false
+
+    var body: some View {
+        HStack(spacing: PanelMetrics.rowInnerGap) {
+            OttoIcon("calendar", pointSize: 14)
+                .foregroundStyle(PanelMetrics.accent)
+                .frame(width: PanelMetrics.checkboxSize, height: PanelMetrics.checkboxSize)
+
+            TextField(L10n.t("meeting.search"), text: $store.meetingQuery)
+                .textFieldStyle(.plain)
+                .font(DSFont.todoTitle)
+                .foregroundStyle(DSColor.textPrimaryBright)
+                .focused($focused)
+
+            Button { store.beginMeetingPicker() } label: {
+                OttoIcon("calendar.badge.plus", pointSize: 13)
+                    .foregroundStyle(DSColor.textSecondary)
+                    .frame(width: 30, height: 24)
+                    .background(Capsule().fill(DSColor.fieldBackground))
+            }
+            .buttonStyle(.plain)
+            .help(L10n.t("meeting.choose"))
+        }
+        .padding(.horizontal, PanelMetrics.barPaddingH)
+        .padding(.vertical, PanelMetrics.barPaddingV)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minHeight: PanelMetrics.barHeight)
+        .background(
+            RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
+                .fill(Color.black.opacity(focused ? 0.14 : (hover ? 0.18 : 0.22)))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
+                .strokeBorder(focused ? PanelMetrics.accent.opacity(0.7)
+                                      : Color.dynamicOverlay(light: 0.07, dark: 0.08),
+                              lineWidth: 1)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous))
+        .onTapGesture { focused = true }
+        .onHover { hover = $0 }
+        .onChange(of: store.meetingSearchFocus) { if $0 { focused = true } }
+    }
+}
+
+// MARK: Notes · Meetings menu
+
+/// Ordinary notes or meeting notes: one space, two views of it. The "Notes ⌄"
+/// dropdown that opened this was removed from both layouts (Marcello,
+/// 2026-10-04); ⌘1 / ⌘2 switch the view. The list stays for the store's
+/// menu state, which nothing on screen opens any more.
+struct NotesKindMenuList: View {
+    let meetings: Bool
+    @ObservedObject private var notes = NotesStore.shared
+
+    var body: some View {
+        VStack(spacing: 1) {
+            row(0, L10n.t("notes.kind.notes"), shortcut: "\u{2318}1", active: !meetings)
+            row(1, L10n.t("notes.kind.meetings"), shortcut: "\u{2318}2", active: meetings)
+        }
+        .padding(OttoMenuStyle.padding)
+        .frame(width: 220)
+        // The gear menu's surface, so the two menus are one kind of thing.
+        .ottoMenuSurface()
+        .accessibilityElement(children: .contain)
+    }
+
+    private func row(_ index: Int, _ title: String, shortcut: String, active: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: OttoMenuStyle.rowRadius, style: .continuous)
+        return Button { notes.chooseKind(meetings: index == 1) } label: {
+            HStack(spacing: 8) {
+                OttoIcon("checkmark", pointSize: 11)
+                    .foregroundStyle(DSColor.textPrimaryBright)
+                    .opacity(active ? 1 : 0)
+                    .frame(width: 14)
+                Text(title)
+                    .font(.system(size: OttoMenuStyle.rowFont, weight: active ? .medium : .regular))
+                    .foregroundStyle(active ? DSColor.textPrimaryBright : DSColor.textPrimary)
+                Spacer(minLength: 8)
+                Text(shortcut)
+                    .font(.system(size: OttoMenuStyle.shortcutFont))
+                    .foregroundStyle(DSColor.textHint)
+                    .fixedSize()
+            }
+            .padding(.leading, 10)
+            .padding(.trailing, OttoMenuStyle.rowPaddingH)
+            .padding(.vertical, OttoMenuStyle.rowPaddingV)
+            .background(shape.fill(OttoMenuStyle.rowFill(highlighted: notes.kindMenuSelection == index)))
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .onHover { if $0 { notes.kindMenuSelection = index } }
+        .accessibilityAddTraits(active ? .isSelected : [])
+    }
+}
+
+// MARK: U5 capture headers (floating panels)
+
+private struct NotesCaptureHeader: View {
+    @FocusState.Binding var focused: Bool
+    @ObservedObject private var store = NotesStore.shared
+
+    var body: some View {
+        CaptureHeader(
+            tint: .notes,
+            placeholder: L10n.t("capture.notePlaceholder"),
+            showsPlaceholder: store.draft.isEmpty,
+            isTyping: !store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            saveLabel: L10n.t("capture.save"),
+            onSave: { store.commitDraft() },
+            onDot: { TodoStore.shared.cycleCollection() }
+        ) {
+            // The user's text is NEVER reformatted — lowercase, missing
+            // punctuation and typos are preserved exactly.
+            TextField("", text: $store.draft, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 18))
+                .foregroundStyle(SpaceInk.a(1))
+                .focused($focused)
+                .lineLimit(10)
+                .onChange(of: store.draft) { _ in store.draftChanged() }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { focused = true }
+    }
+}
+
+private struct CalendarCaptureHeader: View {
+    @FocusState.Binding var focused: Bool
+    @ObservedObject private var store = NotesStore.shared
+
+    var body: some View {
+        CaptureHeader(
+            tint: .calendar,
+            placeholder: L10n.t("meeting.search"),
+            showsPlaceholder: store.meetingQuery.isEmpty,
+            isTyping: false,
+            saveLabel: nil,
+            onSave: {},
+            onDot: { TodoStore.shared.cycleCollection() }
+        ) {
+            // No calendar icon here any more: it opened a separate picker page
+            // with no clear meaning (2026-09-25 spec). Meetings still come from
+            // the calendar, listed below.
+            TextField("", text: $store.meetingQuery)
+                .textFieldStyle(.plain)
+                .font(.system(size: 18))
+                .foregroundStyle(SpaceInk.a(1))
+                .focused($focused)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { focused = true }
+        .onChange(of: store.meetingSearchFocus) { if $0 { focused = true } }
+    }
+}
+
+// MARK: One entry in the stream
+
+private struct NoteEntryRow: View {
+    let note: QuickNote
+    let isHovered: Bool
+    let onHover: (Bool) -> Void
+    /// Where the drop indicator goes, and whether this row is the one moving.
+    let isDragged: Bool
+    let showsDropIndicator: Bool
+    let dragOffset: CGFloat
+    let onDrag: (CGFloat, CGFloat) -> Void
+    let onDragEnd: () -> Void
+    let onFrame: (CGRect) -> Void
+
+    @ObservedObject private var store = NotesStore.shared
+    @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
+    private var isLanding: Bool { store.landingNoteID == note.id }
+    private var isSelected: Bool { store.selectedNoteID == note.id }
+
+    var body: some View {
+        rowContent
+            // On TOP, not behind: AppKit hit-tests the frontmost subview
+            // first, and behind the content it would never be reached.
+            .overlay(RowClickCatcher(
+                onClick: { store.open(note.id) },
+                onHover: onHover,
+                onDrag: onDrag,
+                onDragEnd: onDragEnd,
+                onFrame: onFrame
+            ))
+    }
+
+    private var rowContent: some View {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                // The to-do list's own title type — 14/medium — not a 15pt
+                // semibold of its own. Notes was styled as a separate surface
+                // and read as a separate product beside it.
+                //
+                // No "generated title" badge (Marcello, 2026-09-06). The
+                // stored `titleSource` stays and still does its work — ⌘⇧R
+                // regenerates a proposed title, and a hand-typed one locks the
+                // model out of that note permanently. It is simply not
+                // announced on the row any more: every title here is drawn
+                // from the note's own words by an on-device pass, so the badge
+                // was labelling the user's own sentence as machine output.
+                Text(note.title)
+                    .font(DSFont.todoTitle)
+                    .foregroundStyle(DSColor.textPrimaryBright)
+                    .lineLimit(1)
+
+                Text(NoteMarkdown.plainText(note.previewLine))
+                    .font(DSFont.checklistItem)
+                    .lineSpacing(2)
+                    .foregroundStyle(DSColor.textSecondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 12)
+
+            // ONE slot at the right edge, holding the time or the
+            // affordances — never both, never in different places.
+            //
+            // The stamp used to trail the title, so it landed at a different x
+            // on every row and a column of times could not be read as a
+            // column; the affordances lived in a separate reserved gutter
+            // further right, which meant the row carried two right-hand
+            // margins. They are the same margin now: at rest it tells you
+            // when, and under the pointer it tells you what you can do
+            // (Marcello, 2026-09-06).
+            ZStack(alignment: .trailing) {
+                Text(Self.stamp(note.updatedAt))
+                    // The system face, like every other date in the app
+                    // (2026-09-25 spec: monospace is for code only).
+                    .font(.system(size: 12))
+                    .foregroundStyle(DSColor.textHint)
+                    .fixedSize()
+                    .opacity(showsActions ? 0 : 1)
+
+                RowActions(showEnter: isSelected, showGrip: isHovered)
+                    .opacity(showsActions ? 1 : 0)
+            }
+            // A floor, not a fixed width: the affordances are 52 and a long
+            // stamp ("yesterday 18:04") is wider, so pinning it would clip the
+            // one and pinning it to the wider would push the title in for
+            // nothing.
+            .frame(minWidth: PanelMetrics.rowActionsWidth, alignment: .trailing)
+            // On the title's line, not the block's middle.
+            .padding(.top, 2)
+        }
+        // Padding that does NOT change with state.
+        //
+        // It used to be applied only while highlighted, so the hover
+        // background hugged the text on all sides and the row jumped by 24pt
+        // the moment the pointer arrived (Marcello, 2026-09-06). A hover state
+        // that resizes the thing being hovered is a hover state that fights
+        // the pointer.
+        // Container: the slab starts at the field's edge (16) and the text
+        // stays where it was (16 + 22).
+        .padding(.horizontal, notchLayout == .container ? NotesMetrics.entryInset + 10 : NotesMetrics.entryInset)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: NotesMetrics.highlightRadius, style: .continuous)
+                .fill(isLanding ? NotesMetrics.pillStroke.opacity(0.12)
+                      : (isSelected ? DSColor.focusedRowBackground
+                         : (isHovered ? DSColor.rowHover(container: notchLayout == .container) : Color.clear)))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: NotesMetrics.highlightRadius, style: .continuous)
+                .strokeBorder(isLanding ? NotesMetrics.pillStroke.opacity(0.3) : Color.clear,
+                              lineWidth: 1)
+        )
+        .overlay(alignment: .top) {
+            if showsDropIndicator {
+                Capsule()
+                    .fill(DSColor.textPrimaryBright)
+                    .frame(height: 2)
+                    .offset(y: -(NotesMetrics.entryGap / 2 + 1))
+            }
+        }
+        .offset(y: dragOffset)
+        .zIndex(isDragged ? 1 : 0)
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button(L10n.t("notes.rename")) { store.open(note.id); store.beginRename() }
+            Button(L10n.t("notes.duplicate")) { store.duplicate(note.id) }
+            Divider()
+            Button(L10n.t("action.delete"), role: .destructive) { store.delete(note.id) }
+        }
+        .animation(Motion.hoverFade, value: isHovered)
+        .animation(Motion.hoverFade, value: isSelected)
+        .animation(Motion.contentHug, value: isLanding)
+    }
+
+    private var showsActions: Bool { isHovered || isSelected }
+
+    /// Relative while it still means something, absolute once it does not.
+    private static func stamp(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if abs(date.timeIntervalSinceNow) < 120 { return L10n.t("notes.justNow") }
+        if calendar.isDateInToday(date) {
+            return NotesFormatters.cached("HH:mm").string(from: date)
+        }
+        if calendar.isDateInYesterday(date) {
+            return L10n.t("notes.yesterday") + " " + NotesFormatters.cached("HH:mm").string(from: date)
+        }
+        return NotesFormatters.cached("d MMM").string(from: date)
+    }
+}
+
+// MARK: Empty state (Meetings)
+
+private struct EmptyStreamState: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            Text(L10n.t("calendar.emptyTitle"))
+                .font(.system(size: 16))
+                .foregroundStyle(DSColor.textSecondary)
+            // No illustration, no icon, no button: the composer above IS the
+            // call to action, and anything here would compete with it.
+            Text(L10n.t("calendar.emptyBody"))
+                .font(.system(size: 13.5))
+                .foregroundStyle(DSColor.textHint)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 380)
+        }
+    }
+}
+
+// MARK: - Note level: the field becomes the title
+
+private struct NoteDetailView: View {
+    let note: QuickNote
+    let isContainer: Bool
+
+    @ObservedObject private var store = NotesStore.shared
+    @ObservedObject private var editor = NoteEditorController.shared
+    @FocusState private var titleFocused: Bool
+    @State private var titleDraft: String
+    @State private var body_: String
+    @ObservedObject private var vault = MarkdownVault.shared
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// Seeded HERE and not in `onAppear`, and that ordering is the whole of
+    /// the "I open a note and it is blank" bug.
+    ///
+    /// `onAppear` runs AFTER the NSTextView has been made, so the view was
+    /// built from an empty string and then told the real text — and the
+    /// coordinator refuses to reload a note it has already loaded, because
+    /// reloading on every change is what drops the caret to the top of the
+    /// document on every keystroke. The two rules met and the note stayed
+    /// empty on screen while its text sat safely in the store
+    /// (Marcello, 2026-09-06). Worse than blank: the first character typed
+    /// into that empty view serialized back over the real content.
+    ///
+    /// A `State` initial value is available before the body is ever evaluated,
+    /// so the text view is built from the note's own text the first time.
+    init(note: QuickNote, isContainer: Bool) {
+        self.note = note
+        self.isContainer = isContainer
+        _titleDraft = State(initialValue: note.title)
+        _body_ = State(initialValue: note.content)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if isContainer {
+                header
+                    .padding(.horizontal, PanelMetrics.barOuterInset)
+            } else {
+                // Floating panels: THE top bar, one level in — Back and the
+                // note's title where the capture field stands at the root. The
+                // old well-shaped title bar is not drawn as well.
+                contextBar
+            }
+            if note.meetingContext != nil { MeetingContextControls(note: note) }
+            if vault.mirrorError {
+                Text(L10n.t("meeting.mirrorFailed")).font(DSFont.checklistItem).foregroundStyle(DSColor.textSecondary).padding(.horizontal, 22)
+            }
+            if let error = store.saveError {
+                HStack {
+                    Text(error).font(DSFont.checklistItem).foregroundStyle(DSColor.textSecondary)
+                    Button(L10n.t("meeting.retry")) { store.saveNow() }
+                }.padding(.horizontal, 22)
+            }
+
+            // Editable in place — no separate edit mode, no Save button. The
+            // note is the editor, and now a rich one: NoteBodyView is an
+            // NSTextView over the same markdown string that was there before.
+            NoteBodyView(noteID: note.id, markdown: $body_, colorScheme: colorScheme) { range, phrase in
+                NoteEditorController.shared.pickerTarget = (range, phrase)
+            }
+                .onChange(of: body_) { store.setBody($0, for: note.id) }
+                // The text begins on the title's column. The old compound
+                // inset created decorative but unusable side bands and made
+                // the document visibly narrower than its own title field.
+                // Floating panels: 25 + the text view's 28 inset = 53, the
+                // title's column; the inset holds the linked checkboxes.
+                .padding(.horizontal, isContainer ? PanelMetrics.blockPadding : SpaceChrome.textColumn - 28)
+                .padding(.top, 6)
+                // A document editor owns the remaining room; it is not sized
+                // to its current line count. Sizing it to `contentHeight`
+                // turns a short note into a tiny scroll well and leaves most
+                // of the card as dead space.
+                .frame(height: editorViewportHeight, alignment: .top)
+                // Fades out above the toolbar instead of stopping on a hard
+                // line: `.clipped()` cut a block quote in half with an empty
+                // band under it (Marcello, 2026-10-02).
+                .mask(
+                    VStack(spacing: 0) {
+                        Color.black
+                        LinearGradient(colors: [.black, .black.opacity(0)],
+                                       startPoint: .top, endPoint: .bottom)
+                            .frame(height: 28)
+                    }
+                )
+
+            if note.meetingContext != nil && editor.pickerTarget == nil { MeetingTasksView(note: note) }
+            if let target = editor.pickerTarget {
+                ActionPicker(phrase: target.phrase, dueDate: ActionItemDetector.dueDate(in: target.phrase)) { collectionID in
+                    store.createTodo(from: target.phrase, in: collectionID, note: note.id)
+                } onDismiss: { editor.pickerTarget = nil }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+            }
+            if !isContainer { Spacer(minLength: 0) }
+            bottomBar
+        }
+        .frame(maxHeight: isContainer ? nil : .infinity, alignment: .top)
+        .animation(Motion.hintFade, value: editor.pickerTarget?.phrase)
+        // Opening a note puts the caret in the CONTENT — driven from HERE,
+        // not from the signal the store sends.
+        //
+        // `open()` bumps `bodyFocusRequest` and then this view is created;
+        // `.onReceive` only ever delivers values published after it
+        // subscribes, so that first request arrived before anything was
+        // listening and was simply lost. With no one claiming the keyboard,
+        // AppKit fell back to its own choice of first responder — the title
+        // field — and an NSTextField selects all of its text when it becomes
+        // one. Hence a note that opened with its NAME highlighted, one
+        // keystroke away from being renamed by someone who asked to read it
+        // (Marcello, 2026-09-06).
+        //
+        // Titles here are proposed by the app, never typed, so the title is
+        // never the place to land. It is reached by clicking it, or by Rename.
+        .onAppear { focusBody() }
+        .onChange(of: note.title) { if !titleFocused { titleDraft = $0 } }
+        // Still subscribed, for every LATER request: ⏎ out of the title,
+        // and the rename flow handing the caret back.
+        .onChange(of: store.bodyFocusRequest) { _ in
+            guard store.openNoteID == note.id else { return }
+            focusBody()
+        }
+        .onChange(of: store.renameRequest) { _ in
+            guard store.openNoteID == note.id else { return }
+            DispatchQueue.main.async { titleFocused = true }
+            FieldCaret.collapseToEnd()
+        }
+    }
+
+    /// The SAME field as the composer — same box, same insets, same type.
+    ///
+    /// One bar in three roles was the handoff's own rule, and three roles
+    /// cannot mean three appearances: the composer was 14/medium in a 59pt
+    /// well, this was 17/semibold in a 76pt one, and the body below was a
+    /// third size again (Marcello, 2026-09-06). They are one input now,
+    /// wearing whatever the role needs inside it.
+    private var header: some View {
+        HStack(spacing: PanelMetrics.rowInnerGap) {
+            BackButton { store.closeNote() }
+
+            TextField("", text: $titleDraft)
+                .textFieldStyle(.plain)
+                .font(DSFont.todoTitle)
+                .foregroundStyle(DSColor.textPrimaryBright)
+                .focused($titleFocused)
+                .onSubmit { commitTitle(); store.focusBody() }
+                .onChange(of: titleFocused) { if !$0 { commitTitle() } }
+
+            if editor.detectedCount > 0 {
+                // Never "0 impegni trovati": a count of nothing advertises a
+                // failure nobody asked about.
+                Text(editor.detectedCount == 1
+                     ? L10n.t("notes.action.foundOne")
+                     : String(format: L10n.t("notes.action.found"), "\(editor.detectedCount)"))
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(DSColor.textFaint)
+                    .fixedSize()
+            }
+
+            HStack(spacing: 8) {
+                Text(store.saveError != nil ? L10n.t("meeting.saveFailed") : (store.isWriting ? L10n.t("notes.saving") : L10n.t("notes.saved")))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(DSColor.textFaint)
+                    .fixedSize()
+                Text("\u{2318}[")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(DSColor.textFaint)
+                    .frame(width: 32, height: 19)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(DSColor.textFaint, lineWidth: 1)
+                    )
+            }
+        }
+        .padding(.horizontal, PanelMetrics.barPaddingH)
+        .padding(.vertical, PanelMetrics.barPaddingV)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minHeight: PanelMetrics.barHeight)
+        .background(
+            RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
+                .fill(Color.black.opacity(titleFocused ? 0.14 : 0.22))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
+                .strokeBorder(titleFocused ? NotesMetrics.pillStroke.opacity(0.7)
+                                           : Color.dynamicOverlay(light: 0.07, dark: 0.08),
+                              lineWidth: 1)
+        )
+        .animation(Motion.hintFade, value: titleFocused)
+    }
+
+    private var contextBar: some View {
+        ContextBar(
+            parentTitle: TodoStore.shared.panelPath.dropLast().last?.title ?? "",
+            onBack: { TodoStore.shared.goBack() }
+        ) {
+            // Still the title field: clicking it renames, as it always did.
+            TextField("", text: $titleDraft)
+                .textFieldStyle(.plain)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(SpaceInk.a(1))
+                .focused($titleFocused)
+                .onSubmit { commitTitle(); store.focusBody() }
+                .onChange(of: titleFocused) { if !$0 { commitTitle() } }
+        } trailing: {
+            HStack(spacing: 10) {
+                Text(store.saveError != nil ? L10n.t("meeting.saveFailed")
+                     : (store.isWriting ? L10n.t("notes.saving") : L10n.t("notes.saved")))
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(SpaceInk.a(0.45))
+                    .fixedSize()
+                CaptureKeyHint(label: "esc")
+            }
+        }
+    }
+
+    private var bottomBar: some View {
+        HStack(spacing: 10) {
+            // In BOTH layouts. This row exists in the container too — it is
+            // where the word count and the download already live — so the
+            // toolbar costs no extra height there, and a note offering
+            // different tools depending on the build was the actual complaint.
+            NoteFormatBar()
+
+            Spacer(minLength: 8)
+
+            Text("\(note.wordCount) " + L10n.t("notes.wordsSuffix"))
+                .font(.system(size: 12).monospacedDigit())
+                .foregroundStyle(DSColor.textHint)
+                .fixedSize()
+
+            // No printed shortcut. ⌘⇧S still fires it — the glyphs were
+            // simply costing ~70pt in a row that now holds nine more controls.
+            Button { store.exportOpenNote() } label: {
+                Text(L10n.t("notes.download"))
+                    .font(.system(size: 12))
+                    .foregroundStyle(DSColor.textPrimaryBright)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                    .floatingGlass(in: RoundedRectangle(
+                        cornerRadius: isContainer ? 20 : SpaceChrome.cornerRadius, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            // Rename is gone from this row — the bar needs the width. It is
+            // still the title in the header, and Rename in the stream's own
+            // context menu.
+        }
+        .glassGroup(spacing: 12)
+        // The row's 76pt budget is exact: 36pt of controls plus 40 of air.
+        // Floating panels: 16 from the side AND the bottom — the corner
+        // inset every corner of the window shares (SpaceChrome.cornerInset).
+        // The container keeps 24 / 16 / 24.
+        .padding(.horizontal, isContainer ? 24 : SpaceChrome.cornerInset)
+        .padding(.top, isContainer ? 16 : 24)
+        .padding(.bottom, isContainer ? 24 : SpaceChrome.cornerInset)
+        .frame(height: NotesMetrics.bottomBarHeight, alignment: .top)
+    }
+
+    private var editorViewportHeight: CGFloat {
+        max(160, PanelMetrics.todoBlockMaxHeight
+            - PanelMetrics.panelTopPadding
+            - PanelMetrics.barHeight - 28
+            - (note.meetingContext == nil || editor.pickerTarget != nil ? 0 : 250)
+            - NotesMetrics.bottomBarHeight
+            - (editor.pickerTarget == nil ? 0 : (editor.pickerExpanded ? 200 : 100)))
+    }
+
+    /// Hand the keyboard to the note's text and put the caret at the end of
+    /// what is already written.
+    private func focusBody() {
+        guard store.openNoteID == note.id else { return }
+        // Async: on the appear pass the NSTextView may not be in a window yet,
+        // and `makeFirstResponder` on a view with no window does nothing at
+        // all — silently, which is the worst kind.
+        DispatchQueue.main.async {
+            guard let view = NoteEditorController.shared.textView else { return }
+            // The caret position is set unconditionally; first responder is
+            // taken ONLY if the panel already holds the keyboard.
+            //
+            // Forcing it otherwise reaches outside this view: the notch is a
+            // nonactivating panel whose `canBecomeKey` is normally false, and
+            // making a responder in it while it cannot be key knocked the
+            // panel into a collapse — which reset the mode and dropped the
+            // user out of the Notes space entirely, on the one action that was
+            // supposed to take them further in. Every real route here (⏎ from
+            // the stream, a click on a row) already has the panel key, so
+            // nothing is lost by asking rather than insisting.
+            view.setSelectedRange(NSRange(location: (view.string as NSString).length, length: 0))
+            if view.window?.isKeyWindow == true {
+                view.window?.makeFirstResponder(view)
+                NoteEditorController.shared.bodyFocused = true
+            }
+            NoteEditorController.shared.refreshState()
+        }
+    }
+
+    private func commitTitle() {
+        let clean = titleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, clean != note.title else {
+            titleDraft = note.title
+            return
+        }
+        store.rename(note.id, to: clean)
+    }
+}
+
+/// The way back to the stream.
+///
+/// It carries a hover state because it is the only way out of an open note
+/// that is visible on screen — the space bar belongs to the stream level and
+/// is not drawn here — and a control you must find without being told about
+/// has to answer the pointer when it arrives.
+private struct BackButton: View {
+    let action: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            OttoIcon("chevron.left", pointSize: 15)
+                .foregroundStyle(hover ? DSColor.textPrimaryBright : PanelMetrics.accent)
+                .frame(width: 30, height: 30)
+                .background(
+                    Circle().fill(hover ? DSColor.fieldBackground : Color.clear)
+                )
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .animation(Motion.hoverFade, value: hover)
+        .help(L10n.t("notes.back"))
+    }
+}
+
+// MARK: - Undo
+
+private struct UndoBar: View {
+    let title: String
+    @ObservedObject private var store = NotesStore.shared
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("\u{00AB}\(title)\u{00BB} " + L10n.t("notes.deletedSuffix"))
+                .font(.system(size: 12.5))
+                .foregroundStyle(DSColor.textSecondary)
+                .lineLimit(1)
+            Button { store.undoDelete() } label: {
+                HStack(spacing: 6) {
+                    Text(L10n.t("notes.undo"))
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(DSColor.textPrimaryBright)
+                    Keycap(text: "\u{2318}Z", tone: .onDark, size: 9)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .background(Capsule().fill(DSColor.fieldBackground))
+        .overlay(Capsule().strokeBorder(DSColor.panelBorder, lineWidth: 0.5))
+        .shadow(color: DSColor.shadowSoft, radius: 10, y: 4)
+    }
+}
+
+// MARK: - The Notes pill in the space bar
+
+/// Always first, never scrolls, no icon.
+///
+/// The icon was removed rather than redrawn: in this interface a small rounded
+/// square with a stroke means one thing, a CHECKBOX, so a three-line glyph in
+/// that shape read as something to tick off. Distinction comes from position
+/// and state — permanently first, permanently active-styled — not from a new
+/// shape (handoff, decision 3).
+struct NotesPill: View {
+    @ObservedObject private var store = TodoStore.shared
+    @ObservedObject private var notes = NotesStore.shared
+    @State private var hover = false
+
+    /// Notes is lit for its meeting-notes view too — it is one space.
+    private var isActive: Bool { store.panelMode == .notes || store.panelMode == .calendar }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(L10n.t("filter.notes"))
+                .font(.system(size: 13, weight: .semibold))
+            Text("\(notes.notes.filter { $0.meetingContext == nil }.count)")
+                .font(.system(size: 13, weight: .semibold))
+                .monospacedDigit()
+                .opacity(0.55)
+                .contentTransition(.numericText())
+        }
+        .foregroundColor(isActive ? SpacePillStyle.onFill : DSColor.textPrimary)
+        .padding(.horizontal, SpacePillStyle.paddingH)
+        .frame(height: 28)
+        // Never squeezed: when the lists overflow, the scroller gives way, not
+        // this pill (its capsule ends were being cut off).
+        .fixedSize()
+        // Like every other pill (Marcello, 2026-10-02): no dashed edge — a
+        // fill when selected, the shared hover wash otherwise.
+        .background(Capsule(style: .continuous).fill(
+            isActive ? SpaceTint.notes.base.color.opacity(0.85)
+                     : (hover ? DSColor.fieldBackground : Color.clear)
+        ))
+        .contentShape(Capsule(style: .continuous))
+        .onTapGesture { NotesStore.shared.enterSpace() }
+        .onHover { hover = $0 }
+        .animation(Motion.hoverFade, value: hover)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(L10n.t("filter.notes"))
+    }
+}
+
+/// U5's space-pill numbers, shared by Notes and Calendar.
+enum SpacePillStyle {
+    /// 11 of padding inside the 1.4-pt border — the reference's content-box
+    /// 11 + border, which lands the text where the section pills' 12 does.
+    static let paddingH: CGFloat = 12.4
+    static let onFill = Color(hex: "#1A1622")
+}

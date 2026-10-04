@@ -8,14 +8,13 @@
 # What makes this safe to run while depending on the shipped Otto:
 #
 #   * Different bundle id      com.notchsnap.app.lab
-#   * Different data folder    ~/Library/Application Support/NotchSnapLab
-#   * Different keychain item  so Google sign-ins do not collide
+#   * Different data folder    ~/Library/Application Support/Otto Lab
 #   * Sparkle OFF              or the lab would "update" itself into the
 #                              shipped app off the production feed
 #   * No DMG, no notarization, no appcast — nothing here can reach a user.
 #
 # Same target and same source tree as the real build, with OTTO_LAB flipped.
-# See NotchSnap/App/AppBuild.swift.
+# See Otto/App/AppBuild.swift.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -45,7 +44,7 @@ echo "  Otto Lab  $VERSION ($BUILD_NUM)  from $BRANCH @ $SHA"
 
 rm -rf "$OUT"
 mkdir -p "$OUT"
-xcodebuild -project NotchSnap.xcodeproj -scheme NotchSnap -configuration Release \
+xcodebuild -project Otto.xcodeproj -scheme Otto -configuration Release \
     -derivedDataPath "$OUT/dd" CONFIGURATION_BUILD_DIR="$PWD/$OUT/Release" \
     MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD_NUM" \
     PRODUCT_NAME="$APP_NAME" PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
@@ -83,18 +82,28 @@ if $SEED; then
     # Keyed on whether the lab has any to-dos, not on whether its folder
     # exists. Merely launching the lab creates an EMPTY store, so a
     # folder-exists test refuses to seed exactly when seeding is wanted.
-    LAB_TODOS="$SUPPORT/NotchSnapLab/Todo/todos.json"
+    LAB_DIR="$SUPPORT/Otto Lab"
+    # A lab from before the rename: carry its data to the new name first, as
+    # the app itself would on launch.
+    if [ -d "$SUPPORT/NotchSnapLab" ] && [ ! -e "$LAB_DIR" ]; then
+        mv "$SUPPORT/NotchSnapLab" "$LAB_DIR"
+    fi
+    LAB_TODOS="$LAB_DIR/Todo/todos.json"
+    # The real app's folder; an install not yet launched since the rename
+    # still has it under the pre-Otto name.
+    REAL_DIR="$SUPPORT/Otto"
+    [ -d "$REAL_DIR" ] || REAL_DIR="$SUPPORT/NotchSnap"
     HAS_DATA=false
     if [ -s "$LAB_TODOS" ] && grep -q '"items":\[{' "$LAB_TODOS" 2>/dev/null; then
         HAS_DATA=true
     fi
     if $HAS_DATA; then
         echo "   --seed skipped: the lab already has to-dos of its own"
-    elif [ -d "$SUPPORT/NotchSnap" ]; then
+    elif [ -d "$REAL_DIR" ]; then
         # A COPY, one way, never linked. The lab can then be scribbled on
         # freely; nothing it does travels back.
-        mkdir -p "$SUPPORT/NotchSnapLab"
-        cp -R "$SUPPORT/NotchSnap/." "$SUPPORT/NotchSnapLab/"
+        mkdir -p "$LAB_DIR"
+        cp -R "$REAL_DIR/." "$LAB_DIR/"
         echo "   seeded the lab from a COPY of your real data"
     fi
 fi
@@ -110,7 +119,7 @@ if $RUN; then open "$DEST"; echo "   launched"; fi
 cat <<EOF
 
    Otto Lab is separate from Otto in every way that matters:
-     data     ~/Library/Application Support/NotchSnapLab
+     data     ~/Library/Application Support/Otto Lab
      updates  disabled (it can never pull the production build over itself)
 
    Both use the same global shortcuts, so run ONE at a time —
