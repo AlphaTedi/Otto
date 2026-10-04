@@ -384,13 +384,8 @@ private struct StreamView: View {
                 TodoTabRow(rulePosition: .below)
                     .notchEntry(index: 1)
                     .measureHeight(TabRowHeightKey.self)
-                // Notes · Meetings, under the space bar: the container's own
-                // field is left exactly as it is.
-                NotesKindMenu()
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .padding(.horizontal, LabMetrics.listInset)
-                    .padding(.bottom, 8)
-                    .zIndex(1)
+                // No Notes · Meetings switcher here any more (Marcello,
+                // 2026-10-04); ⌘1 / ⌘2 still switch.
             }
 
             streamBody
@@ -755,52 +750,12 @@ private struct CalendarComposer: View {
     }
 }
 
-// MARK: Notes · Meetings — the dropdown accessory inside Notes
+// MARK: Notes · Meetings menu
 
-/// Ordinary notes or meeting notes: one space, two views of it. A Raycast-style
-/// dropdown trailing the field — "Notes ⌄" — replaced the segmented pill,
-/// the one container-inside-a-container in the UI (2026-09-26 PRD). ⌘1 / ⌘2
-/// switch with it closed; while open it takes ↑↓ ⏎ Esc (key handler).
-struct NotesKindMenu: View {
-    @ObservedObject private var store = TodoStore.shared
-    @ObservedObject private var notes = NotesStore.shared
-    @State private var hover = false
-
-    private var meetings: Bool { store.panelMode == .calendar }
-    private var title: String { L10n.t(meetings ? "notes.kind.meetings" : "notes.kind.notes") }
-
-    var body: some View {
-        Button {
-            if notes.kindMenuOpen { notes.closeKindMenu() } else { notes.openKindMenu() }
-        } label: {
-            HStack(spacing: 6) {
-                Text(title)
-                    .font(.system(size: 15, weight: .medium))
-                    .lineLimit(1)
-                // Static, as in Raycast: the chevron never rotates.
-                OttoIcon("chevron.down", pointSize: 10)
-            }
-            .foregroundStyle(SpaceInk.a(0.70))
-            .padding(.vertical, 6)
-            .padding(.leading, 10)
-            .padding(.trailing, 8)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(SpaceInk.a(notes.kindMenuOpen ? 0.08 : hover ? 0.06 : 0)))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .fixedSize()
-        // The menu itself is drawn by the panel (TodoTabView), placed
-        // against this frame like the gear's menu is against the gear.
-        .menuAnchor(.notesKind)
-        .onHover { hovering in withAnimation(Motion.hoverFade) { hover = hovering } }
-        .help(L10n.t("notes.kind.help"))
-        .accessibilityLabel(String(format: L10n.t("notes.kind.a11y"), title))
-        .accessibilityAddTraits(.isButton)
-        .onDisappear { notes.closeKindMenu() }
-    }
-}
-
+/// Ordinary notes or meeting notes: one space, two views of it. The "Notes ⌄"
+/// dropdown that opened this was removed from both layouts (Marcello,
+/// 2026-10-04); ⌘1 / ⌘2 switch the view. The list stays for the store's
+/// menu state, which nothing on screen opens any more.
 struct NotesKindMenuList: View {
     let meetings: Bool
     @ObservedObject private var notes = NotesStore.shared
@@ -860,8 +815,7 @@ private struct NotesCaptureHeader: View {
             isTyping: !store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             saveLabel: L10n.t("capture.save"),
             onSave: { store.commitDraft() },
-            onDot: { TodoStore.shared.cycleCollection() },
-            accessory: AnyView(NotesKindMenu())
+            onDot: { TodoStore.shared.cycleCollection() }
         ) {
             // The user's text is NEVER reformatted — lowercase, missing
             // punctuation and typos are preserved exactly.
@@ -890,8 +844,7 @@ private struct CalendarCaptureHeader: View {
             isTyping: false,
             saveLabel: nil,
             onSave: {},
-            onDot: { TodoStore.shared.cycleCollection() },
-            accessory: AnyView(NotesKindMenu())
+            onDot: { TodoStore.shared.cycleCollection() }
         ) {
             // No calendar icon here any more: it opened a separate picker page
             // with no clear meaning (2026-09-25 spec). Meetings still come from
