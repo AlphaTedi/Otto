@@ -19,7 +19,7 @@ final class HapticManager: @unchecked Sendable {
 
     // MARK: - Notch Events
 
-    /// Notch expands: transition to gallery visible
+    /// Notch expands
     func notchExpanded() {
         SoundManager.shared.play(.expand)
         guard isEnabled else { return }
@@ -28,7 +28,7 @@ final class HapticManager: @unchecked Sendable {
         performer.perform(.generic, performanceTime: .now)
     }
 
-    /// Notch collapses: gallery hidden
+    /// Notch collapses
     func notchCollapsed() {
         SoundManager.shared.play(.collapse)
         guard isEnabled else { return }
@@ -51,14 +51,6 @@ final class HapticManager: @unchecked Sendable {
         performer.perform(.generic, performanceTime: .now)
     }
     private var lastHoverTap: TimeInterval = 0
-
-    // Legacy aliases
-    func hoverTap() { notchHoverEntered() }
-    func expandTap() { notchExpanded() }
-
-    // MARK: - Screenshot Events
-
-    // MARK: - Clipboard & Actions
 
     // MARK: - Drag & Drop
 

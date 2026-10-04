@@ -39,9 +39,9 @@ struct InsightsView: View {
     /// the space bar out through the bottom edge and off the panel. `min` with
     /// the natural height, never a fixed frame, so a thin page still hugs.
     private var budget: CGFloat {
-        max(160, LabMetrics.todoBlockMaxHeight
-            - LabMetrics.panelTopPadding
-            - LabMetrics.barHeight
+        max(160, PanelMetrics.todoBlockMaxHeight
+            - PanelMetrics.panelTopPadding
+            - PanelMetrics.barHeight
             // The space bar, in BOTH layouts. The container's copy is drawn by
             // this page, the floating panels' one at the foot of the card — it
             // is in a different place, not absent, and a budget that only
@@ -66,7 +66,7 @@ struct InsightsView: View {
                 } trailing: {
                     weekStepper
                 }
-                .padding(.horizontal, -LabMetrics.barOuterInset)
+                .padding(.horizontal, -PanelMetrics.barOuterInset)
             }
 
             // The space bar, under the header — the same rule the lists and the
@@ -76,7 +76,7 @@ struct InsightsView: View {
             if isContainer, store.showsSpaceBar {
                 TodoTabRow(rulePosition: .below)
                     .measureHeight(TabRowHeightKey.self)
-                    .padding(.horizontal, -LabMetrics.barOuterInset)
+                    .padding(.horizontal, -PanelMetrics.barOuterInset)
             }
 
             ScrollView(.vertical, showsIndicators: false) {
@@ -88,7 +88,7 @@ struct InsightsView: View {
             .frame(height: min(max(contentHeight, 1), budget))
             .onPreferenceChange(InsightsContentKey.self) { contentHeight = $0 }
         }
-        .padding(.horizontal, LabMetrics.barOuterInset)
+        .padding(.horizontal, PanelMetrics.barOuterInset)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .onAppear {
             archive.reloadIfNeeded()
@@ -135,7 +135,7 @@ struct InsightsView: View {
                     } label: {
                         Text(L10n.t("insights.view") + " \u{203A}")
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(LabMetrics.accent)
+                            .foregroundStyle(PanelMetrics.accent)
                     }
                     .buttonStyle(.plain)
                     Spacer(minLength: 8)
@@ -150,7 +150,7 @@ struct InsightsView: View {
                 .padding(.vertical, 9)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(LabMetrics.accent.opacity(0.10))
+                        .fill(PanelMetrics.accent.opacity(0.10))
                 )
                 .transition(.opacity)
             }
@@ -192,13 +192,13 @@ struct InsightsView: View {
             weekStepper
         }
         .padding(.horizontal, 20)
-        .frame(minHeight: LabMetrics.barHeight)
+        .frame(minHeight: PanelMetrics.barHeight)
         .background(
-            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
                 .fill(Color.black.opacity(0.18))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
                 .strokeBorder(DSColor.panelBorder, lineWidth: 1)
         )
     }
@@ -337,7 +337,7 @@ private struct YearGrid: View {
                                     let index = column * Self.rows + row
                                     let isToday = index == shown.count - 1
                                     RoundedRectangle(cornerRadius: 2, style: .continuous)
-                                        .fill(isToday ? LabMetrics.accent
+                                        .fill(isToday ? PanelMetrics.accent
                                               : Self.fill(index < shown.count ? shown[index] : 0))
                                         .overlay(
                                             // Today is the anchor: without it
@@ -345,7 +345,7 @@ private struct YearGrid: View {
                                             // and stops being a calendar.
                                             RoundedRectangle(cornerRadius: 2, style: .continuous)
                                                 .strokeBorder(isToday
-                                                              ? LabMetrics.accent.opacity(0.55)
+                                                              ? PanelMetrics.accent.opacity(0.55)
                                                               : Color.clear, lineWidth: 1.5)
                                         )
                                         .frame(width: cell, height: cell)
@@ -363,7 +363,7 @@ private struct YearGrid: View {
                         Text(marker)
                             .font(.system(size: 10))
                             .foregroundStyle(marker == L10n.t("insights.today")
-                                             ? LabMetrics.accent : DSColor.textFaint)
+                                             ? PanelMetrics.accent : DSColor.textFaint)
                         Spacer(minLength: 0)
                     }
                 }
@@ -390,9 +390,9 @@ private struct YearGrid: View {
     private static func fill(_ count: Int) -> Color {
         switch count {
         case 0:     return Color.white.opacity(0.05)
-        case 1...2: return LabMetrics.accent.opacity(0.28)
-        case 3...5: return LabMetrics.accent.opacity(0.55)
-        default:    return LabMetrics.accent.opacity(0.80)
+        case 1...2: return PanelMetrics.accent.opacity(0.28)
+        case 3...5: return PanelMetrics.accent.opacity(0.55)
+        default:    return PanelMetrics.accent.opacity(0.80)
         }
     }
 }
@@ -417,7 +417,7 @@ private struct WeekPanel: View {
                 HStack(alignment: .lastTextBaseline, spacing: 8) {
                     Text("\(completions.count)")
                         .font(.system(size: 40, weight: .semibold))
-                        .foregroundStyle(LabMetrics.accent)
+                        .foregroundStyle(PanelMetrics.accent)
                         .contentTransition(.numericText())
                     Text(L10n.t("insights.closedThisWeek"))
                         .font(.system(size: 12))
@@ -496,7 +496,7 @@ private struct LeftBehindRow: View {
             } label: {
                 // The to-do's own section colour, as everywhere else.
                 RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .strokeBorder(store.collection(id: item.collectionID)?.color ?? LabMetrics.accent,
+                    .strokeBorder(store.collection(id: item.collectionID)?.color ?? PanelMetrics.accent,
                                   lineWidth: 1.6)
                     .frame(width: 16, height: 16)
                     .contentShape(Rectangle())
@@ -524,18 +524,18 @@ private struct LeftBehindRow: View {
         // row and the caret on another you can still tell which one ⏎ acts on.
         .background(
             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(isFocused ? LabMetrics.accent.opacity(0.10)
+                .fill(isFocused ? PanelMetrics.accent.opacity(0.10)
                       : (hover ? Color.white.opacity(0.05) : Color.clear))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .strokeBorder(isFocused ? LabMetrics.accent.opacity(0.45) : Color.clear,
+                .strokeBorder(isFocused ? PanelMetrics.accent.opacity(0.45) : Color.clear,
                               lineWidth: 1)
         )
         .overlay(alignment: .leading) {
             if isFocused {
                 Rectangle()
-                    .fill(LabMetrics.accent)
+                    .fill(PanelMetrics.accent)
                     .frame(width: 3)
                     .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
             }

@@ -148,11 +148,11 @@ private struct FormatControlStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
         return configuration.label
-            .foregroundStyle(isActive ? LabMetrics.accent : DSColor.textPrimary)
+            .foregroundStyle(isActive ? PanelMetrics.accent : DSColor.textPrimary)
             .frame(width: 28, height: 28)
             .background(
-                shape.fill(configuration.isPressed ? LabMetrics.accent.opacity(0.28)
-                           : (isActive ? LabMetrics.accent.opacity(0.18)
+                shape.fill(configuration.isPressed ? PanelMetrics.accent.opacity(0.28)
+                           : (isActive ? PanelMetrics.accent.opacity(0.18)
                               : (hover ? DSColor.fieldBackground : Color.clear)))
             )
             .contentShape(shape)
@@ -240,7 +240,7 @@ private struct BlockMenu: View {
             HStack(spacing: 10) {
                 Text(glyph)
                     .font(.system(size: glyphSize, weight: block == .body ? .regular : .semibold))
-                    .foregroundStyle(isCurrent ? LabMetrics.accent : DSColor.textPrimaryBright)
+                    .foregroundStyle(isCurrent ? PanelMetrics.accent : DSColor.textPrimaryBright)
                     .frame(width: 22, alignment: .leading)
                 Text(label)
                     .font(.system(size: OttoMenuStyle.rowFont, weight: isCurrent ? .medium : .regular))

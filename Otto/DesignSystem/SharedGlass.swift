@@ -134,3 +134,40 @@ enum SharedGlassStyle {
     /// Grouped surfaces: deliberately dark under the light glass buttons.
     static let card = Color.black.opacity(0.3)
 }
+
+// MARK: - Visual Effect Blur (NSVisualEffectView wrapper)
+
+struct VisualEffectBlur: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+    let blendingMode: NSVisualEffectView.BlendingMode
+    /// Pin the material's appearance instead of inheriting the system's.
+    ///
+    /// Materials resolve light or dark from the effective appearance, so on a
+    /// light desktop `.hudWindow` came back LIGHT — and every panel in this
+    /// app draws white text on it. nil keeps the old inherited behaviour for
+    /// the callers that want it.
+    var appearance: NSAppearance.Name?
+    /// Bumped when the material must sample again — see GlassRefresh. The
+    /// value is never read for its own sake; it exists so `updateNSView` runs.
+    var refreshToken: Int = 0
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = material
+        view.blendingMode = blendingMode
+        view.state = .active
+        if let appearance { view.appearance = NSAppearance(named: appearance) }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
+        nsView.blendingMode = blendingMode
+        nsView.appearance = appearance.flatMap { NSAppearance(named: $0) }
+        // Re-asserting `.active` is what makes AppKit re-sample what is behind
+        // the window. Setting it to the value it already holds is not a no-op
+        // here: it marks the effect dirty.
+        nsView.state = .active
+        nsView.needsDisplay = true
+    }
+}

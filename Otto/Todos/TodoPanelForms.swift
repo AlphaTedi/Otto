@@ -6,7 +6,7 @@ import AppKit
 // Category creation and Quick Find render INSIDE the panel, replacing the
 // browsing content — no floating windows (CT-5/CT-6). Mode swaps animate on
 // contentHug so the panel re-hugs each surface's height. Every visual value
-// comes from DesignSystem.swift; where a reusable component exists there
+// comes from the DesignSystem folder; where a reusable component exists there
 // (PrimaryActionButton, ColorSwatchButton, ShortcutHintBadge) it is used
 // directly, wrapped in Buttons for behavior.
 //
@@ -336,7 +336,7 @@ struct CategoryFormView: View {
                 ContextBar(parentTitle: store.panelPath.first?.title ?? "",
                            title: L10n.t("todo.newSection"),
                            onBack: { store.goBack() })
-                    .padding(.horizontal, -LabMetrics.listInset)
+                    .padding(.horizontal, -PanelMetrics.listInset)
             }
 
             // The name field IS the creation bar, one radius step smaller for
@@ -347,14 +347,14 @@ struct CategoryFormView: View {
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(DSColor.textPrimary)
                 .focused($nameFocused)
-                .padding(.horizontal, LabMetrics.barPaddingH)
-                .padding(.vertical, LabMetrics.barPaddingV)
+                .padding(.horizontal, PanelMetrics.barPaddingH)
+                .padding(.vertical, PanelMetrics.barPaddingV)
                 .background(
-                    RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
                         .fill(DSColor.fieldWell)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
                         .strokeBorder(nameFocused ? chosen.opacity(0.8)
                                                   : DSColor.hairlineOnPanel, lineWidth: 1)
                         // After the stroke, not before: `.animation` on a
@@ -370,12 +370,12 @@ struct CategoryFormView: View {
                     Button {
                         withAnimation(NotchAnimation.hintFade) { colorHex = hex }
                     } label: {
-                        RoundedRectangle(cornerRadius: LabMetrics.checkboxRadius,
+                        RoundedRectangle(cornerRadius: PanelMetrics.checkboxRadius,
                                          style: .continuous)
                             .fill((SpaceTint.named(hex) ?? .work).sectionColor)
                             .frame(width: 26, height: 26)
                             .overlay(
-                                RoundedRectangle(cornerRadius: LabMetrics.checkboxRadius,
+                                RoundedRectangle(cornerRadius: PanelMetrics.checkboxRadius,
                                                  style: .continuous)
                                     .strokeBorder(DSColor.selectionRing,
                                                   lineWidth: colorHex == hex ? 2 : 0)
@@ -396,10 +396,10 @@ struct CategoryFormView: View {
                     Text(L10n.t("snippet.cancel"))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(DSColor.textSecondary)
-                        .padding(.horizontal, LabMetrics.tabPaddingH)
-                        .padding(.vertical, LabMetrics.tabPaddingV)
+                        .padding(.horizontal, PanelMetrics.tabPaddingH)
+                        .padding(.vertical, PanelMetrics.tabPaddingV)
                         .overlay(
-                            RoundedRectangle(cornerRadius: LabMetrics.tabActiveRadius,
+                            RoundedRectangle(cornerRadius: PanelMetrics.tabActiveRadius,
                                              style: .continuous)
                                 .strokeBorder(DSColor.panelBorder, lineWidth: 1)
                         )
@@ -413,10 +413,10 @@ struct CategoryFormView: View {
                     Text(L10n.t("todo.create"))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.black)
-                        .padding(.horizontal, LabMetrics.tabPaddingH)
-                        .padding(.vertical, LabMetrics.tabPaddingV)
+                        .padding(.horizontal, PanelMetrics.tabPaddingH)
+                        .padding(.vertical, PanelMetrics.tabPaddingV)
                         .background(
-                            RoundedRectangle(cornerRadius: LabMetrics.tabActiveRadius,
+                            RoundedRectangle(cornerRadius: PanelMetrics.tabActiveRadius,
                                              style: .continuous)
                                 .fill(chosen)
                         )
@@ -429,7 +429,7 @@ struct CategoryFormView: View {
                 Spacer(minLength: 0)
             }
         }
-        .padding(.horizontal, LabMetrics.listInset)
+        .padding(.horizontal, PanelMetrics.listInset)
         // Hugs its content and sits at the TOP. Without this it stretched down
         // the panel's whole fixed height.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

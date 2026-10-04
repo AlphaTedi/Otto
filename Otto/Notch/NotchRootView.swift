@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - NotchRootView — Connects NotchShapeView with gallery content
+// MARK: - NotchRootView — the notch panel's root: silhouette plus content
 //
 // TWO expanded designs live here, chosen by `notchLayout` in Settings.
 //
@@ -25,7 +25,7 @@ struct NotchRootView: View {
     var body: some View {
         ZStack(alignment: .top) {
             if notchLayout == .panels, controller.state == .expanded {
-                LabPanelsView()
+                FloatingPanelsView()
                     .environmentObject(appState)
                     // The staggered entry (`notchEntry`) reads this. Inside
                     // the silhouette NotchShapeView sets it; out here the
@@ -75,7 +75,15 @@ struct NotchRootView: View {
     @ViewBuilder
     private var expandedContent: some View {
         if notchLayout == .container {
-            NotchExpandedView()
+            TodoTabView()
+                // TOP-aligned, explicitly. The default alignment of a max
+                // frame is centre, and the silhouette proposes an ANIMATING
+                // height: for the duration of a big-to-small section switch
+                // the proposal is taller than the content, so the content sat
+                // centred in the slack and the draft row slid up and down
+                // with every switch (Thomas, 2026-09-01). The input must stay
+                // put; only the bottom edge moves.
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .environmentObject(appState)
                 // The container has no gap between the notch and its content,
                 // so the pointer moving from one into the other must not read
@@ -164,8 +172,8 @@ private struct ContainerMeetingCard: View {
         VStack(spacing: 0) {
             Color.clear.frame(height: controller.containerSilhouetteHeight + 12)
             if let meeting {
-                LabMeetingCard(meeting: meeting, isNext: true)
-                    .padding(LabMetrics.blockPadding)
+                PanelMeetingCard(meeting: meeting, isNext: true)
+                    .padding(PanelMetrics.blockPadding)
                     .frame(width: controller.containerBodyWidth, alignment: .leading)
                     .background(shape.fill(Color.black))
                     .overlay(shape.strokeBorder(Color.white.opacity(0.08), lineWidth: 1))

@@ -51,7 +51,7 @@ struct NoteBodyView: NSViewRepresentable {
         view.isAutomaticSpellingCorrectionEnabled = false
         view.isAutomaticLinkDetectionEnabled = false
         view.isAutomaticDataDetectionEnabled = false
-        view.insertionPointColor = NSColor(LabMetrics.accent)
+        view.insertionPointColor = NSColor(PanelMetrics.accent)
         view.selectedTextAttributes = [
             .backgroundColor: NSColor.controlAccentColor.withAlphaComponent(0.28)
         ]
@@ -287,7 +287,7 @@ final class ActionTextView: NSTextView {
         if let old = controlTarget {
             layoutManager?.removeTemporaryAttribute(.backgroundColor, forCharacterRange: old.range)
             layoutManager?.addTemporaryAttribute(.underlineColor,
-                value: NSColor(LabMetrics.accent).withAlphaComponent(0.55),
+                value: NSColor(PanelMetrics.accent).withAlphaComponent(0.55),
                 forCharacterRange: old.range)
         }
         controlTarget = nil
@@ -318,8 +318,8 @@ final class ActionTextView: NSTextView {
         if controlTarget?.phrase != hit.phrase { clearActionControl() }
         controlTarget = hit
         layout.addTemporaryAttributes([
-            .backgroundColor: NSColor(LabMetrics.accent).withAlphaComponent(0.10),
-            .underlineColor: NSColor(LabMetrics.accent).withAlphaComponent(0.85)
+            .backgroundColor: NSColor(PanelMetrics.accent).withAlphaComponent(0.10),
+            .underlineColor: NSColor(PanelMetrics.accent).withAlphaComponent(0.85)
         ], forCharacterRange: hit.range)
         // Keep the control beside the phrase in temporary layout space: never
         // obscure text or inject attachment characters into Markdown.
@@ -660,18 +660,18 @@ final class ActionTextView: NSTextView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         for control in linkedControls() {
-            NSColor(LabMetrics.accent).setStroke()
+            NSColor(PanelMetrics.accent).setStroke()
             let path = NSBezierPath(roundedRect: control.rect, xRadius: 5, yRadius: 5)
             path.lineWidth = 1.5
             path.stroke()
             if control.done {
                 ("✓" as NSString).draw(in: control.rect.offsetBy(dx: 2, dy: -1), withAttributes: [
-                    .font: NSFont.systemFont(ofSize: 13), .foregroundColor: NSColor(LabMetrics.accent)
+                    .font: NSFont.systemFont(ofSize: 13), .foregroundColor: NSColor(PanelMetrics.accent)
                 ])
             }
         }
         guard let target = controlTarget else { return }
-        NSColor(LabMetrics.accent).setFill()
+        NSColor(PanelMetrics.accent).setFill()
         NSBezierPath(ovalIn: controlRect).fill()
         let linked = noteID.flatMap { TodoStore.shared.todo(forNote: $0, phrase: target.phrase) }
         let glyph = linked.map { $0.isCompleted ? "✓" : "○" } ?? "+"

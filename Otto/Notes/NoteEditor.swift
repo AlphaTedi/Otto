@@ -242,7 +242,7 @@ final class NoteEditorController: ObservableObject {
             storage.addAttribute(.noteAction, value: phrase, range: actionRange)
             view.layoutManager?.addTemporaryAttributes([
                 .underlineStyle: NSUnderlineStyle.single.rawValue,
-                .underlineColor: NSColor(LabMetrics.accent).withAlphaComponent(0.85)
+                .underlineColor: NSColor(PanelMetrics.accent).withAlphaComponent(0.85)
             ], forCharacterRange: actionRange)
             if actionRange.length > 0 {
                 view.layoutManager?.addTemporaryAttribute(.kern, value: 27,
@@ -848,7 +848,7 @@ extension NoteEditorController {
             storage.addAttribute(.noteAction, value: action.phrase, range: action.range)
             view.layoutManager?.addTemporaryAttributes([
                 .underlineStyle: NSUnderlineStyle.single.rawValue,
-                .underlineColor: NSColor(LabMetrics.accent).withAlphaComponent(0.55)
+                .underlineColor: NSColor(PanelMetrics.accent).withAlphaComponent(0.55)
             ], forCharacterRange: action.range)
             // Reserve the inline chip's width even before hover. Temporary
             // kerning changes layout only; it never reaches Markdown.

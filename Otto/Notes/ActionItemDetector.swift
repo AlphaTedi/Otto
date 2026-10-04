@@ -260,7 +260,7 @@ struct ActionPicker: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 4)
                         .background(
-                            Capsule().fill(index == 0 ? LabMetrics.accent
+                            Capsule().fill(index == 0 ? PanelMetrics.accent
                                                       : Color.white.opacity(0.06))
                         )
                         .contentShape(Capsule())
@@ -305,7 +305,7 @@ struct ActionPicker: View {
                         Button { onPick(section.id) } label: {
                             Text(section.name).font(.system(size: 12))
                                 .frame(maxWidth: .infinity, alignment: .leading).padding(6)
-                                .background(index == editor.pickerIndex ? LabMetrics.accent.opacity(0.25) : Color.clear)
+                                .background(index == editor.pickerIndex ? PanelMetrics.accent.opacity(0.25) : Color.clear)
                         }.buttonStyle(.plain).id(index)
                     }
                 }

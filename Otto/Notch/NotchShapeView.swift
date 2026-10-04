@@ -144,31 +144,26 @@ struct NotchShapeView: View {
     }
 
     private var currentWidth: CGFloat {
-        let base: CGFloat = {
-            switch state {
-            case .idle:
-                return notchSize.width + presenceExtraWidth + currentFilletRadius * 2
-            case .hovering:
-                return notchSize.width + max(28, presenceExtraWidth) + currentFilletRadius * 2
-            case .expanded:             return expandedSize.width
-            }
-        }()
-        return base
+        switch state {
+        case .idle:
+            return notchSize.width + presenceExtraWidth + currentFilletRadius * 2
+        case .hovering:
+            return notchSize.width + max(28, presenceExtraWidth) + currentFilletRadius * 2
+        case .expanded:
+            return expandedSize.width
+        }
     }
 
     private var currentHeight: CGFloat {
-        let base: CGFloat = {
-            switch state {
-            // The indicator NEVER adds height. It exceeded the hardware notch
-            // vertically, which reads as a bar hanging into the desktop rather
-            // than as the notch itself (Marcello, 2026-08-18). It widens, and
-            // only as far as its content needs.
-            case .idle:                 return notchSize.height
-            case .hovering:             return notchSize.height + 6
-            case .expanded:             return expandedSize.height + extraExpandedHeight
-            }
-        }()
-        return base
+        switch state {
+        // The indicator NEVER adds height. It exceeded the hardware notch
+        // vertically, which reads as a bar hanging into the desktop rather
+        // than as the notch itself (Marcello, 2026-08-18). It widens, and
+        // only as far as its content needs.
+        case .idle:      return notchSize.height
+        case .hovering:  return notchSize.height + 6
+        case .expanded:  return expandedSize.height + extraExpandedHeight
+        }
     }
 
     private var bottomCornerRadius: CGFloat {
@@ -271,7 +266,7 @@ struct NotchShapeView: View {
             .animation(NotchAnimation.contentHug, value: presenceExtraWidth)
             .animation(NotchAnimation.hintFade, value: presence.state)
 
-            // Content gallery — staggered fade-in.
+            // Expanded content — staggered fade-in.
             // The content is hard-clipped to the same NotchShape used for the
             // black silhouette so thumbnails / tiles can never paint outside
             // the rounded body (otherwise on taller presets the bottom rows

@@ -49,7 +49,7 @@ final class CalendarStore: ObservableObject {
     /// alert because one was still live, and there was no Snooze button on
     /// screen to press (Marcello, 2026-09-06). A deadline that only exists
     /// while something is drawing it is not a deadline.
-    @Published private(set) var autoSnoozeRemaining: Double = LabMetrics.autoSnoozeSeconds
+    @Published private(set) var autoSnoozeRemaining: Double = PanelMetrics.autoSnoozeSeconds
     @Published private(set) var autoSnoozeRunning = false
     /// Non-nil while a meeting is inside the ambient window (CA-2).
     @Published private(set) var ambientMeeting: DetectedMeeting?
@@ -333,7 +333,7 @@ final class CalendarStore: ObservableObject {
     /// Start the countdown from full. Called when the alert is raised, not
     /// when a view appears.
     private func armAutoSnooze() {
-        autoSnoozeRemaining = LabMetrics.autoSnoozeSeconds
+        autoSnoozeRemaining = PanelMetrics.autoSnoozeSeconds
         resumeAutoSnooze()
     }
 
@@ -367,7 +367,7 @@ final class CalendarStore: ObservableObject {
         autoSnoozeTask = nil
         autoSnoozeResumedAt = nil
         autoSnoozeRunning = false
-        autoSnoozeRemaining = LabMetrics.autoSnoozeSeconds
+        autoSnoozeRemaining = PanelMetrics.autoSnoozeSeconds
     }
 
     /// Untouched alerts collapse shortly after the meeting starts, so the

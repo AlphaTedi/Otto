@@ -1084,3 +1084,26 @@ the to-do panel in the container. The card's screen rect
 testing, outside clicks and the pointer-left close all treat it as panel.
 The panel window is 190pt taller to leave room for it. `menu-status` reports
 the card rect. Verified: 621 wide, 12pt under a 253pt silhouette.
+
+## 11. The 2026-10-04 cleanup: delete, organize, refactor
+
+Three commits on `refactor/cleanup` (Marcello: "non c'è ordine, non c'è architettura").
+
+- **Delete.** Everything Otto no longer reaches at runtime: the screenshot,
+  annotation, OCR, clipboard, snippet and shelf stack with its gallery, Quick Look
+  and capture notifications; the shelved voice brain-dump; the Google Calendar OAuth
+  provider (off since 2026-09-27) with its Keychain store and the unused Sign in with
+  Apple stub; the legacy Notes tab and Reminders bridge; unused declarations, strings,
+  sounds, icons and Info.plist usage descriptions. About 12,500 lines. All of it is
+  recoverable from git history before the "Delete:" commit.
+- **Organize.** `NotchSnap/` → `Otto/`, one folder per feature (map in
+  `docs/ARCHITECTURE.md`); `Otto.xcodeproj` with a synchronized folder, so new files
+  need no project edit. The pre-Otto name is gone everywhere except the bundle id.
+  The data folder moves itself to `~/Library/Application Support/Otto` on the first
+  launch that runs alone (`AppBuild.supportDirectory`); the settings key
+  (`otto.settings`) and the stored vault path follow it.
+- **Refactor.** The "Lab" panels became `FloatingPanelsView` / `PanelMetrics` (they are
+  the default layout, not an experiment). `TodoBrowsingView.swift` (3,300 lines) was
+  split into one file per component, `DesignSystem.swift` into tokens and components,
+  and `NotchPanel`, `AppDelegate` and `AppNotifications` got files of their own.
+  Behaviour is unchanged.

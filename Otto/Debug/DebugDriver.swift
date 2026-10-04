@@ -67,7 +67,7 @@ enum DebugDriver {
                 appendState("presentation regression: 30 cycles, failures=\(failures)")
             }
         case "expand":
-            NotchController.shared.expand()
+            NotchController.shared.triggerExpand()
         case "collapse":
             NotchController.shared.triggerCollapse()
         case "complete-first":
@@ -499,9 +499,9 @@ enum DebugDriver {
                     // bitmap cache cannot capture — so the same view is hosted
                     // off screen on the spec's own panel background instead.
                     let container = AppState.shared.notchLayout == .container
-                    let size = NSSize(width: container ? 560 : LabMetrics.blockWidth,
-                                      height: container ? 520 : LabMetrics.todoBlockMaxHeight)
-                    let shape = RoundedRectangle(cornerRadius: container ? 30 : LabMetrics.blockRadius,
+                    let size = NSSize(width: container ? 560 : PanelMetrics.blockWidth,
+                                      height: container ? 520 : PanelMetrics.todoBlockMaxHeight)
+                    let shape = RoundedRectangle(cornerRadius: container ? 30 : PanelMetrics.blockRadius,
                                                  style: .continuous)
                     let root = TodoTabView()
                         .frame(width: size.width, height: container ? nil : size.height,
@@ -763,7 +763,7 @@ enum DebugDriver {
                     guard let window = NSApp.windows.first(where: { $0 is NotchPanel }),
                           let content = window.contentView else { return }
                     @MainActor func sample(_ label: String) {
-                        let x = content.bounds.midX + LabMetrics.blockWidth / 2 - 90
+                        let x = content.bounds.midX + PanelMetrics.blockWidth / 2 - 90
                         var line = label + ":"
                         for fromTop in stride(from: 100, through: 400, by: 15) {
                             let y = content.isFlipped ? CGFloat(fromTop) : content.bounds.maxY - CGFloat(fromTop)
@@ -829,7 +829,7 @@ enum DebugDriver {
                 let name = String(command.dropFirst(15))
                 UserDefaults.standard.set(name == "container" ? "container" : "panels", forKey: "notchLayout")
                 AppState.shared.todoContentHeight = 0
-                AppState.shared.labColumnHeight = 0
+                AppState.shared.panelColumnHeight = 0
             } else if command == "meeting-notes-status" {
                 let notes = NotesStore.shared
                 let editor = NoteEditorController.shared
@@ -1434,7 +1434,7 @@ enum DebugDriver {
         draft='\(store.draftTitle)' \
         layout=\(app.notchLayout) \
         todoContentHeight=\(app.todoContentHeight) \
-        labColumnHeight=\(app.labColumnHeight) \
+        panelColumnHeight=\(app.panelColumnHeight) \
         notchExtraHeight=\(app.notchExtraHeight) \
         chromeDraftBlock=\(PanelChrome.shared.draftBlock) \
         chromeTabRow=\(PanelChrome.shared.tabRow)

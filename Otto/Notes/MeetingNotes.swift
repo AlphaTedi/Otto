@@ -324,10 +324,6 @@ struct MeetingTasksView: View {
     }
 }
 
-extension Notification.Name {
-    static let meetingTaskCommand = Notification.Name("otto.meeting.task.command")
-}
-
 private struct MeetingTaskContentHeight: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }

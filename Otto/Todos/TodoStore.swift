@@ -796,7 +796,7 @@ final class TodoStore: ObservableObject {
         collections.first { !$0.isSystemToday }
     }
 
-    /// LAB: the sections a user actually sees. Today is not one of them.
+    /// The sections a user actually sees. Today is not one of them.
     ///
     /// Today was a smart view aggregating meetings and anything due today.
     /// Meetings have their own panel now, and what was left was a section you

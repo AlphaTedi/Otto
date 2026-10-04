@@ -23,7 +23,7 @@ enum SpaceChrome {
     /// sits this far from BOTH edges it is near (Marcello, 2026-09-25).
     static let cornerInset: CGFloat = 16
     /// Radius for corner furniture: the window's minus the inset.
-    static var cornerRadius: CGFloat { LabMetrics.blockRadius - cornerInset }
+    static var cornerRadius: CGFloat { PanelMetrics.blockRadius - cornerInset }
     /// The leading slot (dot or Back): 16 + 30 puts its centre on the
     /// checkbox column (22 + 9) and, with the 7 gap, the text at 53 — where
     /// every to-do title starts.
@@ -36,7 +36,7 @@ enum SpaceChrome {
     static let columnInset: CGFloat = 10
     /// Panel edge → a row's trailing hints: the column inset plus the row's
     /// own padding. The capture field's trailing control ends there too.
-    static var rowTrailingInset: CGFloat { columnInset + LabMetrics.rowPaddingH }
+    static var rowTrailingInset: CGFloat { columnInset + PanelMetrics.rowPaddingH }
     /// Where text starts after the leading slot — the capture field's text,
     /// a page title after Back, a note's body and meeting metadata: 53.
     static var textColumn: CGFloat { cornerInset + slotWidth + slotGap }

@@ -185,7 +185,7 @@ enum NotesMetrics {
     static let entryGap: CGFloat = 18
     static let entryInset: CGFloat = 12
     /// The row radius every list shares (was 16).
-    static var highlightRadius: CGFloat { LabMetrics.rowRadius }
+    static var highlightRadius: CGFloat { PanelMetrics.rowRadius }
     /// Includes the breathing room that keeps floating controls concentric
     /// with the lower corners of the expanded notch.
     static let bottomBarHeight: CGFloat = 76
@@ -303,10 +303,10 @@ private struct StreamView: View {
         // list does, so the progressive blur has rows to blur. The space bar
         // is not subtracted there; an end spacer gives the last note travel.
         guard isContainer else {
-            return max(120, LabMetrics.todoBlockMaxHeight - composerHeight)
+            return max(120, PanelMetrics.todoBlockMaxHeight - composerHeight)
         }
-        return max(120, LabMetrics.todoBlockMaxHeight
-                   - LabMetrics.panelTopPadding
+        return max(120, PanelMetrics.todoBlockMaxHeight
+                   - PanelMetrics.panelTopPadding
                    - composerHeight - 36
                    - chrome.tabRow)
     }
@@ -332,23 +332,23 @@ private struct StreamView: View {
                 .zIndex(1)
             } else if isCalendarSpace {
                 CalendarComposer(focused: $composerFocused)
-                    .padding(.horizontal, LabMetrics.barOuterInset)
+                    .padding(.horizontal, PanelMetrics.barOuterInset)
                     .notchEntry(index: 0)
-                    .padding(.bottom, LabMetrics.fieldToTabsGap)
+                    .padding(.bottom, PanelMetrics.fieldToTabsGap)
                     .background(GeometryReader { geo in
                         Color.clear.preference(key: ComposerHeightKey.self, value: geo.size.height)
                     })
                     .onPreferenceChange(ComposerHeightKey.self) { composerHeight = $0 }
             } else {
                 Composer(focused: $composerFocused, isContainer: isContainer)
-                .padding(.horizontal, LabMetrics.barOuterInset)
+                .padding(.horizontal, PanelMetrics.barOuterInset)
                 // Index 0 and the same gap as a list's capture field, so this
                 // field and that one are the SAME piece of furniture: same
                 // place, same size, same settle as the panel opens. They are
                 // one bar in three roles by the handoff's own rule, and a role
                 // that sits 26pt higher than the others is a fourth one.
                 .notchEntry(index: 0)
-                .padding(.bottom, LabMetrics.fieldToTabsGap)
+                .padding(.bottom, PanelMetrics.fieldToTabsGap)
                 .background(GeometryReader { geo in
                     Color.clear.preference(key: ComposerHeightKey.self, value: geo.size.height)
                 })
@@ -452,7 +452,7 @@ private struct StreamView: View {
                     // note rows start where the to-do rows do, their text on
                     // the checkbox column (22), and the first title sits 22
                     // under the bar like the first to-do.
-                    .padding(.horizontal, isContainer ? LabMetrics.barOuterInset : SpaceChrome.columnInset)
+                    .padding(.horizontal, isContainer ? PanelMetrics.barOuterInset : SpaceChrome.columnInset)
                     .padding(.top, isContainer ? 16 : 12.5)
                     .padding(.bottom, 8)
                     .background(GeometryReader { geo in
@@ -463,7 +463,7 @@ private struct StreamView: View {
                     })
                     // Travel for the last note to clear the floating pills.
                     // Outside the measurement, so it cannot feed its own test.
-                    .padding(.bottom, overlapsFooter(entries) ? LabMetrics.floatingFooterDepth : 0)
+                    .padding(.bottom, overlapsFooter(entries) ? PanelMetrics.floatingFooterDepth : 0)
                 }
                 .coordinateSpace(name: NotesStreamOffsetKey.space)
                 .onPreferenceChange(NotesStreamOffsetKey.self) { streamOffset = $0 }
@@ -560,7 +560,7 @@ private struct StreamView: View {
 
     /// Notes reach the floating footer's blur band.
     private func overlapsFooter(_ entries: [QuickNote]) -> Bool {
-        !isContainer && natural(entries) > streamBudget - LabMetrics.floatingFooterBlurDepth
+        !isContainer && natural(entries) > streamBudget - PanelMetrics.floatingFooterBlurDepth
     }
 
     private func streamViewport(_ entries: [QuickNote]) -> CGFloat {
@@ -605,10 +605,10 @@ private struct Composer: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: LabMetrics.rowInnerGap) {
+            HStack(alignment: .center, spacing: PanelMetrics.rowInnerGap) {
                 OttoIcon("note.text", pointSize: 14)
                     .foregroundStyle(NotesMetrics.pillStroke)
-                    .frame(width: LabMetrics.checkboxSize, height: LabMetrics.checkboxSize)
+                    .frame(width: PanelMetrics.checkboxSize, height: PanelMetrics.checkboxSize)
 
                 ZStack(alignment: .topLeading) {
                     if store.draft.isEmpty {
@@ -633,23 +633,23 @@ private struct Composer: View {
             }
         }
         // 20 / 12, the creation bar's own insets.
-        .padding(.horizontal, LabMetrics.barPaddingH)
-        .padding(.vertical, LabMetrics.barPaddingV)
+        .padding(.horizontal, PanelMetrics.barPaddingH)
+        .padding(.vertical, PanelMetrics.barPaddingV)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(minHeight: LabMetrics.barHeight)
+        .frame(minHeight: PanelMetrics.barHeight)
         // A WELL: darker than the panel, with the edge doing the finding —
         // the same reasoning, and the same numbers, as InlineDraftRow.
         .background(
-            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
                 .fill(Color.black.opacity(wellOpacity))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
                 .strokeBorder(focused ? NotesMetrics.pillStroke.opacity(0.7)
                                       : Color.dynamicOverlay(light: 0.07, dark: 0.08),
                               lineWidth: 1)
         )
-        .contentShape(RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous))
         .onTapGesture { focused = true }
         .onHover { hovering in
             withAnimation(Motion.hintFade) { hover = hovering }
@@ -697,10 +697,10 @@ private struct CalendarComposer: View {
     @State private var hover = false
 
     var body: some View {
-        HStack(spacing: LabMetrics.rowInnerGap) {
+        HStack(spacing: PanelMetrics.rowInnerGap) {
             OttoIcon("calendar", pointSize: 14)
-                .foregroundStyle(LabMetrics.accent)
-                .frame(width: LabMetrics.checkboxSize, height: LabMetrics.checkboxSize)
+                .foregroundStyle(PanelMetrics.accent)
+                .frame(width: PanelMetrics.checkboxSize, height: PanelMetrics.checkboxSize)
 
             TextField(L10n.t("meeting.search"), text: $store.meetingQuery)
                 .textFieldStyle(.plain)
@@ -717,21 +717,21 @@ private struct CalendarComposer: View {
             .buttonStyle(.plain)
             .help(L10n.t("meeting.choose"))
         }
-        .padding(.horizontal, LabMetrics.barPaddingH)
-        .padding(.vertical, LabMetrics.barPaddingV)
+        .padding(.horizontal, PanelMetrics.barPaddingH)
+        .padding(.vertical, PanelMetrics.barPaddingV)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(minHeight: LabMetrics.barHeight)
+        .frame(minHeight: PanelMetrics.barHeight)
         .background(
-            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
                 .fill(Color.black.opacity(focused ? 0.14 : (hover ? 0.18 : 0.22)))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
-                .strokeBorder(focused ? LabMetrics.accent.opacity(0.7)
+            RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
+                .strokeBorder(focused ? PanelMetrics.accent.opacity(0.7)
                                       : Color.dynamicOverlay(light: 0.07, dark: 0.08),
                               lineWidth: 1)
         )
-        .contentShape(RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous))
         .onTapGesture { focused = true }
         .onHover { hover = $0 }
         .onChange(of: store.meetingSearchFocus) { if $0 { focused = true } }
@@ -935,7 +935,7 @@ private struct NoteEntryRow: View {
             // stamp ("yesterday 18:04") is wider, so pinning it would clip the
             // one and pinning it to the wider would push the title in for
             // nothing.
-            .frame(minWidth: LabMetrics.rowActionsWidth, alignment: .trailing)
+            .frame(minWidth: PanelMetrics.rowActionsWidth, alignment: .trailing)
             // On the title's line, not the block's middle.
             .padding(.top, 2)
         }
@@ -1058,7 +1058,7 @@ private struct NoteDetailView: View {
         VStack(alignment: .leading, spacing: 0) {
             if isContainer {
                 header
-                    .padding(.horizontal, LabMetrics.barOuterInset)
+                    .padding(.horizontal, PanelMetrics.barOuterInset)
             } else {
                 // Floating panels: THE top bar, one level in — Back and the
                 // note's title where the capture field stands at the root. The
@@ -1088,7 +1088,7 @@ private struct NoteDetailView: View {
                 // the document visibly narrower than its own title field.
                 // Floating panels: 25 + the text view's 28 inset = 53, the
                 // title's column; the inset holds the linked checkboxes.
-                .padding(.horizontal, isContainer ? LabMetrics.blockPadding : SpaceChrome.textColumn - 28)
+                .padding(.horizontal, isContainer ? PanelMetrics.blockPadding : SpaceChrome.textColumn - 28)
                 .padding(.top, 6)
                 // A document editor owns the remaining room; it is not sized
                 // to its current line count. Sizing it to `contentHeight`
@@ -1158,7 +1158,7 @@ private struct NoteDetailView: View {
     /// third size again (Marcello, 2026-09-06). They are one input now,
     /// wearing whatever the role needs inside it.
     private var header: some View {
-        HStack(spacing: LabMetrics.rowInnerGap) {
+        HStack(spacing: PanelMetrics.rowInnerGap) {
             BackButton { store.closeNote() }
 
             TextField("", text: $titleDraft)
@@ -1195,16 +1195,16 @@ private struct NoteDetailView: View {
                     )
             }
         }
-        .padding(.horizontal, LabMetrics.barPaddingH)
-        .padding(.vertical, LabMetrics.barPaddingV)
+        .padding(.horizontal, PanelMetrics.barPaddingH)
+        .padding(.vertical, PanelMetrics.barPaddingV)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(minHeight: LabMetrics.barHeight)
+        .frame(minHeight: PanelMetrics.barHeight)
         .background(
-            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
                 .fill(Color.black.opacity(titleFocused ? 0.14 : 0.22))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: LabMetrics.barRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
                 .strokeBorder(titleFocused ? NotesMetrics.pillStroke.opacity(0.7)
                                            : Color.dynamicOverlay(light: 0.07, dark: 0.08),
                               lineWidth: 1)
@@ -1281,9 +1281,9 @@ private struct NoteDetailView: View {
     }
 
     private var editorViewportHeight: CGFloat {
-        max(160, LabMetrics.todoBlockMaxHeight
-            - LabMetrics.panelTopPadding
-            - LabMetrics.barHeight - 28
+        max(160, PanelMetrics.todoBlockMaxHeight
+            - PanelMetrics.panelTopPadding
+            - PanelMetrics.barHeight - 28
             - (note.meetingContext == nil || editor.pickerTarget != nil ? 0 : 250)
             - NotesMetrics.bottomBarHeight
             - (editor.pickerTarget == nil ? 0 : (editor.pickerExpanded ? 200 : 100)))
@@ -1341,7 +1341,7 @@ private struct BackButton: View {
     var body: some View {
         Button(action: action) {
             OttoIcon("chevron.left", pointSize: 15)
-                .foregroundStyle(hover ? DSColor.textPrimaryBright : LabMetrics.accent)
+                .foregroundStyle(hover ? DSColor.textPrimaryBright : PanelMetrics.accent)
                 .frame(width: 30, height: 30)
                 .background(
                     Circle().fill(hover ? DSColor.fieldBackground : Color.clear)
