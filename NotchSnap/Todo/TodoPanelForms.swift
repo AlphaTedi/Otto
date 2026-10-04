@@ -51,13 +51,35 @@ struct HighlightingTitleField: NSViewRepresentable {
     /// the text (the title carries their `![…](…)` tokens), the way
     /// Conductor's input does. Off: text only, as before.
     var allowsImages = false
+    /// The color the text is drawn in. Broken out of the hardcoded
+    /// `textPrimaryBright` so a non-draft caller (a checklist step, dimmed
+    /// while done) isn't forced to look like the draft title.
+    var textColor: Color = DSColor.textPrimaryBright
+    /// A completed step is struck through; nothing else uses this.
+    var strikethrough = false
+    /// `view.identifier` is how TodoBrowsingKeyHandler's `draftHasCaret()`
+    /// recognizes the ONE draft title field so ⏎/⇥/Esc reach
+    /// `commitDraft()`/`blurDraft()` instead of whatever has focus elsewhere.
+    /// A second field carrying that identifier would make the router think
+    /// the draft itself was focused while you were actually editing a step —
+    /// so every other caller MUST pass `false`.
+    var identifies = true
+    /// Return commits, for a field the key monitor does not already route
+    /// by identifier. With it set the field also behaves like a form field
+    /// under ⇥: the caret moves on instead of a tab being typed into the
+    /// text. nil leaves both keys to AppKit, as before.
+    var onReturn: (() -> Void)?
 
     static let lineHeight: CGFloat = 17
     static let maxHeight: CGFloat = 102   // ~6 lines, then it scrolls
 
-    /// One line at `size`: the 13-pt field keeps its historical 17.
+    /// One line at `size`: the 13-pt field keeps its historical 17 exactly —
+    /// narrowed from "`<= 13`" when an 11-pt caller (a checklist step)
+    /// arrived and would otherwise have inherited a line height tuned for a
+    /// field two points larger, taller than the compact row steps are
+    /// designed at.
     static func lineHeight(_ size: CGFloat) -> CGFloat {
-        size <= 13 ? lineHeight : ceil(NSFont.systemFont(ofSize: size).boundingRectForFont.height * 0.92)
+        size == 13 ? lineHeight : ceil(NSFont.systemFont(ofSize: size).boundingRectForFont.height * 0.92)
     }
 
     /// Stamped on the text view so the key monitor can ask "is the caret in
@@ -75,13 +97,13 @@ struct HighlightingTitleField: NSViewRepresentable {
         scroll.verticalScrollElasticity = .allowed
 
         let view = FocusReportingTextView()
-        view.identifier = Self.fieldIdentifier
+        if identifies { view.identifier = Self.fieldIdentifier }
         view.allowsImages = allowsImages
-        view.onFocusChange = { focused in
+        view.onFocusChange = { [coordinator = context.coordinator] focused in
             // Async: this fires from inside AppKit's responder change, and
             // publishing store state synchronously from there re-enters
             // SwiftUI layout mid-transaction.
-            DispatchQueue.main.async { onFocusChange(focused) }
+            DispatchQueue.main.async { coordinator.parent.onFocusChange(focused) }
         }
         view.delegate = context.coordinator
         view.drawsBackground = false
@@ -113,7 +135,7 @@ struct HighlightingTitleField: NSViewRepresentable {
         }
         view.textStorage?.setAttributedString(AttachmentStore.chipped(text, attributes: [
             .font: NSFont.systemFont(ofSize: fontSize),
-            .foregroundColor: NSColor(DSColor.textPrimaryBright),
+            .foregroundColor: NSColor(textColor),
         ]))
         context.coordinator.restyle(view, highlight: highlightRange)
 
@@ -127,6 +149,10 @@ struct HighlightingTitleField: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let view = scroll.documentView as? NSTextView else { return }
+        // The coordinator restyles from `parent`, and a step's colour and
+        // strikethrough change while the view lives — a parent captured once
+        // at creation would keep drawing the first render's values.
+        context.coordinator.parent = self
         (view as? FocusReportingTextView)?.allowsImages = allowsImages
         // The view holds chips where the text holds tokens: compare in token
         // form, and rebuild only when they really differ (a rebuild would move
@@ -134,13 +160,13 @@ struct HighlightingTitleField: NSViewRepresentable {
         if let storage = view.textStorage, AttachmentStore.unchipped(storage) != text {
             storage.setAttributedString(AttachmentStore.chipped(text, attributes: [
                 .font: NSFont.systemFont(ofSize: fontSize),
-                .foregroundColor: NSColor(DSColor.textPrimaryBright),
+                .foregroundColor: NSColor(textColor),
             ]))
         }
         view.insertionPointColor = NSColor(accent)
         view.selectedTextAttributes = [
             .backgroundColor: NSColor(accent).withAlphaComponent(0.32),
-            .foregroundColor: NSColor(DSColor.textPrimaryBright),
+            .foregroundColor: NSColor(textColor),
         ]
         context.coordinator.restyle(view, highlight: highlightRange)
         if wantsFocus, view.window?.firstResponder !== view {
@@ -270,6 +296,29 @@ struct HighlightingTitleField: NSViewRepresentable {
             parent.text = view.textStorage.map(AttachmentStore.unchipped) ?? view.string
         }
 
+        /// Only engaged when the caller supplied `onReturn` — the draft title
+        /// does not (its ⏎/⇥/Esc are routed by identifier, see
+        /// `fieldIdentifier`), so for it this always falls through to
+        /// AppKit's default and nothing here changes its behavior.
+        ///
+        /// ⇥ is here because an NSTextView types a tab character where the
+        /// NSTextField a step used to be moved to the next field. Same
+        /// traversal, asked for by hand.
+        func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            guard let onReturn = parent.onReturn else { return false }
+            switch commandSelector {
+            case #selector(NSResponder.insertNewline(_:)):
+                onReturn()
+            case #selector(NSResponder.insertTab(_:)):
+                textView.window?.selectKeyView(following: textView)
+            case #selector(NSResponder.insertBacktab(_:)):
+                textView.window?.selectKeyView(preceding: textView)
+            default:
+                return false
+            }
+            return true
+        }
+
         func restyle(_ view: NSTextView, highlight: NSRange?) {
             let full = NSRange(location: 0, length: (view.string as NSString).length)
             guard let storage = view.textStorage else { return }
@@ -277,9 +326,14 @@ struct HighlightingTitleField: NSViewRepresentable {
             // addAttributes, not setAttributes: an image chip's attachment
             // must survive the restyle.
             storage.addAttributes([
-                .foregroundColor: NSColor(DSColor.textPrimaryBright),
+                .foregroundColor: NSColor(parent.textColor),
                 .font: NSFont.systemFont(ofSize: parent.fontSize),
             ], range: full)
+            if parent.strikethrough {
+                storage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: full)
+            } else {
+                storage.removeAttribute(.strikethroughStyle, range: full)
+            }
             // The date phrase is found in the TITLE, where a chip is a whole
             // token; move its range to where it sits among single chips.
             if let highlight {
@@ -292,7 +346,7 @@ struct HighlightingTitleField: NSViewRepresentable {
             AttachmentStore.spaceChips(in: storage)
             storage.endEditing()
             view.typingAttributes = [
-                .foregroundColor: NSColor(DSColor.textPrimaryBright),
+                .foregroundColor: NSColor(parent.textColor),
                 .font: NSFont.systemFont(ofSize: parent.fontSize),
             ]
         }

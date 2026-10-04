@@ -142,6 +142,20 @@ enum DebugDriver {
             } else {
                 appendState("step preview: no items")
             }
+        case "step-responder":
+            // The VIEW half of step focus: which control actually holds the
+            // caret. `step-down` and friends report where the store thinks it
+            // is, which stayed right while the fields themselves took focus
+            // and dropped it in the same pass (2026-10-04).
+            let responder = NSApp.windows.first { $0 is NotchPanel }?.firstResponder
+            if let text = responder as? NSTextView {
+                appendState("stepResponder=textView editable=\(text.isEditable) "
+                            + "fieldEditor=\(text.isFieldEditor) "
+                            + "draftTitle=\(text.identifier == HighlightingTitleField.fieldIdentifier) "
+                            + "text=\"\(text.string)\"")
+            } else {
+                appendState("stepResponder=\(responder.map { String(describing: type(of: $0)) } ?? "nil")")
+            }
         case "presence":
             appendState("presence: " + NotchPresence.shared.state.debugDescription)
         case "presence-rest":

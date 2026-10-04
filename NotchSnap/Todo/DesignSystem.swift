@@ -308,7 +308,10 @@ enum DSFont {
     static let tabLabel: Font = .system(size: 11)
     static let sectionLabel: Font = .system(size: 10, weight: .regular)
     static let hint: Font = .system(size: 9)
-    static let checklistItem: Font = .system(size: 11)
+    /// Broken out so StepRow's HighlightingTitleField can ask for this exact
+    /// size's measured line height instead of a second, hand-copied number.
+    static let checklistItemSize: CGFloat = 11
+    static let checklistItem: Font = .system(size: checklistItemSize)
     static let buttonLabel: Font = .system(size: 12, weight: .medium)
 }
 
