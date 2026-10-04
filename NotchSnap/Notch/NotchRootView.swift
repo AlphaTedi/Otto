@@ -42,6 +42,7 @@ struct NotchRootView: View {
             // 2026-10-03) — the menu hangs past the edge instead.
             if notchLayout == .container, controller.state == .expanded {
                 ContainerMeetingCard(controller: controller)
+                    .transition(.opacity.animation(NotchAnimation.contentOut))
                 ContainerMenuLayer(controller: controller)
             }
         }
@@ -150,6 +151,11 @@ private struct ContainerMeetingCard: View {
     @ObservedObject private var calendar = CalendarStore.shared
     @ObservedObject private var store = TodoStore.shared
     @EnvironmentObject private var appState: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Drives the entrance: the card drops out of the notch just behind it,
+    /// on the notch's own expand spring (Marcello, 2026-10-04: it was simply
+    /// there when the notch opened).
+    @State private var entered = false
 
     /// Same rule as the floating panels: at the root only, never over a page.
     private var meeting: DetectedMeeting? {
@@ -176,6 +182,9 @@ private struct ContainerMeetingCard: View {
                             .onChange(of: card.frame(in: .named("notchPanelContent"))) { controller.setContainerCardFrame($0) }
                     })
                     .environment(\.colorScheme, .dark)
+                    .opacity(entered ? 1 : 0)
+                    .scaleEffect(entered || reduceMotion ? 1 : 0.94, anchor: .top)
+                    .offset(y: entered || reduceMotion ? 0 : -28)
                     .transition(.opacity.combined(with: .offset(y: -8)))
             }
             Spacer(minLength: 0)
@@ -184,6 +193,15 @@ private struct ContainerMeetingCard: View {
         .animation(NotchAnimation.contentHug, value: appState.notchExtraHeight)
         .animation(NotchAnimation.contentHug, value: meeting?.id)
         .onChange(of: meeting == nil) { gone in if gone { controller.setContainerCardFrame(nil) } }
-        .onDisappear { controller.setContainerCardFrame(nil) }
+        .onAppear {
+            // A beat after the notch starts growing, so the card reads as
+            // coming out of it rather than arriving alongside.
+            withAnimation(reduceMotion ? .easeOut(duration: 0.15)
+                                       : NotchAnimation.expand.delay(0.08)) { entered = true }
+        }
+        .onDisappear {
+            entered = false
+            controller.setContainerCardFrame(nil)
+        }
     }
 }
