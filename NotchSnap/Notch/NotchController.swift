@@ -31,6 +31,17 @@ class NotchController: ObservableObject {
                                    width: frame.width, height: frame.height)
     }
 
+    /// The container silhouette's BODY width: the shape's frame is
+    /// `expandedSize.width` including its two 12pt top fillets (NotchShapeView,
+    /// expanded state), so the straight sides stand 12pt in from each edge.
+    var containerBodyWidth: CGFloat { expandedSize.width - 2 * 12 }
+
+    /// The silhouette's bottom corner radius while expanded (same formula as
+    /// NotchShapeView.bottomCornerRadius).
+    var containerBottomRadius: CGFloat {
+        max(CGFloat(cornerRadius), min(28, expandedSize.height * 0.13)) + 4
+    }
+
     /// The container silhouette's height while expanded — where the meeting
     /// card hangs from.
     var containerSilhouetteHeight: CGFloat { expandedSize.height + AppState.shared.notchExtraHeight }

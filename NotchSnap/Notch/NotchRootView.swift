@@ -158,13 +158,15 @@ private struct ContainerMeetingCard: View {
     }
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 30, style: .continuous)
+        // Exactly the notch's body width and corner, whatever the size preset
+        // (Marcello, 2026-10-04: the card was wider than the notch).
+        let shape = RoundedRectangle(cornerRadius: controller.containerBottomRadius, style: .continuous)
         VStack(spacing: 0) {
             Color.clear.frame(height: controller.containerSilhouetteHeight + 12)
             if let meeting {
                 LabMeetingCard(meeting: meeting, isNext: true)
                     .padding(LabMetrics.blockPadding)
-                    .frame(width: controller.expandedSize.width, alignment: .leading)
+                    .frame(width: controller.containerBodyWidth, alignment: .leading)
                     .background(shape.fill(Color.black))
                     .overlay(shape.strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
                     .shadow(color: .black.opacity(0.35), radius: 18, y: 8)
