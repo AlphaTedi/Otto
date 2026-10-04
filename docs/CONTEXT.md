@@ -1122,7 +1122,10 @@ Three commits on `refactor/cleanup` (Marcello: "non c'è ordine, non c'è archit
   need no project edit. The pre-Otto name is gone everywhere except the bundle id.
   The data folder moves itself to `~/Library/Application Support/Otto` on the first
   launch that runs alone (`AppBuild.supportDirectory`); the settings key
-  (`otto.settings`) and the stored vault path follow it.
+  (`otto.settings`) and the stored vault path follow it. The old name is left
+  as a symlink to the new folder: the installed 1.73.0, opened beside a Debug
+  build after the move, found no folder, started empty and looked like every
+  note and to-do was lost (they were intact under `Otto/`).
 - **Refactor.** The "Lab" panels became `FloatingPanelsView` / `PanelMetrics` (they are
   the default layout, not an experiment). `TodoBrowsingView.swift` (3,300 lines) was
   split into one file per component, `DesignSystem.swift` into tokens and components,

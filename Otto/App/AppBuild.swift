@@ -42,6 +42,8 @@ enum AppBuild {
         let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let current = base.appendingPathComponent(isLab ? "Otto Lab" : "Otto", isDirectory: true)
         let legacy = base.appendingPathComponent(legacySupportRoot, isDirectory: true)
+        // Already moved: the old name is the link left behind (below).
+        if (try? fm.destinationOfSymbolicLink(atPath: legacy.path)) != nil { return current }
         guard fm.fileExists(atPath: legacy.path) else { return current }
         // Another copy still running (an older build, or the installed app
         // beside a Debug build) has its files open in the old folder. Moving
@@ -51,6 +53,14 @@ enum AppBuild {
             return fm.fileExists(atPath: current.path) ? current : legacy
         }
         adoptLegacySupportFolder(legacy, into: current)
+        // Leave the old name pointing at the new folder. A build from before
+        // the rename — the installed release beside a Debug build, or a
+        // downgrade — still opens the old path; without this it found
+        // nothing, started empty and looked like every to-do and note was
+        // gone (2026-10-04).
+        if !fm.fileExists(atPath: legacy.path) {
+            try? fm.createSymbolicLink(at: legacy, withDestinationURL: current)
+        }
         return current
     }()
 
