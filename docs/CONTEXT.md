@@ -1105,6 +1105,37 @@ the card rect. Verified: 621 wide, 12pt under a 253pt silhouette.
   until release. Being a drop target is the only way to see what a drag
   carries. It accepts images only, opens the notch, and steps aside so the
   drop lands in the note or the to-do draft field.
+  **Levels are the trap here.** The drag system offers drops to nothing at
+  shielding level, and draws the drag image below it: the catcher at
+  shielding + 1 was up and in place yet never saw a drag; the notch itself,
+  opened, hid the dragged file under it and let the drop fall to the desktop.
+  The catcher lives at `DragCatcherPanel.dragLevel` (statusBar + 8). The
+  opened notch was harder: a space above the desktops is composited above
+  everything on them whatever the levels, and lowering the space's level
+  changed nothing. So for the length of a drag the panel steps out of its
+  space onto the active desktop (`SpaceAnchor.stepDown`, private
+  CGSRemoveWindowsFromSpaces / CGSGetActiveSpace) at dragLevel, and steps
+  back on release.
+  Last trap: an NSTextView registers for drags only in a window and nothing
+  re-registers it on arrival — the to-do field and the note were registered
+  for NOTHING. Both call `updateDragTypeRegistration()` in
+  `viewDidMoveToWindow`. Probe: `drop-targets`; live trace: /tmp/otto-drag.txt.
+  Even registered, no drag ever reached them inside the open panel (the
+  hosting view does not pass it down). So the catcher ROUTES: once the notch
+  opens it spreads over the panel (dragLevel + 1), takes the drop itself and
+  puts it in the image-taking text view under the pointer — found by
+  geometry, not hit testing — else the one holding the caret
+  (`imageDropTarget` / `dropImage`). Probe: `drop-route`.
+- **A chip in the draft field sits still.** TextKit sized a chip's line by
+  the chip: 22 with a chip and a space, 20 with the chip alone, 21 with
+  text — deleting the space made the chip jump, and the 13 pt row (measured
+  at 14 pt with those heights) left it off the checkbox. `ChipLineLayout`
+  (layout delegate on both draft fields) makes a chip line max(text line,
+  chip) with the text's own baseline centred; `ImageChipCell.cellFrame`
+  centres the chip on the cap height of the font beside it, at any size.
+  InlineDraftRow measures with `ChipLineLayout.height` at the field's size.
+  Probe: `chip-metrics`. `panel-snap` does not capture the floating-panels
+  layout.
 
 ## 11. The 2026-10-04 cleanup: delete, organize, refactor
 

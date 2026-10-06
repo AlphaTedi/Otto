@@ -75,14 +75,14 @@ struct InlineDraftRow: View {
         let panelWidth = CGFloat(NotchController.shared.expandedWidth)
         let estimate = max(120, panelWidth - CGFloat(DSSpacing.panelPadding) * 2 - 20 - 24 - 112)
         let width = measuredFieldWidth > 0 ? measuredFieldWidth : estimate
-        let text = store.draftTitle.isEmpty ? " " : store.draftTitle
-        // As displayed: an image token is one chip, not its long markdown.
-        let measured = AttachmentStore.chipped(
-            text, attributes: [.font: NSFont.systemFont(ofSize: DSFont.todoTitleSize)]
-        ).boundingRect(
-            with: NSSize(width: width, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading]
-        ).height
+        // As displayed: an image token is one chip, not its long markdown,
+        // laid out the field's own way (ChipLineLayout) at the field's own
+        // size — measured at 14 pt for a 13 pt field, with TextKit's
+        // chip-dependent line heights, the field and its line disagreed and
+        // a dropped image sat off the checkbox (Marcello, 2026-10-04).
+        let measured = ChipLineLayout.height(of: store.draftTitle,
+                                             font: .systemFont(ofSize: HighlightingTitleField.defaultFontSize),
+                                             width: width)
         return max(HighlightingTitleField.lineHeight,
                    min(ceil(measured), HighlightingTitleField.maxHeight))
     }
@@ -93,15 +93,14 @@ struct InlineDraftRow: View {
         // the label carries its own 8pt box is what left every checkbox
         // sitting visibly above the text it belongs to.
         HStack(alignment: .center, spacing: PanelMetrics.rowInnerGap) {
-                // Back to a checkbox, and the SAME one the rows use: 18pt,
-                // 2pt cyan, 6pt corner. The export draws the bar and the list
-                // with one component, so the bar reads as the row you are
-                // about to make rather than as a search field.
                 // The DESTINATION's colour, so the bar says where the thing
                 // being typed will land — the same pairing the rows use.
-                RoundedRectangle(cornerRadius: PanelMetrics.checkboxRadius, style: .continuous)
-                    .strokeBorder(accent, lineWidth: PanelMetrics.checkboxStroke)
-                    .frame(width: PanelMetrics.checkboxSize, height: PanelMetrics.checkboxSize)
+                // The glowing space dot of the floating panels' capture bar,
+                // in the checkbox's box so the column below still lines up
+                // (Marcello, 2026-10-04). Like there, a click cycles the
+                // destination (⇥ does it from the keyboard).
+                SpaceDot(tint: store.draftSpaceTint, action: { store.cycleCollection() },
+                         slot: CGSize(width: PanelMetrics.checkboxSize, height: PanelMetrics.checkboxSize))
 
                 ZStack(alignment: .topLeading) {
                     // Stays until the first character, the way every other

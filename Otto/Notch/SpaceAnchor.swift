@@ -72,6 +72,10 @@ enum SpaceAnchor {
     private static let hideSpaces = symbol("CGSHideSpaces", as: FnHideSpaces.self)
     private static let spaceDestroy = symbol("CGSSpaceDestroy", as: FnSpaceDestroy.self)
     private static let addWindows = symbol("CGSAddWindowsToSpaces", as: FnAddWindowsToSpaces.self)
+    private typealias FnRemoveWindowsFromSpaces = @convention(c) (ConnectionID, CFArray, CFArray) -> Void
+    private typealias FnGetActiveSpace = @convention(c) (ConnectionID) -> CGSSpaceID
+    private static let removeWindows = symbol("CGSRemoveWindowsFromSpaces", as: FnRemoveWindowsFromSpaces.self)
+    private static let activeSpace = symbol("CGSGetActiveSpace", as: FnGetActiveSpace.self)
 
     /// Every symbol the technique needs. All or nothing — a half-resolved
     /// version of this would make a space and fail to show it, which is worse
@@ -136,6 +140,42 @@ enum SpaceAnchor {
                    [NSNumber(value: target)] as CFArray)
         lastError = nil
         return true
+    }
+
+    // MARK: Stepping down for a drag (2026-10-04)
+    //
+    // A space above the desktops is composited above EVERYTHING on them —
+    // the drag image included, whatever the window levels say. Dragging a
+    // file into the open notch, the file slid under the panel, and the drop
+    // was never offered to the panel: it fell to the desktop. Lowering the
+    // space's level did not change it. So for the length of a drag the panel
+    // moves onto the desktop the user is looking at, an ordinary window
+    // there; the release moves it back.
+
+    private static var borrowedSpace: CGSSpaceID?
+
+    /// Move `window` out of Otto's space onto the active desktop.
+    static func stepDown(_ window: NSWindow) {
+        guard borrowedSpace == nil, let mainConnection, let addWindows, let removeWindows, let activeSpace,
+              let space, window.windowNumber > 0 else { return }
+        let connection = mainConnection()
+        let desktop = activeSpace(connection)
+        guard desktop != 0 else { return }
+        let windows = [NSNumber(value: window.windowNumber)] as CFArray
+        addWindows(connection, windows, [NSNumber(value: desktop)] as CFArray)
+        removeWindows(connection, windows, [NSNumber(value: space)] as CFArray)
+        borrowedSpace = desktop
+    }
+
+    /// Back into Otto's space, off the desktop it borrowed.
+    static func stepUp(_ window: NSWindow) {
+        guard let desktop = borrowedSpace, let mainConnection, let addWindows, let removeWindows,
+              let space, window.windowNumber > 0 else { borrowedSpace = nil; return }
+        let connection = mainConnection()
+        let windows = [NSNumber(value: window.windowNumber)] as CFArray
+        addWindows(connection, windows, [NSNumber(value: space)] as CFArray)
+        removeWindows(connection, windows, [NSNumber(value: desktop)] as CFArray)
+        borrowedSpace = nil
     }
 
     /// Give the space back. Not strictly required — the window server cleans up

@@ -43,7 +43,8 @@ struct HighlightingTitleField: NSViewRepresentable {
     /// the panel open, so it has to be observed rather than assumed.
     var onFocusChange: (Bool) -> Void = { _ in }
     /// 13 everywhere except U5's floating capture header, which is 18.
-    var fontSize: CGFloat = 13
+    var fontSize: CGFloat = Self.defaultFontSize
+    static let defaultFontSize: CGFloat = 13
     /// One line that scrolls sideways under the caret (the floating capture
     /// header, 2026-09-27) instead of wrapping and growing.
     var singleLine = false
@@ -178,7 +179,22 @@ struct HighlightingTitleField: NSViewRepresentable {
     /// responder calls is the only account of focus that is always right.
     final class FocusReportingTextView: NSTextView {
         var onFocusChange: ((Bool) -> Void)?
-        var allowsImages = false
+        /// Re-registered with the drag system whenever it changes, and on
+        /// joining a window (`viewDidMoveToWindow`).
+        var allowsImages = false {
+            didSet { if allowsImages != oldValue { updateDragTypeRegistration() } }
+        }
+
+        /// A text view registers for drags only in a window, and nothing
+        /// re-registers it once it gets there: measured, the field in the
+        /// panel was registered for nothing at all, so every image dropped
+        /// on it fell through to the desktop (2026-10-04, `drop-targets`).
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window != nil { updateDragTypeRegistration() }
+            // A chip never changes its line's height (ChipLineLayout).
+            if layoutManager?.delegate == nil { layoutManager?.delegate = ChipLineLayout.shared }
+        }
         private lazy var chips = MainActor.assumeIsolated { ImageChipInteraction(textView: self, canRemove: true) }
         private var chipTracking: NSTrackingArea?
 
@@ -191,6 +207,20 @@ struct HighlightingTitleField: NSViewRepresentable {
         override var acceptableDragTypes: [NSPasteboard.PasteboardType] {
             allowsImages ? [.fileURL, .png, .tiff] + super.acceptableDragTypes : super.acceptableDragTypes
         }
+
+        #if DEBUG
+        override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+            let operation = super.draggingEntered(sender)
+            DragCatcherPanel.trace("to-do field: drag entered, operation=\(operation.rawValue) registered=\(registeredDraggedTypes.map(\.rawValue))")
+            return operation
+        }
+
+        override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+            let done = super.performDragOperation(sender)
+            DragCatcherPanel.trace("to-do field: drop performed=\(done)")
+            return done
+        }
+        #endif
 
         override func readSelection(from pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
             if allowsImages, MainActor.assumeIsolated({ AttachmentStore.hasImage(pboard) }) {

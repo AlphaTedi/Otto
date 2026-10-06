@@ -203,7 +203,7 @@ final class ImageChipCell: NSTextAttachmentCell {
     let path: String
     private let name: String
     private let chipFont = NSFont.systemFont(ofSize: 11.5, weight: .medium)
-    private static let height: CGFloat = 20
+    static let height: CGFloat = 20
     /// Under the pointer. With `showsRemove`, the thumbnail's slot becomes an
     /// ✕ — the Conductor chip (Marcello, 2026-09-27).
     var hovered = false
@@ -230,6 +230,18 @@ final class ImageChipCell: NSTextAttachmentCell {
     }
 
     override func cellBaselineOffset() -> NSPoint { NSPoint(x: 0, y: -5) }
+
+    /// Centred on the middle of the capitals beside it, whatever their size.
+    /// The fixed -5 above was right for 13–14 pt only: in the 18 pt capture
+    /// field the chip sat visibly off the text (Marcello, 2026-10-04).
+    override func cellFrame(for textContainer: NSTextContainer, proposedLineFragment lineFrag: NSRect,
+                            glyphPosition position: NSPoint, characterIndex charIndex: Int) -> NSRect {
+        let size = cellSize()
+        let font = (textContainer.layoutManager?.textStorage.flatMap { storage in
+            charIndex < storage.length ? storage.attribute(.font, at: charIndex, effectiveRange: nil) : nil
+        } as? NSFont) ?? .systemFont(ofSize: 13)
+        return NSRect(x: 0, y: (font.capHeight / 2 - size.height / 2).rounded(), width: size.width, height: size.height)
+    }
 
     override func draw(withFrame cellFrame: NSRect, in controlView: NSView?) {
         let frame = cellFrame.insetBy(dx: Self.margin + 0.5, dy: 0.5)
@@ -281,6 +293,59 @@ final class ImageChipCell: NSTextAttachmentCell {
     // Clicks and hover are the text view's (ImageChipInteraction), so the
     // chip behaves the same in a note, the to-do field and a to-do row.
     override func wantsToTrackMouse() -> Bool { false }
+}
+
+// MARK: - A steady line under a chip (the draft fields)
+
+/// A line holding a chip is as tall as a line of text, or the chip if that is
+/// taller — and never depends on what else is on it. Left to TextKit, the
+/// 18 pt field's line was 22 with a chip and a space, 20 with the chip alone
+/// and 21 with text: deleting the space after a dropped image made the chip
+/// jump (Marcello, 2026-10-04). The text keeps its own baseline, centred in
+/// the line; the chip centres itself on it (ImageChipCell.cellFrame).
+final class ChipLineLayout: NSObject, NSLayoutManagerDelegate, @unchecked Sendable {
+    static let shared = ChipLineLayout()
+
+    func layoutManager(_ layoutManager: NSLayoutManager,
+                       shouldSetLineFragmentRect lineFragmentRect: UnsafeMutablePointer<NSRect>,
+                       lineFragmentUsedRect: UnsafeMutablePointer<NSRect>,
+                       baselineOffset: UnsafeMutablePointer<CGFloat>,
+                       in textContainer: NSTextContainer,
+                       forGlyphRange glyphRange: NSRange) -> Bool {
+        guard let storage = layoutManager.textStorage else { return false }
+        let characters = layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
+        var holdsChip = false
+        storage.enumerateAttribute(.attachment, in: characters) { value, _, stop in
+            if value is ImageChipAttachment { holdsChip = true; stop.pointee = true }
+        }
+        guard holdsChip else { return false }
+        let font = (characters.location < storage.length
+            ? storage.attribute(.font, at: characters.location, effectiveRange: nil) as? NSFont : nil)
+            ?? .systemFont(ofSize: 13)
+        let textLine = layoutManager.defaultLineHeight(for: font)
+        let height = max(textLine, ImageChipCell.height)
+        lineFragmentRect.pointee.size.height = height
+        lineFragmentUsedRect.pointee.size.height = height
+        baselineOffset.pointee = layoutManager.defaultBaselineOffset(for: font) + (height - textLine) / 2
+        return true
+    }
+
+    /// The height `text` (token form) takes in a field of `width` laid out
+    /// this way — what the field's frame must be, so it neither clips the
+    /// chip nor leaves the line off-centre.
+    @MainActor
+    static func height(of text: String, font: NSFont, width: CGFloat) -> CGFloat {
+        let storage = NSTextStorage(attributedString: AttachmentStore.chipped(text.isEmpty ? " " : text,
+                                                                              attributes: [.font: font]))
+        let layout = NSLayoutManager()
+        layout.delegate = shared
+        let container = NSTextContainer(size: NSSize(width: width, height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        layout.addTextContainer(container)
+        storage.addLayoutManager(layout)
+        layout.ensureLayout(for: container)
+        return layout.usedRect(for: container).height
+    }
 }
 
 // MARK: - Hover preview and clicks, for any text view holding chips

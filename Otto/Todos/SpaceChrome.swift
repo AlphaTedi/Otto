@@ -138,11 +138,14 @@ struct CaptureHeader<Field: View>: View {
     }
 }
 
-/// The 9-pt space dot in an 18-pt slot — the checkbox column's width, so its
-/// centre lines up with every checkbox below it.
-private struct SpaceDot: View {
+/// The 9-pt space dot, centred in its slot — the checkbox column, so its
+/// centre lines up with every checkbox below it. The container's draft row
+/// wears it too, in the checkbox's own 18-pt box (Marcello, 2026-10-04: one
+/// glowing dot in both layouts, not a dot here and a checkbox there).
+struct SpaceDot: View {
     let tint: SpaceTint
     let action: () -> Void
+    var slot = CGSize(width: SpaceChrome.slotWidth, height: 28)
 
     var body: some View {
         Button(action: action) {
@@ -154,7 +157,7 @@ private struct SpaceDot: View {
                 .shadow(color: tint.base.color.opacity(0.6), radius: 4)
                 // The same slot the Back key takes one level in, so the dot
                 // sits on the checkbox column and the bar does not move.
-                .frame(width: SpaceChrome.slotWidth, height: 28)
+                .frame(width: slot.width, height: slot.height)
                 .contentShape(Rectangle())
                 .animation(.easeInOut(duration: 0.2), value: tint)
         }

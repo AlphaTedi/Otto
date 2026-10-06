@@ -11,18 +11,49 @@ import SwiftUI
 /// The invisible drop target over the notch while a press is held
 /// (NotchController.armDragCatcher). Accepts only drags carrying an image,
 /// and calls `onHeld` once one has rested on it for `dwell` seconds.
+///
+/// Then it ROUTES: spread over the open panel, it takes the drop itself and
+/// hands it to `onDrop`, which puts it in the text under the pointer. The
+/// panel's own text views never saw a drag — the trace showed the notch
+/// open, under the dragged file, and not one draggingEntered reaching the
+/// to-do field — so the drop no longer depends on the panel's hosting view
+/// passing it down.
 final class DragCatcherPanel: NSPanel {
     var onHeld: (() -> Void)?
     var dwell: TimeInterval = 0.3
+    /// Routing mode: whether a drop at this screen point has a place to go,
+    /// and putting it there.
+    var canDrop: ((NSPoint) -> Bool)?
+    var onDrop: ((NSPasteboard, NSPoint) -> Bool)?
+    fileprivate(set) var isRouting = false
+
+    /// Spread over `frame` (the open panel) and take the drop.
+    func route(over frame: NSRect) {
+        (contentView as? DropView)?.cancel()
+        isRouting = true
+        level = NSWindow.Level(rawValue: Self.dragLevel.rawValue + 1)
+        setFrame(frame, display: false)
+        orderFrontRegardless()
+    }
 
     init() {
-        super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
+        super.init(contentRect: NSRect(x: 0, y: 0, width: 10, height: 10),
+                   styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
-        // Not clear: a window ignores the pointer, drags included, wherever
-        // it draws nothing.
-        backgroundColor = NSColor(white: 0, alpha: 0.001)
+        // A window lets the pointer — drags included — through wherever its
+        // pixels are fully transparent. 0.001 alpha rounds to 0 in an 8-bit
+        // backing store, which is exactly that: the first version of this
+        // panel never saw a single drag. Opt in to the pointer explicitly,
+        // and keep a fill that survives the rounding (3/255, unseen).
+        ignoresMouseEvents = false
+        backgroundColor = NSColor(white: 0, alpha: 0.012)
         hasShadow = false
-        level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()) + 1)
+        // Above the menu bar, but nowhere near the notch's own shielding
+        // level: at shielding level + 1 the panel was up, in place, and not
+        // one drag was offered to it (otto-drag trace, 2026-10-04) — the
+        // drag system does not look for destinations that high. The idle
+        // notch ignores the pointer, so it does not stand in the way.
+        level = Self.dragLevel
         collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         let target = DropView()
         target.owner = self
@@ -31,9 +62,28 @@ final class DragCatcherPanel: NSPanel {
 
     override var canBecomeKey: Bool { false }
 
+    /// Over the menu bar, under the drag image: where drops are offered.
+    static let dragLevel = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 8)
+
+    #if DEBUG
+    /// /tmp/otto-drag.txt — what the catcher saw, for a drag only a person
+    /// can make.
+    static func trace(_ line: String) {
+        let url = URL(fileURLWithPath: "/tmp/otto-drag.txt")
+        let entry = Data("[\(Date())] \(line)\n".utf8)
+        if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile(); handle.write(entry); try? handle.close()
+        } else {
+            try? entry.write(to: url)
+        }
+    }
+    #endif
+
     func disarm() {
         (contentView as? DropView)?.cancel()
         orderOut(nil)
+        isRouting = false
+        level = Self.dragLevel
     }
 
     private final class DropView: NSView {
@@ -51,7 +101,11 @@ final class DragCatcherPanel: NSPanel {
 
         override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
             let isImage = MainActor.assumeIsolated { AttachmentStore.hasImage(sender.draggingPasteboard) }
+            #if DEBUG
+            DragCatcherPanel.trace("entered: image=\(isImage) types=\(sender.draggingPasteboard.types?.map(\.rawValue) ?? [])")
+            #endif
             guard isImage else { return [] }
+            if owner?.isRouting == true { return routeOperation() }
             anchor = NSEvent.mouseLocation
             restingSince = Date()
             // Polls rather than waits on draggingUpdated: a hand held still
@@ -64,14 +118,26 @@ final class DragCatcherPanel: NSPanel {
         }
 
         override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-            restingSince == nil ? [] : .copy
+            if owner?.isRouting == true { return routeOperation() }
+            return restingSince == nil ? [] : .copy
         }
 
         override func draggingExited(_ sender: NSDraggingInfo?) { cancel() }
 
-        /// Nothing is dropped here: by the time a drop could land, the notch
-        /// is open and this window is gone.
-        override func performDragOperation(_ sender: NSDraggingInfo) -> Bool { cancel(); return false }
+        /// The plus cursor only over a place that takes the image.
+        private func routeOperation() -> NSDragOperation {
+            owner?.canDrop?(NSEvent.mouseLocation) == true ? .copy : []
+        }
+
+        override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+            cancel()
+            guard owner?.isRouting == true else { return false }
+            let done = owner?.onDrop?(sender.draggingPasteboard, NSEvent.mouseLocation) ?? false
+            #if DEBUG
+            DragCatcherPanel.trace("routed drop: inserted=\(done)")
+            #endif
+            return done
+        }
 
         func cancel() {
             timer?.invalidate()
@@ -87,6 +153,9 @@ final class DragCatcherPanel: NSPanel {
                 anchor = now
                 restingSince = Date()
             } else if Date().timeIntervalSince(since) >= owner?.dwell ?? 0.3 {
+                #if DEBUG
+                DragCatcherPanel.trace("held: opening the notch")
+                #endif
                 cancel()
                 owner?.onHeld?()
             }

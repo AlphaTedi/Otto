@@ -733,6 +733,29 @@ final class ActionTextView: NSTextView {
         super.acceptableDragTypes.filter { $0 != NoteEditorController.markdownPasteboardType }
     }
 
+    /// A text view registers for drags only in a window, and nothing
+    /// re-registers it once it gets there: measured, a note in the panel was
+    /// registered for nothing, so an image dropped on it fell through to the
+    /// desktop (2026-10-04, `drop-targets`).
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { updateDragTypeRegistration() }
+    }
+
+    #if DEBUG
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let operation = super.draggingEntered(sender)
+        DragCatcherPanel.trace("note: drag entered, operation=\(operation.rawValue) registered=\(registeredDraggedTypes.map(\.rawValue))")
+        return operation
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let done = super.performDragOperation(sender)
+        DragCatcherPanel.trace("note: drop performed=\(done)")
+        return done
+    }
+    #endif
+
     override func readSelection(from pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
         if type != NoteEditorController.markdownPasteboardType, insertImages(from: pboard) { return true }
         guard type == NoteEditorController.markdownPasteboardType,

@@ -1086,6 +1086,9 @@ class NotchController: ObservableObject {
     private var dragCatcher: DragCatcherPanel?
     private var dragCatcherWatch: Timer?
     private var dragCatcherPress = NSPoint.zero
+    #if DEBUG
+    private var dragCatcherPointerTraced = false
+    #endif
 
     /// A press elsewhere: watch it until release. The target goes up only
     /// once the pointer travels with the button down — a plain click never
@@ -1094,6 +1097,9 @@ class NotchController: ObservableObject {
     private func armDragCatcher() {
         guard state != .expanded else { return }
         dragCatcherPress = NSEvent.mouseLocation
+        #if DEBUG
+        dragCatcherPointerTraced = false
+        #endif
         dragCatcherWatch?.invalidate()
         dragCatcherWatch = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.dragCatcherTick() }
@@ -1108,8 +1114,16 @@ class NotchController: ObservableObject {
             dragCatcherWatch = nil
             dragCatcher?.disarm()
             isDragSessionActive = false
+            if isLoweredForDrag { raiseAfterDrag() }
             return
         }
+        #if DEBUG
+        if let catcher = dragCatcher, catcher.isVisible, !dragCatcherPointerTraced,
+           catcher.frame.contains(NSEvent.mouseLocation) {
+            dragCatcherPointerTraced = true
+            DragCatcherPanel.trace("pointer over the catcher, button held")
+        }
+        #endif
         guard state != .expanded, dragCatcher?.isVisible != true, let screen = notchScreen else { return }
         let now = NSEvent.mouseLocation
         guard hypot(now.x - dragCatcherPress.x, now.y - dragCatcherPress.y) > 6 else { return }
@@ -1118,10 +1132,15 @@ class NotchController: ObservableObject {
         catcher.dwell = TimeInterval(dragDwellNanos) / 1_000_000_000
         catcher.onHeld = { [weak self] in
             guard let self, self.state != .expanded else { return }
-            self.dragCatcher?.disarm()
             // Through the release that ends the drag, nothing may close it.
             self.isDragSessionActive = true
+            self.lowerForDrag()
             self.triggerExpand(trigger: .drag)
+            if let panel = self.panel { self.dragCatcher?.route(over: panel.frame) }
+        }
+        catcher.canDrop = { [weak self] point in self?.imageDropTarget(at: point) != nil }
+        catcher.onDrop = { [weak self] pasteboard, point in
+            self?.dropImage(from: pasteboard, at: point) ?? false
         }
         let target = dragTargetRect()
         // Up to the screen's top edge: the pointer pins there when the drag
@@ -1129,6 +1148,79 @@ class NotchController: ObservableObject {
         catcher.setFrame(NSRect(x: target.minX, y: target.minY,
                                 width: target.width, height: screen.frame.maxY - target.minY), display: false)
         catcher.orderFrontRegardless()
+        #if DEBUG
+        DragCatcherPanel.trace("shown: frame=\(catcher.frame) visible=\(catcher.isVisible) onScreen=\(catcher.isOnActiveSpace)")
+        #endif
+    }
+
+    /// The text a dropped image goes into: the note or image-taking field
+    /// under the pointer, else the one holding the caret (the draft row, on
+    /// every open). Found by geometry, not hit testing — the hosting view
+    /// answers hit tests with its own views, not the text view underneath.
+    private func imageDropTarget(at screenPoint: NSPoint) -> (view: NSTextView, underPointer: Bool)? {
+        guard let panel, let root = panel.contentView else { return nil }
+        func takesImages(_ view: NSTextView) -> Bool {
+            guard view.isEditable, !view.isHiddenOrHasHiddenAncestor else { return false }
+            if let field = view as? HighlightingTitleField.FocusReportingTextView { return field.allowsImages }
+            return view is ActionTextView
+        }
+        func textViews(in view: NSView) -> [NSTextView] {
+            view.subviews.flatMap { ($0 as? NSTextView).map { [$0] } ?? [] + textViews(in: $0) }
+        }
+        let point = panel.convertPoint(fromScreen: screenPoint)
+        let under = textViews(in: root).filter(takesImages)
+            .map { ($0, $0.convert($0.visibleRect, to: nil)) }
+            .filter { $0.1.insetBy(dx: -8, dy: -8).contains(point) }
+            .min { $0.1.width * $0.1.height < $1.1.width * $1.1.height }
+        if let under { return (under.0, true) }
+        if let focused = panel.firstResponder as? NSTextView, takesImages(focused) { return (focused, false) }
+        return nil
+    }
+
+    #if DEBUG
+    /// `drop-route`: drop `pasteboard` as the catcher would, at `screenPoint`.
+    func debugRouteDrop(_ pasteboard: NSPasteboard, at screenPoint: NSPoint) -> (String, Bool) {
+        let target = imageDropTarget(at: screenPoint)
+        let name = target.map { "\(type(of: $0.view)) underPointer=\($0.underPointer)" } ?? "none"
+        return (name, dropImage(from: pasteboard, at: screenPoint))
+    }
+    #endif
+
+    private func dropImage(from pasteboard: NSPasteboard, at screenPoint: NSPoint) -> Bool {
+        guard let panel, let target = imageDropTarget(at: screenPoint) else { return false }
+        panel.makeFirstResponder(target.view)
+        if target.underPointer {
+            let local = target.view.convert(panel.convertPoint(fromScreen: screenPoint), from: nil)
+            target.view.setSelectedRange(NSRange(location: target.view.characterIndexForInsertion(at: local), length: 0))
+        }
+        return target.view.readSelection(from: pasteboard, type: .fileURL)
+    }
+
+    // While a drag is open over it, the notch steps down onto the desktop
+    // (SpaceAnchor.stepDown) at the catcher's level — still over the menu
+    // bar, now under the drag image and among the windows a drop is offered
+    // to. The release puts it back; it may not stay down, or the desktop
+    // swipe and full-screen apps would carry or cover the notch.
+    private var isLoweredForDrag = false
+
+    private func lowerForDrag() {
+        guard let panel else { return }
+        isLoweredForDrag = true
+        SpaceAnchor.stepDown(panel)
+        panel.level = DragCatcherPanel.dragLevel
+        #if DEBUG
+        DragCatcherPanel.trace("notch stepped down: level=\(panel.level.rawValue)")
+        #endif
+    }
+
+    private func raiseAfterDrag() {
+        isLoweredForDrag = false
+        guard let panel else { return }
+        panel.level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()))
+        SpaceAnchor.stepUp(panel)
+        #if DEBUG
+        DragCatcherPanel.trace("notch back up")
+        #endif
     }
 
     /// Where a drag has to be HELD to open the tray: the drawn notch plus a

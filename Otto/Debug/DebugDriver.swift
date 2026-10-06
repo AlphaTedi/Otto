@@ -884,6 +884,93 @@ enum DebugDriver {
                         .write(to: directory.appendingPathComponent(dark ? "format-dark.png" : "format-light.png"))
                 }
                 appendState("notes-format-snap: wrote \(directory.path)")
+            } else if command.hasPrefix("panel-snap ") {
+                // panel-snap <png> — the open panel as drawn, no Screen
+                // Recording needed (the hosting view renders itself).
+                let path = String(command.dropFirst("panel-snap ".count))
+                guard let view = NotchController.shared.panelForDebug?.contentView,
+                      let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
+                    appendState("panel-snap: no panel"); return
+                }
+                view.cacheDisplay(in: view.bounds, to: rep)
+                try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+                appendState("panel-snap: wrote \(path) \(view.bounds.size)")
+            } else if command == "chip-metrics" {
+                // Where a chip sits in the draft field's line, against the
+                // field's own height, with and without text beside it.
+                let token = AttachmentStore.token(for: "Attachments/Screenshot-test.png")
+                var out: [String] = []
+                for size: CGFloat in [18, 13] {
+                    for (label, text) in [("text", "Abc"), ("chip+space", token + " "), ("chip", token), ("chip+text", token + " Abc")] {
+                        let view = HighlightingTitleField.FocusReportingTextView()
+                        view.allowsImages = true
+                        view.isRichText = true
+                        view.font = .systemFont(ofSize: size)
+                        view.textContainerInset = .zero
+                        view.textContainer?.lineFragmentPadding = 0
+                        view.layoutManager?.delegate = ChipLineLayout.shared
+                        view.textStorage?.setAttributedString(AttachmentStore.chipped(text, attributes: [.font: NSFont.systemFont(ofSize: size)]))
+                        let layout = view.layoutManager!
+                        layout.ensureLayout(for: view.textContainer!)
+                        let line = layout.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
+                        let textGlyph = text.hasPrefix("!") ? (text.hasSuffix("Abc") ? 3 : -1) : 0
+                        let baseline = textGlyph >= 0 ? line.minY + layout.location(forGlyphAt: textGlyph).y
+                            : line.minY + layout.typesetter.baselineOffset(in: layout, glyphIndex: 0)
+                        var chip = "-"
+                        if text.hasPrefix("!") {
+                            let r = layout.boundingRect(forGlyphRange: NSRange(location: 0, length: 1), in: view.textContainer!)
+                            chip = "y\(r.minY)-\(r.maxY) mid\(r.midY)"
+                        }
+                        let font = NSFont.systemFont(ofSize: size)
+                        let capMid = baseline - font.capHeight / 2
+                        out.append("\(Int(size))pt \(label): field=\(HighlightingTitleField.lineHeight(size)) line=\(line.minY)-\(line.maxY) baseline=\(baseline) capMid=\(capMid) chip=\(chip)")
+                    }
+                }
+                appendState("chip-metrics:\n" + out.joined(separator: "\n"))
+            } else if command == "drop-route" {
+                // The catcher's drop, without a drag: an image file dropped on
+                // the open panel, where nothing is under the point — so it
+                // must land in the field holding the caret.
+                guard let image = (try? FileManager.default.contentsOfDirectory(atPath: AttachmentStore.directory.path))?
+                    .first(where: { AttachmentStore.isImage(URL(fileURLWithPath: $0)) })
+                    .map({ AttachmentStore.directory.appendingPathComponent($0) }) else {
+                    appendState("drop-route: no image in Attachments/"); return
+                }
+                let board = NSPasteboard(name: NSPasteboard.Name("com.notchsnap.drop-route"))
+                board.clearContents()
+                board.writeObjects([image as NSURL])
+                let point = NotchController.shared.panelForDebug.map { NSPoint(x: $0.frame.minX + 2, y: $0.frame.minY + 2) } ?? .zero
+                let (target, done) = NotchController.shared.debugRouteDrop(board, at: point)
+                let responder = NotchController.shared.panelForDebug?.firstResponder as? NSTextView
+                appendState("drop-route: target=\(target) inserted=\(done) caretText=\((responder.map { AttachmentStore.unchipped($0.attributedString()) } ?? "nil").debugDescription)")
+                board.releaseGlobally()
+            } else if command == "drop-targets" {
+                // What the to-do field and a note tell the drag system they
+                // take, and whether a dropped image file becomes a chip.
+                let field = HighlightingTitleField.FocusReportingTextView()
+                field.allowsImages = true
+                field.isRichText = true
+                let note = (ActionTextView.scrollableTextView().documentView as! ActionTextView)
+                let host = NSWindow(contentRect: NSRect(x: -3000, y: -3000, width: 400, height: 200),
+                                    styleMask: [.borderless], backing: .buffered, defer: false)
+                host.contentView?.addSubview(field)
+                host.contentView?.addSubview(note)
+                let fileURL = NSPasteboard.PasteboardType.fileURL.rawValue
+                let image = (try? FileManager.default.contentsOfDirectory(atPath: AttachmentStore.directory.path))?
+                    .first(where: { AttachmentStore.isImage(URL(fileURLWithPath: $0)) })
+                    .map { AttachmentStore.directory.appendingPathComponent($0) }
+                var chipped = false
+                if let image {
+                    let board = NSPasteboard(name: NSPasteboard.Name("com.notchsnap.drop-test"))
+                    board.clearContents()
+                    board.writeObjects([image as NSURL])
+                    _ = field.readSelection(from: board, type: .fileURL)
+                    field.textStorage?.enumerateAttribute(.attachment, in: NSRange(location: 0, length: field.textStorage?.length ?? 0)) { value, _, _ in
+                        if value is ImageChipAttachment { chipped = true }
+                    }
+                    board.releaseGlobally()
+                }
+                appendState("drop-targets: field takes files=\(field.registeredDraggedTypes.map(\.rawValue).contains(fileURL)) note takes files=\(note.registeredDraggedTypes.map(\.rawValue).contains(fileURL)) field drop makes chip=\(chipped) note=\(note.registeredDraggedTypes.map(\.rawValue)) noteAcceptable=\(note.acceptableDragTypes.map(\.rawValue)) noteEditable=\(note.isEditable)")
             } else if command == "notes-copy-test" || command == "notes-copy-test general" {
                 // Copy a note holding an image chip, the way ⌘C does, onto a
                 // private pasteboard: what would another app receive?
