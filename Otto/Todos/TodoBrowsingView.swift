@@ -698,6 +698,6 @@ struct SweepButton: View {
         .onHover { hovering in
             withAnimation(NotchAnimation.hintFade) { hover = hovering }
         }
-        .help(L10n.t("todo.clearCompleted"))
+        .panelTooltip(L10n.t("todo.clearCompleted"))
     }
 }

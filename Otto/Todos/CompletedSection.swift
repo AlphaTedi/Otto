@@ -164,7 +164,7 @@ struct CompletedEntryRow: View {
             guard completion.isLive else { return }
             withAnimation(NotchAnimation.hoverFade) { hover = hovering }
         }
-        .help(completion.isLive ? L10n.t("todo.untickHint") : L10n.t("todo.archivedHint"))
+        .panelTooltip(completion.isLive ? L10n.t("todo.untickHint") : L10n.t("todo.archivedHint"))
     }
 
     @ViewBuilder

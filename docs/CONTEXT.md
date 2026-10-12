@@ -1166,3 +1166,18 @@ Three commits on `refactor/cleanup` (Marcello: "non c'è ordine, non c'è archit
   split into one file per component, `DesignSystem.swift` into tokens and components,
   and `NotchPanel`, `AppDelegate` and `AppNotifications` got files of their own.
   Behaviour is unchanged.
+
+### 2026-10-12 panel polish: tooltips, dot, back, download, code icons
+
+- Tooltips inside the notch use `panelTooltip(_:)` (DesignSystem/
+  PanelTooltip.swift), never `.help()`: AppKit puts tooltip windows at an
+  ordinary level, so they opened BEHIND the notch panel (it sits far higher,
+  in its own space). Every `.help` in Notes/Todos/Notch/Calendar was swapped.
+- The container's Notes composer wears the glowing space dot, like the to-do
+  field (no note icon).
+- The open note's back button highlights as a rounded square, not a circle.
+- Download .md is an icon (Lucide download) with its words in the tooltip.
+- Code icons are Lucide: `code` (</>) inline, `braces` ({ }) for the block;
+  the boxed "</>" glyph is gone.
+- The image picker is removed (format-bar button, ⌘⇧I in notes and lists,
+  `AttachmentStore.chooseImages`): it did not work. Paste and drop remain.

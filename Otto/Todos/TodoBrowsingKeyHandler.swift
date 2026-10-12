@@ -455,7 +455,6 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                     case 28: editor.toggleBlock(.bullet);        return true   // ⌘⇧8
                     case 26: editor.toggleBlock(.numbered);      return true   // ⌘⇧7
                     case 25: editor.toggleBlock(.checklistOpen); return true   // ⌘⇧9
-                    case 34: editor.insertImageFromPanel();       return true   // ⌘⇧I
                     default: break
                     }
                 }
@@ -862,28 +861,8 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 store.toggleComplete(focused)
                 return true
             }
-            // ⌘⇧I — an image for the to-do being typed (floating field), or
-            // for the focused to-do.
-            if cmd, shift, !option, keyCode == 34, store.panelMode == .browsing {
-                // In the field: at the caret, like a pasted image. On a
-                // focused to-do: at the end of its title.
-                let field = NSApp.keyWindow?.firstResponder as? HighlightingTitleField.FocusReportingTextView
-                let target = field == nil ? store.focusedItemID : nil
-                AttachmentStore.chooseImages { paths in
-                    guard !paths.isEmpty else { return }
-                    if let field, field.allowsImages {
-                        field.window?.makeFirstResponder(field)
-                        field.insertImageChips(paths)
-                    } else if let target, let item = store.items.first(where: { $0.id == target }) {
-                        store.rename(target, to: ([item.title] + paths.map(AttachmentStore.token(for:))).joined(separator: " "))
-                    } else {
-                        store.draftTitle += (store.draftTitle.isEmpty ? "" : " ")
-                            + paths.map(AttachmentStore.token(for:)).joined(separator: " ")
-                        store.draftWantsFocus = true
-                    }
-                }
-                return true
-            }
+            // No ⌘⇧I image picker any more (2026-10-12): it did not work.
+            // Images come in by paste and by drop.
             if cmd, !shift, keyCode == 36, CalendarStore.shared.joinNextMeeting() {
                 return true
             }

@@ -283,7 +283,7 @@ struct AutoSnoozeButton: View {
         // is doing now, and again whenever it starts or stops.
         .onAppear { syncFill() }
         .onChange(of: calendar.autoSnoozeRunning) { _ in syncFill() }
-        .help(L10n.t("cal.snoozeAutoHint"))
+        .panelTooltip(L10n.t("cal.snoozeAutoHint"))
     }
 
     /// Drive the fill to match the store's clock: animate to full over

@@ -116,7 +116,7 @@ struct StepRow: View {
             .buttonStyle(.plain)
             .opacity(hover ? 1 : 0)
             .padding(.top, 1)
-            .help(L10n.t("action.delete"))
+            .panelTooltip(L10n.t("action.delete"))
         }
         .onHover { hovering in
             withAnimation(NotchAnimation.hintFade) { hover = hovering }

@@ -266,7 +266,7 @@ struct ActionPicker: View {
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .help("\(index + 1)")
+                .panelTooltip("\(index + 1)")
             }
 
             if sections.count > Self.maxShown {
@@ -274,7 +274,7 @@ struct ActionPicker: View {
                     Text("…").font(.system(size: 14)).foregroundStyle(DSColor.textSecondary)
                 }
                 .buttonStyle(.plain)
-                .help("↓")
+                .panelTooltip("↓")
             }
 
             if let dueDate {

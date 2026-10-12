@@ -12,7 +12,6 @@ struct ShortcutsOverlay: View {
         ("\u{21A9}", "todo.sc.editTitle"),
         ("\u{2192} \u{2190}", "todo.sc.expandRow"),
         ("\u{2318}N", "todo.sc.newTodo"),
-        ("\u{2318}\u{21E7}I", "todo.sc.addImage"),
         ("Esc", "todo.sc.clearDraft"),
         ("\u{21E5}", "todo.switchSection"),
         ("\u{2318}1\u{2013}9 / \u{2318}", "todo.sc.switchCollection"),

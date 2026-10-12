@@ -446,7 +446,7 @@ struct TodoItemRow: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .help(L10n.t("todo.sc.expandRow"))
+                    .panelTooltip(L10n.t("todo.sc.expandRow"))
                     .accessibilityLabel(moreStepsLabel(hiddenCount))
                 }
 

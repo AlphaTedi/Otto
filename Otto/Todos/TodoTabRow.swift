@@ -514,7 +514,7 @@ struct NewSectionButton: View {
         .onHover { hovering in
             withAnimation(NotchAnimation.hintFade) { hover = hovering }
         }
-        .help(L10n.t("todo.newCollection"))
+        .panelTooltip(L10n.t("todo.newCollection"))
         .accessibilityLabel(L10n.t("todo.newCollection"))
     }
 }

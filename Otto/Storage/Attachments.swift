@@ -92,29 +92,6 @@ enum AttachmentStore {
         return type.conforms(to: .image)
     }
 
-    /// "Add image…": the open panel, in front of the notch the same way the
-    /// Download .md save panel is (NotesStore.exportOpenNote).
-    @MainActor
-    static func chooseImages(_ done: @escaping @MainActor ([String]) -> Void) {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false
-        panel.allowedContentTypes = [.image]
-        let controller = NotchController.shared
-        let host = controller.dialogHostWindow
-        panel.level = NSWindow.Level(rawValue: (host?.level.rawValue ?? NSWindow.Level.modalPanel.rawValue) + 1)
-        controller.isPresentingDialog = true
-        NSApp.activate(ignoringOtherApps: true)
-        panel.begin { response in
-            controller.isPresentingDialog = false
-            let paths = response == .OK ? panel.urls.compactMap(importFile) : []
-            controller.focusPanel()
-            done(paths)
-        }
-        if host != nil { SpaceAnchor.pin(panel) }
-        panel.makeKeyAndOrderFront(nil)
-    }
-
     static func open(_ relativePath: String) {
         NSWorkspace.shared.open(url(for: relativePath))
     }

@@ -162,7 +162,7 @@ struct SpaceDot: View {
                 .animation(.easeInOut(duration: 0.2), value: tint)
         }
         .buttonStyle(.plain)
-        .help(L10n.t("todo.switchSpace"))
+        .panelTooltip(L10n.t("todo.switchSpace"))
         .accessibilityLabel(L10n.t("todo.switchSpace"))
     }
 }
@@ -279,7 +279,7 @@ private struct BackChip: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering in withAnimation(Motion.hoverFade) { hover = hovering } }
-        .help(String(format: L10n.t("nav.backTo"), parentTitle) + "  (Esc)")
+        .panelTooltip(String(format: L10n.t("nav.backTo"), parentTitle) + "  (Esc)")
         .accessibilityLabel(String(format: L10n.t("nav.backTo"), parentTitle))
     }
 }
@@ -316,7 +316,7 @@ struct SettingsGearButton: View {
         .buttonStyle(.plain)
         .menuAnchor(.gear)
         .onHover { hovering in withAnimation(Motion.hoverFade) { hover = hovering } }
-        .help(L10n.t("settings.open"))
+        .panelTooltip(L10n.t("settings.open"))
         .accessibilityLabel(L10n.t("settings.open"))
     }
 }

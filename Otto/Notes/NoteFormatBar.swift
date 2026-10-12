@@ -77,29 +77,24 @@ struct NoteFormatBar: View {
 
             // Group 4 — code and quote: three separate verbs, as in Slack.
             Button { editor.toggleInlineCode() } label: {
-                Text("</>").font(.system(size: 11, weight: .semibold))
+                // Lucide glyphs for both code verbs (Marcello, 2026-10-12: the
+                // boxed "</>" read badly): </> inline, { } for the block.
+                OttoIcon("chevron.left.forwardslash.chevron.right", pointSize: 12)
             }
             .buttonStyle(FormatControlStyle(isActive: editor.code))
             .disabled(editor.activeBlock == .code)
-            .help(L10n.t("notes.fmt.inlineCode") + "  \u{2318}\u{21E7}C")
+            .panelTooltip(L10n.t("notes.fmt.inlineCode") + "  \u{2318}\u{21E7}C")
             .accessibilityLabel(L10n.t("notes.fmt.inlineCode"))
             Button { editor.toggleQuote() } label: { QuoteGlyph() }
                 .buttonStyle(FormatControlStyle(isActive: editor.activeBlock == .quote))
-                .help(L10n.t("notes.fmt.quote") + "  \u{2318}'")
+                .panelTooltip(L10n.t("notes.fmt.quote") + "  \u{2318}'")
                 .accessibilityLabel(L10n.t("notes.fmt.quote"))
-            Button { editor.toggleCodeBlock() } label: { CodeBlockGlyph() }
+            Button { editor.toggleCodeBlock() } label: { OttoIcon("curlybraces", pointSize: 12) }
                 .buttonStyle(FormatControlStyle(isActive: editor.activeBlock == .code))
-                .help(L10n.t("notes.fmt.codeBlock") + "  \u{2318}\u{2325}\u{21E7}C")
+                .panelTooltip(L10n.t("notes.fmt.codeBlock") + "  \u{2318}\u{2325}\u{21E7}C")
                 .accessibilityLabel(L10n.t("notes.fmt.codeBlock"))
-
-            divider
-
-            // Group 5 — an image, as a chip in the text (⌘⇧I; paste and drop
-            // work too).
-            Button { editor.insertImageFromPanel() } label: { OttoIcon("photo", pointSize: 12) }
-                .buttonStyle(FormatControlStyle(isActive: false))
-                .help(L10n.t("notes.fmt.image") + "  \u{2318}\u{21E7}I")
-                .accessibilityLabel(L10n.t("notes.fmt.image"))
+            // No image button (Marcello, 2026-10-12: picking from the vault
+            // did not work). Images come in by paste and by drop.
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 4)
@@ -191,16 +186,6 @@ private struct QuoteGlyph: View {
     }
 }
 
-/// </> in a box: the block, beside the bare </> of inline code.
-private struct CodeBlockGlyph: View {
-    var body: some View {
-        Text("</>")
-            .font(.system(size: 8, weight: .bold))
-            .frame(width: 17, height: 13)
-            .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous).strokeBorder(lineWidth: 1.2))
-    }
-}
-
 private struct ChecklistGlyph: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 4, style: .continuous)
@@ -227,7 +212,7 @@ private struct BlockMenu: View {
             row(.checklistOpen, glyph: "\u{2610}", glyphSize: 13, label: L10n.t("notes.fmt.checklist"))
             Divider().padding(.horizontal, 8).padding(.vertical, 5)
             row(.quote, glyph: "\u{201C}", glyphSize: 15, label: L10n.t("notes.fmt.quote"))
-            row(.code, glyph: "</>", glyphSize: 10.5, label: L10n.t("notes.fmt.codeBlock"))
+            row(.code, glyph: "{ }", glyphSize: 12, label: L10n.t("notes.fmt.codeBlock"))
         }
         .padding(OttoMenuStyle.padding - 4)
         .frame(width: 220)

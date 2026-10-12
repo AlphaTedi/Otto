@@ -606,9 +606,10 @@ private struct Composer: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: PanelMetrics.rowInnerGap) {
-                OttoIcon("note.text", pointSize: 14)
-                    .foregroundStyle(NotesMetrics.pillStroke)
-                    .frame(width: PanelMetrics.checkboxSize, height: PanelMetrics.checkboxSize)
+                // The glowing space dot, as in the to-do field and the
+                // floating panels (Marcello, 2026-10-12) — not a note icon.
+                SpaceDot(tint: .notes, action: { TodoStore.shared.cycleCollection() },
+                         slot: CGSize(width: PanelMetrics.checkboxSize, height: PanelMetrics.checkboxSize))
 
                 ZStack(alignment: .topLeading) {
                     if store.draft.isEmpty {
@@ -715,7 +716,7 @@ private struct CalendarComposer: View {
                     .background(Capsule().fill(DSColor.fieldBackground))
             }
             .buttonStyle(.plain)
-            .help(L10n.t("meeting.choose"))
+            .panelTooltip(L10n.t("meeting.choose"))
         }
         .padding(.horizontal, PanelMetrics.barPaddingH)
         .padding(.vertical, PanelMetrics.barPaddingV)
@@ -1254,17 +1255,19 @@ private struct NoteDetailView: View {
 
             // No printed shortcut. ⌘⇧S still fires it — the glyphs were
             // simply costing ~70pt in a row that now holds nine more controls.
+            // The icon alone: the label was cut to "Downl…" in the container
+            // (Marcello, 2026-10-12). The words are in the tooltip.
             Button { store.exportOpenNote() } label: {
-                Text(L10n.t("notes.download"))
-                    .font(.system(size: 12))
+                OttoIcon("square.and.arrow.down", pointSize: 13)
                     .foregroundStyle(DSColor.textPrimaryBright)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
+                    .frame(width: 32, height: 28)
                     .contentShape(Rectangle())
                     .floatingGlass(in: RoundedRectangle(
-                        cornerRadius: isContainer ? 20 : SpaceChrome.cornerRadius, style: .continuous))
+                        cornerRadius: isContainer ? 10 : SpaceChrome.cornerRadius, style: .continuous))
             }
             .buttonStyle(.plain)
+            .panelTooltip(L10n.t("notes.download") + "  \u{2318}\u{21E7}S")
+            .accessibilityLabel(L10n.t("notes.download"))
             // Rename is gone from this row — the bar needs the width. It is
             // still the title in the header, and Rename in the stream's own
             // context menu.
@@ -1343,15 +1346,18 @@ private struct BackButton: View {
             OttoIcon("chevron.left", pointSize: 15)
                 .foregroundStyle(hover ? DSColor.textPrimaryBright : PanelMetrics.accent)
                 .frame(width: 30, height: 30)
+                // A rounded square, like every other small control in the
+                // panel — not a circle (Marcello, 2026-10-12).
                 .background(
-                    Circle().fill(hover ? DSColor.fieldBackground : Color.clear)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(hover ? DSColor.fieldBackground : Color.clear)
                 )
-                .contentShape(Circle())
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { hover = $0 }
         .animation(Motion.hoverFade, value: hover)
-        .help(L10n.t("notes.back"))
+        .panelTooltip(L10n.t("notes.back"))
     }
 }
 

@@ -162,7 +162,7 @@ struct MeetingCard: View {
         .onHover { hovering in
             withAnimation(NotchAnimation.hintFade) { hover = hovering }
         }
-        .help(event.subtitle.isEmpty ? event.title : "\(event.title) — \(event.subtitle)")
+        .panelTooltip(event.subtitle.isEmpty ? event.title : "\(event.title) — \(event.subtitle)")
     }
 
     private func open() {
@@ -215,7 +215,7 @@ private struct JoinButton: View {
         .onHover { hovering in
             withAnimation(NotchAnimation.hintFade) { hover = hovering }
         }
-        .help(L10n.t("cal.joinHelp"))
+        .panelTooltip(L10n.t("cal.joinHelp"))
     }
 }
 
