@@ -248,6 +248,10 @@ struct NotesSpaceView: View {
 private struct StreamView: View {
     let isContainer: Bool
     let isCalendarSpace: Bool
+    @AppStorage(DockExperiment.key) private var containerDock = false
+    /// The B3 dock: "New note…" is the first row, the dock replaces the
+    /// section row, and the stream fills the fixed panel.
+    private var usesDock: Bool { DockExperiment.isOn(layout: isContainer ? .container : .panels, flag: containerDock) }
 
     @ObservedObject private var store = NotesStore.shared
     @ObservedObject private var chrome = PanelChrome.shared
@@ -339,6 +343,13 @@ private struct StreamView: View {
                         Color.clear.preference(key: ComposerHeightKey.self, value: geo.size.height)
                     })
                     .onPreferenceChange(ComposerHeightKey.self) { composerHeight = $0 }
+            } else if usesDock {
+                DockNoteFirstRow(focused: $composerFocused)
+                    .notchEntry(index: 0)
+                    .background(GeometryReader { geo in
+                        Color.clear.preference(key: ComposerHeightKey.self, value: geo.size.height)
+                    })
+                    .onPreferenceChange(ComposerHeightKey.self) { composerHeight = $0 }
             } else {
                 Composer(focused: $composerFocused, isContainer: isContainer)
                 .padding(.horizontal, PanelMetrics.barOuterInset)
@@ -368,7 +379,7 @@ private struct StreamView: View {
             //
             // Stream level only: `showsSpaceBar` is already false while a note
             // is open, and this view is not on screen then either.
-            if isContainer, TodoStore.shared.showsSpaceBar {
+            if isContainer, !usesDock, TodoStore.shared.showsSpaceBar {
                 TodoTabRow(rulePosition: .below)
                     .notchEntry(index: 1)
                     .measureHeight(TabRowHeightKey.self)
@@ -453,8 +464,9 @@ private struct StreamView: View {
                     // the checkbox column (22), and the first title sits 22
                     // under the bar like the first to-do.
                     .padding(.horizontal, isContainer ? PanelMetrics.barOuterInset : SpaceChrome.columnInset)
-                    .padding(.top, isContainer ? 16 : 12.5)
-                    .padding(.bottom, 8)
+                    .padding(.top, usesDock ? 4 : (isContainer ? 16 : 12.5))
+                    // The dock: travel for the last note to clear the fade.
+                    .padding(.bottom, usesDock ? NotchContainerMetrics.listFade : 8)
                     .background(GeometryReader { geo in
                         Color.clear
                             .preference(key: NotesStreamOffsetKey.self,
@@ -479,14 +491,22 @@ private struct StreamView: View {
                     }
                 }
             }
-            .frame(height: streamViewport(entries), alignment: .top)
+            .frame(height: usesDock ? nil : streamViewport(entries), alignment: .top)
+            .frame(maxHeight: usesDock ? .infinity : nil, alignment: .top)
             // The stream ENDS at its own bottom edge. Without this a run of
             // notes taller than the budget kept drawing into the space bar and
             // past the panel, which is how they became unclickable. The edge
             // is the lists' own — a fade under a progressive blur — rather
             // than `.clipped()`, which cut the last note on a straight line.
+            .overlay(alignment: .bottom) {
+                if usesDock {
+                    LinearGradient(colors: [.black.opacity(0), .black], startPoint: .top, endPoint: .bottom)
+                        .frame(height: NotchContainerMetrics.listFade)
+                        .allowsHitTesting(false)
+                }
+            }
             .modifier(TodoScrollEdgeEffect(
-                isScrollable: natural(entries) > streamBudget,
+                isScrollable: !usesDock && natural(entries) > streamBudget,
                 scrollOffset: streamOffset,
                 hasBelow: natural(entries) > streamViewport(entries) + max(streamOffset, 0) + 2,
                 isContainer: isContainer,
@@ -866,6 +886,10 @@ private struct NoteEntryRow: View {
 
     @ObservedObject private var store = NotesStore.shared
     @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
+    @AppStorage(DockExperiment.key) private var containerDock = false
+    /// The B3 dock's note row (spec §5.5): 15 pt semibold title, one-line
+    /// preview, a hairline between notes.
+    private var usesDock: Bool { DockExperiment.isOn(layout: notchLayout, flag: containerDock) }
     private var isLanding: Bool { store.landingNoteID == note.id }
     private var isSelected: Bool { store.selectedNoteID == note.id }
 
@@ -897,15 +921,25 @@ private struct NoteEntryRow: View {
                 // from the note's own words by an on-device pass, so the badge
                 // was labelling the user's own sentence as machine output.
                 Text(note.title)
-                    .font(DSFont.todoTitle)
-                    .foregroundStyle(DSColor.textPrimaryBright)
+                    .font(usesDock ? DSDock.noteTitle : DSFont.todoTitle)
+                    .foregroundStyle(usesDock ? DSDock.text : DSColor.textPrimaryBright)
                     .lineLimit(1)
 
+                if usesDock {
+                    let preview = NoteMarkdown.plainText(note.previewLine)
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    Text(preview.isEmpty ? L10n.t("dock.noPreview") : preview)
+                        .font(DSDock.notePreview)
+                        .foregroundStyle(DSDock.text2)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                } else {
                 Text(NoteMarkdown.plainText(note.previewLine))
                     .font(DSFont.checklistItem)
                     .lineSpacing(2)
                     .foregroundStyle(DSColor.textSecondary)
                     .lineLimit(2)
+                }
             }
 
             Spacer(minLength: 12)
@@ -925,7 +959,7 @@ private struct NoteEntryRow: View {
                     // The system face, like every other date in the app
                     // (2026-09-25 spec: monospace is for code only).
                     .font(.system(size: 12))
-                    .foregroundStyle(DSColor.textHint)
+                    .foregroundStyle(usesDock ? DSDock.text3 : DSColor.textHint)
                     .fixedSize()
                     .opacity(showsActions ? 0 : 1)
 
@@ -963,6 +997,14 @@ private struct NoteEntryRow: View {
                 .strokeBorder(isLanding ? NotesMetrics.pillStroke.opacity(0.3) : Color.clear,
                               lineWidth: 1)
         )
+        // The dock: a 1-pt divider between notes.
+        .overlay(alignment: .bottom) {
+            if usesDock {
+                Rectangle().fill(DSDock.divider).frame(height: 1)
+                    .offset(y: NotesMetrics.entryGap / 2)
+                    .allowsHitTesting(false)
+            }
+        }
         .overlay(alignment: .top) {
             if showsDropIndicator {
                 Capsule()

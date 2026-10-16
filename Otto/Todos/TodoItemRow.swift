@@ -36,12 +36,38 @@ struct TodoItemRow: View {
     @FocusState private var noteFocused: Bool
     @ObservedObject private var store = TodoStore.shared
     @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
+    @AppStorage(DockExperiment.key) private var containerDock = false
+
+    /// The B3 dock restyles the row (spec §5.3–5.4): its own checkbox, and a
+    /// closed row says what it holds in one quiet meta line instead of
+    /// previewing its steps.
+    private var usesDock: Bool { DockExperiment.isOn(layout: notchLayout, flag: containerDock) }
+    private var dockTint: DockTint {
+        DockTint(store.collection(id: item.collectionID)?.spaceTint ?? .work)
+    }
+
+    /// "1 of 3 · Note · Oct 18" — nil when there is nothing to say.
+    private var metaLine: String? {
+        var parts: [String] = []
+        if !item.checklist.isEmpty {
+            parts.append(String(format: L10n.t("dock.stepsOf"),
+                                item.checklist.filter(\.isDone).count, item.checklist.count))
+        }
+        if !item.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { parts.append(L10n.t("dock.note")) }
+        if let due = item.dueDate {
+            parts.append(due.formatted(.dateTime.day().month(.abbreviated)))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " \u{00B7} ")
+    }
+    private var showsMetaLine: Bool { usesDock && !isExpanded && metaLine != nil }
 
     /// Whether the row draws anything under its title — the note editor, the
     /// inline steps, or the trailing step-draft row an expanded row always
     /// carries. Only then does the slab need vertical air of its own; plain
     /// rows are inset by their 37pt floor instead.
-    private var carriesDetails: Bool { isExpanded || !item.checklist.isEmpty }
+    private var carriesDetails: Bool {
+        isExpanded || (usesDock ? showsMetaLine : !item.checklist.isEmpty)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -66,8 +92,18 @@ struct TodoItemRow: View {
             if isExpanded {
                 noteBlock
             }
-            if !item.checklist.isEmpty || isExpanded {
+            if isExpanded || (!usesDock && !item.checklist.isEmpty) {
                 stepsBlock(expanded: isExpanded)
+            }
+            if showsMetaLine, let metaLine {
+                // Aligned with the title text, under it (spec §5.4).
+                Text(metaLine)
+                    .font(DSDock.meta)
+                    .foregroundStyle(DSDock.text2)
+                    .lineLimit(1)
+                    .padding(.leading, PanelMetrics.checkboxSize + PanelMetrics.rowInnerGap)
+                    .padding(.top, -4)
+                    .transition(.opacity)
             }
         }
         // 12pt horizontal, always. That puts a row's checkbox at
@@ -117,7 +153,8 @@ struct TodoItemRow: View {
             RoundedRectangle(cornerRadius: PanelMetrics.rowRadius, style: .continuous)
                 .fill(isExpanded ? Self.openedRowFill
                                  : (isFocused ? DSColor.focusedRowBackground
-                                              : (hover ? DSColor.rowHover(container: notchLayout == .container)
+                                              : (hover ? (usesDock ? DSDock.rowHover
+                                                                   : DSColor.rowHover(container: notchLayout == .container))
                                                        : .clear)))
         )
         // An opened to-do is a well sunk into the panel: darker than the
@@ -183,7 +220,8 @@ struct TodoItemRow: View {
             if showsActions {
                 RowActions(showEnter: isFocused, showGrip: hover, enterLabel: "\u{2318}\u{21B5}")
                     .transition(.opacity)
-            } else if !item.note.isEmpty && !isExpanded {
+            } else if !item.note.isEmpty && !isExpanded && !usesDock {
+                // (The dock says "Note" in the meta line instead.)
                 OttoIcon("text.alignleft", pointSize: 8)
                     .foregroundStyle(DSColor.textHint)
             }
@@ -212,6 +250,9 @@ struct TodoItemRow: View {
             Button {
                 TodoStore.shared.toggleComplete(item.id)
             } label: {
+                if usesDock {
+                    dockCheckbox
+                } else {
                 ZStack {
                     RoundedRectangle(cornerRadius: PanelMetrics.checkboxRadius, style: .continuous)
                         .strokeBorder(accent, lineWidth: PanelMetrics.checkboxStroke)
@@ -227,6 +268,7 @@ struct TodoItemRow: View {
                     }
                 }
                 .contentShape(Rectangle())
+                }
             }
             .buttonStyle(.plain)
             // §8.3: near-instant fill; row exit + shrink follow on contentHug.
@@ -236,7 +278,7 @@ struct TodoItemRow: View {
                 Text(item.title)
                     .font(DSFont.todoTitle)
                     .strikethrough(true)
-                    .foregroundStyle(DSColor.textHint)
+                    .foregroundStyle(usesDock ? DSDock.doneText : DSColor.textHint)
                     .lineLimit(1)
             } else if let draft = titleDraft {
                 // Editing. A plain TextField, deliberately NOT the entity
@@ -323,6 +365,26 @@ struct TodoItemRow: View {
         // Reordering is NOT attached here. It is a plain drag gesture owned by
         // the list, which is the only place that knows where the other rows
         // are — see `reorderGesture`.
+    }
+
+    /// The B3 dock's checkbox: the space colour at half strength, filled with
+    /// a black ✓ once done (spec §5.3), over 200 ms.
+    private var dockCheckbox: some View {
+        let shape = RoundedRectangle(cornerRadius: NotchContainerMetrics.boxRadius, style: .continuous)
+        return ZStack {
+            shape.fill(item.isCompleted ? dockTint.base : .clear)
+            shape.strokeBorder(item.isCompleted ? dockTint.base : dockTint.checkboxStroke,
+                               lineWidth: NotchContainerMetrics.boxStroke)
+            if item.isCompleted {
+                OttoIcon("checkmark", pointSize: 11)
+                    .foregroundStyle(Color.black)
+                    .transition(.opacity.combined(with: .scale(scale: 0.6)))
+            }
+        }
+        .frame(width: NotchContainerMetrics.box, height: NotchContainerMetrics.box)
+        .contentShape(Rectangle())
+        .animation(.easeOut(duration: 0.2), value: item.isCompleted)
+        .accessibilityLabel(item.isCompleted ? L10n.t("todo.completed") : item.title)
     }
 
     /// NC-1: deliberate open — clicking the row body (not the checkbox)

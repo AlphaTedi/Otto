@@ -29,6 +29,7 @@ struct TodoTabView: View {
     /// is a value this view will not redraw for.
     @ObservedObject private var notes = NotesStore.shared
     @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
+    @AppStorage(DockExperiment.key) private var containerDock = false
     @State private var footBlurVisible = false
     /// Where the controls the panel menus open from are (MenuAnchor).
     @State private var menuAnchors: [MenuAnchor: CGRect] = [:]
@@ -40,6 +41,9 @@ struct TodoTabView: View {
     /// The notch silhouette hugs its content, so its height moves with the
     /// section; the floating panels are a fixed 556 and do not.
     private var isContainerLayout: Bool { notchLayout == .container }
+    /// The B3 colour dock experiment (DockExperiment): the container's
+    /// furniture replaced by DockPanelView.
+    private var usesDock: Bool { DockExperiment.isOn(layout: notchLayout, flag: containerDock) }
     /// Spaces whose scroll runs UNDER the floating pills, with the
     /// progressive blur between them. Lists and the Notes/Meetings stream.
     private var hasFloatingFooter: Bool {
@@ -68,11 +72,21 @@ struct TodoTabView: View {
             // In `.container` it is not drawn here either any more: the
             // meeting is a detached card under the notch (ContainerMeetingCard,
             // 2026-10-04), like the floating panels' block.
-            todoPanelContent
+            if usesDock {
+                // Fixed height: it fills what the silhouette offers.
+                DockPanelView()
+                if store.showShortcuts {
+                    ShortcutsOverlay()
+                        .transition(.opacity)
+                }
+            } else {
+                todoPanelContent
+            }
         }
         // The floating panels' capture header starts at the very top edge
-        // (U5 §2: top padding 0); the container keeps its 16.
-        .padding(.top, isContainerLayout ? PanelMetrics.panelTopPadding : 0)
+        // (U5 §2: top padding 0); the container keeps its 16. The dock places
+        // itself against the notch zone.
+        .padding(.top, isContainerLayout && !usesDock ? PanelMetrics.panelTopPadding : 0)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         // Hugging height: the notch shape is a direct animated function of
         // this measurement.

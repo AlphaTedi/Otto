@@ -288,6 +288,42 @@ enum DSFont {
 // NotchAnimation, and Motion in front of it, is the whole vocabulary now.
 
 
+// MARK: - The B3 dock's neutrals (OTTO-B3-DOCK-SPEC §4.2)
+//
+// The dock experiment draws on pure black in both appearances (the notch is a
+// hole in the hardware), so these are fixed values, not dynamic ones.
+
+enum DSDock {
+    static let text = Color(hex: "#F2F2F2")
+    static let textStrong = Color(hex: "#F5F5F7")
+    static let text2 = Color(hex: "#8E8E93")
+    static let text3 = Color(hex: "#6E6E73")
+    /// The first row's placeholder — ALWAYS this grey, never the space colour.
+    static let placeholder = Color(hex: "#77777C")
+    static let doneText = Color(hex: "#5E5E63")
+    static let chrome = Color(hex: "#111113")
+    static let chromeBorder = Color(hex: "#1C1C1E")
+    static let tooltip = Color(hex: "#1C1C1E")
+    static let tooltipText = Color(hex: "#E5E5EA")
+    static let divider = Color(hex: "#121214")
+    static let keycapBorder = Color(hex: "#2C2C2E")
+    static let rowHover = Color(hex: "#0E0E10")
+    static let plus = Color(hex: "#5E5E63")
+    static let iconHover = Color(hex: "#E5E5EA")
+    /// Notes' gold, and its active tone.
+    static let notes = Color(hex: "#E5B66B")
+    static let notesLight = Color(hex: "#F0CF98")
+
+    static let rowTitle: Font = .system(size: 15)
+    static let noteTitle: Font = .system(size: 15, weight: .semibold)
+    static let notePreview: Font = .system(size: 13)
+    static let meta: Font = .system(size: 12.5)
+    static let dockLabel: Font = .system(size: 13, weight: .semibold)
+    static let dockCount: Font = .system(size: 13, weight: .medium)
+    static let tooltipFont: Font = .system(size: 12, weight: .semibold)
+    static let keycap: Font = .system(size: 11, weight: .semibold)
+}
+
 // MARK: - Color hex convenience
 
 extension Color {

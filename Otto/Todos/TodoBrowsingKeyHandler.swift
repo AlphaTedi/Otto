@@ -603,7 +603,8 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 // U5 §4.2, floating panels: Esc CLEARS what is typed and
                 // keeps the caret; the next Esc, on an empty field, closes.
                 // The notch container keeps its own field's behaviour.
-                if AppState.shared.notchLayout == .panels,
+                // The B3 dock's first row behaves the same (spec §5.1).
+                if AppState.shared.notchLayout == .panels || DockExperiment.isOn,
                    !store.draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     store.draftTitle = ""
                     return true

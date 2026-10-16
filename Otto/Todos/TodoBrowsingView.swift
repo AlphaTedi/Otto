@@ -9,10 +9,15 @@ struct TodoBrowsingView: View {
     @ObservedObject private var archive = CompletedArchive.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
+    @AppStorage(DockExperiment.key) private var containerDock = false
 
     /// The container is a hole in the hardware and keeps its black ground; the
     /// floating panels are a card over the desktop and keep their material.
     private var isContainerLayout: Bool { notchLayout == .container }
+    /// The B3 dock: a fixed panel, so the list always scrolls inside it.
+    private var usesDock: Bool { DockExperiment.isOn(layout: notchLayout, flag: containerDock) }
+    /// Which way the last switch went along the dock (Pages slides that way).
+    @State private var dockForward = true
 
     /// FB3+4: ONE scroll region for the whole browsing body (open list +
     /// Completed together), capped to the panel's budget. Two independent
@@ -119,6 +124,17 @@ struct TodoBrowsingView: View {
             if let collection = store.activeCollection {
                 // Same jump guard as the mode switch: the id() swap keeps two
                 // copies alive mid-transition; overlap them instead of stacking.
+                if usesDock {
+                    ZStack(alignment: .topLeading) {
+                        dockBody(for: collection)
+                            .id(collection.id)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                            .transition(NotchDockMotion.listTransition(reduceMotion: reduceMotion,
+                                                                      forward: dockForward))
+                    }
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .clipped()
+                } else {
                 ZStack(alignment: .topLeading) {
                     browsingBody(for: collection)
                         .id(collection.id)
@@ -128,6 +144,14 @@ struct TodoBrowsingView: View {
                         .transition(isContainerLayout ? .sectionSwap
                                                       : .spaceSwap(reduceMotion: reduceMotion))
                 }
+                }
+            }
+        }
+        .onChange(of: store.activeCollectionID) { [previous = store.activeCollectionID] next in
+            let order = store.visibleCollections.map(\.id)
+            if let from = previous.flatMap(order.firstIndex(of:)),
+               let to = next.flatMap(order.firstIndex(of:)) {
+                dockForward = to >= from
             }
         }
         // Read the archive HERE, not while drawing.
@@ -359,6 +383,72 @@ struct TodoBrowsingView: View {
         }
     }
 
+    // MARK: The B3 dock's list
+    //
+    // The panel is a fixed height (DockExperiment), so there is nothing to
+    // hug and no budget to compute: the list takes whatever is between the
+    // first row and the bar, scrolls with the indicator hidden, and dissolves
+    // into the bar under a 40 pt fade, with 40 pt of travel so the last row
+    // can scroll clear of it. Completed scrolls with the list, after it — the
+    // same place in every space (spec §2.2).
+
+    @ViewBuilder
+    private func dockBody(for collection: TodoCollection) -> some View {
+        GeometryReader { geo in
+            let viewport = geo.size.height
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        if collection.isSystemToday { UpNextSection() }
+                        if store.openItems(in: collection).isEmpty, !collection.isSystemToday {
+                            // Centred in the list area, between the first row
+                            // and the dock (spec §6.5).
+                            EmptyListView(compact: true,
+                                          showsSubtitle: viewport >= 220,
+                                          fillHeight: max(0, viewport - NotchContainerMetrics.listFade))
+                                .transition(EmptyListView.transition)
+                        } else {
+                            todoList(for: collection, room: viewport)
+                        }
+                        if hasAnyCompleted(in: collection) {
+                            completedSection(for: collection)
+                                .padding(.horizontal, PanelMetrics.rowPaddingH)
+                        }
+                        Color.clear.frame(height: NotchContainerMetrics.listFade).id(Self.bottomAnchor)
+                    }
+                    .padding(.top, 2)
+                    .background(DeselectCatcher())
+                    .background(GeometryReader { content in
+                        Color.clear.preference(key: ScrollOffsetKey.self,
+                                               value: -content.frame(in: .named(Self.scrollSpace)).minY)
+                    })
+                }
+                .coordinateSpace(name: Self.scrollSpace)
+                .onPreferenceChange(ScrollOffsetKey.self) { scrollOffset = $0 }
+                .onChange(of: store.focusedItemID) { focused in
+                    guard let focused else { return }
+                    revealRowIfNeeded(focused, viewport: viewport,
+                                      footer: NotchContainerMetrics.listFade, proxy: proxy)
+                }
+                .onChange(of: store.expandedItemID) { expanded in
+                    guard let expanded else { return }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        guard store.expandedItemID == expanded else { return }
+                        revealRowIfNeeded(expanded, viewport: viewport,
+                                          footer: NotchContainerMetrics.listFade, proxy: proxy)
+                    }
+                }
+            }
+            // Rows dissolve into the bar: transparent → black.
+            .overlay(alignment: .bottom) {
+                LinearGradient(colors: [.black.opacity(0), .black], startPoint: .top, endPoint: .bottom)
+                    .frame(height: NotchContainerMetrics.listFade)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
     /// Scroll the least possible amount, and only when the complete row is
     /// outside the visible list region. Row frames are in content coordinates;
     /// adding `scrollOffset` gives the current viewport in that same space.
@@ -446,6 +536,8 @@ struct TodoBrowsingView: View {
                 // Rows come in behind the tab row and the meeting cards, so
                 // the panel assembles top-down as the silhouette opens.
                 .notchEntry(index: rowIndex + 2)
+                // The B3 dock's "Rise" motion: no-op in the others.
+                .dockRise(index: rowIndex, enabled: usesDock)
                 // The dragged row dims in place while its copy travels.
                 .opacity(draggedItemID == item.id ? 0.4 : 1)
                 // The landing slot, drawn in the gap ABOVE this row so it
@@ -617,8 +709,9 @@ struct TodoBrowsingView: View {
                             .foregroundStyle(DSColor.textFaint)
                             .rotationEffect(.degrees(store.completedExpanded ? 90 : 0))
                         Text(L10n.t("todo.completed"))
-                            .font(DSFont.checklistItem)
-                            .foregroundStyle(DSColor.textMuted)
+                            // The dock: 12 pt semibold, low-key (spec §2.2).
+                            .font(usesDock ? .system(size: 12, weight: .semibold) : DSFont.checklistItem)
+                            .foregroundStyle(usesDock ? DSDock.text3 : DSColor.textMuted)
                         // Everything the section holds, history included —
                         // the count in a closed header is the answer to "what
                         // did I finish", and one that stopped at yesterday

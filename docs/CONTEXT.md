@@ -1181,3 +1181,32 @@ Three commits on `refactor/cleanup` (Marcello: "non c'è ordine, non c'è archit
   the boxed "</>" glyph is gone.
 - The image picker is removed (format-bar button, ⌘⇧I in notes and lists,
   `AttachmentStore.chooseImages`): it did not work. Paste and drop remain.
+
+### 2026-10-15 B3 colour dock — an experiment on the notch container
+
+Marcello's redesign (OTTO-B3-DOCK-SPEC): the first row of the list is the
+input, the spaces become a dock of dots at the foot with one sliding
+highlight, Notes / Meetings / gear are 38 pt round buttons, and the panel
+stands at a FIXED 560. Built as an experiment: Settings › Notch › "B3 dock
+(experiment)", shown and honoured only in Debug and Otto Lab
+(`DockExperiment.isOn`), so a release cannot reach it.
+
+- **Principle 2's exception, on purpose:** with the dock on, `notchExtraHeight`
+  sizes the silhouette to `NotchContainerMetrics.panelHeight` and the list
+  scrolls inside, with a 40 pt fade into the bar. Off, the container hugs as
+  before.
+- **A flag, not a third layout:** about 95 places ask "is this the
+  container?"; they keep their answers and only the furniture is swapped
+  (`TodoTabView` draws `DockPanelView`). The list takes its own simple path in
+  `TodoBrowsingView.dockBody` (a ScrollView filling the space); no budget
+  arithmetic.
+- **Decisions (2026-10-14):** the gear keeps its menu, opening upwards;
+  Meetings gets a round button; images stay chips in the title; Esc in the
+  first row clears first, as the floating panels do. The full feature map is
+  `docs/parity-checklist.md`.
+- **`Capsule(style: .continuous)` at the dock's proportions** drew a stray
+  vertical stroke just past each end: the dock uses `.circular`.
+- **Motion:** Glide is the default; `defaults write com.notchsnap.app
+  containerDockMotion pages|rise` switches. Reduce Motion is a 150 ms fade.
+- **Headless probes:** `dock-on`, `dock-off`, `dock-status`, `panel-snap <png>`
+  (the open panel as drawn — works for the container, not the floating panels).

@@ -114,10 +114,12 @@ private struct ContainerMenuLayer: View {
         GeometryReader { proxy in
             ZStack {
                 if store.showsAvatarMenu, let gear = controller.containerMenuAnchors[.gear] {
+                    // The B3 dock's gear sits at the foot: its menu rises.
+                    let rises = DockExperiment.isOn
                     AvatarMenu()
                         .background(frameReporter)
-                        .anchoredMenu(to: gear, in: proxy.size, opensUpward: false)
-                        .transition(.opacity.combined(with: .offset(y: -4)))
+                        .anchoredMenu(to: gear, in: proxy.size, opensUpward: rises)
+                        .transition(.opacity.combined(with: .offset(y: rises ? 4 : -4)))
                 } else if notes.kindMenuOpen, let trigger = controller.containerMenuAnchors[.notesKind] {
                     NotesKindMenuList(meetings: store.panelMode == .calendar)
                         .background(frameReporter)

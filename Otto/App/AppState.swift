@@ -104,7 +104,10 @@ class AppState: ObservableObject {
         // notch to a column that is not on screen.
         let usesColumn = notchLayout == .panels && panelColumnHeight > 0
         let content = usesColumn ? panelColumnHeight : todoContentHeight + 8
-        let desiredTotal = notchBarHeight + content
+        // The B3 dock does not hug: one height in every space, Notes and
+        // empty lists included, and the list scrolls inside it.
+        let desiredTotal = DockExperiment.isOn ? NotchContainerMetrics.panelHeight
+                                               : notchBarHeight + content
         let cappedTotal = min(desiredTotal, Self.expandedBaseHeight + Self.maxExtraHeight)
         return cappedTotal - Self.expandedBaseHeight
     }

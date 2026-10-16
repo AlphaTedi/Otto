@@ -241,31 +241,7 @@ struct TodoTabRow: View {
                         dropBeforeID: $dropBeforeCollectionID,
                         dropAtEnd: $dropCollectionAtEnd
                     ))
-                    .contextMenu {
-                        // No "set as default" item any more. Where ⌃⇧N files
-                        // is decided by tab ORDER — drag the section you use
-                        // most to the front — so a second, invisible way to
-                        // set the same thing could only contradict it.
-                        Button(L10n.t("todo.newCollection") + "\u{2026}") {
-                            store.setMode(.newCategory)
-                            NotchController.shared.focusPanel()
-                        }
-                        Divider()
-                        Button(L10n.t("action.moveLeft")) {
-                            store.moveCollection(collection.id, by: -1)
-                        }
-                        .disabled(index == 0)
-                        Button(L10n.t("action.moveRight")) {
-                            store.moveCollection(collection.id, by: 1)
-                        }
-                        .disabled(index == store.visibleCollections.count - 1)
-                        if !collection.isSystemToday {
-                            Divider()
-                            Button(L10n.t("action.delete"), role: .destructive) {
-                                store.deleteCollection(collection.id)
-                            }
-                        }
-                    }
+                    .contextMenu { CollectionContextMenu(collection: collection, index: index) }
                 }
 
                 // CT-5 still holds — exactly ONE "+" in the row — but it now
@@ -389,6 +365,39 @@ struct TodoTabRow: View {
 }
 
 // MARK: - Category tab drag-to-reorder
+
+/// A section's right-click menu — the tab row's and the B3 dock's.
+///
+/// No "set as default" item any more. Where ⌃⇧N files is decided by tab ORDER
+/// — drag the section you use most to the front — so a second, invisible way
+/// to set the same thing could only contradict it.
+struct CollectionContextMenu: View {
+    let collection: TodoCollection
+    let index: Int
+    @ObservedObject private var store = TodoStore.shared
+
+    var body: some View {
+        Button(L10n.t("todo.newCollection") + "\u{2026}") {
+            store.setMode(.newCategory)
+            NotchController.shared.focusPanel()
+        }
+        Divider()
+        Button(L10n.t("action.moveLeft")) {
+            store.moveCollection(collection.id, by: -1)
+        }
+        .disabled(index == 0)
+        Button(L10n.t("action.moveRight")) {
+            store.moveCollection(collection.id, by: 1)
+        }
+        .disabled(index == store.visibleCollections.count - 1)
+        if !collection.isSystemToday {
+            Divider()
+            Button(L10n.t("action.delete"), role: .destructive) {
+                store.deleteCollection(collection.id)
+            }
+        }
+    }
+}
 
 struct CollectionReorderDropDelegate: DropDelegate {
     let targetID: UUID

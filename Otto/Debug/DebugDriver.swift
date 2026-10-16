@@ -884,6 +884,20 @@ enum DebugDriver {
                         .write(to: directory.appendingPathComponent(dark ? "format-dark.png" : "format-light.png"))
                 }
                 appendState("notes-format-snap: wrote \(directory.path)")
+            } else if command == "dock-on" || command == "dock-off" {
+                // The B3 dock experiment's switch, as Settings flips it.
+                DockExperiment.set(command == "dock-on")
+                appendState("\(command): isOn=\(DockExperiment.isOn)")
+            } else if command == "dock-status" {
+                // What the dock is drawing from: the switch, the fixed height,
+                // the space it is on and what each dot would say.
+                let store = TodoStore.shared
+                let app = AppState.shared
+                let controller = NotchController.shared
+                let spaces = store.visibleCollections.map {
+                    "\($0.name)=\(store.remainingCount(for: $0) ?? 0)\($0.id == store.activeCollectionID ? "*" : "")"
+                }
+                appendState("dock-status: layout=\(app.notchLayout.rawValue) isOn=\(DockExperiment.isOn) state=\(controller.state) silhouette=\(controller.containerSilhouetteHeight) extra=\(app.notchExtraHeight) mode=\(store.panelMode) spaceBar=\(store.showsSpaceBar) motion=\(NotchDockMotion.current.rawValue) draft='\(store.draftTitle)' draftFocused=\(store.draftFocused) spaces=\(spaces.joined(separator: ","))")
             } else if command.hasPrefix("panel-snap ") {
                 // panel-snap <png> — the open panel as drawn, no Screen
                 // Recording needed (the hosting view renders itself).
