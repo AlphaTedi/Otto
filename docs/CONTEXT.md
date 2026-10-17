@@ -1210,3 +1210,57 @@ stands at a FIXED 560. Built as an experiment: Settings › Notch › "B3 dock
   containerDockMotion pages|rise` switches. Reduce Motion is a 150 ms fade.
 - **Headless probes:** `dock-on`, `dock-off`, `dock-status`, `panel-snap <png>`
   (the open panel as drawn — works for the container, not the floating panels).
+
+### 2026-10-16 Final flow on the B3 dock
+
+OTTO-NOTCH-FINAL-FLOW-SPEC applied behind the same experiment switch
+(details and the building-block table in docs/parity-checklist.md):
+470 pt panel, glass bar over the list with a progressive blur + gradient,
+Meetings out of the container, 7 pt dots and a name-only pill, 2 pt
+checkboxes, inset highlights, Save ↵ in the first row, the steps pattern
+back (no "1 of 3"), the space menu, the Morph new-space card, title-first
+notes and an editor with no top bar.
+
+- **The grid is measured from the VISIBLE edge.** NotchShapeView's content
+  frame is 16 in from the shape's frame but only 4 in from the body you
+  see (the top fillets take 12 a side); `NotchContainerMetrics.frameInset`
+  is 4. The first pass used 16 and drew everything 12 pt to the left.
+- **`notchGlass`**: the existing glass blurs the desktop before macOS 26
+  (`.behindWindow`), which inside the notch would show the wallpaper
+  through the black. This variant samples only the window.
+- **Marcello's Mac is now an M5 on macOS 26.2**: the real `glassEffect`
+  is what he sees, and `panel-snap` cannot draw it — use
+  `glass-opaque on` for layout checks.
+- Probes: `dock-newspace`, `dock-newspace-name <n>`, `dock-newspace-cancel`,
+  `dock-menu <i>`, `dock-menu-close`, `expand-steps`, `glass-opaque on|off`.
+
+### 2026-10-17 Final-flow polish (Marcello's feedback)
+
+- **The glass bar lives at the root** (`DockBarLayer` in NotchRootView), not
+  inside the silhouette: NotchShapeView draws its content through a mask and
+  the open animation's opacity/blur, and Liquid Glass inside those layers
+  cannot sample the backdrop, so it came out flat and grey. Up here it
+  refracts the list. Its menu anchors go to `controller.dockBarAnchors`.
+- **Blur only near the bar**: the foot zone is the bar's band + 40 pt.
+- **Tooltips** reveal with scale + rise + fade; the fixed-height clip mask
+  cut the ones over Notes and Settings.
+- **Settings is the gear** (`gearshape`), as in the floating panels.
+- **Dock dots** get a hover capsule (white 8 %).
+- **New-space card is a modal**: a 45 % black veil over the silhouette, the
+  list inert under it, a click on the veil (MenuDismissCatcher) or Esc
+  closes it. No dot, no "esc" hint, 15-pt regular name.
+- **Nine colours**: `SpaceTint.teal` and `.amber` appended to the palette
+  (existing lists keep their hue); the space menu is 272 pt wide for them.
+
+- **2026-10-17 (b) — B3 dock polish round.** Dock icons move to Hugeicons
+  "stroke rounded" (MIT, `Assets.xcassets/Huge`, `DockIcon`) — Lucide's
+  hand-drawn page/pencil read square next to the round gear; floating panels
+  keep Lucide. The bar has ONE gliding tooltip (`BarTipState`/`barTipHost`)
+  shared by Notes, the dots, "+", Settings and the note editor's tools. The
+  first row's box is always dashed, with a dash period that divides the
+  perimeter (`EvenDashBox`); "Save ↵" became a bare ↵ key. Note titles use the
+  row's regular weight. Notes: right-click menu (Open/Rename/Duplicate/Delete)
+  and a two-finger swipe that reveals Delete (full swipe deletes; ⌘Z undoes).
+  Space menu: swatches scroll, menu 248 wide, delete is hold-to-confirm (⏎ ⏎
+  from the keyboard). A right-click a view answers no longer also opens the
+  panel's native Settings/Quit menu (`rightClickClaimedAt`).

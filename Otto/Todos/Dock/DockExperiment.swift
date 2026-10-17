@@ -51,48 +51,104 @@ enum DockExperiment {
     }
 }
 
-/// Every number the dock is drawn with (spec §3, §5). 1 CSS px = 1 pt.
+/// Every number the dock is drawn with. 1 CSS px = 1 pt.
+///
+/// The final flow (OTTO-NOTCH-FINAL-FLOW-SPEC, 2026-10-16) set the grid in
+/// SILHOUETTE coordinates: content 30 in, row highlights 20 in, the bar 20 in.
+/// The content frame NotchShapeView hands us already starts `frameInset` in
+/// from each side, so the values used inside it are those minus 16.
 enum NotchContainerMetrics {
     /// The whole silhouette, notch strip included. FIXED: the dock is the one
     /// place the panel does not hug its content (principle 2's exception,
-    /// Marcello, 2026-10-14). One constant, so it can be tuned.
-    static let panelHeight: CGFloat = 560
+    /// Marcello, 2026-10-14). One constant, so it can be tuned. 560 → 470 in
+    /// the final flow.
+    static let panelHeight: CGFloat = 470
     /// The top band left pure black, from the screen's edge.
+    /// 44 in the final flow; 50 for more air under the notch (2026-10-17).
     static let notchZone: CGFloat = 50
-    /// From the silhouette's sides to the content.
-    static let sideInset: CGFloat = 32
-    static let bottomInset: CGFloat = 18
-    /// The first row's box sits on the checkbox column of the rows under it:
-    /// a container row pads 20 inside the content frame, which itself starts
-    /// 16 in — 36 from the silhouette, the spec's 32 + 4.
-    static let firstRowInset: CGFloat = PanelMetrics.barPaddingH
-    static let rowMinHeight: CGFloat = 40
-    static let rowGap: CGFloat = 14
+    /// NotchShapeView's content frame, from the silhouette's VISIBLE edge.
+    /// The frame is 16 in from the shape's frame, but the body is narrower
+    /// than that frame by the top fillets (12 a side,
+    /// `NotchController.containerBodyWidth`), so measured against the edge you
+    /// see it starts only 4 in — the first pass assumed 16 and drew the whole
+    /// grid 12 pt to the left (panel-snap, 2026-10-16). It ends 4 above the
+    /// foot.
+    static let frameInset: CGFloat = 4
+    static let frameFootGap: CGFloat = 4
+
+    // The grid, from the silhouette's edge.
+    //
+    // The bar is CONCENTRIC with the silhouette's bottom corners: a round
+    // button sits as far from the side as from the foot, and that distance
+    // is the corner radius less the button's own (Marcello, 2026-10-17 — the
+    // spec's 20 at the side against 14 at the foot looked off). Everything
+    // else hangs from it: row highlights start at the button's outer edge,
+    // and checkboxes, note glyphs and the first row's box are centred on the
+    // Notes button's axis, so the text column follows.
+    ///
+    /// Strictly concentric was 11 (radius 30 less 19) and read as glued to the
+    /// edges (Marcello, 2026-10-17): 16, still the same at the side and the
+    /// foot.
+    @MainActor static var barInset: CGFloat {
+        max(16, (NotchController.shared.containerBottomRadius - roundButton / 2).rounded())
+    }
+    @MainActor static var barBottom: CGFloat { barInset }
+    /// Hover, focus and the opened card start here.
+    @MainActor static var highlightInset: CGFloat { barInset }
+    /// Checkboxes and the like: centred on the Notes button (18 on a 38).
+    @MainActor static var contentInset: CGFloat { barInset + (roundButton - box) / 2 }
+    /// Inside a highlight: the content column.
+    static let rowPadding: CGFloat = (roundButton - box) / 2
+    static let highlightRadius: CGFloat = 14
+    /// The same three, inside the content frame.
+    @MainActor static var highlightInFrame: CGFloat { highlightInset - frameInset }
+    @MainActor static var contentInFrame: CGFloat { contentInset - frameInset }
+    @MainActor static var barInFrame: CGFloat { barInset - frameInset }
+
+    static let rowMinHeight: CGFloat = 38
+    /// Checkbox 18 + 12: the text column at 60.
+    static let rowGap: CGFloat = 12
     static let box: CGFloat = 18
     static let boxRadius: CGFloat = 6
-    static let boxStroke: CGFloat = 1.5
+    static let boxStroke: CGFloat = 2
 
-    /// The list scrolls under a fade of this depth, and ends this far above
-    /// the bar so the last row can scroll clear of it.
-    static let listFade: CGFloat = 40
+    /// The progressive blur + gradient under the bar: the bar's own band and
+    /// at most 40 pt above it (Marcello, 2026-10-17 — the spec's 130 began
+    /// blurring rows halfway up the list).
+    @MainActor static var footZone: CGFloat { barBottom + roundButton + 40 }
+    /// What the list leaves as travel at its end, so its last row can
+    /// scroll out from under the bar.
+    static let listTravel: CGFloat = 62
+    /// What the empty state leaves at the list's foot: the bar and its
+    /// margin, so the block centres in the room you can see.
+    @MainActor static var dockEmptyFoot: CGFloat { barBottom + roundButton + 8 }
 
     // Bottom bar
-    static let barTopGap: CGFloat = 10
     static let barGap: CGFloat = 8
     static let roundButton: CGFloat = 38
     static let roundIcon: CGFloat = 16
 
     // Dock
     static let dockItem: CGFloat = 30
-    static let dockPadding: CGFloat = 3
+    /// 4: the dock is then 38 tall, the round buttons' height, so their tops
+    /// — where the tooltips hang from — are one line.
+    static let dockPadding: CGFloat = 4
+    /// Between a tooltip's foot and the top of the bar.
+    static let tooltipGap: CGFloat = 12
+    static let tooltipHeight: CGFloat = 28
     static let dockItemGap: CGFloat = 2
-    static let dockDot: CGFloat = 9
-    static let dockItemPaddingH: CGFloat = 10.5
+    static let dockDot: CGFloat = 7
+    static let dockItemPaddingH: CGFloat = 11.5
     static let dockLabelLeading: CGFloat = 7
-    static let dockLabelTrailing: CGFloat = 3.5
-    static let dockCountGap: CGFloat = 5
+    static let dockLabelTrailing: CGFloat = 5
     /// About eight spaces fit; past this width the dock scrolls in its capsule.
     static let dockMaxWidth: CGFloat = 380
+
+    // Steps (final flow 4.3)
+    static let stepBox: CGFloat = 14
+    static let stepBoxRadius: CGFloat = 4.5
+    static let stepStroke: CGFloat = 1.75
+    static let stepRowHeight: CGFloat = 26
 }
 
 /// The three motion styles the designer is choosing between (spec §8).
@@ -171,25 +227,34 @@ extension View {
     }
 }
 
-// MARK: - A space's colours, derived (spec §4.1)
+// MARK: - A space's colours, derived (final flow 3.2)
 
-/// Every variant the dock paints a space with, from the colour the space
-/// already has. The panel is always black, so the dark-appearance tone is the
-/// base.
+/// Every variant the dock paints a space with. The base is the final flow's
+/// swatch for the space's stored tint — the same seven, in the same order as
+/// `SpaceTint.palette`, that the new-space card and the space menu offer.
 struct DockTint: Equatable {
     let base: Color
     let light: Color
 
+    /// The nine swatches by tint key, plus Notes' gold.
+    static let swatches: [String: UInt32] = [
+        "grocery": 0x9EE0B0, "work": 0x8FB8FF, "personal": 0xF4A9C4, "violet": 0xC3B1FF,
+        "coral": 0xF5C2A6, "sky": 0xA9D8FF, "lime": 0xD9EBA3, "teal": 0x8FE0D6,
+        "amber": 0xF5D68A, "notes": 0xE5B66B,
+        "calendar": 0x9AD8CF,
+    ]
+
     init(_ tint: SpaceTint) {
-        let rgb = tint.light
+        let rgb = Self.swatches[tint.key].map(SpaceTint.RGB.init(hex:)) ?? tint.light
         base = rgb.color
         // The base mixed half-way to white.
         light = Color(.sRGB, red: (rgb.r / 255 + 1) / 2, green: (rgb.g / 255 + 1) / 2,
                       blue: (rgb.b / 255 + 1) / 2, opacity: 1)
     }
 
-    var highlight: Color { base.opacity(0.18) }
-    var checkboxStroke: Color { base.opacity(0.5) }
-    var firstRowStroke: Color { base.opacity(0.6) }
+    var highlight: Color { base.opacity(0.24) }
+    var checkboxStroke: Color { base.opacity(0.85) }
+    var firstRowStroke: Color { base.opacity(0.85) }
     var firstRowFill: Color { base.opacity(0.12) }
+    var stepStroke: Color { base.opacity(0.7) }
 }

@@ -18,12 +18,95 @@ import SwiftUI
 // does not grow.
 
 struct NoteFormatBar: View {
+    /// The B3 dock's version: the same tools in a 38-pt glass capsule in the
+    /// bar at the panel's foot, each with an animated tooltip carrying its
+    /// real shortcut (final flow 4.11).
+    var docked = false
+
     @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
 
     @ObservedObject private var editor = NoteEditorController.shared
     @State private var showsBlockMenu = false
 
     var body: some View {
+        if docked { dockedBody } else { panelBody }
+    }
+
+    // MARK: Docked (final flow 4.11)
+
+    private var dockedBody: some View {
+        HStack(spacing: 2) {
+            DockToolButton(label: L10n.t("dock.fmt.style"), shortcut: nil,
+                           isActive: editor.activeBlock == .h1 || editor.activeBlock == .h2) {
+                showsBlockMenu.toggle()
+            } glyph: {
+                Text(blockLabel).font(.system(size: 13, weight: .semibold))
+            }
+            .popover(isPresented: $showsBlockMenu, arrowEdge: .top) {
+                BlockMenu { block in
+                    editor.setBlock(block)
+                    showsBlockMenu = false
+                }
+            }
+            dockDivider
+            DockToolButton(label: L10n.t("notes.fmt.bulleted"), shortcut: "\u{2318}\u{21E7}8",
+                           isActive: editor.activeBlock == .bullet) {
+                editor.toggleBlock(.bullet)
+            } glyph: { DockIcon(.bullets, size: 17) }
+            DockToolButton(label: L10n.t("notes.fmt.numbered"), shortcut: "\u{2318}\u{21E7}7",
+                           isActive: editor.activeBlock == .numbered) {
+                editor.toggleBlock(.numbered)
+            } glyph: { DockIcon(.numbers, size: 17) }
+            DockToolButton(label: L10n.t("notes.fmt.checklist"), shortcut: "\u{2318}\u{21E7}9",
+                           isActive: editor.activeBlock.isChecklist) {
+                editor.toggleBlock(.checklistOpen)
+            } glyph: { DockIcon(.checklist, size: 17) }
+            dockDivider
+            Group {
+                DockToolButton(label: L10n.t("dock.fmt.bold"), shortcut: "\u{2318}B", isActive: editor.bold) {
+                    editor.toggleBold()
+                } glyph: { Text("B").font(.system(size: 13, weight: .bold)) }
+                DockToolButton(label: L10n.t("dock.fmt.italic"), shortcut: "\u{2318}I", isActive: editor.italic) {
+                    editor.toggleItalic()
+                } glyph: { Text("I").font(.system(size: 13).italic()) }
+                DockToolButton(label: L10n.t("dock.fmt.underline"), shortcut: "\u{2318}U", isActive: editor.underline) {
+                    editor.toggleUnderline()
+                } glyph: { Text("U").font(.system(size: 13)).underline() }
+            }
+            .disabled(editor.activeBlock == .code)
+            dockDivider
+            DockToolButton(label: L10n.t("notes.fmt.inlineCode"), shortcut: "\u{2318}\u{21E7}C",
+                           isActive: editor.code) {
+                editor.toggleInlineCode()
+            } glyph: { DockIcon(.inlineCode, size: 17) }
+                .disabled(editor.activeBlock == .code)
+            DockToolButton(label: L10n.t("notes.fmt.quote"), shortcut: "\u{2318}'",
+                           isActive: editor.activeBlock == .quote) {
+                editor.toggleQuote()
+            } glyph: { DockIcon(.quote, size: 17) }
+            DockToolButton(label: L10n.t("notes.fmt.codeBlock"), shortcut: "\u{2318}\u{2325}\u{21E7}C",
+                           isActive: editor.activeBlock == .code) {
+                editor.toggleCodeBlock()
+            } glyph: { DockIcon(.codeBlock, size: 17) }
+        }
+        .padding(.horizontal, 4)
+        .frame(height: NotchContainerMetrics.roundButton)
+        .notchGlass(in: Capsule(style: .circular))
+        .opacity(editor.bodyFocused ? 1 : 0.45)
+        .allowsHitTesting(editor.bodyFocused)
+        .animation(Motion.hintFade, value: editor.bodyFocused)
+    }
+
+    private var dockDivider: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.12))
+            .frame(width: 1, height: 18)
+            .padding(.horizontal, 3)
+    }
+
+    // MARK: The panels / container bar
+
+    private var panelBody: some View {
         HStack(spacing: 2) {
             // Group 1 — block type
             Button { showsBlockMenu.toggle() } label: {
@@ -123,6 +206,35 @@ struct NoteFormatBar: View {
             .fill(DSColor.hairlineOnPanel)
             .frame(width: 1, height: 16)
             .padding(.horizontal, 3)
+    }
+}
+
+/// One tool in the docked bar: a circular hover fill (white 9 %) and its
+/// tooltip, which reads the same hover.
+private struct DockToolButton<Glyph: View>: View {
+    let label: String
+    let shortcut: String?
+    let isActive: Bool
+    let action: () -> Void
+    @ViewBuilder let glyph: Glyph
+    @State private var hover = false
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        Button(action: action) {
+            glyph
+                .foregroundStyle(isActive ? DSDock.notesLight : DSDock.text)
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(isActive ? DSDock.notes.opacity(0.18)
+                                          : (hover ? Color.white.opacity(0.09) : .clear)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .opacity(isEnabled ? 1 : 0.35)
+        .onHover { hover = $0 }
+        .animation(Motion.hoverFade, value: hover)
+        .barTip("fmt." + label, isEnabled ? BarTip(label: label, shortcut: shortcut) : nil)
+        .accessibilityLabel(label)
     }
 }
 

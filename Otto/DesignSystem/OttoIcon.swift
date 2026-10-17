@@ -116,3 +116,51 @@ struct OttoIcon: View {
         }
     }
 }
+
+// MARK: - DockIcon — the B3 dock's icons are Hugeicons (hugeicons.com, MIT)
+//
+// The dock's bar wanted a softer hand than Lucide's: the hand-drawn page and
+// pencil there were square-cornered next to a round gear, three visual
+// languages in one bar (Marcello, 2026-10-17). Hugeicons' "stroke rounded"
+// set is drawn with generous radii and a 1.5 stroke throughout, so every
+// glyph in the dock now comes from the one family. Floating panels keep
+// Lucide. SVGs in Assets.xcassets/Huge; licence Resources/HUGEICONS-LICENSE.txt.
+
+enum DockGlyph: String {
+    case notes = "note-01"
+    case note = "file-02"
+    case newNote = "edit-02"
+    case settings = "settings-01"
+    case back = "arrow-left-01"
+    case export = "download-01"
+    case bullets = "left-to-right-list-bullet"
+    case numbers = "left-to-right-list-number"
+    case checklist = "checkmark-square-02"
+    case inlineCode = "source-code"
+    case quote = "left-to-right-block-quote"
+    case codeBlock = "code-square"
+    case delete = "delete-02"
+    case plus = "add-01"
+    case check = "tick-02"
+    case duplicate = "copy-01"
+}
+
+struct DockIcon: View {
+    let glyph: DockGlyph
+    /// The icon's box, in points (the glyph fills ~20 of its 24 units).
+    var size: CGFloat = 18
+
+    init(_ glyph: DockGlyph, size: CGFloat = 18) {
+        self.glyph = glyph
+        self.size = size
+    }
+
+    var body: some View {
+        Image("Huge/\(glyph.rawValue)")
+            .renderingMode(.template)
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fit)
+            .frame(width: size, height: size)
+    }
+}

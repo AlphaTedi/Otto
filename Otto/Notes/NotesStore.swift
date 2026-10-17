@@ -302,6 +302,22 @@ final class NotesStore: ObservableObject {
         return note
     }
 
+    /// The B3 dock's title-first note (final flow 4.10): the first row holds
+    /// the TITLE; ⏎ makes a note with that title, opens it and puts the caret
+    /// in the body. The title is the user's own, so no model ever renames it.
+    @discardableResult
+    func commitTitleDraft() -> QuickNote? {
+        let title = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return nil }
+        let note = QuickNote(content: "", title: title, titleSource: .user)
+        Analytics.track(.noteCreated(meeting: false))
+        withAnimation(Motion.contentHug) { notes.insert(note, at: 0) }
+        draft = ""
+        scheduleSave()
+        open(note.id)
+        return note
+    }
+
     func draftChanged() {
         scheduleSave()
     }
@@ -404,6 +420,10 @@ final class NotesStore: ObservableObject {
 
     /// Meeting notes are a sibling space, reached by the Calendar pill.
     func enterCalendarSpace() {
+        // The B3 dock has no Meetings view (final flow 2.2): every route in
+        // lands in Notes instead. The meetings data and the floating panels'
+        // view are untouched.
+        if DockExperiment.isOn { enterSpace(); return }
         closeNoteState()
         TodoStore.shared.setMode(.calendar)
         meetingSearchFocus = true

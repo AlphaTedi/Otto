@@ -265,6 +265,79 @@ extension View {
 
 }
 
+// MARK: - Glass INSIDE the notch (the B3 dock's bar, final flow 3.4)
+//
+// The two surfaces above blur the DESKTOP: before macOS 26 the stand-in is an
+// NSVisualEffectView in `.behindWindow` mode. Inside the notch silhouette that
+// is exactly wrong — the bar sits on the notch's own black, and a behind-window
+// blur would open a window onto the wallpaper through what is pretending to be
+// a hole in the hardware.
+//
+// So this one samples only what is IN the window. macOS 26: the real
+// `glassEffect`, which refracts the list scrolling under the bar. Before it:
+// the look the final flow's mocks describe — a white 12 % → 4 % fill, a 11 %
+// hairline, an 18 % top highlight and a soft drop shadow — with no blur of
+// the desktop at all.
+
+struct NotchGlassSurface<S: InsettableShape>: ViewModifier {
+    let shape: S
+    var tint: Color?
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    func body(content: Content) -> some View {
+        if reduceTransparency || GlassDebug.forceOpaque {
+            content
+                .background(shape.fill(Color(hex: "#1A1A1C")))
+                .overlay(shape.strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+        } else if #available(macOS 26.0, *) {
+            // EXACTLY the panel menus' glass (OttoMenuSurface's glass branch),
+            // so the bar and the popovers above it are one material: the same
+            // dark cast, the same lit edge that fades from 26 % at the top to
+            // 8 % at the foot, the same shadow. The bar had a flat 11 % edge
+            // and no cast, and beside the popover it read as a different,
+            // lesser glass (Marcello, 2026-10-17).
+            content
+                .floatingGlass(in: shape, tint: tint.map { $0.opacity(0.3) } ?? Color.black.opacity(0.35))
+                .overlay(shape.strokeBorder(
+                    LinearGradient(colors: [(tint ?? .white).opacity(0.26), (tint ?? .white).opacity(0.08)],
+                                   startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1))
+            // No drop shadow, unlike the menus: the bar sits 11 pt from the
+            // silhouette's foot, and the menus' 24-pt shadow spilled out
+            // under the notch onto the desktop. On the notch's black a
+            // shadow shows nothing anyway.
+        } else {
+            content
+                .background(
+                    ZStack {
+                        shape.fill(Color(hex: "#0C0C0E"))
+                        shape.fill(LinearGradient(colors: [Color.white.opacity(0.12), Color.white.opacity(0.04)],
+                                                  startPoint: .top, endPoint: .bottom))
+                        if let tint {
+                            shape.fill(LinearGradient(colors: [tint.opacity(0.30), tint.opacity(0.12)],
+                                                      startPoint: .top, endPoint: .bottom))
+                        }
+                    }
+                )
+                .overlay(shape.strokeBorder(tint.map { $0.opacity(0.35) } ?? Color.white.opacity(0.11),
+                                            lineWidth: 1))
+                // The top inner highlight: light catching the upper edge.
+                .overlay(shape.inset(by: 1).strokeBorder(
+                    LinearGradient(colors: [Color.white.opacity(0.18), .clear],
+                                   startPoint: .top, endPoint: .center),
+                    lineWidth: 1))
+                .shadow(color: .black.opacity(0.55), radius: 14, x: 0, y: 10)
+        }
+    }
+}
+
+extension View {
+    /// Glass for controls drawn INSIDE the notch silhouette (NotchGlassSurface).
+    func notchGlass<S: InsettableShape>(in shape: S, tint: Color? = nil) -> some View {
+        modifier(NotchGlassSurface(shape: shape, tint: tint))
+    }
+}
+
 extension View {
     /// Groups neighbouring glass surfaces so the material samples them
     /// together. Glass cannot sample other glass, and ungrouped neighbours

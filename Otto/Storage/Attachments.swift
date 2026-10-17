@@ -37,6 +37,18 @@ enum AttachmentStore {
         return ext.isEmpty ? stem : "\(stem).\(ext)"
     }
 
+    /// The name without the date and time a screenshot carries:
+    /// "Screenshot-2026-10-04-at-10.15.23.png" → "Screenshot". Falls back to
+    /// the display name, cut short.
+    nonisolated static func shortName(for relativePath: String) -> String {
+        let full = (displayName(for: relativePath) as NSString).deletingPathExtension
+        let stem = full.replacingOccurrences(of: #"[\s_-]*\d{4}[-.]\d{2}[-.]\d{2}.*$"#,
+                                             with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = stem.isEmpty ? full : stem
+        return name.count > 20 ? String(name.prefix(18)) + "\u{2026}" : name
+    }
+
     /// Copies an image file into the vault. Returns its relative path.
     static func importFile(_ source: URL) -> String? {
         guard isImage(source) else { return nil }
@@ -195,7 +207,13 @@ final class ImageChipCell: NSTextAttachmentCell {
     init(path: String) {
         self.path = path
         let full = AttachmentStore.displayName(for: path)
-        name = full.count > 26 ? String(full.prefix(23)) + "…" : full
+        // The B3 dock shows a short label — "Screenshot", not the file's
+        // whole dated name (final flow 4.2).
+        if DockExperiment.isOn {
+            name = AttachmentStore.shortName(for: path)
+        } else {
+            name = full.count > 26 ? String(full.prefix(23)) + "…" : full
+        }
         super.init(textCell: "")
     }
 

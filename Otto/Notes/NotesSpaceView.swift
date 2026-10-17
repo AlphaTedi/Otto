@@ -41,6 +41,11 @@ private struct RowClickCatcher: NSViewRepresentable {
     /// This row's rect in SCREEN coordinates, so the drag can work out which
     /// gap the pointer is over.
     let onFrame: (CGRect) -> Void
+    /// The B3 dock: a right-click opens the note menu…
+    var onRightClick: (() -> Void)? = nil
+    /// …and a two-finger sideways swipe slides the row (finger travel, + is
+    /// right; `ended` true on the gesture's last event).
+    var onSwipe: ((_ delta: CGFloat, _ ended: Bool) -> Void)? = nil
 
     final class CatcherView: NSView {
         var onClick: () -> Void = {}
@@ -48,10 +53,17 @@ private struct RowClickCatcher: NSViewRepresentable {
         var onDrag: (CGFloat, CGFloat) -> Void = { _, _ in }
         var onDragEnd: () -> Void = {}
         var onFrame: (CGRect) -> Void = { _ in }
+        var onRightClick: (() -> Void)?
+        var onSwipe: ((CGFloat, Bool) -> Void)?
 
         private var tracking: NSTrackingArea?
         private var downAt: NSPoint?
         private var dragging = false
+        /// The current trackpad gesture: undecided, sideways (ours) or
+        /// vertical (the list's).
+        private enum Axis { case undecided, sideways, vertical }
+        private var axis: Axis = .undecided
+        private var travel = CGSize.zero
 
         override func updateTrackingAreas() {
             super.updateTrackingAreas()
@@ -130,12 +142,53 @@ private struct RowClickCatcher: NSViewRepresentable {
         /// Notes · Meetings menu open over this row the row took the click
         /// meant for the menu (Marcello, 2026-09-26). Stand aside while it is.
         override func hitTest(_ point: NSPoint) -> NSView? {
-            NotesStore.shared.kindMenuOpen ? nil : super.hitTest(point)
+            let menuOpen = NotesStore.shared.kindMenuOpen || DockState.shared.noteMenuID != nil
+            return menuOpen ? nil : super.hitTest(point)
         }
-        /// Let the scroll wheel through to the ScrollView underneath: this
+
+        override func rightMouseDown(with event: NSEvent) {
+            guard let onRightClick else { return super.rightMouseDown(with: event) }
+            // Claimed, so the panel's native Settings / Quit menu stays shut.
+            NotchController.shared.rightClickClaimedAt = event.timestamp
+            onRightClick()
+        }
+
+        /// Vertical scrolls go through to the ScrollView underneath: this
         /// view is here for clicks, and swallowing scrolls would trade one
-        /// broken interaction for another.
-        override func scrollWheel(with event: NSEvent) { nextResponder?.scrollWheel(with: event) }
+        /// broken interaction for another. A trackpad gesture that starts
+        /// SIDEWAYS is the row's swipe and stays with it to the end.
+        override func scrollWheel(with event: NSEvent) {
+            guard let onSwipe, !event.phase.isEmpty || !event.momentumPhase.isEmpty else {
+                return forward(event)
+            }
+            // The momentum after a swipe belongs to nobody.
+            if !event.momentumPhase.isEmpty { return axis == .sideways ? () : forward(event) }
+            if event.phase.contains(.began) {
+                axis = .undecided
+                travel = .zero
+            }
+            // Finger travel, whatever the scrolling direction setting.
+            let sign: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
+            let dx = event.scrollingDeltaX * sign
+            if axis == .undecided {
+                travel.width += abs(event.scrollingDeltaX)
+                travel.height += abs(event.scrollingDeltaY)
+                if travel.width + travel.height > 3 {
+                    axis = travel.width > travel.height * 1.2 ? .sideways : .vertical
+                }
+            }
+            let ending = event.phase.contains(.ended) || event.phase.contains(.cancelled)
+            switch axis {
+            case .sideways:
+                onSwipe(dx, ending)
+                if ending { axis = .undecided; forward(event) }
+            case .vertical, .undecided:
+                forward(event)
+                if ending { axis = .undecided }
+            }
+        }
+
+        private func forward(_ event: NSEvent) { nextResponder?.scrollWheel(with: event) }
     }
 
     func makeNSView(context: Context) -> CatcherView { CatcherView() }
@@ -146,6 +199,8 @@ private struct RowClickCatcher: NSViewRepresentable {
         view.onDrag = onDrag
         view.onDragEnd = onDragEnd
         view.onFrame = onFrame
+        view.onRightClick = onRightClick
+        view.onSwipe = onSwipe
     }
 }
 
@@ -205,6 +260,7 @@ enum NotesMetrics {
 struct NotesSpaceView: View {
     @ObservedObject private var store = NotesStore.shared
     @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
+    @AppStorage(DockExperiment.key) private var containerDock = false
 
     private var isContainer: Bool { notchLayout == .container }
     private var isCalendarSpace: Bool { TodoStore.shared.panelMode == .calendar }
@@ -236,7 +292,9 @@ struct NotesSpaceView: View {
         .overlay(alignment: .bottom) {
             if let pending = store.pendingDelete {
                 UndoBar(title: pending.title)
-                    .padding(.bottom, 8)
+                    // The dock: above the bar at the foot, not under it.
+                    .padding(.bottom, DockExperiment.isOn(layout: notchLayout, flag: containerDock)
+                             ? NotchContainerMetrics.footZone - 20 : 8)
                     .transition(.opacity.combined(with: .offset(y: 8)))
             }
         }
@@ -397,7 +455,7 @@ private struct StreamView: View {
                 // is exactly what it looked like (Marcello, 2026-09-06). The
                 // design's intent was the composing state, and the honest
                 // test for that is whether there is a draft in the field.
-                .opacity(store.draft.isEmpty ? 1 : 0.55)
+                .opacity(store.draft.isEmpty ? 1 : (usesDock ? 0.45 : 0.55))
                 .animation(Motion.hintFade, value: store.draft.isEmpty)
         }
         .onAppear {
@@ -413,7 +471,15 @@ private struct StreamView: View {
     @ViewBuilder
     private var streamBody: some View {
         let entries = store.stream
-        if entries.isEmpty, !isCalendarSpace {
+        if entries.isEmpty, !isCalendarSpace, usesDock {
+            // The dock: as a list's — title only, gold, centred.
+            GeometryReader { geo in
+                EmptyListView(compact: true, showsSubtitle: false,
+                              fillHeight: max(0, geo.size.height - NotchContainerMetrics.dockEmptyFoot),
+                              logoColor: DSDock.notes, centred: true)
+            }
+            .transition(EmptyListView.transition)
+        } else if entries.isEmpty, !isCalendarSpace {
             // The lists' empty state (Otto peeking); Meetings keeps its own.
             EmptyListView(compact: isContainer,
                           showsSubtitle: !isContainer || streamBudget >= 180,
@@ -427,7 +493,7 @@ private struct StreamView: View {
         } else {
             ScrollViewReader { proxy in
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: NotesMetrics.entryGap) {
+                    VStack(alignment: .leading, spacing: usesDock ? 4 : NotesMetrics.entryGap) {
                         ForEach(entries) { note in
                             NoteEntryRow(
                                 note: note,
@@ -463,10 +529,13 @@ private struct StreamView: View {
                     // note rows start where the to-do rows do, their text on
                     // the checkbox column (22), and the first title sits 22
                     // under the bar like the first to-do.
-                    .padding(.horizontal, isContainer ? PanelMetrics.barOuterInset : SpaceChrome.columnInset)
-                    .padding(.top, usesDock ? 4 : (isContainer ? 16 : 12.5))
-                    // The dock: travel for the last note to clear the fade.
-                    .padding(.bottom, usesDock ? NotchContainerMetrics.listFade : 8)
+                    .padding(.horizontal, usesDock ? NotchContainerMetrics.highlightInFrame
+                                                   : (isContainer ? PanelMetrics.barOuterInset : SpaceChrome.columnInset))
+                    // The dock: clear air under the title row, more than a
+                    // list's (Marcello, 2026-10-17: the notes sat on it).
+                    .padding(.top, usesDock ? 14 : (isContainer ? 16 : 12.5))
+                    // The dock: travel for the last note to clear the bar.
+                    .padding(.bottom, usesDock ? NotchContainerMetrics.listTravel : 8)
                     .background(GeometryReader { geo in
                         Color.clear
                             .preference(key: NotesStreamOffsetKey.self,
@@ -498,13 +567,6 @@ private struct StreamView: View {
             // past the panel, which is how they became unclickable. The edge
             // is the lists' own — a fade under a progressive blur — rather
             // than `.clipped()`, which cut the last note on a straight line.
-            .overlay(alignment: .bottom) {
-                if usesDock {
-                    LinearGradient(colors: [.black.opacity(0), .black], startPoint: .top, endPoint: .bottom)
-                        .frame(height: NotchContainerMetrics.listFade)
-                        .allowsHitTesting(false)
-                }
-            }
             .modifier(TodoScrollEdgeEffect(
                 isScrollable: !usesDock && natural(entries) > streamBudget,
                 scrollOffset: streamOffset,
@@ -885,6 +947,7 @@ private struct NoteEntryRow: View {
     let onFrame: (CGRect) -> Void
 
     @ObservedObject private var store = NotesStore.shared
+    @ObservedObject private var dock = DockState.shared
     @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
     @AppStorage(DockExperiment.key) private var containerDock = false
     /// The B3 dock's note row (spec §5.5): 15 pt semibold title, one-line
@@ -893,21 +956,44 @@ private struct NoteEntryRow: View {
     private var isLanding: Bool { store.landingNoteID == note.id }
     private var isSelected: Bool { store.selectedNoteID == note.id }
 
+    /// How far this row is swiped (≤ 0): the dock's Delete behind it.
+    private var swipe: CGFloat { dock.swipedNoteID == note.id ? dock.swipeOffset : 0 }
+
     var body: some View {
-        rowContent
-            // On TOP, not behind: AppKit hit-tests the frontmost subview
-            // first, and behind the content it would never be reached.
-            .overlay(RowClickCatcher(
-                onClick: { store.open(note.id) },
-                onHover: onHover,
-                onDrag: onDrag,
-                onDragEnd: onDragEnd,
-                onFrame: onFrame
-            ))
+        ZStack(alignment: .trailing) {
+            if usesDock, swipe < 0 {
+                NoteSwipeDelete(offset: swipe) { dock.swipeDelete(note.id) }
+            }
+            rowContent
+                // On TOP, not behind: AppKit hit-tests the frontmost subview
+                // first, and behind the content it would never be reached.
+                .overlay(RowClickCatcher(
+                    onClick: {
+                        // A click on a swiped row closes it first.
+                        if dock.swipedNoteID != nil { dock.closeSwipe(); return }
+                        store.open(note.id)
+                    },
+                    onHover: onHover,
+                    onDrag: onDrag,
+                    onDragEnd: onDragEnd,
+                    onFrame: onFrame,
+                    onRightClick: usesDock ? { dock.openNoteMenu(for: note.id) } : nil,
+                    onSwipe: usesDock ? { delta, ended in dock.swipeNote(note.id, by: delta, ended: ended) } : nil
+                ))
+                .offset(x: swipe)
+        }
+        .menuAnchor(.noteRow, when: dock.noteMenuID == note.id)
     }
 
     private var rowContent: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: usesDock ? NotchContainerMetrics.rowGap : 8) {
+            if usesDock {
+                // The note glyph in the checkbox column, so titles start where
+                // to-do text does (final flow 4.9).
+                DockIcon(.note, size: NotchContainerMetrics.box)
+                    .foregroundStyle(DSDock.text3)
+                    .padding(.top, 1)
+            }
             VStack(alignment: .leading, spacing: 3) {
                 // The to-do list's own title type — 14/medium — not a 15pt
                 // semibold of its own. Notes was styled as a separate surface
@@ -983,28 +1069,25 @@ private struct NoteEntryRow: View {
         // the pointer.
         // Container: the slab starts at the field's edge (16) and the text
         // stays where it was (16 + 22).
-        .padding(.horizontal, notchLayout == .container ? NotesMetrics.entryInset + 10 : NotesMetrics.entryInset)
-        .padding(.vertical, 9)
+        .padding(.leading, usesDock ? NotchContainerMetrics.rowPadding
+                                    : (notchLayout == .container ? NotesMetrics.entryInset + 10 : NotesMetrics.entryInset))
+        .padding(.trailing, usesDock ? 16
+                                     : (notchLayout == .container ? NotesMetrics.entryInset + 10 : NotesMetrics.entryInset))
+        .padding(.vertical, usesDock ? 11 : 9)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: NotesMetrics.highlightRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: usesDock ? NotchContainerMetrics.highlightRadius : NotesMetrics.highlightRadius,
+                             style: .continuous)
                 .fill(isLanding ? NotesMetrics.pillStroke.opacity(0.12)
-                      : (isSelected ? DSColor.focusedRowBackground
-                         : (isHovered ? DSColor.rowHover(container: notchLayout == .container) : Color.clear)))
+                      : (isSelected ? (usesDock ? DSDock.rowFocus : DSColor.focusedRowBackground)
+                         : (isHovered ? (usesDock ? DSDock.rowHover : DSColor.rowHover(container: notchLayout == .container))
+                                      : Color.clear)))
         )
         .overlay(
             RoundedRectangle(cornerRadius: NotesMetrics.highlightRadius, style: .continuous)
                 .strokeBorder(isLanding ? NotesMetrics.pillStroke.opacity(0.3) : Color.clear,
                               lineWidth: 1)
         )
-        // The dock: a 1-pt divider between notes.
-        .overlay(alignment: .bottom) {
-            if usesDock {
-                Rectangle().fill(DSDock.divider).frame(height: 1)
-                    .offset(y: NotesMetrics.entryGap / 2)
-                    .allowsHitTesting(false)
-            }
-        }
         .overlay(alignment: .top) {
             if showsDropIndicator {
                 Capsule()
@@ -1075,6 +1158,11 @@ private struct NoteDetailView: View {
     @State private var body_: String
     @ObservedObject private var vault = MarkdownVault.shared
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
+    @AppStorage(DockExperiment.key) private var containerDock = false
+    /// The B3 dock's editor: no top bar, a meta line and the title in the
+    /// content, the controls in the dock's bar (DockEditorBar).
+    private var usesDock: Bool { DockExperiment.isOn(layout: notchLayout, flag: containerDock) }
 
     /// Seeded HERE and not in `onAppear`, and that ordering is the whole of
     /// the "I open a note and it is blank" bug.
@@ -1099,7 +1187,10 @@ private struct NoteDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if isContainer {
+            if usesDock {
+                DockNoteHeader(note: note, title: $titleDraft, titleFocused: $titleFocused,
+                               onCommit: commitTitle)
+            } else if isContainer {
                 header
                     .padding(.horizontal, PanelMetrics.barOuterInset)
             } else {
@@ -1131,13 +1222,20 @@ private struct NoteDetailView: View {
                 // the document visibly narrower than its own title field.
                 // Floating panels: 25 + the text view's 28 inset = 53, the
                 // title's column; the inset holds the linked checkboxes.
-                .padding(.horizontal, isContainer ? PanelMetrics.blockPadding : SpaceChrome.textColumn - 28)
-                .padding(.top, 6)
+                // The dock: the text on the content column (30 from the
+                // silhouette), the text view's own 28 inset taken back.
+                .padding(.horizontal, usesDock ? NotchContainerMetrics.contentInFrame - 28
+                                               : (isContainer ? PanelMetrics.blockPadding : SpaceChrome.textColumn - 28))
+                .padding(.top, usesDock ? 0 : 6)
                 // A document editor owns the remaining room; it is not sized
                 // to its current line count. Sizing it to `contentHeight`
                 // turns a short note into a tiny scroll well and leaves most
                 // of the card as dead space.
-                .frame(height: editorViewportHeight, alignment: .top)
+                // The dock's panel is a fixed height: the editor takes what
+                // is left, and ends above the bar so the last line clears it.
+                .frame(height: usesDock ? nil : editorViewportHeight, alignment: .top)
+                .frame(maxHeight: usesDock ? .infinity : nil, alignment: .top)
+                .padding(.bottom, usesDock ? NotchContainerMetrics.listTravel : 0)
                 // Fades out above the toolbar instead of stopping on a hard
                 // line: `.clipped()` cut a block quote in half with an empty
                 // band under it (Marcello, 2026-10-02).
@@ -1159,9 +1257,9 @@ private struct NoteDetailView: View {
                 .padding(.bottom, 8)
             }
             if !isContainer { Spacer(minLength: 0) }
-            bottomBar
+            if !usesDock { bottomBar }
         }
-        .frame(maxHeight: isContainer ? nil : .infinity, alignment: .top)
+        .frame(maxHeight: isContainer && !usesDock ? nil : .infinity, alignment: .top)
         .animation(Motion.hintFade, value: editor.pickerTarget?.phrase)
         // Opening a note puts the caret in the CONTENT — driven from HERE,
         // not from the signal the store sends.

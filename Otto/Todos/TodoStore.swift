@@ -540,6 +540,8 @@ final class TodoStore: ObservableObject {
     /// A caret in the draft row counts; the row merely existing does not.
     var isPanelPinnedOpen: Bool {
         panelMode != .browsing || showShortcuts || draftFocused
+            // The B3 dock's space menu or new-space card is up.
+            || DockState.shared.isBusy
     }
 
     /// QF: Quick Find state — query, cross-category matches, ↑↓ selection.
@@ -883,6 +885,32 @@ final class TodoStore: ObservableObject {
         if activeCollectionID == id { activeCollectionID = collections.first?.id }
         if lastUsedCollectionID == id { lastUsedCollectionID = firstUserCollection?.id }
         scheduleSave()
+    }
+
+    /// Rename a space (the B3 dock's space menu). The Markdown mirror follows:
+    /// the section's file is rewritten under the new name and the old one,
+    /// being in the vault's manifest, is removed (MarkdownVault.exportNow).
+    func renameCollection(_ id: UUID, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let index = collections.firstIndex(where: { $0.id == id }),
+              !collections[index].isSystemToday, collections[index].name != trimmed else { return }
+        collections[index].name = trimmed
+        scheduleSave()
+    }
+
+    /// Recolour a space: its stored tint is what every view reads.
+    func setCollectionTint(_ id: UUID, _ tint: SpaceTint) {
+        guard let index = collections.firstIndex(where: { $0.id == id }),
+              collections[index].tint != tint.key else { return }
+        withAnimation(.easeInOut(duration: 0.3)) { collections[index].tint = tint.key }
+        scheduleSave()
+    }
+
+    /// The first palette colour no space wears yet — what a new space starts
+    /// with (final flow 4.7).
+    var nextUnusedTint: SpaceTint {
+        let taken = Set(collections.compactMap(\.tint))
+        return SpaceTint.palette.first { !taken.contains($0.key) } ?? SpaceTint.palette[0]
     }
 
     /// Tab order is the user's to own — "if my use case is mostly Work,

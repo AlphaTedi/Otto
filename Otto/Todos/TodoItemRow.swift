@@ -46,7 +46,7 @@ struct TodoItemRow: View {
         DockTint(store.collection(id: item.collectionID)?.spaceTint ?? .work)
     }
 
-    /// "1 of 3 · Note · Oct 18" — nil when there is nothing to say.
+    /// (Unused since the final flow: the steps themselves are the summary.)
     private var metaLine: String? {
         var parts: [String] = []
         if !item.checklist.isEmpty {
@@ -59,14 +59,16 @@ struct TodoItemRow: View {
         }
         return parts.isEmpty ? nil : parts.joined(separator: " \u{00B7} ")
     }
-    private var showsMetaLine: Bool { usesDock && !isExpanded && metaLine != nil }
+    /// The final flow dropped the "1 of 3" meta line (decision 11): closed
+    /// rows preview their steps the way they always did.
+    private var showsMetaLine: Bool { false }
 
     /// Whether the row draws anything under its title — the note editor, the
     /// inline steps, or the trailing step-draft row an expanded row always
     /// carries. Only then does the slab need vertical air of its own; plain
     /// rows are inset by their 37pt floor instead.
     private var carriesDetails: Bool {
-        isExpanded || (usesDock ? showsMetaLine : !item.checklist.isEmpty)
+        isExpanded || !item.checklist.isEmpty
     }
 
     var body: some View {
@@ -92,7 +94,7 @@ struct TodoItemRow: View {
             if isExpanded {
                 noteBlock
             }
-            if isExpanded || (!usesDock && !item.checklist.isEmpty) {
+            if isExpanded || !item.checklist.isEmpty {
                 stepsBlock(expanded: isExpanded)
             }
             if showsMetaLine, let metaLine {
@@ -130,7 +132,10 @@ struct TodoItemRow: View {
         // The container's slab now starts at the field's edge, so its content
         // keeps the field's own inner inset (20) — checkboxes still line up
         // with the field's.
-        .padding(.horizontal, notchLayout == .container ? PanelMetrics.barPaddingH : PanelMetrics.rowPaddingH)
+        // The B3 dock: 10 inside a highlight that starts 20 from the
+        // silhouette, so the checkbox lands on the content column at 30.
+        .padding(.horizontal, usesDock ? NotchContainerMetrics.rowPadding
+                                       : (notchLayout == .container ? PanelMetrics.barPaddingH : PanelMetrics.rowPaddingH))
         // Plain rows get the same 6 top and bottom. A one-line row is still
         // exactly its 37pt floor (6 + 4 + 17 + 4 + 6); a WRAPPED one now keeps
         // the side inset's air above its first line and below its last
@@ -148,14 +153,20 @@ struct TodoItemRow: View {
         // A floor, not a fixed height: a title that wraps still grows. Without
         // it the row was exactly as tall as its content, so the checkbox had
         // 12pt either side and nothing above or below.
-        .frame(minHeight: carriesDetails ? 0 : PanelMetrics.rowMinHeight)
+        .frame(minHeight: carriesDetails ? 0 : (usesDock ? NotchContainerMetrics.rowMinHeight
+                                                         : PanelMetrics.rowMinHeight))
         .background(
-            RoundedRectangle(cornerRadius: PanelMetrics.rowRadius, style: .continuous)
-                .fill(isExpanded ? Self.openedRowFill
-                                 : (isFocused ? DSColor.focusedRowBackground
-                                              : (hover ? (usesDock ? DSDock.rowHover
-                                                                   : DSColor.rowHover(container: notchLayout == .container))
-                                                       : .clear)))
+            RoundedRectangle(cornerRadius: usesDock ? NotchContainerMetrics.highlightRadius : PanelMetrics.rowRadius,
+                             style: .continuous)
+                .fill(usesDock ? dockFill
+                      : (isExpanded ? Self.openedRowFill
+                         : (isFocused ? DSColor.focusedRowBackground
+                            : (hover ? DSColor.rowHover(container: notchLayout == .container) : .clear))))
+        )
+        // The B3 dock's opened card has a hairline (final flow 4.3).
+        .overlay(
+            RoundedRectangle(cornerRadius: NotchContainerMetrics.highlightRadius, style: .continuous)
+                .strokeBorder(usesDock && isExpanded ? DSDock.cardBorder : .clear, lineWidth: 1)
         )
         // An opened to-do is a well sunk into the panel: darker than the
         // list, and no outline at all — not the lighter card with a
@@ -229,6 +240,14 @@ struct TodoItemRow: View {
         .frame(width: PanelMetrics.rowActionsWidth, alignment: .trailing)
     }
 
+    /// The B3 dock's highlight: the opened card, keyboard focus at 9 %,
+    /// hover at 4.5 % (final flow 3.2).
+    private var dockFill: Color {
+        if isExpanded { return DSDock.card }
+        if isFocused { return DSDock.rowFocus }
+        return hover ? DSDock.rowHover : .clear
+    }
+
     /// The opened to-do's ground: darker than the panel in dark mode, a
     /// faint grey well in light.
     private static let openedRowFill = Color.dynamic(light: NSColor.black.withAlphaComponent(0.05),
@@ -276,7 +295,7 @@ struct TodoItemRow: View {
 
             if item.isCompleted {
                 Text(item.title)
-                    .font(DSFont.todoTitle)
+                    .font(usesDock ? DSDock.rowTitle : DSFont.todoTitle)
                     .strikethrough(true)
                     .foregroundStyle(usesDock ? DSDock.doneText : DSColor.textHint)
                     .lineLimit(1)
@@ -291,7 +310,7 @@ struct TodoItemRow: View {
                     set: { titleDraft = $0 }
                 ), axis: .vertical)
                     .textFieldStyle(.plain)
-                    .font(DSFont.todoTitle)
+                    .font(usesDock ? DSDock.rowTitle : DSFont.todoTitle)
                     .foregroundStyle(DSColor.textPrimaryBright)
                     .lineLimit(1...5)
                     // The SAME vertical box the read view carries below.
@@ -333,7 +352,8 @@ struct TodoItemRow: View {
                         onTap: activateRow,
                         onRemoveImage: { path in
                             store.rename(item.id, to: AttachmentStore.removingToken(path, from: item.title))
-                        }
+                        },
+                        fontSize: usesDock ? 15 : DSFont.todoTitleSize
                     )
                     // The export wraps the label in its own 8pt box, which is what
                     // gives a single-line row 33pt and lets a wrapped one grow to
@@ -488,7 +508,7 @@ struct TodoItemRow: View {
         return indented {
             VStack(alignment: .leading, spacing: 5) {
                 ForEach(Array(item.checklist.prefix(visibleCount))) { step in
-                    StepRow(step: step, parentID: item.id, accent: accent)
+                    StepRow(step: step, parentID: item.id, accent: usesDock ? dockTint.stepStroke : accent)
                 }
 
                 if hiddenCount > 0 {
@@ -516,7 +536,7 @@ struct TodoItemRow: View {
                     // Always last in an opened row, styled exactly like a real
                     // step. The empty row is the add affordance and committing
                     // one leaves the caret on the next empty row.
-                    StepDraftRow(parentID: item.id, accent: accent)
+                    StepDraftRow(parentID: item.id, accent: usesDock ? dockTint.stepStroke : accent)
                 }
             }
         }
@@ -530,7 +550,7 @@ struct TodoItemRow: View {
 
     /// The connector rule + indent shared by notes and steps.
     private func indented<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        let connectorWidth: CGFloat = 0.5
+        let connectorWidth: CGFloat = usesDock ? 1.5 : 0.5
         // Centre the connector on the parent checkbox's vertical axis while
         // keeping the child content on the existing checklist indent.
         let connectorLeading = (PanelMetrics.checkboxSize - connectorWidth) / 2
@@ -538,7 +558,7 @@ struct TodoItemRow: View {
 
         return HStack(spacing: 0) {
             Rectangle()
-                .fill(DSColor.panelBorder)
+                .fill(usesDock ? DSDock.stepLine : DSColor.panelBorder)
                 .frame(width: connectorWidth)
                 .padding(.leading, connectorLeading)
             content()

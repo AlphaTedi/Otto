@@ -188,7 +188,9 @@ struct CaptureKeyHint: View {
 
 /// "Save to Work" + a filled white ↵ cap; on hover the label brightens and the
 /// cap takes a soft violet glow (U5 §4.2, `02b`).
-private struct SaveButton: View {
+/// The white "Save ↵" — the floating panels' capture header, and the B3
+/// dock's first row once it holds text (final flow 4.1).
+struct SaveButton: View {
     let label: String
     let action: () -> Void
     @State private var hover = false

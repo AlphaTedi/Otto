@@ -164,3 +164,43 @@ Known gaps in this first pass:
 5. The space dot's click-to-cycle is gone; ⇥ and the dock replace it.
 6. The width follows the user's size preset (620 by default), not the prototype's 600.
 7. New telemetry events are deferred to graduation.
+
+---
+
+## Final flow (2026-10-16, OTTO-NOTCH-FINAL-FLOW-SPEC)
+
+Same switch, same branch (`b3-dock`). What changed from the B3 pass, and
+how each building block was handled (spec 2.1):
+
+| Building block | Status | Where |
+|---|---|---|
+| Liquid glass | **Extended**: `notchGlass(in:tint:)` beside `liquidGlass`/`floatingGlass`. Real `glassEffect` on macOS 26; before 26 a hand-drawn look with NO behind-window blur (that would show the desktop through the notch) | `DesignSystem/LiquidGlass.swift` |
+| Progressive blur | Reused, under a gradient to black, over the bottom 130 pt | `DockPanelView.footZone` |
+| Popover pattern | Reused: `ottoMenuSurface`, the gear menu's row metrics, `MenuDismissCatcher`, the container menu layer | `DockSpaceMenu.swift`, `NotchRootView.ContainerMenuLayer` |
+| White Save ↵ | Reused (was private to the floating panels; now shared) | `SpaceChrome.SaveButton` |
+| Inline steps / expanded card | Reused (`stepsBlock`, `ChecklistDisclosure.collapsedLimit = 2`); restyled: card fill, inset highlight, 1.5 pt step line | `TodoItemRow` |
+| Peeking-logo empty state | Reused, with the new copy | `EmptyListView(title:subtitle:)` |
+| Dock, highlight, ⇥, first row | Kept from B3; 7 pt dots, name-only pill, glass | `DockBar.swift`, `DockFirstRow.swift` |
+| Space menu | New content in the existing pattern; right-click via `RightClickCatcher` | `DockSpaceMenu.swift` |
+| New-space card (Morph) | New | `DockNewSpaceCard.swift` |
+| Editor bar + tooltips | New (`DockEditorBar`, `DockTooltip`); `NoteFormatBar(docked:)` reuses the tools | `DockNoteEditor.swift`, `DockTooltip.swift` |
+
+| # | Change | Status |
+|---|---|---|
+| F1 | Panel 470, notch zone 44, grid 30 / 20 (checkbox centre = Notes button centre) | ✅ measured on panel-snap |
+| F2 | Glass bar, list under it, blur + gradient | ✅ (glass itself judged in the app: cacheDisplay cannot draw it) |
+| F3 | Meetings out of the container: button gone, ⌘2 / ⌥⇥ no-ops, `enterCalendarSpace` lands in Notes; the meeting card under the notch stays | ⚠️ placement decision |
+| F4 | 7 pt dots, name-only pill, no counts anywhere | ✅ |
+| F5 | 2 pt checkboxes at 85 %, 15 pt titles (EntityTitleView sized through its cache key) | ✅ |
+| F6 | Inset highlight: hover 4.5 %, focus 9 % + ⌘↵, card for the opened row | ✅ card / ⬜ hover & focus by hand |
+| F7 | Save ↵ in the first row (to-do and note title) | ✅ |
+| F8 | Steps: two + "N more", the card with "Add a note…" and "Type to add a step" | ✅ (step rows still 13 pt / ~19 pt pitch, not 13.5 / 26) |
+| F9 | Space menu: rename, colour, move, delete with a second-click confirmation (there was none) | ✅ drawn / ⬜ by hand |
+| F10 | New space: Morph card, next free colour, ⇥ colours, ⏎ / ✓ / Esc, lands on the new space with "‹Name› is ready" | ✅ drawn / ⬜ by hand |
+| F11 | Notes list: glyph column, no dividers, 11 / 4 spacing | ✅ |
+| F12 | Title-first note: ⏎ / Save creates and opens it (`commitTitleDraft`) | ⬜ by hand |
+| F13 | Editor: no top bar, meta line + 22 pt title, back · tools · export bar, animated tooltips with the real shortcuts | ✅ drawn / ⬜ tooltips by hand |
+| F14 | Empty space copy | ✅ |
+| F15 | Short chip labels ("Screenshot") | ✅ |
+| F16 | Reduce Motion: fades only (card, tooltips, dock) | ⬜ by hand |
+

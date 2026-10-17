@@ -19,6 +19,9 @@ struct EntityTitleView: NSViewRepresentable {
     let onTap: () -> Void
     /// Removes an image chip's token from the title (its ✕ on hover).
     var onRemoveImage: ((String) -> Void)? = nil
+    /// The title's size: `todoTitleSize`, or the B3 dock's 15 (final flow
+    /// 3.3). Part of every cache key, so measuring and drawing agree.
+    var fontSize: CGFloat = DSFont.todoTitleSize
 
     func makeNSView(context: Context) -> EntityTextView {
         let view = EntityTextView()
@@ -47,11 +50,11 @@ struct EntityTitleView: NSViewRepresentable {
         view.chips.onRemove = onRemoveImage
         // Only when the title actually changed: re-setting the same string
         // re-laid-out every row's text view on every panel update.
-        let key = Self.cacheKey(title, bright: isBright)
+        let key = Self.cacheKey(title, bright: isBright, size: fontSize)
         guard view.renderedKey != key else { return }
         view.renderedKey = key
         view.textStorage?.setAttributedString(
-            Self.attributedTitle(title, bright: isBright)
+            Self.attributedTitle(title, bright: isBright, size: fontSize)
         )
     }
 
@@ -73,12 +76,12 @@ struct EntityTitleView: NSViewRepresentable {
         // Exactly the same trap as HighlightingTitleField, which carries the
         // same warning — reading a live NSView's layout during SwiftUI's sizing
         // pass is never safe.
-        let sizeKey = Self.cacheKey(title, bright: isBright) + "\u{1}\(width)" as NSString
+        let sizeKey = Self.cacheKey(title, bright: isBright, size: fontSize) + "\u{1}\(width)" as NSString
         let measured: CGSize
         if let cached = Self.sizeCache.object(forKey: sizeKey) {
             measured = cached.sizeValue
         } else {
-            measured = Self.attributedTitle(title, bright: isBright)
+            measured = Self.attributedTitle(title, bright: isBright, size: fontSize)
                 .boundingRect(
                     with: NSSize(width: width, height: .greatestFiniteMagnitude),
                     options: [.usesLineFragmentOrigin, .usesFontLeading]
@@ -105,25 +108,26 @@ struct EntityTitleView: NSViewRepresentable {
         let cache = NSCache<NSString, NSValue>(); cache.countLimit = 1200; return cache
     }()
 
-    private static func cacheKey(_ title: String, bright: Bool) -> String {
+    private static func cacheKey(_ title: String, bright: Bool, size: CGFloat = DSFont.todoTitleSize) -> String {
         let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        return (dark ? "d" : "l") + (bright ? "b" : "n") + title
+        return (dark ? "d" : "l") + (bright ? "b" : "n") + "\(size)|" + title
     }
 
     // MARK: Attributed assembly
 
-    static func attributedTitle(_ title: String, bright: Bool) -> NSAttributedString {
-        let key = cacheKey(title, bright: bright) as NSString
+    static func attributedTitle(_ title: String, bright: Bool,
+                                size: CGFloat = DSFont.todoTitleSize) -> NSAttributedString {
+        let key = cacheKey(title, bright: bright, size: size) as NSString
         if let cached = stringCache.object(forKey: key) { return cached }
-        let built = buildAttributedTitle(title, bright: bright)
+        let built = buildAttributedTitle(title, bright: bright, size: size)
         stringCache.setObject(built, forKey: key)
         return built
     }
 
-    private static func buildAttributedTitle(_ title: String, bright: Bool) -> NSAttributedString {
-        // Must equal DSFont.todoTitleSize — this is the same title, drawn
+    private static func buildAttributedTitle(_ title: String, bright: Bool, size: CGFloat) -> NSAttributedString {
+        // Must equal the row's own size — this is the same title, drawn
         // through TextKit so chips can flow inline with the words.
-        let bodyFont = NSFont.systemFont(ofSize: DSFont.todoTitleSize)
+        let bodyFont = NSFont.systemFont(ofSize: size)
         let bodyAttributes: [NSAttributedString.Key: Any] = [
             .font: bodyFont,
             .foregroundColor: NSColor(bright ? DSColor.textPrimaryBright : DSColor.textPrimary),

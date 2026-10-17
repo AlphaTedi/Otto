@@ -403,20 +403,33 @@ struct TodoBrowsingView: View {
                         if store.openItems(in: collection).isEmpty, !collection.isSystemToday {
                             // Centred in the list area, between the first row
                             // and the dock (spec §6.5).
+                            // Title only, the logo in the space's colour,
+                            // centred between the first row and the bar.
                             EmptyListView(compact: true,
-                                          showsSubtitle: viewport >= 220,
-                                          fillHeight: max(0, viewport - NotchContainerMetrics.listFade))
+                                          showsSubtitle: false,
+                                          fillHeight: max(0, viewport - NotchContainerMetrics.dockEmptyFoot),
+                                          title: DockState.shared.justCreatedID == collection.id
+                                              ? String(format: L10n.t("dock.readyTitle"), collection.name)
+                                              : L10n.t("dock.emptyTitle"),
+                                          logoColor: DockTint(collection.spaceTint).base,
+                                          centred: true)
                                 .transition(EmptyListView.transition)
                         } else {
                             todoList(for: collection, room: viewport)
                         }
                         if hasAnyCompleted(in: collection) {
                             completedSection(for: collection)
-                                .padding(.horizontal, PanelMetrics.rowPaddingH)
+                                .padding(.horizontal, NotchContainerMetrics.rowPadding)
                         }
-                        Color.clear.frame(height: NotchContainerMetrics.listFade).id(Self.bottomAnchor)
+                        // Travel: the last row scrolls out from under the bar.
+                        Color.clear.frame(height: NotchContainerMetrics.listTravel).id(Self.bottomAnchor)
                     }
-                    .padding(.top, 2)
+                    // The rows' own gap: the first row (38) and the first
+                    // to-do sit on the same pitch as every to-do after it
+                    // (Marcello, 2026-10-17: the first gap was 4 pt short).
+                    .padding(.top, PanelMetrics.listRowGap)
+                    // Row highlights start at the round buttons' outer edge.
+                    .padding(.horizontal, NotchContainerMetrics.highlightInFrame)
                     .background(DeselectCatcher())
                     .background(GeometryReader { content in
                         Color.clear.preference(key: ScrollOffsetKey.self,
@@ -428,23 +441,16 @@ struct TodoBrowsingView: View {
                 .onChange(of: store.focusedItemID) { focused in
                     guard let focused else { return }
                     revealRowIfNeeded(focused, viewport: viewport,
-                                      footer: NotchContainerMetrics.listFade, proxy: proxy)
+                                      footer: NotchContainerMetrics.listTravel, proxy: proxy)
                 }
                 .onChange(of: store.expandedItemID) { expanded in
                     guard let expanded else { return }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                         guard store.expandedItemID == expanded else { return }
                         revealRowIfNeeded(expanded, viewport: viewport,
-                                          footer: NotchContainerMetrics.listFade, proxy: proxy)
+                                          footer: NotchContainerMetrics.listTravel, proxy: proxy)
                     }
                 }
-            }
-            // Rows dissolve into the bar: transparent → black.
-            .overlay(alignment: .bottom) {
-                LinearGradient(colors: [.black.opacity(0), .black], startPoint: .top, endPoint: .bottom)
-                    .frame(height: NotchContainerMetrics.listFade)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
             }
         }
     }
@@ -708,10 +714,15 @@ struct TodoBrowsingView: View {
                         OttoIcon("chevron.right", pointSize: 9)
                             .foregroundStyle(DSColor.textFaint)
                             .rotationEffect(.degrees(store.completedExpanded ? 90 : 0))
+                        if usesDock {
+                            // The final flow's quiet label: "Completed · 2".
+                            Text(String(format: L10n.t("dock.completed"), completed.count + historyCount))
+                                .font(DSDock.quietLabel)
+                                .foregroundStyle(DSDock.text3)
+                        } else {
                         Text(L10n.t("todo.completed"))
-                            // The dock: 12 pt semibold, low-key (spec §2.2).
-                            .font(usesDock ? .system(size: 12, weight: .semibold) : DSFont.checklistItem)
-                            .foregroundStyle(usesDock ? DSDock.text3 : DSColor.textMuted)
+                            .font(DSFont.checklistItem)
+                            .foregroundStyle(DSColor.textMuted)
                         // Everything the section holds, history included —
                         // the count in a closed header is the answer to "what
                         // did I finish", and one that stopped at yesterday
@@ -720,6 +731,7 @@ struct TodoBrowsingView: View {
                             .font(.system(size: 10))
                             .foregroundStyle(DSColor.textHint)
                             .contentTransition(.numericText())
+                        }
                         Spacer()
                         // Seven days of volume, in the header itself. It
                         // answers "am I still moving" while the section is

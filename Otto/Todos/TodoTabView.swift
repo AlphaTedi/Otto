@@ -28,6 +28,7 @@ struct TodoTabView: View {
     /// `showsSpaceBar` reads NotesStore, and a value this view does not watch
     /// is a value this view will not redraw for.
     @ObservedObject private var notes = NotesStore.shared
+    @ObservedObject private var dock = DockState.shared
     @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
     @AppStorage(DockExperiment.key) private var containerDock = false
     @State private var footBlurVisible = false
@@ -131,6 +132,10 @@ struct TodoTabView: View {
                 MenuDismissCatcher { store.closeAvatarMenu() }
             } else if notes.kindMenuOpen {
                 MenuDismissCatcher { notes.closeKindMenu() }
+            } else if dock.menuSpaceID != nil {
+                MenuDismissCatcher { dock.closeMenu() }
+            } else if dock.noteMenuID != nil {
+                MenuDismissCatcher { dock.closeNoteMenu() }
             }
         }
         // The avatar menu, over everything and inside the panel.

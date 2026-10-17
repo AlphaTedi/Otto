@@ -123,6 +123,8 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 }
                 // ⌘1 Notes, ⌘2 Meetings — on the stream, menu open or not.
                 if cmd, !option, !control, !shift, notes.openNoteID == nil, chars == "1" || chars == "2" {
+                    // The B3 dock has no Meetings: ⌘2 does nothing there.
+                    if DockExperiment.isOn, chars == "2" { return true }
                     notes.chooseKind(meetings: chars == "2"); return true
                 }
                 if let _ = NoteEditorController.shared.pickerTarget, keyCode == 53 {
@@ -212,6 +214,16 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                     AvatarMenu.perform(.preferences); return true
                 }
                 return true
+            }
+
+            // The B3 dock's space menu and new-space card are modal too, and
+            // their text fields (rename, the space's name) take the letters.
+            if DockExperiment.isOn {
+                switch DockState.shared.handleKey(keyCode: keyCode, shift: shift, option: option, cmd: cmd) {
+                case .consumed: return true
+                case .toField: return false
+                case .notMine: break
+                }
             }
 
             // ⌘, and ⌘Q, from anywhere in the panel.
@@ -494,7 +506,10 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             // use for any of them.
             // ⌥⇥ — Notes ⇄ Meetings, the switch inside the Notes space.
             if keyCode == 48, option, !cmd, !control {
-                notes.chooseKind(meetings: TodoStore.shared.panelMode != .calendar)
+                // No Meetings in the B3 dock: ⌥⇥ has nowhere to go.
+                if !DockExperiment.isOn {
+                    notes.chooseKind(meetings: TodoStore.shared.panelMode != .calendar)
+                }
                 return true
             }
             if keyCode == 48, !cmd, !option, !control {          // ⇥
@@ -528,8 +543,13 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             // ⇧⏎ falls through to the field and puts in a line break.
             if keyCode == 36, !cmd, !shift, !option, !control,
                !isCalendarStream, notes.openNoteID == nil, !composerEmpty {
-                notes.commitDraft()
-                notes.focusComposer()
+                // The B3 dock writes a title first and opens the note.
+                if DockExperiment.isOn {
+                    notes.commitTitleDraft()
+                } else {
+                    notes.commitDraft()
+                    notes.focusComposer()
+                }
                 return true
             }
 
@@ -837,7 +857,12 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             // mouse-only one (Marcello, 2026-09-20). One level up from ⌘N, and
             // deliberately adjacent to it — same verb, different scale.
             if cmd, shift, lower == "n" {
-                store.setMode(.newCategory)
+                // The B3 dock grows its new-space card instead of a form.
+                if DockExperiment.isOn {
+                    DockState.shared.beginNewSpace()
+                } else {
+                    store.setMode(.newCategory)
+                }
                 NotchController.shared.focusPanel()
                 return true
             }

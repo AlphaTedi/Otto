@@ -111,6 +111,13 @@ enum DebugDriver {
             if let focused = store.focusedItemID ?? store.activeCollection.flatMap({ store.openItems(in: $0).first?.id }) {
                 withAnimation(NotchAnimation.contentHug) { store.expandedItemID = focused }
             }
+        case "expand-steps":
+            // The active list's to-do with the most steps, opened and focused.
+            if let collection = store.activeCollection,
+               let item = store.openItems(in: collection).max(by: { $0.checklist.count < $1.checklist.count }) {
+                store.focusedItemID = item.id
+                withAnimation(NotchAnimation.contentHug) { store.expandedItemID = item.id }
+            }
         case "deselect":
             // The exact path a click on dead panel space takes.
             store.endEditing()
@@ -888,6 +895,47 @@ enum DebugDriver {
                 // The B3 dock experiment's switch, as Settings flips it.
                 DockExperiment.set(command == "dock-on")
                 appendState("\(command): isOn=\(DockExperiment.isOn)")
+            } else if command == "glass-opaque on" || command == "glass-opaque off" {
+                // cacheDisplay cannot draw system glass: render it opaque for
+                // panel-snap (takes effect on the next open).
+                GlassDebug.forceOpaque = command.hasSuffix("on")
+                GlassRefresh.shared.bump()
+            } else if command == "dock-newspace" {
+                DockState.shared.beginNewSpace()
+            } else if command.hasPrefix("dock-newspace-name ") {
+                DockState.shared.newSpaceName = String(command.dropFirst("dock-newspace-name ".count))
+            } else if command == "dock-newspace-cancel" {
+                DockState.shared.cancelNewSpace()
+            } else if command.hasPrefix("dock-menu ") {
+                // dock-menu <i>: the space menu of the i-th dock item.
+                if let i = Int(command.dropFirst("dock-menu ".count)),
+                   store.visibleCollections.indices.contains(i) {
+                    DockState.shared.openMenu(for: store.visibleCollections[i].id)
+                }
+            } else if command.hasPrefix("dock-tip ") {
+                let i = Int(command.dropFirst("dock-tip ".count)) ?? -1
+                if store.visibleCollections.indices.contains(i) {
+                    let collection = store.visibleCollections[i]
+                    BarTipState.shared.debugShow(collection.id.uuidString,
+                                                 tip: BarTip(label: collection.name, shortcut: nil))
+                } else {
+                    BarTipState.shared.debugShow(nil, tip: nil)
+                }
+            } else if command.hasPrefix("dock-note-menu ") {
+                // dock-note-menu <i> — the note menu on the i-th note; -1 closes.
+                let i = Int(command.dropFirst("dock-note-menu ".count)) ?? -1
+                let stream = NotesStore.shared.stream
+                if stream.indices.contains(i) { DockState.shared.openNoteMenu(for: stream[i].id) }
+                else { DockState.shared.closeNoteMenu() }
+            } else if command.hasPrefix("dock-swipe ") {
+                // dock-swipe <i> <dx> — swipe the i-th note by dx and let go.
+                let parts = command.split(separator: " ")
+                let stream = NotesStore.shared.stream
+                if parts.count == 3, let i = Int(parts[1]), let dx = Double(parts[2]), stream.indices.contains(i) {
+                    DockState.shared.swipeNote(stream[i].id, by: CGFloat(dx), ended: false)
+                }
+            } else if command == "dock-menu-close" {
+                DockState.shared.closeMenu()
             } else if command == "dock-status" {
                 // What the dock is drawing from: the switch, the fixed height,
                 // the space it is on and what each dot would say.

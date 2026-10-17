@@ -12,6 +12,10 @@ class NotchController: ObservableObject {
     /// NotchRootView's space, so their menus can be drawn above the
     /// silhouette instead of clipped inside it.
     @Published var containerMenuAnchors: [MenuAnchor: CGRect] = [:]
+    /// The B3 dock's bar is drawn at the root (DockBarLayer), already in the
+    /// root's space, so its anchors (the gear, a right-clicked dot) come
+    /// straight in here rather than through TodoTabView's offset.
+    @Published var dockBarAnchors: [MenuAnchor: CGRect] = [:]
     /// The open container menu's frame on screen — it may hang past the
     /// silhouette, and that part still counts as the panel for clicks and
     /// for the pointer-left close.
@@ -850,7 +854,7 @@ class NotchController: ObservableObject {
                     self.handleClick(at: location, inNotchWindow: inNotchWindow)
                 case .rightMouseDown:
                     self.handleRightClick(at: location, eventLocation: eventLocation,
-                                          inNotchWindow: inNotchWindow)
+                                          inNotchWindow: inNotchWindow, timestamp: timestamp)
                 case .leftMouseDragged:
                     // Drag-out from a tray card: our own app's drag events are
                     // local-only, so track them here to keep the notch open
@@ -967,8 +971,14 @@ class NotchController: ObservableObject {
         }
     }
 
+    /// The timestamp of a right-click a view inside the panel already
+    /// answered with its own menu (RightClickCatcher): the native Settings /
+    /// Quit menu must not open over it (Marcello, 2026-10-17).
+    var rightClickClaimedAt: TimeInterval = -1
+
     private func handleRightClick(at location: NSPoint, eventLocation: NSPoint,
-                                  inNotchWindow: Bool) {
+                                  inNotchWindow: Bool, timestamp: TimeInterval) {
+        if inNotchWindow && rightClickClaimedAt == timestamp { return }
         if state == .expanded {
             if isPresentingDialog && !inNotchWindow { return }
             if !inNotchWindow {

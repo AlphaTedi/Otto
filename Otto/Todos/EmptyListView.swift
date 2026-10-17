@@ -32,6 +32,14 @@ struct EmptyListView: View {
     /// centres it between the capture header and the pills. Nil in the
     /// container, which hugs.
     var fillHeight: CGFloat?
+    /// The B3 dock's own words (final flow 4.8), in place of the keys above.
+    var title: String? = nil
+    var subtitle: String? = nil
+    /// The B3 dock: the logo in the space's colour, and the block centred in
+    /// the room it is given — no offsets, no deeper foot (Marcello,
+    /// 2026-10-17: it sat high and off-centre).
+    var logoColor: Color? = nil
+    var centred = false
 
     /// Animates only while the notch is open — README §7.
     @ObservedObject private var notch = NotchController.shared
@@ -46,15 +54,16 @@ struct EmptyListView: View {
         // is 1.3× that.
         let logoWidth: CGFloat = compact ? 150 : 200
         VStack(spacing: 18) {
-            OttoPeekLogo(pupilColor: compact ? .black : nil,
+            OttoPeekLogo(color: logoColor ?? OttoPeekLogo.mint,
+                         pupilColor: compact ? .black : nil,
                          isAnimating: notch.state == .expanded)
                 .frame(width: logoWidth * 1.3)
             VStack(spacing: 8) {
-                Text(L10n.t("todo.emptyTitle"))
+                Text(title ?? L10n.t("todo.emptyTitle"))
                     .font(.system(size: compact ? 22 : 26, weight: .bold))
                     .foregroundStyle(Self.titleInk)
                 if showsSubtitle {
-                    Text(L10n.t(subtitleKey))
+                    Text(subtitle ?? L10n.t(subtitleKey))
                         .font(.system(size: compact ? 14 : 16))
                         .foregroundStyle(Self.subtitleInk)
                         .frame(maxWidth: 340)
@@ -66,13 +75,13 @@ struct EmptyListView: View {
         .padding(.horizontal, 32)
         // The container sits right on the panel's rounded foot and read as
         // cramped there, so it takes a deeper bottom margin (2026-09-26).
-        .padding(.top, compact ? 22 : 32)
-        .padding(.bottom, compact ? 44 : 32)
+        .padding(.top, centred ? 0 : (compact ? 22 : 32))
+        .padding(.bottom, centred ? 0 : (compact ? 44 : 32))
         .frame(maxWidth: .infinity, minHeight: fillHeight)
         // The budget reserves room under the region that the empty list never
         // draws into; −33 puts the block on the middle of the visible gap
         // (measured on the live panel, 2026-09-26).
-        .offset(y: fillHeight == nil ? 0 : -33)
+        .offset(y: fillHeight == nil || centred ? 0 : -33)
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(L10n.t("todo.emptyA11y") + " " + L10n.t(subtitleKey))
@@ -92,7 +101,8 @@ struct EmptyListView: View {
 // MARK: - Peeking logo
 
 struct OttoPeekLogo: View {
-    var color: Color = Color(red: 0x9E/255, green: 0xDD/255, blue: 0xB0/255)   // Otto mint #9EDDB0
+    static let mint = Color(red: 0x9E/255, green: 0xDD/255, blue: 0xB0/255)   // Otto mint #9EDDB0
+    var color: Color = OttoPeekLogo.mint
     /// The colour behind the logo, for the pupils; nil erases them instead
     /// (the floating panels' glass — see the file comment).
     var pupilColor: Color? = .black

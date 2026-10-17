@@ -52,8 +52,15 @@ struct SpaceTint: Equatable {
     static let lime = SpaceTint(key: "lime", base: RGB(185, 215, 110),
                                 light: RGB(hex: 0xD6EB9F), neighbour: RGB(110, 200, 190))
 
+    // Two more for the B3 dock's nine swatches (Marcello, 2026-10-17: fill
+    // the new-space card's row). Appended, so no existing list changes hue.
+    static let teal = SpaceTint(key: "teal", base: RGB(95, 205, 190),
+                                light: RGB(hex: 0x8FE0D6), neighbour: RGB(110, 190, 255))
+    static let amber = SpaceTint(key: "amber", base: RGB(240, 195, 90),
+                                 light: RGB(hex: 0xF5D68A), neighbour: RGB(255, 160, 120))
+
     /// Every tint a list can hold, in the order new lists receive them.
-    static let palette: [SpaceTint] = [grocery, work, personal, violet, coral, sky, lime]
+    static let palette: [SpaceTint] = [grocery, work, personal, violet, coral, sky, lime, teal, amber]
 
     /// THE section colour (top-navigation spec): the active pill, the
     /// section's checkboxes, the capture circle, the caret and the selection

@@ -304,7 +304,13 @@ enum OttoMenuStyle {
 
 /// The controls a panel menu opens from. Each reports its frame in the
 /// panel's space so its menu can open a fixed `anchorGap` away from it.
-enum MenuAnchor: Hashable { case gear, notesKind }
+enum MenuAnchor: Hashable {
+    case gear, notesKind
+    /// The B3 dock's right-clicked space (DockSpaceMenu).
+    case dockItem
+    /// The B3 dock's right-clicked note (DockNoteMenu).
+    case noteRow
+}
 
 #if DEBUG
 /// The anchors in hosting-view coordinates, for DebugDriver's click tests.
@@ -327,6 +333,15 @@ extension View {
                 .onAppear { MenuAnchorDebug.global[anchor] = proxy.frame(in: .global) }
                 .onChange(of: proxy.frame(in: .global)) { MenuAnchorDebug.global[anchor] = $0 }
             #endif
+        })
+    }
+
+    /// The anchor only while `active` — for one of many rows. The same view
+    /// either way, so the row keeps its state when its menu opens.
+    func menuAnchor(_ anchor: MenuAnchor, when active: Bool) -> some View {
+        background(GeometryReader { proxy in
+            Color.clear.preference(key: MenuAnchorKey.self,
+                                   value: active ? [anchor: proxy.frame(in: .named(OttoMenuStyle.space))] : [:])
         })
     }
 

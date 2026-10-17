@@ -307,7 +307,16 @@ enum DSDock {
     static let tooltipText = Color(hex: "#E5E5EA")
     static let divider = Color(hex: "#121214")
     static let keycapBorder = Color(hex: "#2C2C2E")
-    static let rowHover = Color(hex: "#0E0E10")
+    /// Row hover and keyboard focus: white at 4.5 % and 9 % (final flow 3.2).
+    static let rowHover = Color.white.opacity(0.045)
+    static let rowFocus = Color.white.opacity(0.09)
+    /// The opened to-do's card.
+    static let card = Color(hex: "#161618")
+    static let cardBorder = Color.white.opacity(0.07)
+    static let stepText = Color(hex: "#C7C7CC")
+    static let stepLine = Color.white.opacity(0.12)
+    static let settingsIcon = Color(hex: "#AEAEB2")
+    static let keycapFocus = Color(hex: "#48484A")
     static let plus = Color(hex: "#5E5E63")
     static let iconHover = Color(hex: "#E5E5EA")
     /// Notes' gold, and its active tone.
@@ -315,13 +324,22 @@ enum DSDock {
     static let notesLight = Color(hex: "#F0CF98")
 
     static let rowTitle: Font = .system(size: 15)
-    static let noteTitle: Font = .system(size: 15, weight: .semibold)
+    /// The to-do row's own type: semibold read heavier than "Add to …" and
+    /// the dock's labels beside it (Marcello, 2026-10-17).
+    static let noteTitle: Font = .system(size: 15)
     static let notePreview: Font = .system(size: 13)
     static let meta: Font = .system(size: 12.5)
-    static let dockLabel: Font = .system(size: 13, weight: .semibold)
+    /// Medium, one step under the spec's semibold (Marcello, 2026-10-17).
+    static let dockLabel: Font = .system(size: 13, weight: .medium)
     static let dockCount: Font = .system(size: 13, weight: .medium)
     static let tooltipFont: Font = .system(size: 12, weight: .semibold)
     static let keycap: Font = .system(size: 11, weight: .semibold)
+    static let step: Font = .system(size: 13.5)
+    static let moreSteps: Font = .system(size: 12.5, weight: .medium)
+    /// "Completed · 2", the editor's meta line.
+    static let quietLabel: Font = .system(size: 12.5, weight: .semibold)
+    static let editorTitle: Font = .system(size: 22, weight: .bold)
+    static let tooltipShortcut: Font = .system(size: 11, weight: .medium)
 }
 
 // MARK: - Color hex convenience

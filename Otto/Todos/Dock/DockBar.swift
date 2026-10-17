@@ -1,85 +1,116 @@
 import SwiftUI
 
-// MARK: - The B3 dock's bottom bar (spec §3, §5.2, §5.6)
+// MARK: - The B3 dock's bottom bar (final flow §4.5)
 //
-//   (Notes)(Meetings)        ( ● ● [● Work 5] ● + )        (⚙)
+//   (Notes)            ( ● [● Grocery] ● ● + )            (⚙)
 //
-// A three-column grid: the round buttons left, the dock centred, the gear
-// right. The dock has ONE highlight that slides between spaces — the thing
-// that makes a switch read as one motion — and the active space opens a
-// label whose width animates from 0 to its measured width while the one
-// before closes on the same curve, so the dock's width barely moves.
+// A three-column grid: Notes left, the dock centred, Settings right — all
+// glass (`notchGlass`), floating over the list, which scrolls underneath.
+// Meetings is gone from the notch container (final flow §2.2).
+//
+// The dock has ONE highlight that slides between spaces — the thing that
+// makes a switch read as one motion — and the active space opens its name
+// (no count anywhere, decision 2) while the one before closes on the same
+// curve, so the dock's width barely moves. Its "+" grows the dock itself into
+// the new-space card ("Morph", §4.7); a right-click on a dot opens the space
+// menu (§4.6).
 
 struct DockBottomBar: View {
     @ObservedObject private var store = TodoStore.shared
+    @ObservedObject private var dock = DockState.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var morph
 
-    private var inNotes: Bool { store.panelMode == .notes }
-    private var inMeetings: Bool { store.panelMode == .calendar }
+    private var inNotes: Bool { store.panelMode == .notes || store.panelMode == .calendar }
+    private var creating: Bool { dock.isCreatingSpace }
 
     var body: some View {
         // `1fr auto 1fr`: equal flexible sides, so the dock sits at the true
-        // centre whatever the two sides hold.
-        HStack(spacing: NotchContainerMetrics.barGap) {
-            HStack(spacing: NotchContainerMetrics.barGap) {
-                DockRoundButton(label: L10n.t("filter.notes"), isOn: inNotes, onTint: DSDock.notes,
-                                onIcon: DSDock.notesLight, iconColor: DSDock.notes) {
-                    DocGlyph()
-                } action: {
-                    NotesStore.shared.chooseKind(meetings: false)
-                }
-                // Meetings: the second round button (decision 4, 2026-10-14).
-                DockRoundButton(label: L10n.t("dock.meetings"), isOn: inMeetings,
-                                onTint: SpaceTint.calendar.light.color,
-                                onIcon: DockTint(.calendar).light, iconColor: DSDock.text2) {
-                    OttoIcon("calendar", pointSize: NotchContainerMetrics.roundIcon - 1)
-                } action: {
-                    NotesStore.shared.chooseKind(meetings: true)
-                }
+        // centre whatever the two sides hold. Bottom-aligned: the card grows
+        // UP out of the dock.
+        HStack(alignment: .bottom, spacing: NotchContainerMetrics.barGap) {
+            DockRoundButton(label: L10n.t("filter.notes"), isOn: inNotes, onTint: DSDock.notes,
+                            onIcon: DSDock.notesLight, iconColor: DSDock.notes) {
+                DockIcon(.notes, size: NotchContainerMetrics.roundIcon + 2)
+            } action: {
+                if inNotes { NotesStore.shared.leaveSpace() } else { NotesStore.shared.chooseKind(meetings: false) }
             }
+            .modifier(SideSlide(away: creating, edge: -1))
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            SpaceDock()
+            ZStack(alignment: .bottom) {
+                if creating {
+                    DockNewSpaceCard()
+                        .matchedGeometryEffect(id: "dockMorph", in: morph)
+                        .transition(.opacity.animation(.easeOut(duration: 0.12)))
+                } else {
+                    SpaceDock()
+                        .matchedGeometryEffect(id: "dockMorph", in: morph)
+                        .transition(.opacity.animation(.easeIn(duration: 0.18).delay(creating ? 0 : 0.12)))
+                }
+            }
 
             DockGearButton()
+                .modifier(SideSlide(away: creating, edge: 1))
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .padding(.top, NotchContainerMetrics.barTopGap)
+    }
+}
+
+/// Notes and Settings step aside (±12 pt, fading) while the card is open.
+private struct SideSlide: ViewModifier {
+    let away: Bool
+    let edge: CGFloat
+    func body(content: Content) -> some View {
+        content
+            .opacity(away ? 0 : 1)
+            .offset(x: away ? edge * 12 : 0)
+            .allowsHitTesting(!away)
+            // The same smooth curve out and back: the overshoot on the way
+            // back carried the buttons past their place and back, which read
+            // as the whole bar jumping (Marcello, 2026-10-17).
+            .animation(DockMorph.side, value: away)
     }
 }
 
 // MARK: Round buttons
 
-/// 38-pt circles in the dock's own material, so the three read as one bar.
+/// 38-pt glass circles, the same material as the dock (final flow §4.5).
 struct DockRoundButton<Icon: View>: View {
     let label: String
+    var shortcut: String? = nil
     var isOn = false
     var onTint: Color = DSDock.notes
     var onIcon: Color = DSDock.notesLight
-    var iconColor: Color = DSDock.text2
+    var iconColor: Color = DSDock.settingsIcon
     @ViewBuilder let icon: Icon
     let action: () -> Void
 
     @State private var hover = false
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            BarTipState.shared.clicked(label)
+            action()
+        } label: {
             icon
-                .foregroundStyle(isOn ? onIcon : (hover && iconColor == DSDock.text2 ? DSDock.iconHover : iconColor))
+                .foregroundStyle(isOn ? onIcon : (hover && iconColor == DSDock.settingsIcon ? DSDock.iconHover : iconColor))
                 .frame(width: NotchContainerMetrics.roundButton, height: NotchContainerMetrics.roundButton)
-                .background(Circle().fill(isOn ? onTint.opacity(0.18) : DSDock.chrome))
-                .overlay(Circle().strokeBorder(isOn ? onTint.opacity(0.3) : DSDock.chromeBorder, lineWidth: 1))
+                .background(Circle().fill(Color.white.opacity(hover ? 0.06 : 0)))
+                .notchGlass(in: Circle(), tint: isOn ? onTint : nil)
                 .contentShape(Circle())
         }
         .buttonStyle(DockPressStyle())
         .onHover { hover = $0 }
+        .barTip(label, label: label, shortcut: shortcut)
         .animation(.easeInOut(duration: 0.3), value: isOn)
-        .panelTooltip(label)
+        .animation(.easeOut(duration: 0.15), value: hover)
         .accessibilityLabel(label)
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }
 
-/// Pressing scales a round button to 0.93 over 150 ms (spec §8.4).
+/// Pressing scales a round button to 0.93 over 150 ms.
 struct DockPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -89,14 +120,16 @@ struct DockPressStyle: ButtonStyle {
 }
 
 /// The gear opens the menu it always has — Insights, Preferences, Shortcuts,
-/// the notes folder, Feedback, Quit — upwards from the foot (decision 3).
+/// the notes folder, Feedback, Quit — upwards from the foot.
 private struct DockGearButton: View {
     @ObservedObject private var store = TodoStore.shared
 
     var body: some View {
-        DockRoundButton(label: L10n.t("settings.open"), isOn: false, iconColor: DSDock.text2) {
-            SlidersGlyph()
+        DockRoundButton(label: L10n.t("settings.open"), iconColor: DSDock.settingsIcon) {
+            // The floating panels' own gear (SettingsGearButton), 2026-10-17.
+            DockIcon(.settings, size: NotchContainerMetrics.roundIcon + 2)
         } action: {
+            DockState.shared.closeMenu()
             if store.showsAvatarMenu { store.closeAvatarMenu() } else { store.openAvatarMenu() }
         }
         .menuAnchor(.gear)
@@ -119,6 +152,7 @@ private struct DockContentWidthKey: PreferenceKey {
 
 struct SpaceDock: View {
     @ObservedObject private var store = TodoStore.shared
+    @ObservedObject private var dock = DockState.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var highlight
 
@@ -130,7 +164,7 @@ struct SpaceDock: View {
     @State private var dropBeforeID: UUID?
     @State private var dropAtEnd = false
 
-    /// The space whose label is open: none while Notes or Meetings is up.
+    /// The space whose label is open: none while Notes is up.
     private var selectedID: UUID? {
         store.panelMode == .browsing ? store.activeCollectionID : nil
     }
@@ -142,6 +176,7 @@ struct SpaceDock: View {
 
     var body: some View {
         let collections = store.visibleCollections
+        let capsule = Capsule(style: .circular)
         Group {
             if overflows {
                 ScrollViewReader { proxy in
@@ -160,10 +195,9 @@ struct SpaceDock: View {
             }
         }
         .padding(NotchContainerMetrics.dockPadding)
-        // A circular-cornered capsule: the continuous one drew a stray
-        // vertical stroke just past each end at this width.
-        .background(Capsule(style: .circular).fill(DSDock.chrome))
-        .overlay(Capsule(style: .circular).strokeBorder(DSDock.chromeBorder, lineWidth: 1))
+        // Circular, not continuous: the continuous capsule drew a stray
+        // vertical stroke just past each end at this width (2026-10-14).
+        .notchGlass(in: capsule)
         .fixedSize()
         // The labels, measured once at their natural width — the widths the
         // open label animates to. Never visible.
@@ -187,8 +221,8 @@ struct SpaceDock: View {
                 }
         }
         // One curve for the label widths and the highlight, so they move as
-        // one (spec §8). Keyed on the selection: the switch itself, not the
-        // panel's own content spring, drives them.
+        // one. Keyed on the selection: the switch itself, not the panel's
+        // own content spring, drives them.
         .animation(NotchDockMotion.curve(reduceMotion: reduceMotion), value: selectedID)
         .animation(NotchDockMotion.curve(reduceMotion: reduceMotion), value: labelWidths)
         .animation(.easeInOut(duration: 0.2), value: inNotes)
@@ -203,14 +237,14 @@ struct SpaceDock: View {
         let tint = DockTint(collection.spaceTint)
         let isSelected = selectedID == collection.id
         let isParked = parkedID == collection.id
-        let open = store.remainingCount(for: collection) ?? 0
+        let menuOpen = dock.menuSpaceID == collection.id
         return HStack(spacing: 0) {
             Circle()
                 .fill(tint.base)
                 .frame(width: NotchContainerMetrics.dockDot, height: NotchContainerMetrics.dockDot)
                 .brightness(hovered == collection.id && !isSelected ? 0.08 : 0)
-                .modifier(DockPop(isActive: isSelected))
-            label(collection.name, count: open, color: tint.light)
+                .modifier(DockPop(isActive: isSelected || dock.justCreatedID == collection.id))
+            label(collection.name, color: tint.light)
                 .frame(width: isSelected ? (labelWidths[collection.id] ?? 0) : 0, alignment: .leading)
                 .clipped()
         }
@@ -220,39 +254,39 @@ struct SpaceDock: View {
             // THE highlight: one capsule, moved between items by matched
             // geometry. In Notes it fades out where it stands.
             if isParked {
-                Capsule(style: .continuous)
+                Capsule(style: .circular)
                     .fill(tint.highlight)
                     .matchedGeometryEffect(id: "dockHighlight", in: highlight)
                     .opacity(inNotes ? 0 : 1)
                     .animation(.easeInOut(duration: 0.3), value: tint)
+            } else if menuOpen || hovered == collection.id {
+                // Hover lights the dot's own slot (Marcello, 2026-10-17); the
+                // item a menu came from stays lit.
+                Capsule(style: .circular).fill(Color.white.opacity(menuOpen ? 0.10 : 0.08))
+                    .transition(.opacity.animation(.easeOut(duration: 0.15)))
             }
         }
         .opacity(inNotes ? 0.5 : (draggedID == collection.id ? 0.4 : 1))
-        .contentShape(Capsule(style: .continuous))
+        .contentShape(Capsule(style: .circular))
         // Not a Button: a Button claims the mouse-down and `.onDrag` beside it
         // never starts (TodoTabRow's lesson).
-        .onTapGesture { store.selectCollection(collection.id) }
+        .onTapGesture {
+            dock.closeMenu()
+            BarTipState.shared.clicked(collection.id.uuidString)
+            store.selectCollection(collection.id)
+        }
+        .overlay(RightClickCatcher { dock.openMenu(for: collection.id) })
+        .modifier(DockMenuAnchor(active: menuOpen))
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.18)) {
-                if hovering { hovered = collection.id } else if hovered == collection.id { hovered = nil }
+                if hovering { hovered = collection.id }
+                else if hovered == collection.id { hovered = nil }
             }
         }
-        .overlay(alignment: .top) {
-            // The name, over an inactive dot only (spec §5.2).
-            if hovered == collection.id, !isSelected, draggedID == nil {
-                Text(collection.name)
-                    .font(DSDock.tooltipFont)
-                    .foregroundStyle(DSDock.tooltipText)
-                    .padding(.vertical, 5)
-                    .padding(.horizontal, 9)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(DSDock.tooltip))
-                    .fixedSize()
-                    .offset(y: -(12 + 26))
-                    .transition(.opacity.combined(with: .offset(y: 4)))
-                    .allowsHitTesting(false)
-            }
-        }
-        .zIndex(hovered == collection.id ? 1 : 0)
+        // The bar's one tooltip — never over the active pill, which already
+        // says its name, nor while dragging.
+        .barTip(collection.id.uuidString,
+                isSelected || draggedID != nil ? nil : BarTip(label: collection.name, shortcut: nil))
         .id(collection.id)
         .onDrag {
             draggedID = collection.id
@@ -266,31 +300,26 @@ struct SpaceDock: View {
         .onDrop(of: [.ottoInternalItem], delegate: CollectionReorderDropDelegate(
             targetID: collection.id, draggedID: $draggedID,
             dropBeforeID: $dropBeforeID, dropAtEnd: $dropAtEnd))
-        .contextMenu { CollectionContextMenu(collection: collection, index: index) }
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityLabel(collection.name)
-        .accessibilityValue(String(format: L10n.t("dock.open"), open))
     }
 
-    private func label(_ name: String, count: Int, color: Color) -> some View {
-        HStack(spacing: NotchContainerMetrics.dockCountGap) {
-            Text(name).font(DSDock.dockLabel)
-            Text("\(count)").font(DSDock.dockCount).opacity(0.6)
-                .contentTransition(.numericText())
-        }
-        .foregroundStyle(color)
-        .lineLimit(1)
-        .fixedSize()
-        .padding(.leading, NotchContainerMetrics.dockLabelLeading)
-        .padding(.trailing, NotchContainerMetrics.dockLabelTrailing)
+    private func label(_ name: String, color: Color) -> some View {
+        Text(name)
+            .font(DSDock.dockLabel)
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.leading, NotchContainerMetrics.dockLabelLeading)
+            .padding(.trailing, NotchContainerMetrics.dockLabelTrailing)
     }
 
     /// Every label at its natural width, reported by id.
     private func measurer(_ collections: [TodoCollection]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(collections) { collection in
-                label(collection.name, count: store.remainingCount(for: collection) ?? 0, color: .clear)
+                label(collection.name, color: .clear)
                     .background(GeometryReader { geo in
                         Color.clear.preference(key: DockLabelWidthKey.self,
                                                value: [collection.id: ceil(geo.size.width)])
@@ -304,16 +333,16 @@ struct SpaceDock: View {
 
     private var plusItem: some View {
         Button {
-            store.setMode(.newCategory)
+            dock.beginNewSpace()
             NotchController.shared.focusPanel()
         } label: {
-            OttoIcon("plus", pointSize: 12)
+            DockIcon(.plus, size: 15)
                 .foregroundStyle(DSDock.plus)
                 .frame(width: NotchContainerMetrics.dockItem, height: NotchContainerMetrics.dockItem)
-                .contentShape(Capsule(style: .continuous))
+                .contentShape(Capsule(style: .circular))
         }
         .buttonStyle(.plain)
-        .panelTooltip(L10n.t("todo.newCollection"))
+        .barTip("dock.plus", label: L10n.t("todo.newCollection"), shortcut: "\u{21E7}\u{2318}N")
         .accessibilityLabel(L10n.t("todo.newCollection"))
     }
 
@@ -327,7 +356,17 @@ struct SpaceDock: View {
     }
 }
 
-/// Rise's "pop" on the dot that becomes active: 1 → 1.45 → 1 over 420 ms.
+/// Reports a dock item's frame as the space menu's anchor — only for the item
+/// whose menu is open.
+private struct DockMenuAnchor: ViewModifier {
+    let active: Bool
+    func body(content: Content) -> some View {
+        if active { content.menuAnchor(.dockItem) } else { content }
+    }
+}
+
+/// The pop on a dot that becomes active (Rise), and on a space just created
+/// (final flow §7.3: scale 0.5 → 1, 500 ms, overshoot).
 private struct DockPop: ViewModifier {
     let isActive: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -343,54 +382,11 @@ private struct DockPop: ViewModifier {
                     withAnimation(.timingCurve(0.3, 1.6, 0.5, 1, duration: 0.25)) { scale = 1 }
                 }
             }
-    }
-}
-
-// MARK: Glyphs (the prototype's own strokes, 24-unit grid)
-
-/// The Notes document: a page with a folded corner and two lines.
-struct DocGlyph: View {
-    var body: some View {
-        DocShape()
-            .stroke(style: StrokeStyle(lineWidth: 1.8 * NotchContainerMetrics.roundIcon / 24,
-                                       lineCap: .round, lineJoin: .round))
-            .frame(width: NotchContainerMetrics.roundIcon, height: NotchContainerMetrics.roundIcon)
-    }
-
-    private struct DocShape: Shape {
-        func path(in rect: CGRect) -> Path {
-            let s = rect.width / 24
-            func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + x * s, y: rect.minY + y * s) }
-            var path = Path()
-            path.move(to: p(6, 3)); path.addLine(to: p(15, 3)); path.addLine(to: p(19, 7))
-            path.addLine(to: p(19, 21)); path.addLine(to: p(6, 21)); path.closeSubpath()
-            path.move(to: p(9, 12)); path.addLine(to: p(16, 12))
-            path.move(to: p(9, 16)); path.addLine(to: p(14, 16))
-            return path
-        }
-    }
-}
-
-/// Settings: two sliders.
-struct SlidersGlyph: View {
-    var body: some View {
-        SlidersShape()
-            .stroke(style: StrokeStyle(lineWidth: 1.7 * NotchContainerMetrics.roundIcon / 24, lineCap: .round))
-            .frame(width: NotchContainerMetrics.roundIcon, height: NotchContainerMetrics.roundIcon)
-    }
-
-    private struct SlidersShape: Shape {
-        func path(in rect: CGRect) -> Path {
-            let s = rect.width / 24
-            func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + x * s, y: rect.minY + y * s) }
-            var path = Path()
-            path.move(to: p(4, 7)); path.addLine(to: p(13, 7))
-            path.move(to: p(17, 7)); path.addLine(to: p(20, 7))
-            path.move(to: p(4, 17)); path.addLine(to: p(7, 17))
-            path.move(to: p(11, 17)); path.addLine(to: p(20, 17))
-            path.addEllipse(in: CGRect(x: rect.minX + 13 * s, y: rect.minY + 5 * s, width: 4 * s, height: 4 * s))
-            path.addEllipse(in: CGRect(x: rect.minX + 7 * s, y: rect.minY + 15 * s, width: 4 * s, height: 4 * s))
-            return path
-        }
+            .onAppear {
+                // A brand-new space pops in.
+                guard isActive, DockState.shared.justCreatedID != nil, !reduceMotion else { return }
+                scale = 0.5
+                withAnimation(.timingCurve(0.3, 1.6, 0.5, 1, duration: 0.5)) { scale = 1 }
+            }
     }
 }

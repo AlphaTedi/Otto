@@ -21,6 +21,7 @@ struct NotchRootView: View {
     @ObservedObject var controller: NotchController
     @EnvironmentObject var appState: AppState
     @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
+    @AppStorage(DockExperiment.key) private var containerDock = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -43,6 +44,12 @@ struct NotchRootView: View {
             if notchLayout == .container, controller.state == .expanded {
                 ContainerMeetingCard(controller: controller)
                     .transition(.opacity.animation(NotchAnimation.contentOut))
+                // The B3 dock's glass bar, OUTSIDE the silhouette's mask so
+                // the glass can see what is behind it (DockBarLayer).
+                if DockExperiment.isAvailable, containerDock {
+                    DockBarLayer(controller: controller)
+                        .transition(.opacity.animation(NotchAnimation.contentOut))
+                }
                 ContainerMenuLayer(controller: controller)
             }
         }
@@ -109,16 +116,37 @@ private struct ContainerMenuLayer: View {
     @ObservedObject var controller: NotchController
     @ObservedObject private var store = TodoStore.shared
     @ObservedObject private var notes = NotesStore.shared
+    @ObservedObject private var dock = DockState.shared
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                if store.showsAvatarMenu, let gear = controller.containerMenuAnchors[.gear] {
+                if store.showsAvatarMenu, let gear = controller.dockBarAnchors[.gear] ?? controller.containerMenuAnchors[.gear] {
                     // The B3 dock's gear sits at the foot: its menu rises.
                     let rises = DockExperiment.isOn
                     AvatarMenu()
                         .background(frameReporter)
                         .anchoredMenu(to: gear, in: proxy.size, opensUpward: rises)
+                        .transition(.opacity.combined(with: .offset(y: rises ? 4 : -4)))
+                } else if let id = dock.menuSpaceID, let collection = store.collection(id: id),
+                          let item = controller.dockBarAnchors[.dockItem] ?? controller.containerMenuAnchors[.dockItem] {
+                    // The B3 dock's space menu: centred over its dot, opening up.
+                    DockSpaceMenu(collection: collection)
+                        .background(frameReporter)
+                        .fixedSize()
+                        .padding(.bottom, max(0, proxy.size.height - item.minY + OttoMenuStyle.anchorGap))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        .offset(x: item.midX - proxy.size.width / 2)
+                        .transition(.opacity.combined(with: .offset(y: 4)))
+                } else if let id = dock.noteMenuID, let note = notes.notes.first(where: { $0.id == id }),
+                          let row = controller.containerMenuAnchors[.noteRow] {
+                    // The dock's note menu: at the note's trailing edge,
+                    // below it — or above it in the list's lower half.
+                    let rises = row.midY > proxy.size.height * 0.55
+                    DockNoteMenu(note: note)
+                        .background(frameReporter)
+                        .fixedSize()
+                        .anchoredMenu(to: row.insetBy(dx: 8, dy: 0), in: proxy.size, opensUpward: rises)
                         .transition(.opacity.combined(with: .offset(y: rises ? 4 : -4)))
                 } else if notes.kindMenuOpen, let trigger = controller.containerMenuAnchors[.notesKind] {
                     NotesKindMenuList(meetings: store.panelMode == .calendar)
@@ -131,7 +159,10 @@ private struct ContainerMenuLayer: View {
         .environment(\.ottoMenuGlass, true)
         .animation(NotchAnimation.hintFade, value: store.showsAvatarMenu)
         .animation(NotchAnimation.hintFade, value: notes.kindMenuOpen)
-        .onChange(of: store.showsAvatarMenu || notes.kindMenuOpen) { open in
+        .animation(NotchAnimation.hintFade, value: dock.menuSpaceID)
+        .animation(NotchAnimation.hintFade, value: dock.noteMenuID)
+        .onChange(of: store.showsAvatarMenu || notes.kindMenuOpen || dock.menuSpaceID != nil
+                      || dock.noteMenuID != nil) { open in
             if !open { controller.setOverflowMenuFrame(nil) }
         }
         .onDisappear { controller.setOverflowMenuFrame(nil) }
@@ -209,3 +240,67 @@ private struct ContainerMeetingCard: View {
         }
     }
 }
+
+/// The B3 dock's bar — Notes, the dock, Settings, or the note editor's back ·
+/// tools · export — drawn at the ROOT, over the silhouette, rather than
+/// inside it.
+///
+/// Inside, it was not glass. NotchShapeView renders its content through a
+/// mask and the open animation's opacity and blur, and each of those draws
+/// the content in a layer of its own: Liquid Glass inside one cannot sample
+/// what lies behind it, so macOS drew it flat and grey (Marcello,
+/// 2026-10-17, beside the space menu — which was real glass, because it
+/// already lived up here). Out here it refracts the list scrolling under it.
+private struct DockBarLayer: View {
+    @ObservedObject var controller: NotchController
+    @ObservedObject private var store = TodoStore.shared
+    @ObservedObject private var notes = NotesStore.shared
+    @ObservedObject private var dock = DockState.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
+
+    private var editingNote: Bool {
+        (store.panelMode == .notes || store.panelMode == .calendar) && notes.openNoteID != nil
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            Group {
+                if editingNote {
+                    DockEditorBar()
+                        .transition(.opacity)
+                } else if store.showsSpaceBar || dock.isCreatingSpace {
+                    DockBottomBar()
+                        .transition(.opacity)
+                }
+            }
+            // The bar's one gliding tooltip, over Notes, the dock, Settings
+            // and the note's tools alike.
+            .barTipHost()
+            .padding(.horizontal, NotchContainerMetrics.barInset)
+            .padding(.bottom, NotchContainerMetrics.barBottom)
+            .frame(width: controller.containerBodyWidth)
+            .onHover { if $0 { controller.cancelCollapse() } }
+        }
+        .frame(height: controller.containerSilhouetteHeight)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // The menus measure their anchors in this space; here it IS the root's.
+        .coordinateSpace(name: OttoMenuStyle.space)
+        .onPreferenceChange(MenuAnchorKey.self) { controller.dockBarAnchors = $0 }
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared || reduceMotion ? 0 : 6)
+        .animation(NotchAnimation.hintFade, value: editingNote)
+        .animation(NotchAnimation.hintFade, value: store.showsSpaceBar)
+        .onAppear {
+            // After the silhouette has grown under it, like the rows.
+            withAnimation(reduceMotion ? .easeOut(duration: 0.15)
+                                       : .easeOut(duration: 0.25).delay(0.18)) { appeared = true }
+        }
+        .onDisappear {
+            appeared = false
+            controller.dockBarAnchors = [:]
+        }
+    }
+}
+
