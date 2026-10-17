@@ -191,10 +191,12 @@ esac
 # entry in the Privacy list — indistinguishable from the user denying it. That
 # shipped for five releases: calendar access worked in Debug (no hardened
 # runtime) and was silently dead in every signed build (Marcello, 2026-08-05).
+# The microphone is no longer on the list: voice capture left the app in the
+# 2026-10 cleanup, and an entitlement for a resource Otto never touches is
+# not asked for (Marcello, 2026-10-17).
 for required in \
     "com.apple.security.personal-information.calendars" \
-    "com.apple.security.personal-information.addressbook" \
-    "com.apple.security.device.audio-input"
+    "com.apple.security.personal-information.addressbook"
 do
     case "$ENTS" in
         *"$required"*) ;;

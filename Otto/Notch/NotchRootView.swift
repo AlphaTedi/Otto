@@ -46,7 +46,7 @@ struct NotchRootView: View {
                     .transition(.opacity.animation(NotchAnimation.contentOut))
                 // The B3 dock's glass bar, OUTSIDE the silhouette's mask so
                 // the glass can see what is behind it (DockBarLayer).
-                if DockExperiment.isAvailable, containerDock {
+                if DockExperiment.isOn(layout: notchLayout, flag: containerDock) {
                     DockBarLayer(controller: controller)
                         .transition(.opacity.animation(NotchAnimation.contentOut))
                 }

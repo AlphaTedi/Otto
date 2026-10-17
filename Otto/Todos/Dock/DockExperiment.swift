@@ -8,29 +8,24 @@ import SwiftUI
 // it and the gear one on the other side; the panel stops hugging and stands
 // at one fixed height.
 //
-// An EXPERIMENT, and built as one: a switch in Settings › Notch that only
-// Debug and Otto Lab builds show (and only they can turn on — a `defaults
-// write` left behind cannot reach a release). It rides on the container
-// layout rather than being a third one: the ~95 places that ask "is this the
+// Built as an experiment behind a Debug / Otto Lab switch, then PROMOTED
+// (Marcello, 2026-10-17): it is now simply what the notch container is, in
+// every build, and the switch is gone. The names keep "Experiment" so the
+// history reads. It rides on the container layout rather than being a third
+// one: the ~95 places that ask "is this the
 // container?" keep their answers, and only the furniture the design replaces
 // is swapped. docs/parity-checklist.md is the list of everything that has to
 // keep working.
 
 enum DockExperiment {
-    /// The UserDefaults key the Settings switch writes (@AppStorage).
+    /// The UserDefaults key the old Settings switch wrote. Read by the
+    /// views' @AppStorage still, but no longer consulted: the dock is on in
+    /// the container for everyone.
     static let key = "containerDock"
 
-    /// Only Debug and Otto Lab can turn it on.
-    static var isAvailable: Bool {
-        #if DEBUG
-        return true
-        #else
-        return AppBuild.isLab
-        #endif
-    }
-
+    /// The dock IS the notch container now — `flag` is ignored.
     static func isOn(layout: NotchLayout, flag: Bool) -> Bool {
-        isAvailable && layout == .container && flag
+        layout == .container
     }
 
     /// For code that is not a view (geometry, key routing).

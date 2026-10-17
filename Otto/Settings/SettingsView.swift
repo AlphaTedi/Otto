@@ -566,7 +566,6 @@ struct AppearanceSettingsView: View {
     @AppStorage("notchExpandedWidth")  private var expandedWidth: Double = 620
     @AppStorage("notchExpandedHeight") private var expandedHeight: Double = 200
     @AppStorage("notchLayout")         private var notchLayout: NotchLayout = .panels
-    @AppStorage(DockExperiment.key)    private var containerDock = false
 
     var body: some View {
         SettingsPage(section: .appearance) {
@@ -598,17 +597,6 @@ struct AppearanceSettingsView: View {
                         .labelsHidden()
                         .pickerStyle(.segmented)
                         .fixedSize()
-                    }
-                    // The B3 colour dock — Debug and Otto Lab only
-                    // (DockExperiment).
-                    if DockExperiment.isAvailable {
-                        SettingRow(title: "B3 dock (experiment)",
-                                   subtitle: "Spaces as a dock of dots at the foot, the first row as the input, a fixed height.") {
-                            RowSwitch(label: "B3 dock (experiment)", isOn: Binding(
-                                get: { containerDock },
-                                set: { DockExperiment.set($0) }
-                            ))
-                        }
                     }
                 }
             } header: {
