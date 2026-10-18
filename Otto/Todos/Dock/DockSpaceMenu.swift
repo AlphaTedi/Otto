@@ -202,14 +202,25 @@ final class DockState: ObservableObject {
     /// ⏎ or ✓: make it, fold the card back into the dock, land on the new
     /// space with the caret in its first row.
     func createSpace() {
+        // Once: ⏎ reaches both the key router and the field's onSubmit.
+        guard isCreatingSpace else { return }
         let name = newSpaceName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
-        let hex = DockTint.swatches[newSpaceTint.key].map { String(format: "#%06X", $0) } ?? "#9EE0B0"
-        let collection = TodoStore.shared.addCollection(name: name, colorHex: hex, tint: newSpaceTint.key)
-        justCreatedID = collection.id
+        let tint = newSpaceTint
+        let hex = DockTint.swatches[tint.key].map { String(format: "#%06X", $0) } ?? "#9EE0B0"
+        // In TWO beats: first the card folds back into the dock as it was,
+        // then the new space pops in and takes the highlight. Done at once,
+        // the dock was morphing back AND growing a dot AND sliding its
+        // highlight, and the whole bar lurched right before settling
+        // (Marcello, 2026-10-18).
         withAnimation(DockMorph.close) { isCreatingSpace = false }
-        TodoStore.shared.selectCollection(collection.id)
-        TodoStore.shared.draftWantsFocus = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + (DockMorph.reduceMotion ? 0.05 : 0.3)) { [weak self] in
+            guard let self else { return }
+            let collection = TodoStore.shared.addCollection(name: name, colorHex: hex, tint: tint.key)
+            self.justCreatedID = collection.id
+            TodoStore.shared.selectCollection(collection.id)
+            TodoStore.shared.draftWantsFocus = true
+        }
     }
 
     private static func step(_ tint: SpaceTint, by offset: Int) -> SpaceTint {

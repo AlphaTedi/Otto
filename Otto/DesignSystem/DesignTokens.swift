@@ -338,7 +338,10 @@ enum DSDock {
     static let moreSteps: Font = .system(size: 12.5, weight: .medium)
     /// "Completed · 2", the editor's meta line.
     static let quietLabel: Font = .system(size: 12.5, weight: .semibold)
-    static let editorTitle: Font = .system(size: 22, weight: .bold)
+    /// The open note's title, set like a document's (2026-10-18).
+    static let editorTitle: Font = .system(size: 24, weight: .bold)
+    /// The day under it.
+    static let noteDate: Font = .system(size: 14, weight: .medium)
     static let tooltipShortcut: Font = .system(size: 11, weight: .medium)
 }
 

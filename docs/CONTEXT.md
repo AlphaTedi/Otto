@@ -1264,3 +1264,15 @@ notes and an editor with no top bar.
   Space menu: swatches scroll, menu 248 wide, delete is hold-to-confirm (⏎ ⏎
   from the keyboard). A right-click a view answers no longer also opens the
   panel's native Settings/Quit menu (`rightClickClaimedAt`).
+
+- **2026-10-18 — Notch motion and notes editor.** The container's content is
+  clipped by the silhouette itself (same shape, size, squish and spring, with
+  its own animated state so an insertion starts small) and stays mounted
+  through the collapse; AppKit text views fade with it (`NotchContentFade`);
+  the dock bar enters late and leaves at once. Notes: links are markdown
+  (`[words](url)`), a paste is redrawn through the markdown at once, ⌘K / the
+  bar's Link sets one; bold/italic/underline sit under one "Text style"
+  popover; caret, selection and links are Notes' gold. The note-actions
+  feature (detected underlines, the "+" on a selection, ⌥↩ picker) is OFF
+  behind `NoteActions.enabled` until it is reworked. Insights in the dock:
+  panels only, Back in place of Notes, no dock, no week stepper.

@@ -23,8 +23,28 @@ struct DockBottomBar: View {
 
     private var inNotes: Bool { store.panelMode == .notes || store.panelMode == .calendar }
     private var creating: Bool { dock.isCreatingSpace }
+    /// Insights is a page, not a space: Back where Notes was, no dock.
+    private var inInsights: Bool { store.panelMode == .insights }
 
     var body: some View {
+        if inInsights { insightsBar } else { mainBar }
+    }
+
+    private var insightsBar: some View {
+        HStack(alignment: .bottom, spacing: NotchContainerMetrics.barGap) {
+            DockRoundButton(label: L10n.t("dock.back"), iconColor: DSDock.settingsIcon) {
+                DockIcon(.back, size: NotchContainerMetrics.roundIcon + 2)
+            } action: {
+                store.goBack()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            DockGearButton()
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .transition(.opacity)
+    }
+
+    private var mainBar: some View {
         // `1fr auto 1fr`: equal flexible sides, so the dock sits at the true
         // centre whatever the two sides hold. Bottom-aligned: the card grows
         // UP out of the dock.

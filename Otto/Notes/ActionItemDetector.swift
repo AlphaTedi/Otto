@@ -33,6 +33,14 @@ struct DetectedAction: Equatable, Identifiable {
     var id: String { "\(range.location)-\(range.length)-\(phrase)" }
 }
 
+/// The whole "action in a note" feature — the underlines Otto draws under
+/// commitments it finds, the "+" on a selection, the picker that files one as
+/// a to-do. OFF for now (Marcello, 2026-10-18): it underlined too much in a
+/// light blue and the "+" worked badly. The code stays, to be reworked.
+enum NoteActions {
+    static let enabled = false
+}
+
 enum ActionItemDetector {
 
     /// Never more than this in one note, however long it is. A note that is all

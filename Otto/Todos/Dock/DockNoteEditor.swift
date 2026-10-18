@@ -9,7 +9,9 @@ import SwiftUI
 // that brought you in never moves, the formatting tools centred, export on
 // the right.
 
-/// "Note · Oct 12 · 48 words" … "Saved", then the title.
+/// The title, then the day — nothing else (Marcello, 2026-10-18: "Note ·
+/// date · words … Saved" over the title read busy). Saving is silent; only a
+/// FAILED save says so, beside the date, because that one needs you.
 struct DockNoteHeader: View {
     let note: QuickNote
     @Binding var title: String
@@ -19,31 +21,30 @@ struct DockNoteHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 0) {
-                Text([L10n.t("dock.noteMeta"),
-                      note.updatedAt.formatted(.dateTime.month(.abbreviated).day()),
-                      String(format: L10n.t("dock.words"), note.wordCount)]
-                    .joined(separator: "  \u{00B7}  "))
-                Spacer(minLength: 12)
-                Text(store.saveError != nil ? L10n.t("meeting.saveFailed")
-                     : (store.isWriting ? L10n.t("notes.saving") : L10n.t("notes.saved")))
-            }
-            .font(DSDock.quietLabel)
-            .foregroundStyle(DSDock.text3)
-            .lineLimit(1)
-
             TextField("", text: $title, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(DSDock.editorTitle)
-                .tracking(-0.3)
+                .tracking(-0.4)
                 .foregroundStyle(DSDock.textStrong)
                 .lineLimit(1...3)
                 .focused($titleFocused)
                 .onSubmit { onCommit(); store.focusBody() }
                 .onChange(of: titleFocused) { if !$0 { onCommit() } }
+
+            HStack(spacing: 8) {
+                Text(note.createdAt.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
+                    .foregroundStyle(DSDock.text3)
+                if store.saveError != nil {
+                    Text(L10n.t("meeting.saveFailed"))
+                        .foregroundStyle(Color(hex: "#FF6961"))
+                }
+            }
+            .font(DSDock.noteDate)
+            .lineLimit(1)
         }
         .padding(.horizontal, NotchContainerMetrics.contentInFrame)
-        .padding(.top, 2)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
     }
 }
 
@@ -53,8 +54,10 @@ struct DockEditorBar: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: NotchContainerMetrics.barGap) {
-            DockRoundButton(label: L10n.t("dock.back"), shortcut: "\u{2318}[",
-                            iconColor: DSDock.notes) {
+            // Grey like every round button (Insights' Back included), and no
+            // shortcut in its tooltip: only the tools show theirs
+            // (Marcello, 2026-10-18). ⌘[ still goes back.
+            DockRoundButton(label: L10n.t("dock.back"), iconColor: DSDock.settingsIcon) {
                 DockIcon(.back, size: NotchContainerMetrics.roundIcon + 2)
             } action: {
                 TodoStore.shared.goBack()
@@ -63,8 +66,7 @@ struct DockEditorBar: View {
 
             NoteFormatBar(docked: true)
 
-            DockRoundButton(label: L10n.t("dock.export"), shortcut: "\u{2318}\u{21E7}S",
-                            iconColor: DSDock.settingsIcon) {
+            DockRoundButton(label: L10n.t("dock.export"), iconColor: DSDock.settingsIcon) {
                 DockIcon(.export, size: NotchContainerMetrics.roundIcon + 2)
             } action: {
                 store.exportOpenNote()

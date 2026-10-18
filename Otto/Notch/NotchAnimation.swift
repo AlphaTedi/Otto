@@ -206,8 +206,62 @@ private struct NotchEntryModifier: ViewModifier {
             // not an entrance.
             .offset(y: appeared || reduceMotion ? 0 : 12)
             .scaleEffect(appeared || reduceMotion ? 1 : 0.97, anchor: .top)
+            // Staggered in; all together and quick on the way out — a
+            // stagger on close left rows behind the closing black.
             .animation(reduceMotion ? .easeOut(duration: 0.12)
-                                    : NotchAnimation.contentEntry(index: index),
+                                    : (appeared ? NotchAnimation.contentEntry(index: index)
+                                                : NotchAnimation.contentOut),
                        value: appeared)
+    }
+}
+
+// MARK: - AppKit views fade with the content
+
+/// SwiftUI's opacity animation does not reach an NSView inside a
+/// representable: the text fields (the first row, a row with image chips, a
+/// note's body) stayed fully drawn while everything around them faded, so the
+/// TEXT came in before the notch's black and stayed after it (Marcello,
+/// 2026-10-18, frame by frame). Each representable passes its view here from
+/// make/update, and the view fades on the content's own timing.
+@MainActor
+enum NotchContentFade {
+    static func apply(to view: NSView, appeared: Bool) {
+        let target: CGFloat = appeared ? 1 : 0
+        guard view.alphaValue != target else { return }
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            view.alphaValue = target
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            // In: after the black has grown, with the rows. Out: at once.
+            context.duration = appeared ? 0.26 : 0.1
+            context.timingFunction = CAMediaTimingFunction(name: appeared ? .easeOut : .easeIn)
+            if appeared {
+                view.alphaValue = 0
+            }
+            view.animator().alphaValue = target
+        }
+    }
+
+    /// When the notch last began to open.
+    static var openedAt = Date.distantPast
+
+    /// For a view being made. Made as the notch opens, it fades in behind the
+    /// black like the rows around it; made any other time (a new row), it is
+    /// simply there.
+    static func initial(_ view: NSView, appeared: Bool) {
+        guard appeared else { view.alphaValue = 0; return }
+        let opening = Date().timeIntervalSince(openedAt) < 0.35
+        guard opening, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            view.alphaValue = 1; return
+        }
+        view.alphaValue = 0
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.26
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                view.animator().alphaValue = 1
+            }
+        }
     }
 }

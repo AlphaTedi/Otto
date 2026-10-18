@@ -47,8 +47,12 @@ struct NotchRootView: View {
                 // The B3 dock's glass bar, OUTSIDE the silhouette's mask so
                 // the glass can see what is behind it (DockBarLayer).
                 if DockExperiment.isOn(layout: notchLayout, flag: containerDock) {
+                    // Leaves at once on collapse: it is outside the clip
+                    // (glass must see the desktop), so it may not linger
+                    // over a closing notch. It enters on its own, late.
                     DockBarLayer(controller: controller)
-                        .transition(.opacity.animation(NotchAnimation.contentOut))
+                        .transition(.asymmetric(insertion: .identity,
+                                                removal: .opacity.animation(.easeOut(duration: 0.08))))
                 }
                 ContainerMenuLayer(controller: controller)
             }
@@ -288,14 +292,17 @@ private struct DockBarLayer: View {
         // The menus measure their anchors in this space; here it IS the root's.
         .coordinateSpace(name: OttoMenuStyle.space)
         .onPreferenceChange(MenuAnchorKey.self) { controller.dockBarAnchors = $0 }
-        .opacity(appeared ? 1 : 0)
+        .opacity(appeared && controller.state == .expanded ? 1 : 0)
+        .animation(.easeOut(duration: 0.08), value: controller.state)
         .offset(y: appeared || reduceMotion ? 0 : 6)
         .animation(NotchAnimation.hintFade, value: editingNote)
         .animation(NotchAnimation.hintFade, value: store.showsSpaceBar)
         .onAppear {
-            // After the silhouette has grown under it, like the rows.
+            // Only once the silhouette has reached the foot under it — the
+            // bar is outside the clip, so earlier it floated over the desktop
+            // ahead of the black (Marcello, 2026-10-18).
             withAnimation(reduceMotion ? .easeOut(duration: 0.15)
-                                       : .easeOut(duration: 0.25).delay(0.18)) { appeared = true }
+                                       : .easeOut(duration: 0.22).delay(0.26)) { appeared = true }
         }
         .onDisappear {
             appeared = false

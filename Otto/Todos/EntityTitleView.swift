@@ -42,10 +42,12 @@ struct EntityTitleView: NSViewRepresentable {
         view.textContainer?.widthTracksTextView = true
         view.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
                               height: CGFloat.greatestFiniteMagnitude)
+        NotchContentFade.initial(view, appeared: context.environment.notchContentAppeared)
         return view
     }
 
     func updateNSView(_ view: EntityTextView, context: Context) {
+        NotchContentFade.apply(to: view, appeared: context.environment.notchContentAppeared)
         view.onPlainTap = onTap
         view.chips.onRemove = onRemoveImage
         // Only when the title actually changed: re-setting the same string

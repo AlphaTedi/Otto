@@ -143,6 +143,8 @@ enum DockGlyph: String {
     case plus = "add-01"
     case check = "tick-02"
     case duplicate = "copy-01"
+    case textStyle = "text-bold"
+    case link = "link-04"
 }
 
 struct DockIcon: View {

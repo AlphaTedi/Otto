@@ -189,6 +189,94 @@ final class NoteEditorController: ObservableObject {
         block == .checklistDone ? .tertiaryLabelColor : .labelColor
     }
 
+    /// Redraw the whole note from its own markdown, keeping the caret — as
+    /// one undoable change.
+    func normalizeToMarkdown() {
+        guard let view = textView, let storage = view.textStorage else { return }
+        let caret = view.selectedRange()
+        let markdown = NoteMarkdown.markdown(from: storage)
+        let fresh = NoteMarkdown.attributed(from: markdown, textColor: .labelColor,
+                                            accent: .labelColor, mutedColor: .tertiaryLabelColor)
+        guard fresh.string != storage.string || !fresh.isEqual(to: storage) else { return }
+        let full = NSRange(location: 0, length: storage.length)
+        guard view.shouldChangeText(in: full, replacementString: fresh.string) else { return }
+        storage.setAttributedString(fresh)
+        view.didChangeText()
+        (view as? ActionTextView)?.applyCodeSpacing()
+        view.setSelectedRange(NSRange(location: min(caret.location, storage.length), length: 0))
+        refreshState()
+    }
+
+    // MARK: Links
+
+    /// The link under the selection or the caret, if any.
+    var currentLink: URL? {
+        guard let view = textView, let storage = view.textStorage, storage.length > 0 else { return nil }
+        let location = min(view.selectedRange().location, storage.length - 1)
+        let value = storage.attribute(.link, at: location, effectiveRange: nil)
+        return (value as? URL) ?? (value as? String).flatMap(URL.init(string:))
+    }
+
+    /// Where the link goes when the field asks: the selection as it was when
+    /// the field opened (the field takes the focus, not the selection).
+    private(set) var linkRange: NSRange?
+    @Published var editingLink = false
+
+    /// ⌘K or the bar's Link: open the field over the current selection.
+    func beginLink() {
+        guard let view = textView, let storage = view.textStorage else { return }
+        var range = view.selectedRange()
+        if range.length == 0, storage.length > 0 {
+            // On a link already: the whole link.
+            let probe = min(range.location, storage.length - 1)
+            var effective = NSRange(location: 0, length: 0)
+            if storage.attribute(.link, at: probe, longestEffectiveRange: &effective,
+                                 in: NSRange(location: 0, length: storage.length)) != nil {
+                range = effective
+            }
+        }
+        linkRange = range
+        editingLink = true
+    }
+
+    /// Apply (or, with an empty string, remove) the link. With no words
+    /// selected the address itself is inserted, linked.
+    func commitLink(_ text: String) {
+        editingLink = false
+        guard let view = textView, let storage = view.textStorage, let range = linkRange else { return }
+        linkRange = nil
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        defer { view.window?.makeFirstResponder(view) }
+        guard !trimmed.isEmpty else {
+            guard range.length > 0 else { return }
+            edit(view) { storage.removeAttribute(.link, range: range) }
+            return
+        }
+        let address = trimmed.contains("://") || trimmed.hasPrefix("mailto:") ? trimmed : "https://" + trimmed
+        guard let url = URL(string: address) else { return }
+        if range.length == 0 {
+            var attributes = view.typingAttributes
+            attributes[.link] = url
+            let inserted = NSAttributedString(string: trimmed, attributes: attributes)
+            guard view.shouldChangeText(in: range, replacementString: trimmed) else { return }
+            storage.replaceCharacters(in: range, with: inserted)
+            view.didChangeText()
+            view.setSelectedRange(NSRange(location: range.location + inserted.length, length: 0))
+        } else {
+            edit(view) { storage.addAttribute(.link, value: url, range: range) }
+            view.setSelectedRange(NSRange(location: NSMaxRange(range), length: 0))
+        }
+        // What is typed next is not part of the link.
+        view.typingAttributes.removeValue(forKey: .link)
+        refreshState()
+    }
+
+    func cancelLink() {
+        editingLink = false
+        linkRange = nil
+        if let view = textView { view.window?.makeFirstResponder(view) }
+    }
+
     // MARK: Inline style
 
     func toggleBold()      { toggleTrait(.boldFontMask, isOn: bold) }
@@ -216,7 +304,7 @@ final class NoteEditorController: ObservableObject {
         // Underlining a selected phrase is also an explicit request to turn
         // that phrase into an action. Keep the user's underline as formatting,
         // then reveal the same section picker used by detected commitments.
-        if turningOn, (view as? ActionTextView)?.noteID != nil {
+        if turningOn, NoteActions.enabled, (view as? ActionTextView)?.noteID != nil {
             let raw = (storage.string as NSString).substring(with: range)
             let phrase = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !phrase.isEmpty else { return }
@@ -789,6 +877,11 @@ extension NoteEditorController {
     /// insertion point is skipped this pass and picked up on the next one,
     /// after the caret has moved on.
     func refreshDetections(noteID: UUID, excludingCaret: Bool = false) {
+        guard NoteActions.enabled else {
+            clearDetections()
+            detectedCount = 0
+            return
+        }
         guard let view = textView, let storage = view.textStorage else { return }
         guard !view.hasMarkedText() else { return }
 

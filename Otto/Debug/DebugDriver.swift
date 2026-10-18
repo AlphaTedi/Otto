@@ -1219,6 +1219,9 @@ enum DebugDriver {
                 // eat the moment the user saved.
                 let cases: [String] = [
                     "plain line",
+                    "vedi [la pagina](https://it.wikipedia.org/wiki/Cristiano_Ronaldo) per i dettagli",
+                    "- un [link **in grassetto**](https://example.com/a?b=1) in lista",
+                    "![x.png](Attachments/x.png) e [un link](https://example.com)",
                     "# Scadenze",
                     "## Da chiarire prima di firmare",
                     "- chi paga la caldaia il primo anno",

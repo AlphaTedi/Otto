@@ -364,6 +364,10 @@ enum NoteMarkdown {
         }
     }
 
+    /// `[words](url)` — not `![…](…)`, which is an image chip.
+    static let linkPattern = try! NSRegularExpression(
+        pattern: "(?<![!\\\\])\\[([^\\]\\n]+?)\\]\\(([^)\\s]+)\\)")
+
     /// A backtick the user TYPED is written `\``, so it can never open code.
     private static let inlineCode = try! NSRegularExpression(pattern: "(?<![`\\\\])`([^`\n]+?)`(?!`)")
 
@@ -398,6 +402,20 @@ enum NoteMarkdown {
             attributes[.attachment] = ImageChipAttachment(path: path)
             paragraph.replaceCharacters(in: match.range,
                                         with: NSAttributedString(string: "\u{FFFC}", attributes: attributes))
+        }
+        // Links, `[words](url)`: the words keep the link (Marcello,
+        // 2026-10-18 — a pasted Wikipedia paragraph showed its links, then
+        // lost them on reopen, because nothing wrote them to the file).
+        // After the chips — `![…](…)` is an image, never a link.
+        for match in linkPattern.matches(
+            in: paragraph.string, options: [], range: NSRange(location: 0, length: paragraph.length)).reversed()
+            where !insideCode(match.range) {
+            let words = (paragraph.string as NSString).substring(with: match.range(at: 1))
+            let target = (paragraph.string as NSString).substring(with: match.range(at: 2))
+            var attributes = paragraph.attributes(at: match.range.location, effectiveRange: nil)
+            if let url = URL(string: target) { attributes[.link] = url }
+            paragraph.replaceCharacters(in: match.range,
+                                        with: NSAttributedString(string: words, attributes: attributes))
         }
         for (regex, traits, isUnderline) in inlinePatterns {
             // Backwards, so replacing one match cannot shift the ranges of the
@@ -563,7 +581,7 @@ enum NoteMarkdown {
         // Runs are MERGED by style first. The text system splits a styled
         // span wherever any other attribute changes, and wrapping each piece
         // separately wrote "**a****b**" for one bold word.
-        var segments: [(text: String, italic: Bool, bold: Bool, underline: Bool, code: Bool)] = []
+        var segments: [(text: String, italic: Bool, bold: Bool, underline: Bool, code: Bool, link: String?)] = []
         var verbatim: [Int: String] = [:]   // segment index → token written as is
         clean.enumerateAttributes(in: range, options: []) { attributes, runRange, _ in
             let text = (attributed.string as NSString).substring(with: runRange)
@@ -571,7 +589,7 @@ enum NoteMarkdown {
             // An image chip goes back to exactly the token it came from.
             if let chip = attributes[.attachment] as? ImageChipAttachment {
                 verbatim[segments.count] = AttachmentStore.token(for: chip.path)
-                segments.append(("", false, false, false, false))
+                segments.append(("", false, false, false, false, nil))
                 return
             }
             let raw = (attributes[.font] as? NSFont).map { NSFontManager.shared.traits(of: $0) } ?? []
@@ -581,7 +599,13 @@ enum NoteMarkdown {
             // never reaches the file — the note keeps the words that were typed
             // and none of the marks Otto put over them.
             let isDetection = attributes[.noteAction] != nil
-            let underlined = !isDetection
+            let link: String? = {
+                if let url = attributes[.link] as? URL { return url.absoluteString }
+                if let string = attributes[.link] as? String { return string }
+                return nil
+            }()
+            // A link's own underline is how links are drawn, not the user's.
+            let underlined = !isDetection && link == nil
                 && ((attributes[.underlineStyle] as? Int).map { $0 != 0 } ?? false)
             // Code is its own thing: never bold, italic or underlined as well.
             let code = attributes[.noteCode] != nil
@@ -589,33 +613,32 @@ enum NoteMarkdown {
             let bold = !code && traits.contains(.boldFontMask)
             let underline = !code && underlined
             if let last = segments.last, verbatim[segments.count - 1] == nil, last.italic == italic,
-               last.bold == bold, last.underline == underline, last.code == code {
+               last.bold == bold, last.underline == underline, last.code == code, last.link == link {
                 segments[segments.count - 1].text += text
             } else {
-                segments.append((text, italic, bold, underline, code))
+                segments.append((text, italic, bold, underline, code, link))
             }
         }
-        for (index, segment) in segments.enumerated() {
-            if let token = verbatim[index] { out += token; continue }
+        /// One segment's markdown — code or emphasis, never its link.
+        func render(_ segment: (text: String, italic: Bool, bold: Bool, underline: Bool, code: Bool, link: String?)) -> String {
             if segment.code {
                 // Verbatim between backticks; edge spaces stay outside.
                 let core = segment.text.trimmingCharacters(in: .whitespaces)
-                guard !core.isEmpty else { out += segment.text; continue }
+                guard !core.isEmpty else { return segment.text }
                 let leading = String(segment.text.prefix(while: { $0.isWhitespace }))
                 let trailing = String(segment.text.reversed().prefix(while: { $0.isWhitespace }).reversed())
-                out += leading + "`" + core + "`" + trailing
-                continue
+                return leading + "`" + core + "`" + trailing
             }
             // A typed asterisk or backtick is text, not syntax.
             let text = segment.text.replacingOccurrences(of: "*", with: "\\*")
                 .replacingOccurrences(of: "`", with: "\\`")
-            guard segment.italic || segment.bold || segment.underline else { out += text; continue }
+            guard segment.italic || segment.bold || segment.underline else { return text }
             // Markers go around the WORDS only. Wrapping a styled space — or a
             // span's edge spaces — wrote "mercoledi.*** ***rimandano", which
             // re-parses with markers pairing across words and, after a few
             // edits, left orphan "***" inside words (the 2026-09-25 audit).
             let core = text.trimmingCharacters(in: .whitespaces)
-            guard !core.isEmpty else { out += text; continue }
+            guard !core.isEmpty else { return text }
             let leading = String(text.prefix(while: { $0.isWhitespace }))
             let trailing = String(text.reversed().prefix(while: { $0.isWhitespace }).reversed())
             var wrapped = core
@@ -623,7 +646,29 @@ enum NoteMarkdown {
             if segment.italic    { wrapped = "*\(wrapped)*" }
             if segment.bold      { wrapped = "**\(wrapped)**" }
             if segment.underline { wrapped = "<u>\(wrapped)</u>" }
-            out += leading + wrapped + trailing
+            return leading + wrapped + trailing
+        }
+
+        var index = 0
+        while index < segments.count {
+            if let token = verbatim[index] { out += token; index += 1; continue }
+            let segment = segments[index]
+            guard let link = segment.link else { out += render(segment); index += 1; continue }
+            // A link is the RUN of segments sharing it, whatever their
+            // emphasis: one `[…](url)` around all of them.
+            var end = index
+            while end < segments.count, verbatim[end] == nil, segments[end].link == link { end += 1 }
+            let run = segments[index..<end]
+            let words = run.map(\.text).joined()
+            let inner = run.map(render).joined()
+            index = end
+            // Words with a bracket of their own (Wikipedia's "[1]") cannot be
+            // a link's words: they stay plain text.
+            let core = inner.trimmingCharacters(in: .whitespaces)
+            guard !words.contains("["), !words.contains("]"), !core.isEmpty else { out += inner; continue }
+            let leading = String(inner.prefix(while: { $0.isWhitespace }))
+            let trailing = String(inner.reversed().prefix(while: { $0.isWhitespace }).reversed())
+            out += leading + "[\(core)](\(link.replacingOccurrences(of: " ", with: "%20")))" + trailing
         }
         return out
     }
@@ -631,8 +676,10 @@ enum NoteMarkdown {
     /// Plain text, for the stream's preview line and the word count — the
     /// markers are not words.
     static func plainText(_ markdown: String) -> String {
-        AttachmentStore.tokenPattern.stringByReplacingMatches(
+        let noChips = AttachmentStore.tokenPattern.stringByReplacingMatches(
             in: markdown, range: NSRange(location: 0, length: (markdown as NSString).length), withTemplate: "")
+        return linkPattern.stringByReplacingMatches(
+            in: noChips, range: NSRange(location: 0, length: (noChips as NSString).length), withTemplate: "$1")
             .components(separatedBy: "\n")
             .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("```") }
             .map { split($0).2 }

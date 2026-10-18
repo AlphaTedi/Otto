@@ -52,9 +52,16 @@ struct NoteBodyView: NSViewRepresentable {
         view.isAutomaticSpellingCorrectionEnabled = false
         view.isAutomaticLinkDetectionEnabled = false
         view.isAutomaticDataDetectionEnabled = false
-        view.insertionPointColor = NSColor(PanelMetrics.accent)
-        view.selectedTextAttributes = [
-            .backgroundColor: NSColor.controlAccentColor.withAlphaComponent(0.28)
+        // Notes' own gold, not the system accent (Marcello, 2026-10-18): the
+        // caret, a toned-down selection and the links.
+        let gold = NSColor(DSDock.notes)
+        view.insertionPointColor = gold
+        view.selectedTextAttributes = [.backgroundColor: gold.withAlphaComponent(0.22)]
+        view.linkTextAttributes = [
+            .foregroundColor: NSColor(DSDock.notesLight),
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+            .underlineColor: gold.withAlphaComponent(0.45),
+            .cursor: NSCursor.pointingHand,
         ]
         view.typingAttributes = [
             .font: NoteType.font(for: .body),
@@ -82,6 +89,7 @@ struct NoteBodyView: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
+        NotchContentFade.apply(to: scroll, appeared: context.environment.notchContentAppeared)
         guard let view = scroll.documentView as? ActionTextView else { return }
         applyAppearance(to: view)
         context.coordinator.parent = self
@@ -329,7 +337,7 @@ final class ActionTextView: NSTextView {
     }
 
     func showSelectionControl() {
-        guard selectedRange().length > 0,
+        guard NoteActions.enabled, selectedRange().length > 0,
               let target = NoteEditorController.shared.actionAtCaret() else { return }
         controlTarget = target
         controlRect = inlineControlRect(after: target.range, size: 20)
@@ -342,7 +350,7 @@ final class ActionTextView: NSTextView {
     }
 
     private func linkedControls() -> [(rect: NSRect, phrase: String, done: Bool)] {
-        guard let storage = textStorage else { return [] }
+        guard NoteActions.enabled, let storage = textStorage else { return [] }
         var controls: [(rect: NSRect, phrase: String, done: Bool)] = []
         storage.enumerateAttribute(.noteActionDone, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
             guard let done = value as? Bool,
@@ -782,6 +790,14 @@ final class ActionTextView: NSTextView {
         storage.addAttribute(.foregroundColor, value: ink, range: inserted)
         storage.removeAttribute(.backgroundColor, range: inserted)
         storage.endEditing()
+        // Then show it as it will be SAVED: through the markdown and back.
+        // A Wikipedia paragraph came in at the page's size with blue links,
+        // and reopened as plain body text (Marcello, 2026-10-18): what you
+        // see after a paste is now what the file holds — the words, the
+        // emphasis and the links, in the note's own type.
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated { NoteEditorController.shared.normalizeToMarkdown() }
+        }
         return true
     }
 

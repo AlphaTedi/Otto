@@ -108,11 +108,16 @@ struct OttoPeekLogo: View {
     var pupilColor: Color? = .black
     var isAnimating: Bool = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The loop runs from when the logo APPEARS, entering at the start of its
+    /// rise. On the wall clock it could be anywhere in its 8 s, mostly hidden
+    /// — an empty space showed only "Nothing here yet" for seconds before
+    /// Otto came up (Marcello, 2026-10-18).
+    @State private var start = Date()
 
     var body: some View {
         let animate = isAnimating && !reduceMotion
         TimelineView(.animation(paused: !animate)) { ctx in
-            let t = animate ? ctx.date.timeIntervalSinceReferenceDate : P.restTime
+            let t = animate ? ctx.date.timeIntervalSince(start) + P.riseStart : P.restTime
             Canvas { gc, size in
                 // size = the visible window (clips the lower part of the logo)
                 let s = size.width / P.windowWidthRatio / 971      // logo scale
@@ -146,6 +151,9 @@ private enum P {
     static let windowWidthRatio = 1.3      // 260 / 200
     static let windowHeightRatio = 0.825   // 80 / 97
     static let restTime = 4.0              // static frame used with Reduce Motion (logo up, eyes centered)
+    /// Where a freshly shown logo enters the loop: the start of its rise
+    /// (0.08 of 8 s), so it comes up at once.
+    static let riseStart = 0.08 * 8
 
     struct K { let t: Double; let x: Double; let y: Double }
 

@@ -27,6 +27,7 @@ struct NoteFormatBar: View {
 
     @ObservedObject private var editor = NoteEditorController.shared
     @State private var showsBlockMenu = false
+    @State private var showsTextStyleMenu = false
 
     var body: some View {
         if docked { dockedBody } else { panelBody }
@@ -62,16 +63,26 @@ struct NoteFormatBar: View {
                 editor.toggleBlock(.checklistOpen)
             } glyph: { DockIcon(.checklist, size: 17) }
             dockDivider
+            // Bold, italic and underline under ONE "Text style" — its popover
+            // lists the three (Marcello, 2026-10-18: room for Link without a
+            // longer bar). Their shortcuts still work straight from the body.
             Group {
-                DockToolButton(label: L10n.t("dock.fmt.bold"), shortcut: "\u{2318}B", isActive: editor.bold) {
-                    editor.toggleBold()
-                } glyph: { Text("B").font(.system(size: 13, weight: .bold)) }
-                DockToolButton(label: L10n.t("dock.fmt.italic"), shortcut: "\u{2318}I", isActive: editor.italic) {
-                    editor.toggleItalic()
-                } glyph: { Text("I").font(.system(size: 13).italic()) }
-                DockToolButton(label: L10n.t("dock.fmt.underline"), shortcut: "\u{2318}U", isActive: editor.underline) {
-                    editor.toggleUnderline()
-                } glyph: { Text("U").font(.system(size: 13)).underline() }
+                DockToolButton(label: L10n.t("dock.fmt.textStyle"), shortcut: nil,
+                               isActive: editor.bold || editor.italic || editor.underline) {
+                    showsTextStyleMenu.toggle()
+                } glyph: { DockIcon(.textStyle, size: 17) }
+                .popover(isPresented: $showsTextStyleMenu, arrowEdge: .top) {
+                    TextStyleMenu { showsTextStyleMenu = false }
+                }
+                DockToolButton(label: L10n.t("dock.fmt.link"), shortcut: "\u{2318}K",
+                               isActive: editor.currentLink != nil) {
+                    editor.beginLink()
+                } glyph: { DockIcon(.link, size: 17) }
+                .popover(isPresented: Binding(get: { editor.editingLink },
+                                              set: { if !$0 { editor.cancelLink() } }),
+                         arrowEdge: .top) {
+                    LinkEditor(initial: editor.currentLink?.absoluteString ?? "")
+                }
             }
             .disabled(editor.activeBlock == .code)
             dockDivider
@@ -306,6 +317,91 @@ private struct ChecklistGlyph: View {
     }
 }
 
+// MARK: The Text style popover — bold, italic, underline
+
+private struct TextStyleMenu: View {
+    let done: () -> Void
+    @ObservedObject private var editor = NoteEditorController.shared
+    @State private var hovered: Int?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            row(0, glyph: Text("B").font(.system(size: 14, weight: .bold)),
+                label: L10n.t("dock.fmt.bold"), shortcut: "\u{2318}B", isOn: editor.bold) { editor.toggleBold() }
+            row(1, glyph: Text("I").font(.system(size: 14).italic()),
+                label: L10n.t("dock.fmt.italic"), shortcut: "\u{2318}I", isOn: editor.italic) { editor.toggleItalic() }
+            row(2, glyph: Text("U").font(.system(size: 14)).underline(),
+                label: L10n.t("dock.fmt.underline"), shortcut: "\u{2318}U", isOn: editor.underline) { editor.toggleUnderline() }
+        }
+        .padding(OttoMenuStyle.padding - 4)
+        .frame(width: 220)
+    }
+
+    private func row(_ index: Int, glyph: some View, label: String, shortcut: String, isOn: Bool,
+                     action: @escaping () -> Void) -> some View {
+        Button {
+            action()
+            done()
+        } label: {
+            HStack(spacing: 10) {
+                glyph
+                    .foregroundStyle(isOn ? DSDock.notes : DSColor.textPrimaryBright)
+                    .frame(width: 22, alignment: .leading)
+                Text(label)
+                    .font(.system(size: OttoMenuStyle.rowFont, weight: isOn ? .medium : .regular))
+                    .foregroundStyle(isOn ? DSColor.textPrimaryBright : DSColor.textPrimary)
+                Spacer(minLength: 8)
+                Text(shortcut)
+                    .font(.system(size: OttoMenuStyle.shortcutFont))
+                    .foregroundStyle(DSDock.text3)
+            }
+            .padding(.horizontal, OttoMenuStyle.rowPaddingH)
+            .padding(.vertical, 9)
+            .background(RoundedRectangle(cornerRadius: OttoMenuStyle.rowRadius, style: .continuous)
+                .fill(OttoMenuStyle.rowFill(highlighted: hovered == index, current: isOn)))
+            .contentShape(RoundedRectangle(cornerRadius: OttoMenuStyle.rowRadius, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 ? index : (hovered == index ? nil : hovered) }
+    }
+}
+
+// MARK: The Link popover — one field
+
+private struct LinkEditor: View {
+    let initial: String
+    @State private var text = ""
+    @FocusState private var focused: Bool
+    @ObservedObject private var editor = NoteEditorController.shared
+
+    var body: some View {
+        HStack(spacing: 8) {
+            DockIcon(.link, size: 15)
+                .foregroundStyle(DSDock.notes)
+            TextField(L10n.t("dock.linkPlaceholder"), text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .focused($focused)
+                .onSubmit { editor.commitLink(text) }
+                .onExitCommand { editor.cancelLink() }
+            if !initial.isEmpty {
+                // Remove: the same verb as committing an empty field.
+                Button(L10n.t("dock.linkRemove")) { editor.commitLink("") }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color(hex: "#FF6961"))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(width: 300)
+        .onAppear {
+            text = initial
+            DispatchQueue.main.async { focused = true }
+        }
+    }
+}
+
 // MARK: The Aa popover — every block type in one place
 
 private struct BlockMenu: View {
@@ -337,7 +433,7 @@ private struct BlockMenu: View {
             HStack(spacing: 10) {
                 Text(glyph)
                     .font(.system(size: glyphSize, weight: block == .body ? .regular : .semibold))
-                    .foregroundStyle(isCurrent ? PanelMetrics.accent : DSColor.textPrimaryBright)
+                    .foregroundStyle(isCurrent ? DSDock.notes : DSColor.textPrimaryBright)
                     .frame(width: 22, alignment: .leading)
                 Text(label)
                     .font(.system(size: OttoMenuStyle.rowFont, weight: isCurrent ? .medium : .regular))

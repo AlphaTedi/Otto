@@ -100,7 +100,9 @@ struct NotchShapeView: View {
 
     // MARK: - Raccordatura radius per state
 
-    private var currentFilletRadius: CGFloat {
+    private var currentFilletRadius: CGFloat { filletRadius(for: state) }
+
+    private func filletRadius(for state: NotchState) -> CGFloat {
         switch state {
         case .idle:                 return 12
         case .hovering:             return 14
@@ -143,18 +145,22 @@ struct NotchShapeView: View {
         presenceState == nil ? 0 : Self.presenceWingWidth * 2
     }
 
-    private var currentWidth: CGFloat {
+    private var currentWidth: CGFloat { width(for: state) }
+
+    private func width(for state: NotchState) -> CGFloat {
         switch state {
         case .idle:
-            return notchSize.width + presenceExtraWidth + currentFilletRadius * 2
+            return notchSize.width + presenceExtraWidth + filletRadius(for: state) * 2
         case .hovering:
-            return notchSize.width + max(28, presenceExtraWidth) + currentFilletRadius * 2
+            return notchSize.width + max(28, presenceExtraWidth) + filletRadius(for: state) * 2
         case .expanded:
             return expandedSize.width
         }
     }
 
-    private var currentHeight: CGFloat {
+    private var currentHeight: CGFloat { height(for: state) }
+
+    private func height(for state: NotchState) -> CGFloat {
         switch state {
         // The indicator NEVER adds height. It exceeded the hardware notch
         // vertically, which reads as a bar hanging into the desktop rather
@@ -166,7 +172,9 @@ struct NotchShapeView: View {
         }
     }
 
-    private var bottomCornerRadius: CGFloat {
+    private var bottomCornerRadius: CGFloat { bottomRadius(for: state) }
+
+    private func bottomRadius(for state: NotchState) -> CGFloat {
         // Scale with height so taller presets (Wide / Extra Large) keep a
         // visibly rounded silhouette instead of looking like a flat slab.
         // Cap at 28pt so tiny notches don't get over-rounded.
@@ -216,6 +224,18 @@ struct NotchShapeView: View {
     // every state change so a rapid hover-in/hover-out can never leave a
     // stale phase firing on an already-collapsed notch.
     @State private var squishTask: Task<Void, Never>? = nil
+    /// The content stays in the tree through the collapse, so the shrinking
+    /// silhouette CLIPS it on the way out. Removed at once, it used to fade
+    /// at full size, unclipped, while the black closed under it — text and
+    /// rows hanging in mid-air for a beat after the notch had gone
+    /// (Marcello, 2026-10-18, frame by frame).
+    @State private var contentMounted = false
+    /// The clip's own state. A view inserted mid-animation is born at its
+    /// FINAL geometry, so a mask reading `state` started full-size and clipped
+    /// nothing on the way in. This one is set to where the black is now,
+    /// then animated to where it is going — on the black's own spring.
+    @State private var maskState: NotchState = .idle
+    @State private var unmountTask: Task<Void, Never>? = nil
 
     // MARK: - Body
 
@@ -239,6 +259,11 @@ struct NotchShapeView: View {
                 if !reduceMotion {
                     runSquishAnimation(for: newState)
                 }
+                updateContentMount(for: newState)
+            }
+            .onAppear {
+                contentMounted = state == .expanded
+                maskState = state
             }
             // The presence indicator (spec 2026-08-17). It replaces CA-2's
             // lone amber dot, which said only "a meeting exists" — this says
@@ -272,7 +297,7 @@ struct NotchShapeView: View {
             // the rounded body (otherwise on taller presets the bottom rows
             // would visibly stick out past the rounded corners and look like
             // they had been "cut").
-            if state == .expanded {
+            if contentMounted {
                 content
                     // TOP alignment (FB4): if the content is ever taller than
                     // this window, the overflow must fall off the BOTTOM, never
@@ -290,26 +315,39 @@ struct NotchShapeView: View {
                     // made a tall card look pasted-in rather than assembled.
                     .opacity(contentVisible ? 1.0 : 0.0)
                     .blur(radius: contentVisible ? 0 : 2)
+                    // In on the content's spring; OUT at once (contentOut), so
+                    // nothing is still fading after the black has gone.
                     .animation(
-                        reduceMotion ? .easeInOut(duration: 0.1) : NotchAnimation.contentIn,
+                        reduceMotion ? .easeInOut(duration: 0.1)
+                            : (contentVisible ? NotchAnimation.contentIn : NotchAnimation.contentOut),
                         value: contentVisible
                     )
                     // Children read this to time their own entry against the
                     // silhouette's expansion.
                     .environment(\.notchContentAppeared, contentVisible)
-                    .frame(width: currentWidth, height: currentHeight, alignment: .top)
-                    .mask(
+                    // The content is laid out at its EXPANDED size the whole
+                    // time — it never reflows while the notch grows or
+                    // shrinks — and only the clip moves.
+                    .frame(width: expandedSize.width, height: expandedSize.height + extraExpandedHeight,
+                           alignment: .top)
+                    // THE clip is the silhouette itself: the same shape, the
+                    // same size, the same squish and the same spring, so the
+                    // content can never show outside the black. It had its
+                    // own (the root's contentHug) and no squish, and the rows
+                    // led the black on the way in and outlived it on the way
+                    // out (Marcello, 2026-10-18).
+                    .mask(alignment: .top) {
                         NotchShape(
-                            bottomRadius: bottomCornerRadius,
-                            filletRadius: currentFilletRadius
+                            bottomRadius: bottomRadius(for: maskState),
+                            filletRadius: filletRadius(for: maskState)
                         )
-                        .frame(width: currentWidth, height: currentHeight)
-                    )
-                    // Content window + clip mask track the hugging silhouette
-                    // on the same spring — otherwise the mask snaps and rows
-                    // get visibly clipped mid-shrink (§8.4).
-                    .animation(reduceMotion ? .easeInOut(duration: 0.15) : NotchAnimation.contentHug,
-                               value: extraExpandedHeight)
+                        .frame(width: width(for: maskState), height: height(for: maskState))
+                        .scaleEffect(x: squishScaleX, y: squishScaleY, anchor: .top)
+                        // Content window + clip mask track the hugging
+                        // silhouette on the same spring (§8.4).
+                        .animation(reduceMotion ? .easeInOut(duration: 0.15) : NotchAnimation.contentHug,
+                                   value: extraExpandedHeight)
+                    }
             }
 
         }
@@ -323,6 +361,37 @@ struct NotchShapeView: View {
         // panels that hang BELOW the notch are siblings of this view, not
         // children, so they keep following the system as they should.
         .darkGroundSurface()
+    }
+
+    /// Mount at once on expand; on collapse, unmount only once the
+    /// silhouette has closed over the content.
+    private func updateContentMount(for newState: NotchState) {
+        unmountTask?.cancel()
+        let spring = reduceMotion ? Animation.easeInOut(duration: 0.15)
+            : (newState == .expanded ? NotchAnimation.expand
+               : newState == .hovering ? NotchAnimation.hover : NotchAnimation.collapse)
+        if newState == .expanded {
+            NotchContentFade.openedAt = Date()
+            if !contentMounted {
+                // Start the clip where the black is (the hover size), then
+                // grow it with the black.
+                var still = Transaction()
+                still.disablesAnimations = true
+                withTransaction(still) { maskState = .hovering }
+                contentMounted = true
+                DispatchQueue.main.async { withAnimation(spring) { maskState = .expanded } }
+            } else {
+                withAnimation(spring) { maskState = .expanded }
+            }
+            return
+        }
+        withAnimation(spring) { maskState = newState }
+        guard contentMounted else { return }
+        unmountTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 420_000_000)
+            guard !Task.isCancelled, state != .expanded else { return }
+            contentMounted = false
+        }
     }
 
     // MARK: - Squish Animation (multi-phase spring sequence)

@@ -297,6 +297,9 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             if keyCode == 48, !cmd, !option, !control {
                 return true
             }
+            // The dock's page has no week stepper (Marcello, 2026-10-18): it
+            // is always this week, so ←/→ have nothing to walk.
+            if keyCode == 123 || keyCode == 124, DockExperiment.isOn { return true }
             if keyCode == 123 || keyCode == 124, !cmd, !option, !control {
                 state.step(keyCode == 124 ? 1 : -1)
                 return true
@@ -441,7 +444,7 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                     }
                     return true
                 }
-                if option, !cmd, !control, keyCode == 36 {
+                if option, !cmd, !control, keyCode == 36, NoteActions.enabled {
                     if let hit = editor.actionAtCaret() {
                         if let noteID = notes.openNoteID,
                            let linked = TodoStore.shared.todo(forNote: noteID, phrase: hit.phrase) {
@@ -475,6 +478,8 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                     case "b": editor.toggleBold();      return true
                     case "i": editor.toggleItalic();    return true
                     case "u": editor.toggleUnderline(); return true
+                    // ⌘K — a link on the selection, every editor's key.
+                    case "k": editor.beginLink();       return true
                     // ⌘' — Apple Notes' block quote. By character, so it
                     // follows the apostrophe wherever the layout puts it.
                     case "'": editor.toggleQuote();     return true

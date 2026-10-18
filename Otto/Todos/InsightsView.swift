@@ -29,6 +29,10 @@ struct InsightsView: View {
     @State private var contentHeight: CGFloat = 0
 
     private var isContainer: Bool { notchLayout == .container }
+    /// The dock: just the panels — no title, no week stepper, no space row;
+    /// the bar at the foot carries Back (Marcello, 2026-10-18).
+    @AppStorage(DockExperiment.key) private var containerDock = false
+    private var usesDock: Bool { DockExperiment.isOn(layout: notchLayout, flag: containerDock) }
 
     /// What is left of the panel once the header and the space bar have taken
     /// theirs.
@@ -55,6 +59,29 @@ struct InsightsView: View {
     }
 
     var body: some View {
+        if usesDock { dockBody } else { panelsBody }
+    }
+
+    /// The dock's page: the panels alone, scrolling under the bar.
+    private var dockBody: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 12) {
+                body_
+            }
+            .padding(.top, 6)
+            .padding(.horizontal, NotchContainerMetrics.highlightInFrame)
+            // Travel: the last panel scrolls out from under the bar.
+            .padding(.bottom, NotchContainerMetrics.listTravel)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onAppear {
+            archive.reloadIfNeeded()
+            state.surfaceLastWeekIfDue(store: store, archive: archive)
+        }
+        .onReceive(store.$archiveRevision) { _ in archive.reload() }
+    }
+
+    private var panelsBody: some View {
         VStack(alignment: .leading, spacing: 12) {
             if isContainer {
                 header
@@ -304,6 +331,11 @@ private struct PanelHeader: View {
 
 // MARK: - Panel 1 — the year grid
 
+private struct GridWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 private struct YearGrid: View {
     let store: TodoStore
     let archive: CompletedArchive
@@ -312,9 +344,21 @@ private struct YearGrid: View {
     /// has rather than being drawn at a fixed cell size and cropped — under the
     /// notch that width changes with the display.
     private static let rows = 7
+    private static let gap: CGFloat = 3
+    private static let weeks = 53
+    @State private var gridWidth: CGFloat = 0
+
+    /// Columns that fit at ~13 pt a square (never more than a year), and the
+    /// square that fills the width exactly.
+    private static func layout(width: CGFloat) -> (columns: Int, cell: CGFloat) {
+        guard width > 0 else { return (26, 11) }
+        let columns = min(weeks, max(13, Int((width + gap) / (13 + gap))))
+        let cell = (width - gap * CGFloat(columns - 1)) / CGFloat(columns)
+        return (columns, max(4, floor(cell * 2) / 2))
+    }
 
     var body: some View {
-        let weeks = 53
+        let weeks = Self.weeks
         let counts = CompletionStats.dailyCounts(section: nil, days: weeks * Self.rows,
                                                  store: store, archive: archive)
         InsightsPanel {
@@ -322,39 +366,43 @@ private struct YearGrid: View {
                 PanelHeader(label: L10n.t("insights.lastTwelveMonths"),
                             total: counts.reduce(0, +),
                             unit: L10n.t("insights.closed"))
-                GeometryReader { geo in
-                    // Below 560pt of width the grid drops to six months rather
-                    // than shrinking the cells further — past a point a smaller
-                    // square stops being readable and becomes noise.
-                    let columns = geo.size.width < 560 ? 26 : weeks
-                    let gap: CGFloat = 3
-                    let cell = max(4, (geo.size.width - gap * CGFloat(columns - 1)) / CGFloat(columns))
-                    let shown = Array(counts.suffix(columns * Self.rows))
-                    HStack(alignment: .top, spacing: gap) {
-                        ForEach(0..<columns, id: \.self) { column in
-                            VStack(spacing: gap) {
-                                ForEach(0..<Self.rows, id: \.self) { row in
-                                    let index = column * Self.rows + row
-                                    let isToday = index == shown.count - 1
-                                    RoundedRectangle(cornerRadius: 2, style: .continuous)
-                                        .fill(isToday ? PanelMetrics.accent
-                                              : Self.fill(index < shown.count ? shown[index] : 0))
-                                        .overlay(
-                                            // Today is the anchor: without it
-                                            // the texture has no "you are here"
-                                            // and stops being a calendar.
-                                            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                                                .strokeBorder(isToday
-                                                              ? PanelMetrics.accent.opacity(0.55)
-                                                              : Color.clear, lineWidth: 1.5)
-                                        )
-                                        .frame(width: cell, height: cell)
-                                }
+                // The grid's height FOLLOWS from its width: as many weeks as fit
+                // at about 13 pt a square, then the squares stretched to fill.
+                // It used to be a fixed 95 pt while the squares were sized by
+                // width, so in a narrower panel they came out ~18 pt and the
+                // last rows hung out of the panel (Marcello, 2026-10-18).
+                let layout = Self.layout(width: gridWidth)
+                let shown = Array(counts.suffix(layout.columns * Self.rows))
+                HStack(alignment: .top, spacing: Self.gap) {
+                    ForEach(0..<layout.columns, id: \.self) { column in
+                        VStack(spacing: Self.gap) {
+                            ForEach(0..<Self.rows, id: \.self) { row in
+                                let index = column * Self.rows + row
+                                let isToday = index == shown.count - 1
+                                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                    .fill(isToday ? PanelMetrics.accent
+                                          : Self.fill(index < shown.count ? shown[index] : 0))
+                                    .overlay(
+                                        // Today is the anchor: without it
+                                        // the texture has no "you are here"
+                                        // and stops being a calendar.
+                                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                            .strokeBorder(isToday
+                                                          ? PanelMetrics.accent.opacity(0.55)
+                                                          : Color.clear, lineWidth: 1.5)
+                                    )
+                                    .frame(width: layout.cell, height: layout.cell)
                             }
                         }
                     }
                 }
-                .frame(height: 7 * 11 + 6 * 3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: CGFloat(Self.rows) * layout.cell + CGFloat(Self.rows - 1) * Self.gap,
+                       alignment: .top)
+                .background(GeometryReader { geo in
+                    Color.clear.preference(key: GridWidthKey.self, value: geo.size.width)
+                })
+                .onPreferenceChange(GridWidthKey.self) { gridWidth = $0 }
 
                 // The axis, so a column has a date rather than being the
                 // n-th square from the left.

@@ -69,6 +69,7 @@ struct HighlightingTitleField: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSScrollView()
+        NotchContentFade.initial(scroll, appeared: context.environment.notchContentAppeared)
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = false
         scroll.hasHorizontalScroller = false
@@ -127,6 +128,7 @@ struct HighlightingTitleField: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
+        NotchContentFade.apply(to: scroll, appeared: context.environment.notchContentAppeared)
         guard let view = scroll.documentView as? NSTextView else { return }
         (view as? FocusReportingTextView)?.allowsImages = allowsImages
         // The view holds chips where the text holds tokens: compare in token
