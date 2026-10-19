@@ -942,6 +942,14 @@ enum DebugDriver {
                 appendState("displays mode=\(NotchDisplays.current.rawValue) active=\(c.notchScreen?.localizedName ?? "nil") "
                             + "policy=\(NSApp.activationPolicy().rawValue) space: \(SpaceAnchor.debugDescription)\n"
                             + lines.joined(separator: "\n"))
+            } else if command == "windows-status" {
+                let lines = NSApp.windows.map { w in
+                    "  \(type(of: w)) title='\(w.title)' visible=\(w.isVisible) onSpace=\(w.isOnActiveSpace) "
+                        + "titled=\(w.styleMask.contains(.titled)) level=\(w.level.rawValue) frame=\(w.frame) "
+                        + "behavior=\(w.collectionBehavior.rawValue)"
+                }
+                appendState("windows active=\(NSApp.isActive) policy=\(NSApp.activationPolicy().rawValue)\n"
+                            + lines.joined(separator: "\n"))
             } else if command == "menu-feedback" {
                 // The gear menu's Send feedback row, as a click would run it.
                 AvatarMenu.perform(.feedback)

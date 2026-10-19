@@ -103,6 +103,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // notch. Otto has no window and no Dock icon, so a launch that drew
         // nothing read as "the app does not open" — clicking the icon again
         // and again did, in fact, nothing visible.
+        // SwiftUI makes its context window after this returns.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { Self.hideContextWindow() }
+
         if !showsOnboarding && !launchedAsLoginItem {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { Self.showOtto() }
         }
@@ -115,10 +118,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// and not when the notch is what activated it.
     func applicationDidBecomeActive(_ notification: Notification) {
         MainActor.assumeIsolated {
+            Self.hideContextWindow()
             guard NSApp.activationPolicy() == .regular,
                   NotchController.shared.state != .expanded else { return }
             let windowUp = NSApp.windows.contains {
                 $0.isVisible && $0.styleMask.contains(.titled) && !($0 is NSPanel)
+                    && $0.frame.width > 1 && !Self.isContextWindow($0)
             }
             guard !windowUp else { return }
             Self.showOtto()
@@ -133,6 +138,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                   NotchController.shared.state == .expanded,
                   !NotchController.shared.isPresentingDialog else { return }
             NotchController.shared.forceCollapse()
+        }
+    }
+
+    /// Otto has no main window: closing (or hiding) the last one is not
+    /// quitting. SwiftUI otherwise ends an app whose only `Window` scene goes
+    /// away — which hiding the context window below did, at launch.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// SwiftUI's zero-size "Hidden" window (OttoApp) is a real, visible,
+    /// titled window to macOS, standing on whichever desktop Otto launched
+    /// on. With Otto in the Dock, ⌘⇥ therefore swiped to THAT desktop — and
+    /// the window counted as "an Otto window is up", so the notch never
+    /// opened (Marcello, 2026-10-19). It only needs to exist, not to be
+    /// shown: out of every space and off screen.
+    static func isContextWindow(_ window: NSWindow) -> Bool {
+        window.identifier?.rawValue.contains("hidden") == true || window.title == "Hidden"
+    }
+
+    @MainActor
+    static func hideContextWindow() {
+        for window in NSApp.windows where isContextWindow(window) {
+            window.collectionBehavior.insert([.canJoinAllSpaces, .ignoresCycle, .transient])
+            if window.isVisible { window.orderOut(nil) }
         }
     }
 
@@ -200,6 +228,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Settings action (the notch's right-click menu)
 
     @objc func openSettingsAction() {
-        NotificationCenter.default.post(name: .openSettingsRequest, object: nil)
+        // Straight to the controller: the hidden SwiftUI window this used to
+        // go through is kept off screen now (hideContextWindow).
+        MainActor.assumeIsolated { SettingsWindowController.show() }
     }
 }
