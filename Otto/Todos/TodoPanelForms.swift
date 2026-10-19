@@ -129,6 +129,8 @@ struct HighlightingTitleField: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         NotchContentFade.apply(to: scroll, appeared: context.environment.notchContentAppeared)
+        // The current values — the section's colour above all — for restyle.
+        context.coordinator.parent = self
         guard let view = scroll.documentView as? NSTextView else { return }
         (view as? FocusReportingTextView)?.allowsImages = allowsImages
         // The view holds chips where the text holds tokens: compare in token
@@ -181,6 +183,52 @@ struct HighlightingTitleField: NSViewRepresentable {
     /// responder calls is the only account of focus that is always right.
     final class FocusReportingTextView: NSTextView {
         var onFocusChange: ((Bool) -> Void)?
+        /// Offer a date's completion in grey after the caret (DateCompletion);
+        /// ⇥ accepts it through the key router.
+        var completesDates = true
+
+        override func draw(_ dirtyRect: NSRect) {
+            super.draw(dirtyRect)
+            drawDateGhost()
+        }
+
+        override func didChangeText() {
+            super.didChangeText()
+            needsDisplay = true
+        }
+
+        override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity,
+                                        stillSelecting: Bool) {
+            super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+            needsDisplay = true
+        }
+
+        /// The grey completion, right after the last character.
+        private func drawDateGhost() {
+            guard completesDates, window?.firstResponder === self, selectedRange().length == 0,
+                  !hasMarkedText(), let layout = layoutManager, let container = textContainer,
+                  let ghost = DateCompletion.ghost(in: string, caret: selectedRange().location)
+            else { return }
+            let glyphs = layout.numberOfGlyphs
+            guard glyphs > 0 else { return }
+            let last = layout.boundingRect(forGlyphRange: NSRange(location: glyphs - 1, length: 1), in: container)
+            let line = layout.lineFragmentRect(forGlyphAt: glyphs - 1, effectiveRange: nil)
+            let origin = NSPoint(x: last.maxX + textContainerOrigin.x,
+                                 y: line.minY + textContainerOrigin.y)
+            (ghost as NSString).draw(at: origin, withAttributes: [
+                .font: font ?? NSFont.systemFont(ofSize: 13),
+                .foregroundColor: NSColor(DSDock.placeholder),
+            ])
+        }
+
+        /// ⇥: write the rest of the date word. False when there is none.
+        func acceptDateCompletion() -> Bool {
+            guard completesDates, selectedRange().length == 0, !hasMarkedText(),
+                  let rest = DateCompletion.remainder(in: string, caret: selectedRange().location)
+            else { return false }
+            insertText(rest, replacementRange: selectedRange())
+            return true
+        }
         /// Re-registered with the drag system whenever it changes, and on
         /// joining a window (`viewDidMoveToWindow`).
         var allowsImages = false {
@@ -325,7 +373,9 @@ struct HighlightingTitleField: NSViewRepresentable {
             if let highlight {
                 let shown = AttachmentStore.displayRange(highlight, in: parent.text)
                 if shown.location >= 0, NSMaxRange(shown) <= full.length {
-                    storage.addAttribute(.foregroundColor, value: NSColor(DSColor.focusAccent), range: shown)
+                    // The section's own colour, like the caret (Marcello,
+                    // 2026-10-19: a fixed green belonged to no section).
+                    storage.addAttribute(.foregroundColor, value: NSColor(parent.accent), range: shown)
                 }
             }
             storage.removeAttribute(.kern, range: full)

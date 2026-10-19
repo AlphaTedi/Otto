@@ -206,15 +206,8 @@ struct DockTodoFirstRow: View {
                 })
                 .onPreferenceChange(DockFieldWidthKey.self) { fieldWidth = $0 }
             }
-            // NL-3: the resolved date, under the text.
-            if let parsed {
-                Text("\u{2192} \(parsed.display)")
-                    .font(.system(size: 11))
-                    .foregroundStyle(DSDock.text3)
-                    .padding(.leading, NotchContainerMetrics.contentInFrame
-                             + NotchContainerMetrics.box + NotchContainerMetrics.rowGap)
-                    .transition(.opacity)
-            }
+            // NL-3: the resolved date follows the caret in grey now
+            // (DateCompletion), not on a line under the text.
         }
         .animation(.easeOut(duration: 0.15), value: parsed?.display)
         .accessibilityElement(children: .contain)

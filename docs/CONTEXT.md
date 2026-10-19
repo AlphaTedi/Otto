@@ -1291,3 +1291,10 @@ notes and an editor with no top bar.
   `?` shortcuts overlay is gone. The calendar "not syncing" hint moved from
   Permissions (no badge) to Calendar & Meetings, after 21 quiet days, with
   steps. Theme/Layout thumbnails draw a mini Otto panel.
+
+- **2026-10-19 — Dates complete inline.** Typing a day word ("fri", "tom",
+  three letters or more, at the end of the draft) shows the rest of the word
+  and the date it means after the caret in placeholder grey
+  (`DateCompletion`, drawn by `FocusReportingTextView`); ⇥ writes the word and
+  switches space only when there is nothing to complete. The "→ Fri, Oct 23"
+  line under the field is gone in all three draft fields.

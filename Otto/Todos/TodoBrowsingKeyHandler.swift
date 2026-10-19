@@ -731,6 +731,13 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             // exception is a note or step field, where the caret is inside a
             // to-do rather than in the panel, and stealing ⇥ would be reaching
             // over the user's shoulder.
+            // ⇥ on a date being typed finishes the word ("fri" → "friday",
+            // DateCompletion) instead of switching space — only then.
+            if keyCode == 48, !cmd, !option, !control, !shift, draftHasCaret(),
+               let field = notchResponder as? HighlightingTitleField.FocusReportingTextView,
+               field.acceptDateCompletion() {
+                return true
+            }
             if keyCode == 48, !cmd, !option, !control,
                draftHasCaret() || !isEditingText() {
                 // The whole bar, Notes included: ⇥ walks past the last list

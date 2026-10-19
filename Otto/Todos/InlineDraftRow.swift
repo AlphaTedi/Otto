@@ -175,14 +175,8 @@ struct InlineDraftRow: View {
                 }
             }
 
-            // NL-3: live resolved-date caption, aligned with the title.
-            if let parsed {
-                Text("\u{2192} \(parsed.display)")
-                    .font(.system(size: 10))
-                    .foregroundStyle(DSColor.textFaint)
-                    .padding(.leading, 14 + DSSpacing.rowInternalGap)
-                    .transition(.opacity)
-            }
+            // NL-3: the resolved date follows the caret in grey now
+            // (DateCompletion), not on a line of its own.
         }
         // 24 / 16, as specified.
         .padding(.horizontal, PanelMetrics.barPaddingH)

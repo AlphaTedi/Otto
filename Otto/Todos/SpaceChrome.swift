@@ -379,19 +379,8 @@ struct TodoCaptureHeader: View {
             })
             .onPreferenceChange(CaptureFieldWidthKey.self) { fieldWidth = $0 }
         }
-        // The resolved date sits in the header's own foot room, so typing
-        // "tomorrow" never changes the header's 60 pt.
-        .overlay(alignment: .bottomLeading) {
-            if let parsed {
-                Text("\u{2192} \(parsed.display)")
-                    .font(.system(size: 10))
-                    .foregroundStyle(SpaceInk.a(0.45))
-                    .padding(.leading, SpaceChrome.cornerInset + SpaceChrome.slotWidth + SpaceChrome.slotGap)
-                    .padding(.bottom, 4)
-                    .transition(.opacity)
-                    .allowsHitTesting(false)
-            }
-        }
+        // The resolved date is no longer written under the field: it follows
+        // the caret in grey, with the rest of the word (DateCompletion).
         .contentShape(Rectangle())
         .onTapGesture { store.draftWantsFocus = true }
     }

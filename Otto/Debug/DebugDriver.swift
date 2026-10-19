@@ -942,6 +942,16 @@ enum DebugDriver {
                 appendState("displays mode=\(NotchDisplays.current.rawValue) active=\(c.notchScreen?.localizedName ?? "nil") "
                             + "policy=\(NSApp.activationPolicy().rawValue) space: \(SpaceAnchor.debugDescription)\n"
                             + lines.joined(separator: "\n"))
+            } else if command == "date-complete-tests" {
+                let cases = ["do this on fri", "do this on Thu", "call mum tom", "meet sun", "see you tod",
+                             "do this on fr", "do this on friday", "buy milk", "the sundial", "on WED",
+                             "x on mon and then"]
+                let lines = cases.map { text in
+                    let n = (text as NSString).length
+                    return "  '\(text)' rest=\(DateCompletion.remainder(in: text, caret: n) ?? "-") "
+                        + "ghost='\(DateCompletion.ghost(in: text, caret: n) ?? "-")'"
+                }
+                appendState("date-complete\n" + lines.joined(separator: "\n"))
             } else if command == "windows-status" {
                 let lines = NSApp.windows.map { w in
                     "  \(type(of: w)) title='\(w.title)' visible=\(w.isVisible) onSpace=\(w.isOnActiveSpace) "
