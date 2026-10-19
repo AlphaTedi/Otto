@@ -1298,3 +1298,11 @@ notes and an editor with no top bar.
   (`DateCompletion`, drawn by `FocusReportingTextView`); ⇥ writes the word and
   switches space only when there is nothing to complete. The "→ Fri, Oct 23"
   line under the field is gone in all three draft fields.
+
+- **2026-10-20 — ⇥ fills the date; rows show it.** ⇥ on a day word writes
+  the DATE in its place ("nice fri" → "nice Oct 23", English month so the
+  parser reads it back); ⏎ then files the to-do with that due date and the
+  title without it, as before. Rows now show the due date as a chip at the
+  line's end (`DueDateChip`: Today in gold, Tomorrow, the coming week's day,
+  later dates, past ones in red) — the date had been saved all along but no
+  row showed it, so it looked lost.

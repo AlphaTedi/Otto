@@ -372,6 +372,14 @@ struct TodoItemRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
+            // The due date, where the eye ends the line. A date typed into
+            // the title leaves it on ⏎ and becomes the due date — which no
+            // row showed, so the to-do read as if the date had been lost
+            // (Marcello, 2026-10-20).
+            if !item.isCompleted, titleDraft == nil, let due = item.dueDate {
+                DueDateChip(date: due)
+            }
+
             // The hint gutter, on EVERY line and always reserved: no text
             // ever runs under ⌘↵ or the grip, and a hint appearing on hover
             // or focus reflows nothing (Marcello, 2026-10-01, the red band
@@ -645,5 +653,53 @@ struct DragGrip: View {
             }
         }
         .frame(width: PanelMetrics.gripBox, height: PanelMetrics.gripBox)
+    }
+}
+
+
+/// A to-do's due date: today and tomorrow by name, the coming week by its
+/// day, later by its date; gold for today, red once past.
+struct DueDateChip: View {
+    let date: Date
+
+    var body: some View {
+        let style = Self.style(for: date)
+        HStack(spacing: 4) {
+            OttoIcon("calendar", pointSize: 10)
+            Text(style.label)
+                .font(.system(size: 12, weight: .medium))
+                .lineLimit(1)
+        }
+        .foregroundStyle(style.color)
+        .padding(.horizontal, 7)
+        .frame(height: 22)
+        .background(Capsule(style: .circular).fill(style.color.opacity(0.12)))
+        .overlay(Capsule(style: .circular).strokeBorder(style.color.opacity(0.25), lineWidth: 1))
+        .fixedSize()
+        .accessibilityLabel(style.label)
+    }
+
+    private static func style(for date: Date) -> (label: String, color: Color) {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let day = cal.startOfDay(for: date)
+        let days = cal.dateComponents([.day], from: today, to: day).day ?? 0
+        let formatter = DateFormatter()
+        formatter.locale = L10n.locale
+        switch days {
+        case ..<0:
+            formatter.setLocalizedDateFormatFromTemplate("MMMd")
+            return (formatter.string(from: date), Color(hex: "#FF8A80"))
+        case 0:
+            return (L10n.t("date.today"), DSDock.notes)
+        case 1:
+            return (L10n.t("date.tomorrow"), DSColor.textSecondary)
+        case 2...6:
+            formatter.setLocalizedDateFormatFromTemplate("EEE")
+            return (formatter.string(from: date), DSColor.textSecondary)
+        default:
+            formatter.setLocalizedDateFormatFromTemplate("MMMd")
+            return (formatter.string(from: date), DSColor.textSecondary)
+        }
     }
 }

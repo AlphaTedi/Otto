@@ -221,12 +221,13 @@ struct HighlightingTitleField: NSViewRepresentable {
             ])
         }
 
-        /// ⇥: write the rest of the date word. False when there is none.
+        /// ⇥: write the date in place of the day word ("fri" → "Oct 23").
+        /// False when there is nothing to fill — then ⇥ switches space.
         func acceptDateCompletion() -> Bool {
             guard completesDates, selectedRange().length == 0, !hasMarkedText(),
-                  let rest = DateCompletion.remainder(in: string, caret: selectedRange().location)
+                  let fill = DateCompletion.fill(in: string, caret: selectedRange().location)
             else { return false }
-            insertText(rest, replacementRange: selectedRange())
+            insertText(fill.replacement, replacementRange: fill.range)
             return true
         }
         /// Re-registered with the drag system whenever it changes, and on
