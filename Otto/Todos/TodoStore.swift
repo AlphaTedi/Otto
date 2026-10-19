@@ -448,10 +448,15 @@ final class TodoStore: ObservableObject {
     /// is now free, and it is what Thomas asked for (2026-09-01).
     @discardableResult
     func commitDraft() -> Bool {
-        // NL-4: a recognized date phrase leaves the title and becomes a real
-        // due date, exactly as the old creation card did.
+        // NL-4: a recognized date phrase becomes a real due date — and STAYS
+        // in the title, written out ("Thu, Oct 22"), where the row draws it
+        // as a date chip in the sentence (Marcello, 2026-10-20: it used to
+        // leave the title, and the to-do read as if the date were lost).
         let parsed = NLDateParser.parse(draftTitle)
-        let title = parsed?.cleanedTitle ?? draftTitle
+        let title = parsed.map {
+            (draftTitle as NSString).replacingCharacters(in: $0.nsRange,
+                                                         with: NLDateParser.token(for: $0.date))
+        } ?? draftTitle
         guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let target = draftDestination?.id,
               addItem(title: title, collectionID: target,

@@ -46,6 +46,10 @@ enum NLDateParser {
         let weekdayAlts = weekdays.keys.sorted { $0.count > $1.count }.joined(separator: "|")
         let monthAlts = months.keys.sorted { $0.count > $1.count }.joined(separator: "|")
         let pieces = [
+            // A written date with its day in front — "Thu, Oct 22", what ⇥
+            // writes and what a saved title keeps (2026-10-20). First, so the
+            // whole of it is one phrase rather than "Thu" alone.
+            "(?:\(weekdayAlts)),?\\s+(?:\(monthAlts))\\s+\\d{1,2}",
             "next\\s+week",
             "(?:next\\s+)?(?:\(weekdayAlts))",
             "tomorrow|tom",
@@ -120,6 +124,14 @@ enum NLDateParser {
             break
         }
 
+        // "thu, oct 22": the date is the month and day; the day name is
+        // there to be read.
+        let words = phrase.replacingOccurrences(of: ",", with: " ")
+            .split(separator: " ").map(String.init)
+        if words.count == 3, weekdays[words[0]] != nil {
+            return resolve(phrase: words[1] + " " + words[2], now: now)
+        }
+
         let isNext = phrase.hasPrefix("next ")
         let word = isNext ? String(phrase.dropFirst(5)).trimmingCharacters(in: .whitespaces)
                           : phrase
@@ -151,6 +163,20 @@ enum NLDateParser {
         }
         return nil
     }
+
+    /// How a date is WRITTEN into a title: "Thu, Oct 22" — always a weekday
+    /// and a date, never "today", which would be wrong tomorrow. English, the
+    /// only names this parser reads back; the row draws it as a date chip.
+    static func token(for date: Date) -> String {
+        tokenFormatter.string(from: date)
+    }
+
+    private static let tokenFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "EEE, MMM d"
+        return formatter
+    }()
 
     // MARK: - Display ("→ Tomorrow, Jul 14")
 

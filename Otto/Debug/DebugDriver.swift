@@ -945,14 +945,16 @@ enum DebugDriver {
             } else if command == "date-complete-tests" {
                 let cases = ["do this on fri", "do this on Thu", "call mum tom", "meet sun", "see you tod",
                              "do this on fr", "do this on friday", "buy milk", "the sundial", "on WED",
-                             "x on mon and then", "nice Oct 23", "call mum today"]
+                             "x on mon and then", "nice Oct 23", "call mum today", "nice Thu, Oct 22"]
                 let lines = cases.map { text in
                     let n = (text as NSString).length
                     let fill = DateCompletion.fill(in: text, caret: n)
                     let filled = fill.map { (text as NSString).replacingCharacters(in: $0.range, with: $0.replacement) } ?? "-"
-                    let saved = NLDateParser.parse(filled == "-" ? text : filled)
+                    let source = filled == "-" ? text : filled
+                    let saved = NLDateParser.parse(source)
                     return "  '\(text)' ghost='\(DateCompletion.ghost(in: text, caret: n) ?? "-")' "
-                        + "tab='\(filled)' saves='\(saved?.cleanedTitle ?? "-")' due=\(saved?.display ?? "-")"
+                        + "tab='\(filled)' saves='\(saved.map { (source as NSString).replacingCharacters(in: $0.nsRange, with: NLDateParser.token(for: $0.date)) } ?? "-")' "
+                        + "due=\(saved?.display ?? "-") chip=\(EntityParser.parse(saved.map { (source as NSString).replacingCharacters(in: $0.nsRange, with: NLDateParser.token(for: $0.date)) } ?? source).count)"
                 }
                 appendState("date-complete\n" + lines.joined(separator: "\n"))
             } else if command == "windows-status" {

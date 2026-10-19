@@ -1299,10 +1299,11 @@ notes and an editor with no top bar.
   switches space only when there is nothing to complete. The "→ Fri, Oct 23"
   line under the field is gone in all three draft fields.
 
-- **2026-10-20 — ⇥ fills the date; rows show it.** ⇥ on a day word writes
-  the DATE in its place ("nice fri" → "nice Oct 23", English month so the
-  parser reads it back); ⏎ then files the to-do with that due date and the
-  title without it, as before. Rows now show the due date as a chip at the
-  line's end (`DueDateChip`: Today in gold, Tomorrow, the coming week's day,
-  later dates, past ones in red) — the date had been saved all along but no
-  row showed it, so it looked lost.
+- **2026-10-20 — ⇥ fills the date, and the date stays in the title.** ⇥
+  on a day word writes the date written out — "nice fri" → "nice Fri, Oct 23"
+  (`NLDateParser.token`, English so the parser reads it back; "Thu, Oct 22"
+  is one phrase to it). ⏎ keeps that text IN the title, where the row draws
+  it as an inline date chip, and also sets the due date — the old behaviour
+  cut the phrase out of the title and no row showed the due date, so the
+  date looked lost. Relative words ("today") are written as dates on save,
+  so they never go stale. A right-aligned due chip was tried and dropped.
