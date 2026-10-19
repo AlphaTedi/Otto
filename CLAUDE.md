@@ -12,8 +12,8 @@ Hard requirements for every change:
   drivable without the mouse. A new surface or action ships WITH its keyboard
   path in the same change: Esc backs out one level from anywhere (and closes
   from plain browsing), explicit opens put the caret in the draft row, ⏎ edits
-  the focused row, Space completes it. Update the `?` overlay
-  (`ShortcutsOverlay`) when a binding changes.
+  the focused row, Space completes it. (The `?` shortcuts
+  overlay was removed on 2026-10-19 — shortcuts show in tooltips instead.)
 - **The panel hugs its content** (principle 2). Never give the expanded panel a
   fixed height; caps are `maxHeight`/`min(natural, budget)`, and any measured
   height must be a measurement of natural content, not a proposal echoed back.

@@ -934,6 +934,17 @@ enum DebugDriver {
                 if parts.count == 3, let i = Int(parts[1]), let dx = Double(parts[2]), stream.indices.contains(i) {
                     DockState.shared.swipeNote(stream[i].id, by: CGFloat(dx), ended: false)
                 }
+            } else if command == "displays-status" {
+                let c = NotchController.shared
+                let lines = NSScreen.screens.map { s in
+                    "  \(s.localizedName) id=\(s.displayID ?? 0) frame=\(s.frame) notch=\(s.safeAreaInsets.top > 0)"
+                }
+                appendState("displays mode=\(NotchDisplays.current.rawValue) active=\(c.notchScreen?.localizedName ?? "nil") "
+                            + "policy=\(NSApp.activationPolicy().rawValue) space: \(SpaceAnchor.debugDescription)\n"
+                            + lines.joined(separator: "\n"))
+            } else if command == "menu-feedback" {
+                // The gear menu's Send feedback row, as a click would run it.
+                AvatarMenu.perform(.feedback)
             } else if command == "dock-menu-close" {
                 DockState.shared.closeMenu()
             } else if command == "dock-status" {

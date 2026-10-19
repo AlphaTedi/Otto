@@ -7,8 +7,9 @@ import SwiftUI
 // granting calendar access is a rare, one-time, system-mediated action.
 //
 // A grouped Form like every other page (SETTINGS_REDESIGN_SPEC, 2026-10-01).
-// Access status and the "macOS isn't syncing" warning moved to Permissions;
-// this page keeps one line pointing there when something is off. The
+// Access status lives in Permissions; this page keeps one line pointing
+// there when access is refused. The "is macOS still syncing?" hint is here,
+// beside the account it is about (2026-10-19). The
 // diagnostics (today's events, the wide sync check) are DEBUG-only now.
 
 struct CalendarSettingsView: View {
@@ -86,6 +87,24 @@ struct CalendarSettingsView: View {
             .help(L10n.t("cal.faster.steps"))
         } header: {
             Text("Account")
+        }
+
+        // A hint, not an alarm: nothing new has reached this Mac for three
+        // weeks, which is what a Google account whose macOS sync died looks
+        // like (it happened on Marcello's Mac in 2026). It may also just be a
+        // quiet calendar, so it says what to try, step by step, and nothing is
+        // badged anywhere (2026-10-19).
+        if calendar.syncLooksStale, let last = calendar.lastSyncedAt {
+            Section {
+                SettingRow(title: "Missing new meetings?",
+                           subtitle: "The newest event on this Mac is from \(last.formatted(date: .abbreviated, time: .omitted)). If you have added meetings since, macOS has stopped syncing that account.") {
+                    Link("Open Internet Accounts", destination: SettingsPermissions.internetAccountsURL)
+                }
+            } header: {
+                Text("Calendar sync")
+            } footer: {
+                Text("1. Open Internet Accounts and choose your Google account.\n2. Turn Calendars off, wait a few seconds, and turn it back on.\n3. Still nothing after a minute? Remove the account and add it again.\nOtto reads whatever the Calendar app has, so once it syncs, meetings appear here on their own.")
+            }
         }
 
         // Per-calendar opt-out: macOS grants the whole calendar database at

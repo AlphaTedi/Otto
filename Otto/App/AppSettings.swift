@@ -65,7 +65,9 @@ struct AppSettings: Codable {
 
     // General
     var launchAtLogin: Bool = false
-    var showInDock: Bool = false
+    /// On by default (2026-10-19): in the Dock means in ⌘⇥, and switching to
+    /// Otto opens the notch ready to type.
+    var showInDock: Bool = true
     var appTheme: AppTheme = .system
     /// Anonymous usage data (docs/TELEMETRY.md). nil = never asked; the
     /// onboarding or a one-time panel card asks. Opt-in: nothing is sent

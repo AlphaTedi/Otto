@@ -399,7 +399,8 @@ struct PanelMeetingCard: View {
                     .padding(.top, 3)
 
                 HStack(alignment: .center, spacing: 8) {
-                    MeetingNotesButton(meeting: meeting)
+                    // No Notes button for now (Marcello, 2026-10-19): Join
+                    // and Snooze are the card's verbs.
                     if meeting.videoURL != nil {
                         PanelJoinButton(showsShortcut: isNext) { join() }
                     }

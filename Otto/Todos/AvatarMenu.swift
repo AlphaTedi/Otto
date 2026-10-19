@@ -37,8 +37,6 @@ struct AvatarMenu: View {
                           shortcut: "\u{2318}I", detail: nil, isDestination: true),
             AvatarMenuRow(id: .preferences, label: L10n.t("menu.preferences"),
                           shortcut: "\u{2318},", detail: nil, isDestination: false),
-            AvatarMenuRow(id: .shortcuts, label: L10n.t("menu.shortcuts"),
-                          shortcut: nil, detail: nil, isDestination: false),
             AvatarMenuRow(id: .notesFolder, label: L10n.t("menu.notesFolder"),
                           shortcut: nil,
                           detail: MarkdownVault.shared.directory.lastPathComponent,
@@ -106,8 +104,6 @@ struct AvatarMenu: View {
             NotchController.shared.focusPanel()
         case .preferences:
             SettingsWindowController.show()
-        case .shortcuts:
-            withAnimation(NotchAnimation.hintFade) { store.showShortcuts = true }
         case .notesFolder:
             // Reveal, not open: the point is to make it concrete that notes are
             // real .md files on disk, and the Finder showing them does that
@@ -118,6 +114,14 @@ struct AvatarMenu: View {
             // the feedback form it had just opened (2026-09-27).
             NotchController.shared.forceCollapse()
             FeedbackWindowController.show()
+            // And again once the click is over. The collapse is refused while
+            // a drag looks in flight, and the click that chose this row can
+            // read as one (a hair of movement, a stale drag pasteboard) until
+            // its mouse-up is handled — so the panel stayed over the form
+            // (Marcello, 2026-10-19).
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                NotchController.shared.collapseForWindow()
+            }
         case .quit:
             NSApp.terminate(nil)
         }
@@ -129,7 +133,6 @@ extension AvatarMenuRow.ID {
         switch self {
         case .insights: return "chart.bar"
         case .preferences: return "gearshape"
-        case .shortcuts: return "keyboard"
         case .notesFolder: return "folder"
         case .feedback: return "bubble.left"
         case .quit: return "power"
@@ -138,7 +141,7 @@ extension AvatarMenuRow.ID {
 }
 
 struct AvatarMenuRow: Identifiable {
-    enum ID: Hashable { case insights, preferences, shortcuts, notesFolder, feedback, quit }
+    enum ID: Hashable { case insights, preferences, notesFolder, feedback, quit }
     let id: ID
     let label: String
     let shortcut: String?

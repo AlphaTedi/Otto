@@ -134,9 +134,7 @@ final class TodoStore: ObservableObject {
     // MARK: - Panel modes (design PRD §§2-5)
 
     @Published var panelMode: TodoPanelMode = .browsing
-    /// §2.3: the `?` reference lives INSIDE the panel as an overlay.
-    @Published var showShortcuts = false
-    /// The avatar menu. Modal in the same sense the ? overlay is: while it is
+    /// The avatar menu. Modal: while it is
     /// up the panel's other keys are inert, and it is handled at the top of the
     /// key router rather than inside a mode.
     @Published var showsAvatarMenu = false
@@ -539,7 +537,7 @@ final class TodoStore: ObservableObject {
     /// under the user mid-typing. Checked by NotchController.triggerCollapse.
     /// A caret in the draft row counts; the row merely existing does not.
     var isPanelPinnedOpen: Bool {
-        panelMode != .browsing || showShortcuts || draftFocused
+        panelMode != .browsing || draftFocused
             // The B3 dock's space menu or new-space card is up.
             || DockState.shared.isBusy
     }

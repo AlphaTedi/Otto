@@ -88,7 +88,7 @@ final class CalendarStore: ObservableObject {
     /// instead of silently showing an empty list.
     var syncLooksStale: Bool {
         guard isConnected, let last = lastSyncedAt else { return false }
-        return Date().timeIntervalSince(last) > 7 * 86_400
+        return Date().timeIntervalSince(last) > 21 * 86_400
     }
 
     /// Raw attendee data — diagnoses empty/letter-only avatars.

@@ -255,6 +255,8 @@ class NotchController: ObservableObject {
         // refused the first one.
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.pinToOwnSpace() }
         applyNotchAppearance()
+        // The other displays' notches (NotchDisplays).
+        updateStubs()
 
         // Start mouse tracking
         startMouseTracking()
@@ -319,21 +321,110 @@ class NotchController: ObservableObject {
     /// (frame origin at zero, the one macOS hangs the menu bar off), not to
     /// `.main`, so it stays on one screen for the whole session instead of
     /// hopping to whichever display you last clicked on.
-    var notchScreen: NSScreen? {
+    var homeScreen: NSScreen? {
         if let notched = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) {
             return notched
         }
         return NSScreen.screens.first(where: { $0.frame.origin == .zero }) ?? NSScreen.main
     }
 
-    @objc private func screenParametersDidChange() {
-        // Hop to the next runloop tick so NSScreen reports the new geometry.
-        DispatchQueue.main.async { [weak self] in
-            self?.repositionForCurrentScreen()
+    /// Where the panel is now: home, or — with the notch on every display
+    /// (NotchDisplays) — the display it was last opened on.
+    var notchScreen: NSScreen? {
+        if NotchDisplays.current == .all, let id = activeDisplayID,
+           let screen = NSScreen.screens.first(where: { $0.displayID == id }) {
+            return screen
+        }
+        return homeScreen
+    }
+
+    /// The display the panel was moved to; nil is home.
+    private var activeDisplayID: CGDirectDisplayID?
+    /// Each stub's hover target, in screen coordinates.
+    private var stubZones: [CGDirectDisplayID: NSRect] = [:]
+
+    /// Take the panel to `screen`, collapsed, to open there.
+    func moveNotch(to screen: NSScreen) {
+        guard let id = screen.displayID, id != notchScreen?.displayID, state != .expanded else { return }
+        activeDisplayID = id
+        repositionForCurrentScreen()
+        // A new space for the new display: the old one belongs to the display
+        // it was made on, and a window left in it there is not drawn here.
+        SpaceAnchor.release()
+        pinToOwnSpace()
+    }
+
+    /// The display under the pointer, for an open that did not come from it
+    /// (a hotkey, the Dock, ⌘⇥).
+    private func followPointer() {
+        guard NotchDisplays.current == .all, state != .expanded else { return }
+        let pointer = NSEvent.mouseLocation
+        if let screen = NSScreen.screens.first(where: { NSMouseInRect(pointer, $0.frame, false) }) {
+            moveNotch(to: screen)
         }
     }
 
+    /// The display whose stub the point is on, if any.
+    private func stubScreen(at point: NSPoint) -> NSScreen? {
+        guard NotchDisplays.current == .all,
+              let id = stubZones.first(where: { $0.value.contains(point) })?.key else { return nil }
+        return NSScreen.screens.first { $0.displayID == id }
+    }
+
+    /// Redraw the stubs (and their hover targets) for the current displays.
+    func updateStubs() {
+        let active = notchScreen?.displayID
+        var zones: [CGDirectDisplayID: NSRect] = [:]
+        var sizes: [CGDirectDisplayID: CGSize] = [:]
+        for screen in NSScreen.screens where screen.displayID != active {
+            guard let id = screen.displayID else { continue }
+            let size = screen.safeAreaInsets.top > 0
+                ? CGSize(width: screen.frame.width - (screen.auxiliaryTopLeftArea?.width ?? 0)
+                            - (screen.auxiliaryTopRightArea?.width ?? 0),
+                         height: screen.safeAreaInsets.top)
+                : CGSize(width: 180, height: min(max(screen.frame.maxY - screen.visibleFrame.maxY, 24), 44))
+            sizes[id] = size
+            // The hardware notch, or the stub, plus the same 8 pt either
+            // side the panel's own trigger zone allows.
+            let x = screen.safeAreaInsets.top > 0
+                ? screen.frame.minX + (screen.auxiliaryTopLeftArea?.width ?? 0)
+                : screen.frame.midX - size.width / 2
+            zones[id] = NSRect(x: x - 8, y: screen.frame.maxY - size.height,
+                               width: size.width + 16, height: size.height + 1)
+        }
+        stubZones = NotchDisplays.current == .all ? zones : [:]
+        NotchStubs.shared.update(activeDisplay: active,
+                                 size: { sizes[$0.displayID ?? 0] ?? CGSize(width: 180, height: 32) },
+                                 cornerRadius: CGFloat(cornerRadius))
+    }
+
+    @objc private func screenParametersDidChange() {
+        // Hop to the next runloop tick so NSScreen reports the new geometry.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            // The display the panel was on went away (unplugged, lid shut):
+            // back home, which may itself be a different display now.
+            if let id = self.activeDisplayID, !NSScreen.screens.contains(where: { $0.displayID == id }) {
+                self.activeDisplayID = nil
+            }
+            self.repositionForCurrentScreen()
+            // The space Otto made belongs to a display; after a change of
+            // displays, make it afresh where the panel is.
+            SpaceAnchor.release()
+            self.pinToOwnSpace()
+        }
+    }
+
+    /// Settings changed where the notch is offered.
+    func displaysModeChanged() {
+        if NotchDisplays.current == .builtIn { activeDisplayID = nil }
+        repositionForCurrentScreen()
+        SpaceAnchor.release()
+        pinToOwnSpace()
+    }
+
     private func repositionForCurrentScreen() {
+        defer { updateStubs() }
         guard let panel, let screen = notchScreen else { return }
         hasPhysicalNotch = screen.safeAreaInsets.top > 0
         notchSize = calculateNotchSize(screen: screen)
@@ -385,6 +476,10 @@ class NotchController: ObservableObject {
         autoCollapseTimer = nil
 
         guard state != .expanded else { return }
+
+        // Opened without pointing at a notch (a hotkey, the Dock, ⌘⇥): on
+        // the display you are looking at — the one with the pointer.
+        if trigger != .hover && trigger != .click && trigger != .drag { followPointer() }
 
         Analytics.track(.notchOpened(trigger, layout: AppState.shared.notchLayout))
         HapticManager.shared.notchExpanded()
@@ -490,6 +585,14 @@ class NotchController: ObservableObject {
     }
 
     /// Collapse that overrides the modal pin — the one guaranteed exit.
+    /// A window of Otto's own is opening (feedback, settings): close, even if
+    /// a "drag" is still believed in flight — with no button down there is
+    /// none, whatever the flag says.
+    func collapseForWindow() {
+        if NSEvent.pressedMouseButtons == 0 { isDragSessionActive = false }
+        forceCollapse()
+    }
+
     func forceCollapse() {
         // An alert on screen when the notch is forced shut has to be told, or
         // it stays "active" with nothing drawing it: the panel then counts
@@ -502,7 +605,6 @@ class NotchController: ObservableObject {
         // the close that runs when you click away to copy something, so every
         // trip out for a paste landed you back on Work.
         TodoStore.shared.settleForClose()
-        TodoStore.shared.showShortcuts = false
         // Actually relinquish key status, don't just announce it. resignKey()
         // is what AppKit CALLS on a window to tell it the status is gone; it
         // does not give the status up, so `panel.isKeyWindow` stayed true and
@@ -873,6 +975,11 @@ class NotchController: ObservableObject {
     }
 
     private func handleMouseMoved(_ location: NSPoint, timestamp: TimeInterval) {
+        // Pointing at another display's notch: the panel goes there first.
+        if state != .expanded, !isDragSessionActive, let other = stubScreen(at: location),
+           AppState.shared.settings.notchTrigger == .hover {
+            moveNotch(to: other)
+        }
         guard let screen = notchScreen else { return }
         let settings = AppState.shared.settings
         // Drag-to-tray works regardless of the notch trigger setting —
@@ -930,6 +1037,9 @@ class NotchController: ObservableObject {
         // zone is a deliberately forgiving hover target, and "I was near it"
         // must not mean "I clicked it". Opening the notch requires landing on
         // the notch (Marcello, 2026-08-05).
+        if state != .expanded, let other = stubScreen(at: location) {
+            moveNotch(to: other)
+        }
         let onNotch = visibleShapeScreenRect().contains(location)
         // Our own window is far larger than what it draws, and not every
         // click outside the drawn content falls through to the app beneath:

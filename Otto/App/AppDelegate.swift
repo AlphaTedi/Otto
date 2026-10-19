@@ -41,10 +41,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Apply user-selected theme (system / light / dark)
         AppState.shared.applyTheme()
 
-        // Hide from Dock if configured
-        if !AppState.shared.settings.showInDock {
-            NSApp.setActivationPolicy(.accessory)
+        // Show in Dock became the default (2026-10-19). Settings saved before
+        // carry the old default, false, written out like any choice — so once,
+        // every install moves to the new default; turning it off afterwards
+        // sticks.
+        if !UserDefaults.standard.bool(forKey: "showInDockDefaultApplied") {
+            UserDefaults.standard.set(true, forKey: "showInDockDefaultApplied")
+            if !AppState.shared.settings.showInDock {
+                AppState.shared.updateSettings { $0.showInDock = true }
+            }
         }
+
+        // In the Dock (and ⌘⇥) or menu bar only. Info.plist says LSUIElement,
+        // so the app STARTS as an accessory; being in the Dock has to be
+        // asked for here.
+        NSApp.setActivationPolicy(AppState.shared.settings.showInDock ? .regular : .accessory)
 
         // Initialize defaults
         if UserDefaults.standard.object(forKey: "hapticFeedback") == nil {
@@ -94,6 +105,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // and again did, in fact, nothing visible.
         if !showsOnboarding && !launchedAsLoginItem {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { Self.showOtto() }
+        }
+    }
+
+    /// ⌘⇥ onto Otto (with Show in Dock on — macOS lists only Dock apps in
+    /// the switcher): open the notch with the caret in the draft, as if the
+    /// app were a window you switched to (Marcello, 2026-10-19). Not when an
+    /// Otto window brought the app forward — Settings, feedback, onboarding —
+    /// and not when the notch is what activated it.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            guard NSApp.activationPolicy() == .regular,
+                  NotchController.shared.state != .expanded else { return }
+            let windowUp = NSApp.windows.contains {
+                $0.isVisible && $0.styleMask.contains(.titled) && !($0 is NSPanel)
+            }
+            guard !windowUp else { return }
+            Self.showOtto()
+        }
+    }
+
+    /// ⌘⇥ away again: the notch closes, the way a switched-from app's window
+    /// steps back.
+    func applicationDidResignActive(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            guard NSApp.activationPolicy() == .regular,
+                  NotchController.shared.state == .expanded,
+                  !NotchController.shared.isPresentingDialog else { return }
+            NotchController.shared.forceCollapse()
         }
     }
 

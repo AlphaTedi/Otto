@@ -489,7 +489,8 @@ struct GeneralSettingsView: View {
                         }
                     ))
                 }
-                SettingRow(title: "Show in Dock", subtitle: "Off keeps Otto in the menu bar only.") {
+                SettingRow(title: "Show in Dock and \u{2318}\u{21E5}",
+                           subtitle: "Switch to Otto like any app: the notch opens, ready to type. Off keeps Otto in the menu bar only.") {
                     RowSwitch(label: "Show in Dock", isOn: Binding(
                         get: { appState.settings.showInDock },
                         set: { newValue in
@@ -566,6 +567,7 @@ struct AppearanceSettingsView: View {
     @AppStorage("notchExpandedWidth")  private var expandedWidth: Double = 620
     @AppStorage("notchExpandedHeight") private var expandedHeight: Double = 200
     @AppStorage("notchLayout")         private var notchLayout: NotchLayout = .panels
+    @AppStorage(NotchDisplays.key)     private var notchDisplays: NotchDisplays = .all
 
     var body: some View {
         SettingsPage(section: .appearance) {
@@ -603,6 +605,29 @@ struct AppearanceSettingsView: View {
                 Text("Layout")
             } footer: {
                 Text(notchLayout.summary)
+            }
+
+            Section {
+                SettingRow(title: "Show the notch on",
+                           subtitle: notchDisplays == .all
+                               ? "Every display has a notch; Otto opens on the one you point at."
+                               : "Only the MacBook's display (or the main one when it is closed).") {
+                    Picker("Show the notch on", selection: Binding(
+                        get: { notchDisplays },
+                        set: { value in
+                            notchDisplays = value
+                            NotchController.shared.displaysModeChanged()
+                        }
+                    )) {
+                        Text("Built-in display").tag(NotchDisplays.builtIn)
+                        Text("All displays").tag(NotchDisplays.all)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .fixedSize()
+                }
+            } header: {
+                Text("Displays")
             }
 
             Section("Theme") {
@@ -652,15 +677,12 @@ private struct LayoutThumbnail: View {
                         .fill(Color.black)
                         .frame(width: w * 0.47, height: h * 0.54)
                 case .panels:
-                    VStack(spacing: h * 0.06) {
+                    // The notch, and ONE window under it — the floating
+                    // panel as it really is, not two slabs (2026-10-19).
+                    VStack(spacing: h * 0.07) {
                         Capsule().fill(Color.black).frame(width: w * 0.17, height: h * 0.1)
-                            .padding(.bottom, h * 0.04)
-                        RoundedRectangle(cornerRadius: h * 0.1, style: .continuous)
-                            .fill(.white.opacity(0.55))
-                            .frame(width: w * 0.53, height: h * 0.25)
-                        RoundedRectangle(cornerRadius: h * 0.1, style: .continuous)
-                            .fill(.white.opacity(0.55))
-                            .frame(width: w * 0.53, height: h * 0.33)
+                        MiniOttoPanel(scheme: .dark, rows: 2)
+                            .frame(width: w * 0.62, height: h * 0.66)
                     }
                 }
             }
@@ -688,8 +710,9 @@ private struct UnevenRoundedRectangleCompat: Shape {
     }
 }
 
-/// A tiny window in the theme's own appearance — semantic colours resolved
-/// under a forced colour scheme, so nothing is hard-coded.
+/// The theme, shown on a piece of Otto itself: a small floating panel in
+/// that appearance — field, a few to-dos, the space pills (Marcello,
+/// 2026-10-19: real UI, simplified, not abstract bars).
 private struct ThemeThumbnail: View {
     let theme: AppTheme
 
@@ -698,12 +721,17 @@ private struct ThemeThumbnail: View {
             ZStack {
                 ThumbnailWallpaper()
                 switch theme {
-                case .light:  window(.light)
-                case .dark:   window(.dark)
+                case .light:  panel(.light, in: geo.size)
+                case .dark:   panel(.dark, in: geo.size)
                 case .system:
-                    HStack(spacing: 0) {
-                        window(.light).frame(width: geo.size.width / 2).clipped()
-                        window(.dark).frame(width: geo.size.width / 2).clipped()
+                    // Light on the left, dark on the right, one panel.
+                    ZStack {
+                        panel(.light, in: geo.size)
+                        panel(.dark, in: geo.size)
+                            .mask(HStack(spacing: 0) {
+                                Color.clear
+                                Color.black
+                            })
                     }
                 }
             }
@@ -711,18 +739,72 @@ private struct ThemeThumbnail: View {
         .accessibilityHidden(true)
     }
 
-    private func window(_ scheme: ColorScheme) -> some View {
-        ZStack(alignment: .topLeading) {
-            Rectangle().fill(.background)
-            VStack(alignment: .leading, spacing: 6) {
-                Capsule().fill(.primary.opacity(0.75)).frame(width: 34, height: 6)
-                Capsule().fill(.primary.opacity(0.3)).frame(width: 54, height: 5)
-                Capsule().fill(.primary.opacity(0.3)).frame(width: 44, height: 5)
+    private func panel(_ scheme: ColorScheme, in size: CGSize) -> some View {
+        MiniOttoPanel(scheme: scheme, rows: 3)
+            .frame(width: size.width * 0.78, height: size.height * 0.8)
+    }
+}
+
+/// A floating panel at thumbnail size: the capture field, to-do rows with
+/// their checkboxes, the pills at the foot. Shapes, not text — at this size
+/// words are noise; the layout is what is recognisable.
+private struct MiniOttoPanel: View {
+    let scheme: ColorScheme
+    var rows = 3
+
+    private var dark: Bool { scheme == .dark }
+    private var ground: LinearGradient {
+        LinearGradient(colors: dark ? [Color(hex: "#1D2654"), Color(hex: "#111B42")]
+                                    : [Color(hex: "#E2DEFC"), Color(hex: "#CBDDF9")],
+                       startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+    private var ink: Color { dark ? Color(hex: "#E8ECF8") : Color(hex: "#25304F") }
+    private var accent: Color { dark ? Color(hex: "#A9C2FF") : Color(hex: "#3E63C7") }
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width, h = geo.size.height
+            let unit = h / 9
+            VStack(alignment: .leading, spacing: 0) {
+                // The field: the space dot and a placeholder.
+                HStack(spacing: unit * 0.45) {
+                    Circle().fill(accent).frame(width: unit * 0.4, height: unit * 0.4)
+                    Capsule().fill(ink.opacity(0.35)).frame(width: w * 0.32, height: unit * 0.32)
+                }
+                .frame(height: unit * 1.3)
+                Rectangle().fill(ink.opacity(0.12)).frame(height: 0.5)
+                    .padding(.horizontal, -w * 0.08)
+                VStack(alignment: .leading, spacing: unit * 0.55) {
+                    ForEach(0..<rows, id: \.self) { row in
+                        HStack(spacing: unit * 0.45) {
+                            RoundedRectangle(cornerRadius: unit * 0.18, style: .continuous)
+                                .strokeBorder(accent, lineWidth: max(1, unit * 0.1))
+                                .frame(width: unit * 0.62, height: unit * 0.62)
+                            Capsule().fill(ink.opacity(0.75))
+                                .frame(width: w * [0.42, 0.28, 0.36][row % 3], height: unit * 0.3)
+                        }
+                    }
+                }
+                .padding(.top, unit * 0.6)
+                Spacer(minLength: 0)
+                // The pills, the current one filled.
+                HStack(spacing: unit * 0.35) {
+                    Capsule().fill(ink.opacity(0.3)).frame(width: w * 0.12, height: unit * 0.28)
+                    Capsule().fill(accent).frame(width: w * 0.17, height: unit * 0.75)
+                    Capsule().fill(ink.opacity(0.3)).frame(width: w * 0.14, height: unit * 0.28)
+                    Spacer(minLength: 0)
+                    Circle().strokeBorder(ink.opacity(0.35), lineWidth: 1)
+                        .frame(width: unit * 0.75, height: unit * 0.75)
+                }
             }
-            .padding(14)
+            .padding(.horizontal, w * 0.08)
+            .padding(.vertical, h * 0.06)
+            .frame(width: w, height: h, alignment: .topLeading)
+            .background(RoundedRectangle(cornerRadius: h * 0.12, style: .continuous).fill(ground))
+            .overlay(RoundedRectangle(cornerRadius: h * 0.12, style: .continuous)
+                .strokeBorder(Color.white.opacity(dark ? 0.12 : 0.6), lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
         }
-        .padding(10)
-        .environment(\.colorScheme, scheme)
     }
 }
 
@@ -919,11 +1001,12 @@ enum SettingsPermissions {
         return calendarStatus == .authorized
     }
 
-    /// Refused, or granted but macOS has stopped syncing. Never asked is not
-    /// a problem: Otto works without a calendar.
+    /// Refused. Never asked is not a problem: Otto works without a calendar.
+    /// A quiet calendar is not either — "no new event in a while" is a hint,
+    /// shown in Calendar & Meetings, not a warning on Permissions (Marcello,
+    /// 2026-10-19: the badge said something was wrong and not what to do).
     static func needsAttention(_ calendar: CalendarStore) -> Bool {
-        let refused = !calendarGranted && calendarStatus != .notDetermined
-        return refused || calendar.syncLooksStale
+        !calendarGranted && calendarStatus != .notDetermined
     }
 
     static let calendarPrivacyURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")!
@@ -952,21 +1035,6 @@ struct PermissionsSettingsView: View {
                 }
             } header: {
                 Text("Access")
-            }
-
-            if calendar.syncLooksStale, let last = calendar.lastSyncedAt {
-                Section {
-                    SettingRow(
-                        title: "macOS isn't syncing your calendars",
-                        subtitle: "Newest event on this Mac: \(last.formatted(date: .abbreviated, time: .shortened)). Anything created since hasn't arrived."
-                    ) {
-                        Link("Open Internet Accounts", destination: SettingsPermissions.internetAccountsURL)
-                    }
-                } header: {
-                    Text("Calendar sync")
-                } footer: {
-                    Text("In Internet Accounts, turn Calendars off and on for your Google account; if that doesn't help, remove and re-add the account.")
-                }
             }
         }
     }

@@ -76,10 +76,6 @@ struct TodoTabView: View {
             if usesDock {
                 // Fixed height: it fills what the silhouette offers.
                 DockPanelView()
-                if store.showShortcuts {
-                    ShortcutsOverlay()
-                        .transition(.opacity)
-                }
             } else {
                 todoPanelContent
             }
@@ -362,10 +358,6 @@ struct TodoTabView: View {
                 }
             }
 
-            if store.showShortcuts {
-                ShortcutsOverlay()
-                    .transition(.opacity)
-            }
         }
     }
 }

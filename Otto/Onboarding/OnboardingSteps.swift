@@ -411,7 +411,6 @@ struct DoneStepContent: View {
             VStack(spacing: 8) {
                 row(L10n.t("ob.done.add"), HotkeyManager.quickEntryDisplay, p)
                 row(L10n.t("ob.done.search"), "type", p)
-                row(L10n.t("ob.done.shortcuts"), "?", p)
             }
         }
     }

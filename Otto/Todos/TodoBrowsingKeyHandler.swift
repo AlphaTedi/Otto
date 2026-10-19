@@ -237,15 +237,6 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
                 if lower == "q" { NSApp.terminate(nil); return true }
             }
 
-            // §2.3: the overlay is a temporary sheet — ? / Esc dismiss it,
-            // everything else is inert while it's up.
-            if store.showShortcuts {
-                if chars == "?" || keyCode == 53 || (cmd && lower == "/") {
-                    withAnimation(NotchAnimation.hintFade) { store.showShortcuts = false }
-                }
-                return true
-            }
-
             switch store.panelMode {
             case .find:
                 return handleFind(store, cmd: cmd, option: option, control: control,
@@ -938,12 +929,6 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             if cmd, shift, lower == "c" {
                 withAnimation(NotchAnimation.contentHug) { store.completedExpanded.toggle() }
                 if store.completedExpanded { CompletedArchive.shared.reload() }
-                return true
-            }
-
-            // §7.3: ? toggles the reference (⌘/ kept as an alias).
-            if chars == "?" || (cmd && lower == "/") {
-                withAnimation(NotchAnimation.hintFade) { store.showShortcuts = true }
                 return true
             }
 

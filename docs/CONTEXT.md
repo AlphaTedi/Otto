@@ -1276,3 +1276,18 @@ notes and an editor with no top bar.
   feature (detected underlines, the "+" on a selection, ⌥↩ picker) is OFF
   behind `NoteActions.enabled` until it is reworked. Insights in the dock:
   panels only, Back in place of Notes, no dock, no week stepper.
+
+- **2026-10-19 — Every display, ⌘⇥, and a calmer Settings.** The notch is on
+  every display (`NotchDisplays.all`, Settings › Appearance › Displays; the
+  alternative is the built-in only). ONE controller and ONE panel: other
+  displays without a hardware notch draw a click-through stub
+  (`NotchStubs`); pointing at any display's notch moves the panel there; a
+  keyboard/Dock/⌘⇥ open goes to the display with the pointer. Otto's private
+  space is re-made after any move or display change (it belongs to a
+  display). Alcove does it with a controller per display ("Display on:
+  Built-in / Main / All / Selected", "Force simulated notch"). ⌘⇥ needs Show
+  in Dock (macOS lists only Dock apps in the switcher); becoming active with
+  no Otto window up opens the notch ready to type, resigning closes it. The
+  `?` shortcuts overlay is gone. The calendar "not syncing" hint moved from
+  Permissions (no badge) to Calendar & Meetings, after 21 quiet days, with
+  steps. Theme/Layout thumbnails draw a mini Otto panel.

@@ -111,9 +111,11 @@ enum NotchContainerMetrics {
     /// at most 40 pt above it (Marcello, 2026-10-17 — the spec's 130 began
     /// blurring rows halfway up the list).
     @MainActor static var footZone: CGFloat { barBottom + roundButton + 40 }
-    /// What the list leaves as travel at its end, so its last row can
-    /// scroll out from under the bar.
-    static let listTravel: CGFloat = 62
+    /// How far past its end a list scrolls: the whole foot zone and a
+    /// little more, so the last row — Completed included — can rest ABOVE
+    /// the blur, in focus and clickable. 62 left it under the blur
+    /// (Marcello, 2026-10-19).
+    @MainActor static var listTravel: CGFloat { footZone + 12 }
     /// What the empty state leaves at the list's foot: the bar and its
     /// margin, so the block centres in the room you can see.
     @MainActor static var dockEmptyFoot: CGFloat { barBottom + roundButton + 8 }
