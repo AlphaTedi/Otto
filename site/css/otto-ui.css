@@ -1,0 +1,542 @@
+/* =====================================================================
+   Otto UI — a faithful HTML replica of the app's "In the notch" layout.
+   Every number comes from the SwiftUI source (LabMetrics, DesignSystem,
+   SpaceTint, NotchAnimation, NotchShapeView, TodoBrowsingView, NotesSpaceView,
+   UpNextSection). 1 CSS px = 1 pt. Panel type is the system font, as in the app.
+   ===================================================================== */
+
+.ot {
+  --ot-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro", "Helvetica Neue", Arial, sans-serif;
+  --ot-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --label: rgba(255, 255, 255, 0.85);        /* labelColor */
+  --secondary: rgba(255, 255, 255, 0.55);    /* secondaryLabelColor */
+  --faint: rgba(255, 255, 255, 0.25);        /* tertiary / placeholder */
+  --separator: rgba(255, 255, 255, 0.10);
+  --field-bg: rgba(255, 255, 255, 0.08);     /* fieldBackground */
+  --row-hover: rgba(255, 255, 255, 0.10);    /* containerRowHover */
+  --row-focus: rgba(255, 255, 255, 0.17);    /* focusedRowBackground */
+  --affordance: #878787;                     /* rowAffordance */
+  --accent: #10EFF2;                         /* LabMetrics.accent */
+  --amber: #E8C15A;
+  --sys-blue: #0A84FF;                       /* controlAccentColor, NL dates */
+  --sec: #9CC0FF;                            /* the active section colour */
+  --sec-base: #699BFF;
+
+  --sp-hug: cubic-bezier(0.30, 1.12, 0.50, 1);   /* contentHug  0.38 / 0.82 */
+  --sp-expand: cubic-bezier(0.28, 1.22, 0.48, 1); /* expand      0.35 / 0.75 */
+  --sp-collapse: cubic-bezier(0.25, 1, 0.4, 1);   /* collapse    0.25 / 0.88 */
+
+  font-family: var(--ot-font);
+  color: var(--label);
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px; line-height: 17px;
+  letter-spacing: 0;
+  text-align: left;
+}
+:where(.ot) *, :where(.ot) *::before, :where(.ot) *::after { box-sizing: border-box; }
+:where(.ot) button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; }
+:where(.ot) input { font: inherit; color: inherit; background: none; border: 0; outline: 0; padding: 0; margin: 0; min-width: 0; }
+.ot svg.i { width: 1em; height: 1.15em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; display: block; }
+
+/* ---------- the silhouette (NotchShape) ---------- */
+.ot-notch {
+  position: relative; margin: 0 auto;
+  width: var(--w, 185px); height: var(--h, 32px);
+  transition: width 0.42s var(--sp-collapse), height 0.42s var(--sp-collapse);
+  transform-origin: 50% 0;
+}
+/* the concave "ears": a 12pt fillet flaring out of the bezel on both sides */
+.ot-notch::before, .ot-notch::after {
+  content: ""; position: absolute; top: 0; width: 12px; height: 12px; pointer-events: none;
+}
+.ot-notch::before { left: -12px; background: radial-gradient(circle at 0 100%, transparent 11.5px, #000 12px); }
+.ot-notch::after { right: -12px; background: radial-gradient(circle at 100% 100%, transparent 11.5px, #000 12px); }
+.ot-body {
+  position: absolute; inset: 0; background: #000; overflow: hidden;
+  border-radius: 0 0 var(--r, 10px) var(--r, 10px);
+  transition: border-radius 0.42s var(--sp-collapse);
+}
+.ot-notch.is-hover { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35); border-radius: 0 0 12px 12px; }
+.ot-notch.is-open { transition: width 0.5s var(--sp-expand), height 0.46s var(--sp-hug); }
+.ot-notch.is-open .ot-body { transition: border-radius 0.5s var(--sp-expand); }
+.ot-notch.squish-open { animation: ot-squish-open 0.62s linear both; }
+.ot-notch.squish-close { animation: ot-squish-close 0.4s linear both; }
+@keyframes ot-squish-open {
+  0% { transform: scale(1, 1); }
+  13% { transform: scale(0.96, 1.04); }     /* anticipation, 80 ms */
+  42% { transform: scale(1.02, 0.99); }     /* overshoot, 180 ms */
+  100% { transform: scale(1, 1); }
+}
+@keyframes ot-squish-close {
+  0% { transform: scale(1, 1); } 30% { transform: scale(1.02, 0.98); } 100% { transform: scale(1, 1); }
+}
+
+/* presence: icon on the left wing, dot + "in 34′" on the right wing */
+.ot-presence {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 0 0 10px; opacity: 0; transition: opacity 0.18s; pointer-events: none;
+}
+.ot-notch.has-presence:not(.is-open) .ot-presence { opacity: 1; transition-delay: 0.12s; }
+.ot-presence .wing { width: 53px; display: flex; align-items: center; justify-content: center; }
+.ot-presence .wing.l { justify-content: flex-start; }
+.ot-presence img, .ot-presence .meet { width: 13px; height: 13px; display: block; }
+.ot-presence .count { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; color: #fff; font-variant-numeric: tabular-nums; }
+.ot-presence .count i { width: 6px; height: 6px; border-radius: 50%; background: #7FB8E0; box-shadow: 0 0 3px rgba(127, 184, 224, 0.55); margin-top: -1px; }
+
+/* ---------- content ---------- */
+.ot-content {
+  position: absolute; top: 0; left: 4px; right: 4px;  /* 620 − 32 = 588 content, ears are 12 */
+  padding-top: calc(var(--nh, 32px) + 4px + 16px);
+  padding-bottom: 16px;
+  opacity: 0; filter: blur(2px);
+  transition: opacity 0.12s, filter 0.12s;
+}
+.ot-notch.is-open .ot-content { opacity: 1; filter: none; transition: opacity 0.32s 0.06s, filter 0.32s 0.06s; }
+.ot-content.no-top { padding-top: 16px; }
+
+/* staggered assembly (notchEntry): rise 12, scale .97, 50 ms + 45 ms × index */
+.ot-enter > * { opacity: 0; transform: translateY(12px) scale(0.97); transform-origin: 50% 0; }
+.ot-notch.is-open .ot-enter > * {
+  opacity: 1; transform: none;
+  transition: opacity 0.34s var(--sp-hug), transform 0.42s var(--sp-hug);
+  transition-delay: calc(50ms + var(--i, 0) * 45ms);
+}
+.ot-static .ot-enter > * { opacity: 1; transform: none; transition: none; }
+
+/* ---------- draft field (InlineDraftRow) ---------- */
+.ot-field {
+  position: relative; margin: 0 16px; min-height: 59px; padding: 12px 20px;
+  border-radius: 16px; background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex; align-items: center; gap: 12px; cursor: text;
+  transition: border-color 0.18s, background 0.18s;
+}
+.ot-field:hover { background: rgba(0, 0, 0, 0.18); }
+.ot-field.is-focus { background: rgba(0, 0, 0, 0.14); border-color: color-mix(in srgb, var(--sec) 70%, transparent); }
+.ot-field .cb { color: var(--sec); }
+.ot-field .ed { position: relative; flex: 1; min-width: 0; height: 17px; }
+.ot-field .ed input, .ot-field .ed .mirror {
+  position: absolute; inset: 0; width: 100%; font-size: 13px; line-height: 17px; font-weight: 400;
+  white-space: pre; overflow: hidden;
+}
+.ot-field .ed input { color: transparent; caret-color: var(--sec); z-index: 1; }
+.ot-field .ed input::selection { background: color-mix(in srgb, var(--sec) 32%, transparent); color: transparent; }
+.ot-field .ed .mirror { color: var(--label); pointer-events: none; }
+.ot-field .ed .mirror mark { background: none; color: var(--sys-blue); }
+.ot-field .ed .ph { position: absolute; inset: 0; font-size: 14px; font-weight: 500; line-height: 17px; color: var(--faint); pointer-events: none; white-space: nowrap; overflow: hidden; }
+.ot-field .ed.has-text .ph { display: none; }
+.ot-field .hint { display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 500; color: var(--faint); white-space: nowrap; flex: none; }
+.ot-cap {
+  display: inline-grid; place-items: center; min-width: 32px; height: 19px; padding: 0 6px;
+  border: 1px solid var(--faint); border-radius: 6px; font-size: 10px; font-weight: 600; color: var(--faint); line-height: 1;
+}
+.ot-field .date { position: absolute; left: 0; top: 20px; font-size: 10px; color: var(--faint); opacity: 0; transition: opacity 0.18s; white-space: nowrap; }
+.ot-field.has-date .date { opacity: 1; }
+.ot-field.has-date { padding-bottom: 25px; }
+.ot input:focus, .ot input:focus-visible, .ot [contenteditable]:focus, .ot-notch:focus { outline: none; }
+.ot-field.notes .cb { color: var(--amber); width: 18px; height: 18px; display: grid; place-items: center; font-size: 14px; }
+.ot-field.notes.is-focus { border-color: rgba(232, 193, 90, 0.7); }
+.ot-field.notes .ed input, .ot-field.notes .ed .mirror { font-size: 14px; font-weight: 500; }
+.ot-field.notes .ed input { caret-color: var(--amber); }
+
+.ot-field.fake .mirror::after { content: ""; display: inline-block; width: 1.5px; height: 15px; margin-left: 1px; vertical-align: -3px; background: var(--sec); animation: ot-blink 1.06s steps(1) infinite; }
+.ot-field.notes.fake .mirror::after { background: var(--amber); }
+@keyframes ot-blink { 50% { opacity: 0; } }
+
+/* ---------- checkboxes ---------- */
+.ot-cb {
+  width: 18px; height: 18px; flex: none; border-radius: 6px; border: 2px solid var(--sec);
+  display: grid; place-items: center; color: rgba(0, 0, 0, 0.85);
+  transition: background 0.28s cubic-bezier(0.3, 1.3, 0.5, 1), border-color 0.2s;
+}
+.ot-cb svg { width: 10px; height: 10px; stroke-width: 3; opacity: 0; transform: scale(0.6); transition: opacity 0.18s, transform 0.28s cubic-bezier(0.3, 1.5, 0.5, 1); }
+.ot-cb.on { background: var(--sec); }
+.ot-cb.on svg { opacity: 1; transform: none; }
+
+/* ---------- section pill row (TodoTabRow) ---------- */
+.ot-tabs { display: flex; align-items: center; gap: 6px; margin: 14px 16px 0; height: 34px; }
+.ot-pill {
+  height: 28px; padding: 0 12px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600; color: var(--label); white-space: nowrap; flex: none;
+  transition: background 0.18s ease-out, color 0.18s ease-out;
+}
+.ot-pill em { font-style: normal; font-variant-numeric: tabular-nums; opacity: 0.5; }
+.ot-pill:hover { background: var(--field-bg); }
+.ot-pill.on { background: var(--pill, var(--sec)); color: #161A24; }
+.ot-pill.notes { padding: 0 12.4px; }
+.ot-pill.notes em { opacity: 0.55; }
+.ot-pill.notes.on { background: rgba(255, 195, 110, 0.85); color: #1A1622; }
+.ot-pill .done-mark { width: 9px; height: 9px; opacity: 0.5; stroke-width: 3; }
+.ot-tabs .rule { width: 1px; height: 18px; background: rgba(255, 255, 255, 0.12); margin: 0 2px; flex: none; }
+.ot-tabs .scroller { display: flex; gap: 6px; min-width: 0; overflow: hidden; flex: 0 1 auto;
+  -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent); mask-image: linear-gradient(90deg, #000 88%, transparent); }
+.ot-tabs .scroller.fits { -webkit-mask-image: none; mask-image: none; }
+.ot-pill.new { font-weight: 500; color: var(--secondary); gap: 5px; border: 1px dashed rgba(255, 255, 255, 0.165); }
+.ot-pill.new:hover { color: var(--label); border-color: rgba(255, 255, 255, 0.25); }
+.ot-pill.new svg { font-size: 11px; }
+.ot-gear {
+  margin-left: auto; width: 34px; height: 34px; border-radius: 50%; flex: none;
+  background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.10);
+  display: grid; place-items: center; color: rgba(255, 255, 255, 0.75); font-size: 18px;
+  transition: background 0.14s;
+}
+.ot-simple .ot-gear { cursor: default; }
+.ot-gear:hover, .ot-gear.open { background: rgba(255, 255, 255, 0.12); }
+.ot-gear svg { width: 18px; height: 18px; }
+
+/* ---------- list ---------- */
+.ot-list { position: relative; margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.ot-list.swap-in { animation: ot-swap-in 0.26s ease-out both; }
+@keyframes ot-swap-in { from { opacity: 0; filter: blur(4px); } to { opacity: 1; filter: none; } }
+.ot-row {
+  position: relative; margin: 0 16px; padding: 6px 20px; min-height: 37px; border-radius: 14px;
+  display: flex; flex-direction: column; justify-content: center; gap: 6px;
+  transition: background 0.14s, opacity 0.26s, transform 0.3s var(--sp-hug), max-height 0.38s var(--sp-hug), margin 0.38s var(--sp-hug), padding 0.38s var(--sp-hug);
+  cursor: default;
+}
+.ot-row:hover { background: var(--row-hover); }
+.ot-row.focus { background: var(--row-focus); }
+.ot-row.open { background: rgba(0, 0, 0, 0.30); padding-bottom: 10px; }
+.ot-row .line { display: flex; align-items: center; gap: 12px; min-height: 25px; }
+.ot-row .title { flex: 1; min-width: 0; font-size: 14px; line-height: 17px; padding: 4px 0; color: var(--label); }
+.ot-row.done .title { color: var(--faint); text-decoration: line-through; font-weight: 500; }
+.ot-row .gutter { width: 52px; flex: none; display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
+.ot-row .badge { min-width: 23px; height: 18px; padding: 0 5px; border: 1px solid var(--affordance); border-radius: 6px; font-size: 10px; font-weight: 600; color: var(--affordance); display: none; place-items: center; line-height: 1; }
+.ot-row.focus .badge { display: grid; }
+.ot-row .grip { width: 16px; height: 16px; display: grid; grid-template-columns: 3px 3px; grid-auto-rows: 3px; gap: 2px; place-content: center; opacity: 0; transition: opacity 0.14s; }
+.ot-row .grip i { width: 3px; height: 3px; border-radius: 50%; background: var(--affordance); }
+.ot-row:hover .grip { opacity: 1; }
+.ot-row .has-note { color: var(--faint); font-size: 8px; }
+.ot-row:hover .has-note, .ot-row.focus .has-note { display: none; }
+.ot-row.enter { animation: ot-row-in 0.42s var(--sp-hug) both; }
+@keyframes ot-row-in { from { opacity: 0; transform: translateY(6px); } }
+.ot-row.leave { opacity: 0; transform: translateX(24px); }
+
+/* steps */
+.ot-steps { position: relative; margin-left: 24px; display: flex; flex-direction: column; gap: 5px; padding-bottom: 2px; }
+.ot-steps::before { content: ""; position: absolute; left: -15.25px; top: -4px; bottom: 4px; width: 0.5px; background: var(--separator); }
+.ot-step { display: flex; align-items: flex-start; gap: 7px; font-size: 11px; line-height: 14px; color: var(--secondary); }
+.ot-step .sb { width: 10px; height: 10px; margin-top: 2px; border: 1px solid var(--sec); border-radius: 3px; flex: none; display: grid; place-items: center; color: rgba(0,0,0,.85); }
+.ot-step .sb svg { width: 6px; height: 6px; stroke-width: 3.5; opacity: 0; }
+.ot-step.done { color: var(--faint); text-decoration: line-through; }
+.ot-step.done .sb { background: var(--sec); }
+.ot-step.done .sb svg { opacity: 1; }
+.ot-step.draft .sb { border-style: dashed; border-color: color-mix(in srgb, var(--sec) 50%, transparent); }
+.ot-step.draft input { font-size: 11px; line-height: 14px; color: var(--label); flex: 1; }
+.ot-step.draft input::placeholder { color: var(--faint); }
+.ot-more { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--faint); cursor: pointer; }
+.ot-more svg { font-size: 8px; }
+.ot-more:hover { color: var(--secondary); }
+.ot-note-field { margin-left: 24px; font-size: 11px; color: var(--secondary); }
+.ot-note-field input { width: 100%; font-size: 11px; color: var(--secondary); }
+.ot-note-field input::placeholder { color: var(--faint); }
+
+/* empty state: the list is napping */
+.ot-empty { margin: 0 16px; padding: 29px 0 40px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
+.ot-empty svg { width: 80px; height: 64px; overflow: visible; color: var(--sec); }
+.ot-empty .page { transform-origin: 46.7% 60.4%; animation: ot-breathe 3s ease-in-out infinite; }
+.ot-empty .z1 { animation: ot-z 2.4s ease-in-out infinite; }
+.ot-empty .z2 { animation: ot-z 2.4s 0.6s ease-in-out infinite; opacity: 0.6; }
+@keyframes ot-breathe { 50% { transform: scale(1.02); } }
+@keyframes ot-z { 0% { transform: translateY(0); opacity: 0; } 50% { opacity: 1; } 100% { transform: translateY(-6px); opacity: 0; } }
+.ot-empty h4 { font-size: 22px; line-height: 26px; font-weight: 600; letter-spacing: -0.2px; color: rgba(255, 255, 255, 0.92); }
+.ot-empty p { font-size: 14px; line-height: 1.5; color: rgba(255, 255, 255, 0.55); max-width: 300px; }
+
+/* completed */
+.ot-completed { margin: 0 16px; padding: 24px 12px 0 20px; }
+.ot-completed .head { display: flex; align-items: center; gap: 8px; width: 100%; height: 24px; }
+.ot-completed .chev { font-size: 9px; color: var(--faint); transition: transform 0.38s var(--sp-hug); }
+.ot-completed.open .chev { transform: rotate(90deg); }
+.ot-completed .lbl { font-size: 11px; color: var(--secondary); }
+.ot-completed .n { font-size: 10px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.ot-spark { margin-left: auto; display: flex; align-items: flex-end; gap: 3px; height: 16px; }
+.ot-spark i { width: 4px; border-radius: 2px; background: var(--accent); }
+.ot-completed .entries { display: grid; gap: 9px; padding: 12px 0 2px 34px; }
+.ot-completed .entry { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--faint); }
+.ot-completed .entry .eb { width: 16px; height: 16px; border-radius: 5px; background: rgba(16, 239, 242, 0.9); color: #000; display: grid; place-items: center; flex: none; }
+.ot-completed .entry .eb svg { width: 8px; height: 8px; stroke-width: 3.5; }
+.ot-completed .entry span { flex: 1; text-decoration: line-through; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ot-completed .entry time { font-size: 10.5px; font-variant-numeric: tabular-nums; }
+
+/* ---------- notes ---------- */
+.ot-kind { display: flex; justify-content: flex-end; margin: 8px 16px 0; }
+.ot-kind button { display: inline-flex; align-items: center; gap: 6px; padding: 6px 8px 6px 10px; border-radius: 8px; font-size: 15px; font-weight: 500; color: rgba(255, 255, 255, 0.70); }
+.ot-kind button:hover { background: rgba(255, 255, 255, 0.06); }
+.ot-kind svg { font-size: 10px; }
+.ot-stream { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; }
+.ot-tabs + .ot-stream { margin-top: 12px; }
+.ot-stream.dim { opacity: 0.55; transition: opacity 0.18s; }
+.ot-note {
+  margin: 0 16px; padding: 9px 22px; border-radius: 8px; display: flex; align-items: flex-start; gap: 8px; cursor: pointer;
+  border: 1px solid transparent; transition: background 0.14s;
+}
+.ot-note:hover { background: var(--row-hover); }
+.ot-note.focus { background: var(--row-focus); }
+.ot-note.landing { background: rgba(232, 193, 90, 0.12); border-color: rgba(232, 193, 90, 0.3); }
+.ot-note .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ot-note b { font-size: 14px; font-weight: 500; color: var(--label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ot-note small { font-size: 11px; line-height: 15px; color: var(--secondary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ot-note time { font-size: 12px; color: var(--faint); min-width: 52px; text-align: right; padding-top: 2px; white-space: nowrap; }
+.ot-note.enter { animation: ot-row-in 0.42s var(--sp-hug) both; }
+
+/* note page */
+.ot-page-head {
+  margin: 0 16px; min-height: 59px; padding: 12px 14px 12px 12px; border-radius: 16px;
+  background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex; align-items: center; gap: 10px;
+}
+.ot-back { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: var(--accent); font-size: 15px; flex: none; }
+.ot-back:hover { background: var(--field-bg); color: var(--label); }
+.ot-page-head .t { flex: 1; font-size: 14px; font-weight: 500; color: var(--label); }
+.ot-page-head .t input { width: 100%; font-size: 14px; font-weight: 500; }
+.ot-page-head .st { display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 500; color: var(--faint); }
+.ot-doc {
+  margin: 6px 16px 0; padding: 14px 28px; min-height: 160px; outline: none;
+  font-size: 14px; line-height: 21px; color: var(--label); caret-color: var(--accent);
+}
+.ot-doc h5 { font-size: 18px; line-height: 24px; font-weight: 700; margin: 0 0 6px; }
+.ot-doc p { margin: 0; }
+.ot-doc ul { list-style: none; margin: 0; padding: 0; }
+.ot-doc li { padding-left: 18px; position: relative; }
+.ot-doc li::before { content: "•"; position: absolute; left: 2px; }
+.ot-doc li.ck::before { content: "☐"; left: 0; }
+.ot-doc li.ck.done { color: var(--faint); text-decoration: line-through; }
+.ot-doc li.ck.done::before { content: "☑"; color: var(--label); text-decoration: none; }
+.ot-doc code { font-family: var(--ot-mono); font-size: 12.5px; color: #E8905C; background: #2A1A14; border: 1px solid #5C3524; border-radius: 4px; padding: 0 4px; }
+.ot-doc .act { text-decoration: underline; text-decoration-color: rgba(16, 239, 242, 0.55); text-underline-offset: 3px; }
+.ot-tools { display: flex; align-items: center; gap: 10px; margin: 0 24px; padding: 16px 0 8px; }
+.ot-fmt {
+  display: flex; align-items: center; gap: 2px; padding: 4px 6px; border-radius: 20px;
+  background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.10);
+}
+.ot-fmt button { width: 28px; height: 28px; border-radius: 5px; display: grid; place-items: center; font-size: 12.5px; color: var(--label); }
+.ot-fmt button:hover { background: var(--field-bg); }
+.ot-fmt button.on { color: var(--accent); background: rgba(16, 239, 242, 0.18); }
+.ot-fmt .div { width: 1px; height: 16px; background: rgba(255, 255, 255, 0.06); margin: 0 3px; }
+.ot-fmt .aa { font-size: 12px; font-weight: 600; }
+.ot-fmt .bl { display: grid; gap: 2.5px; justify-items: start; }
+.ot-fmt .bl i { height: 1.5px; border-radius: 1px; background: currentColor; display: block; }
+.ot-fmt .ck { width: 13px; height: 13px; border: 1.5px solid currentColor; border-radius: 4px; }
+.ot-fmt .cd { font-size: 8px; font-weight: 700; border: 1.2px solid currentColor; border-radius: 3px; width: 17px; height: 13px; display: grid; place-items: center; }
+.ot-tools .wc { margin-left: auto; font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ot-tools .dl { font-size: 12px; padding: 6px 14px; border-radius: 20px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.10); white-space: nowrap; }
+
+/* ---------- meetings (MeetingCard) ---------- */
+.ot-meet {
+  margin: 0 16px; padding: 10px 12px; border-radius: 10px; display: flex; align-items: flex-start; gap: 10px;
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.10);
+}
+.ot-meet .ic { width: 16px; height: 16px; margin-top: 1px; flex: none; }
+.ot-meet .col { flex: 1; min-width: 0; }
+.ot-meet .r1 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 11px; font-variant-numeric: tabular-nums; }
+.ot-meet .r1 .tm { color: var(--amber); }
+.ot-meet .r1 .cd { color: var(--amber); font-weight: 600; }
+.ot-meet h6 { margin: 2px 0 0; font-size: 15px; line-height: 19px; font-weight: 500; color: var(--label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ot-meet .acts { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+.ot-join { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 999px; background: #EDEDED; color: #121212; font-size: 11px; font-weight: 500; line-height: 14px; }
+.ot-join:hover { opacity: 0.85; }
+.ot-join kbd { font: 500 9px/1 var(--ot-font); padding: 2px 3px; min-width: 12px; text-align: center; border-radius: 3.5px; background: rgba(18, 18, 18, 0.14); color: rgba(18, 18, 18, 0.75); }
+.ot-snooze { padding: 5px 12px; border-radius: 999px; font-size: 11px; font-weight: 500; line-height: 14px; color: var(--secondary); box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.10); }
+.ot-snooze:hover { color: var(--label); }
+.ot-avs { margin-left: auto; display: flex; padding-left: 7px; }
+.ot-avs span {
+  width: 24px; height: 24px; border-radius: 50%; margin-left: -7.2px; display: grid; place-items: center;
+  font-size: 10.5px; font-weight: 500; box-shadow: 0 0 0 2px #111, inset 0 0 0 1px rgba(0, 0, 0, 0.10);
+}
+.ot-avs span.plus { background: #3A3A3A; color: var(--label); font-size: 9.6px; font-weight: 600; box-shadow: 0 0 0 2px #111; }
+
+/* ---------- settings menu (AvatarMenu, container variant) ---------- */
+.ot-menu {
+  position: absolute; z-index: 5; width: 276px; padding: 10px; border-radius: 20px;
+  background: rgba(30, 30, 34, 0.86); backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26), inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 12px 24px rgba(0, 0, 0, 0.45);
+  opacity: 0; transform: translateY(-4px); pointer-events: none; transition: opacity 0.18s, transform 0.18s;
+}
+.ot-menu.open { opacity: 1; transform: none; pointer-events: auto; }
+.ot-menu .mi { display: flex; align-items: center; gap: 13px; width: 100%; padding: 11px 13px; border-radius: 11px; font-size: 13.5px; color: var(--label); text-align: left; }
+.ot-menu .mi:hover { background: rgba(255, 255, 255, 0.12); }
+.ot-menu .mi svg { width: 16px; font-size: 13px; color: var(--secondary); }
+.ot-menu .mi .k { margin-left: auto; display: flex; gap: 3px; }
+.ot-menu .mi .k b { width: 20px; height: 20px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.18); display: grid; place-items: center; font-size: 11px; font-weight: 400; color: var(--faint); }
+.ot-menu .mi .d { margin-left: auto; font-size: 11px; color: var(--faint); }
+.ot-menu hr { border: 0; height: 1px; background: rgba(255, 255, 255, 0.09); margin: 5px 10px; }
+
+/* ---------- floating panel (the other layout) ---------- */
+.ot-float {
+  width: 657px; border-radius: 24px; overflow: hidden; position: relative;
+  background: rgba(0, 0, 0, 0.42); backdrop-filter: blur(30px) saturate(1.4); -webkit-backdrop-filter: blur(30px) saturate(1.4);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 8px 54px rgba(0, 0, 0, 0.45);
+}
+.ot-float .cap { height: 60px; padding: 8px 22px 8px 16px; display: flex; align-items: center; gap: 7px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.ot-float .cap .dotslot { width: 30px; height: 28px; display: grid; place-items: center; }
+.ot-float .cap .dotslot i { width: 9px; height: 9px; border-radius: 50%; background: var(--sec); box-shadow: 0 0 4px rgba(105, 155, 255, 0.6); }
+.ot-float .cap .ph { flex: 1; font-size: 18px; color: rgba(255, 255, 255, 0.40); }
+.ot-float .cap .hint { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: rgba(255, 255, 255, 0.45); }
+.ot-float .cap .hint .k { min-width: 30px; height: 20px; padding: 0 6px; border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 5px; display: grid; place-items: center; font-size: 10.5px; color: rgba(255, 255, 255, 0.6); }
+.ot-float .ot-list { margin-top: 11.5px; padding-bottom: 8px; }
+.ot-float .ot-row { margin: 0 10px; padding: 6px 12px; }
+.ot-float .ot-row .line { gap: 13px; }
+.ot-float .ot-row:hover { background: rgba(255, 255, 255, 0.04); }
+.ot-float .ot-tabs { margin: 0; padding: 12px 16px 16px; height: auto; }
+
+/* meeting preview: two small desktops */
+.stage > .ot-meet-stage { background: none; border: 0; border-radius: 0; overflow: visible; }
+.ot-mini { position: relative; border-radius: 18px; overflow: hidden; border: 1px solid rgba(255,255,255,.08);
+  background: linear-gradient(180deg, rgba(7,7,10,.15), rgba(7,7,10,.55)), url(../assets/img/wallpaper.jpg) center / cover; }
+.ot-mini + .ot-mini { margin-top: 14px; }
+.ot-when { position: absolute; left: 0; right: 0; text-align: center; bottom: 14px; font: 500 12px/1 var(--ot-font); color: rgba(255,255,255,.6); z-index: 1; }
+.ot-mini:last-child .ot-when { display: none; }
+
+/* static previews never take clicks */
+.ot-static { pointer-events: none; user-select: none; }
+
+/* scale-to-fit wrapper used by the feature cards */
+.ot-fit { position: relative; width: 100%; }
+.ot-fit > .ot-fit-inner { position: absolute; top: 0; left: 50%; transform-origin: 50% 0; }
+
+@media (max-width: 600px) { .ot-field .hint .sw { display: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ot *, .ot-notch { animation: none !important; transition-duration: 0.12s !important; transition-delay: 0s !important; }
+}
+
+/* =====================================================================
+   B3 dock (Otto 1.75): fixed 470 tall, first row pinned, list scrolling
+   under a floating glass bar — Notes button · colour dock · Settings.
+   Numbers from NotchContainerMetrics / DSDock / DockTint.
+   ===================================================================== */
+.ot-dock { --dk: 143, 184, 255; --dk-text: #F2F2F2; --dk-text2: #8E8E93; --dk-text3: #6E6E73; --dk-ph: #77777C; }
+.ot-dock:not(.ot-paged) .ot-content { bottom: 0; padding-top: calc(var(--nh, 32px) + 18px); padding-bottom: 0; display: flex; flex-direction: column; }
+.ot-dock:not(.ot-paged) .ot-content.no-top { padding-top: 14px; }
+.ot-dock:not(.ot-paged) .ot-enter { position: relative; flex: 1; min-height: 0; }
+.ot-dock .dk-scroll { position: absolute; inset: 0; overflow: hidden; padding: 0 12px; }
+/* first row: dashed box in the space colour, grey placeholder */
+.ot-dock .ot-field.dk-first {
+  display: flex; align-items: center; gap: 12px; min-height: 38px; padding: 0 10px; margin: 0;
+  background: none; border: 0; border-radius: 14px;
+}
+.ot-dock .ot-field.dk-first:hover, .ot-dock .ot-field.dk-first.is-focus { background: none; border: 0; }
+.ot-dock .dk-dash {
+  width: 18px; height: 18px; flex: none; border-radius: 6px;
+  border: 2px dashed rgba(var(--dk), 0.85); background: rgba(var(--dk), 0.12);
+}
+.ot-dock .ot-field .ed { height: 19px; }
+.ot-dock .ot-field .ed input, .ot-dock .ot-field .ed .mirror, .ot-dock .ot-field.notes .ed input, .ot-dock .ot-field.notes .ed .mirror { font-size: 15px; font-weight: 400; line-height: 19px; }
+.ot-dock .ot-field .ed .mirror { color: var(--dk-text); }
+.ot-dock .ot-field .ed input { caret-color: rgb(var(--dk)); }
+.ot-dock .ot-field .ed .ph { font-size: 15px; font-weight: 400; line-height: 19px; color: var(--dk-ph); }
+.ot-dock .ot-field.fake .mirror::after, .ot-dock .ot-field.notes.fake .mirror::after { background: rgb(var(--dk)); height: 17px; }
+.ot-dock .ot-field .date { top: 22px; font-size: 11px; color: var(--dk-text3); }
+.ot-dock .ot-field.has-date { padding-bottom: 18px; }
+/* rows */
+.ot-dock .ot-list { margin-top: 0; gap: 0; padding-bottom: 80px; }
+.ot-dock .ot-row { margin: 0; padding: 0 10px; min-height: 38px; border-radius: 14px; gap: 2px; }
+.ot-dock .ot-row:hover { background: rgba(255, 255, 255, 0.045); }
+.ot-dock .ot-row.focus { background: rgba(255, 255, 255, 0.09); }
+.ot-dock .ot-row.open { background: #161618; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07); padding-bottom: 10px; }
+.ot-dock .ot-row .line { min-height: 38px; gap: 12px; }
+.ot-dock .ot-row .title { font-size: 15px; line-height: 19px; color: var(--dk-text); padding: 0; }
+.ot-dock .ot-row.done .title { color: #5E5E63; }
+.ot-dock .ot-cb { width: 18px; height: 18px; border-radius: 6px; border: 2px solid rgba(var(--dk), 0.85); background: none; color: #000; display: grid; place-items: center; }
+.ot-dock .ot-cb.on { background: rgb(var(--dk)); border-color: rgb(var(--dk)); }
+.ot-dock .ot-steps { margin-left: 30px; gap: 6px; padding-bottom: 6px; }
+.ot-dock .ot-steps::before { left: -21px; background: rgba(255, 255, 255, 0.12); width: 1px; }
+.ot-dock .ot-step { font-size: 13px; line-height: 16px; color: #C7C7CC; gap: 9px; }
+.ot-dock .ot-step .sb { width: 12px; height: 12px; border: 1.5px solid rgba(var(--dk), 0.7); border-radius: 4px; }
+.ot-dock .ot-step.done .sb { background: rgb(var(--dk)); }
+.ot-dock .ot-more { font-size: 12.5px; color: var(--dk-text3); }
+.ot-dock .ot-row .badge, .ot-dock .ot-row .grip { display: none !important; }
+/* notes */
+.ot-dock .ot-stream { margin-top: 2px; gap: 0; padding-bottom: 80px; }
+.ot-dock .ot-note { margin: 0; border: 0; display: flex; align-items: flex-start; gap: 12px; padding: 9px 10px; border-radius: 14px; }
+.ot-dock .ot-note:hover { background: rgba(255, 255, 255, 0.045); }
+.ot-dock .ot-note.focus { background: rgba(255, 255, 255, 0.09); }
+.ot-dock .ot-note .ng { width: 18px; flex: none; display: grid; place-items: center; color: var(--dk-text3); font-size: 15px; padding-top: 1px; }
+.ot-dock .ot-note .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ot-dock .ot-note .txt b { font-size: 15px; line-height: 19px; font-weight: 400; color: var(--dk-text); }
+.ot-dock .ot-note .txt small { font-size: 13px; line-height: 16px; color: var(--dk-text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ot-dock .ot-note time { font-size: 12px; color: var(--dk-text3); white-space: nowrap; padding-top: 2px; }
+/* the foot: rows dissolve into black behind the bar */
+.ot-dock .dk-foot {
+  position: absolute; left: -4px; right: -4px; bottom: 0; height: 94px; pointer-events: none; z-index: 1;
+  background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.6) 45%, rgba(0,0,0,.92) 80%, #000 100%);
+  -webkit-backdrop-filter: blur(1.5px); backdrop-filter: blur(1.5px);
+  -webkit-mask: linear-gradient(180deg, transparent, #000 40%); mask: linear-gradient(180deg, transparent, #000 40%);
+}
+/* the bar */
+.ot-dock .dk-bar { position: absolute; z-index: 2; left: 12px; right: 12px; bottom: 16px; display: grid; grid-template-columns: 38px 1fr 38px; align-items: end; justify-items: center; gap: 8px; }
+.ot-dock .dk-round, .ot-dock .dk-dock {
+  background: rgba(30, 30, 33, 0.72); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.13), inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 6px 18px rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4); backdrop-filter: blur(14px) saturate(1.4);
+}
+.ot-dock .dk-round { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; color: #AEAEB2; font-size: 16px; flex: none; transition: background .15s, color .15s; }
+.ot-dock .dk-round:hover { color: #E5E5EA; }
+.ot-dock .dk-round svg.i { width: 16px; height: 16px; stroke-width: 1.8; }
+.ot-dock .dk-notes { color: #E5B66B; }
+.ot-dock .dk-notes.on { background: rgba(229, 182, 107, 0.28); color: #F0CF98; }
+.ot-dock .dk-round.ot-gear.open { background: rgba(60, 60, 64, 0.9); }
+.ot-dock .dk-dock { height: 38px; padding: 4px; border-radius: 19px; display: flex; align-items: center; gap: 2px; max-width: 380px; overflow: hidden; }
+.ot-dock .dk-item { height: 30px; padding: 0 11.5px; border-radius: 15px; display: flex; align-items: center; transition: background .2s, opacity .2s; }
+.ot-dock .dk-item i { width: 7px; height: 7px; border-radius: 50%; background: var(--b); flex: none; }
+.ot-dock .dk-item span { max-width: 0; overflow: hidden; white-space: nowrap; font-size: 13px; font-weight: 500; color: var(--l); transition: max-width .35s cubic-bezier(.3,1.1,.5,1), padding .35s; }
+.ot-dock .dk-item:hover { background: rgba(255, 255, 255, 0.08); }
+.ot-dock .dk-item.on { background: rgba(var(--rgb), 0.24); }
+.ot-dock .dk-item.on span { max-width: 120px; padding: 0 5px 0 7px; }
+.ot-dock .dk-dock.dim .dk-item { opacity: .5; }
+.ot-dock .dk-dock.dim .dk-item.on { background: none; }
+.ot-dock .dk-dock.dim .dk-item.on span { max-width: 0; padding: 0; }
+.ot-dock .dk-plus { width: 30px; height: 30px; border-radius: 15px; display: grid; place-items: center; color: #5E5E63; font-size: 14px; }
+.ot-dock .dk-plus:hover { color: #E5E5EA; background: rgba(255, 255, 255, 0.08); }
+.ot-simple .dk-round.ot-gear { cursor: default; }
+
+.ot-dock .ot-row .has-note { display: none; }
+/* note editor (DockNoteEditor): title + date in the content, tools in the bar */
+.ot-dock .dk-page { padding: 0 22px; overflow: hidden; }
+.ot-dock .dk-head { padding: 6px 0 10px; display: flex; flex-direction: column; gap: 6px; }
+.ot-dock .dk-title { font-size: 24px; line-height: 29px; font-weight: 700; letter-spacing: -0.4px; color: #F5F5F7; width: 100%; }
+.ot-dock .dk-date { font-size: 14px; font-weight: 500; color: var(--dk-text3); }
+.ot-dock .dk-page .ot-doc { padding: 0 0 90px; margin: 0; background: none; border: 0; font-size: 15px; line-height: 22px; color: var(--dk-text); }
+.ot-dock .dk-page .ot-doc h5 { font-size: 17px; font-weight: 600; margin: 6px 0 4px; color: #F5F5F7; }
+.ot-dock .dk-page .ot-doc li, .ot-dock .dk-page .ot-doc p { font-size: 15px; line-height: 22px; }
+.ot-dock .dk-fmt { gap: 0; padding: 0 4px; }
+.ot-dock .dk-tool { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; color: #AEAEB2; font-size: 17px; }
+.ot-dock .dk-tool:hover { background: rgba(255, 255, 255, 0.08); color: #E5E5EA; }
+.ot-dock .dk-tool svg.i { width: 16px; height: 16px; stroke-width: 1.8; }
+.ot-dock .dk-tool .aa { font-size: 13px; font-weight: 600; }
+.ot-dock .dk-div { width: 1px; height: 18px; margin: 0 3px; background: rgba(255, 255, 255, 0.12); flex: none; }
+/* the meeting card: its own black card under the notch, 12 below */
+.ot-mcard {
+  margin: 12px auto 0; display: flex; gap: 12px; padding: 22px 22px 22px 22px; border-radius: 26px; background: #000;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 18px 40px rgba(0, 0, 0, 0.35);
+  opacity: 0; transform: translateY(-14px) scale(.97); transform-origin: 50% 0; pointer-events: none;
+  transition: opacity .3s, transform .45s var(--sp-hug);
+}
+.ot-mcard.show { opacity: 1; transform: none; pointer-events: auto; transition-delay: .35s; }
+.ot-mcard .mi { width: 22px; flex: none; padding-top: 2px; }
+.ot-mcard .mi svg { width: 22px; height: auto; display: block; }
+.ot-mcard .mc { flex: 1; min-width: 0; }
+.ot-mcard .r1 { display: flex; justify-content: space-between; font-size: 12px; line-height: 15px; }
+.ot-mcard .tm { color: #E8C15A; font-weight: 500; }
+.ot-mcard .now { color: #8E8E93; }
+.ot-mcard h6 { margin: 4px 0 0; font-size: 17px; line-height: 22px; font-weight: 500; color: #F2F2F2; }
+.ot-mcard .r3 { margin-top: 12px; display: flex; align-items: center; gap: 8px; }
+.ot-mcard .mb { height: 26px; padding: 0 10px; border-radius: 13px; display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; color: #E5E5EA; background: #1C1C1E; }
+.ot-mcard .mb.join { background: #E5E5EA; color: #111; padding-right: 4px; }
+.ot-mcard .mb.ghost { background: none; box-shadow: inset 0 0 0 1px #2C2C2E; color: #AEAEB2; padding-right: 4px; }
+.ot-mcard kbd { font: 600 10px/1 var(--ot-font); min-width: 18px; height: 16px; padding: 0 4px; border-radius: 4px; display: inline-grid; place-items: center; background: rgba(0,0,0,.12); color: #333; }
+.ot-mcard .ghost kbd { background: #2C2C2E; color: #D1D1D6; }
+.ot-mcard .avs { margin-left: auto; display: flex; }
+.ot-mcard .avs span { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 600; margin-left: -5px; box-shadow: 0 0 0 2px #000; }
+.ot-mcard .avs span.plus { background: #2C2C2E; color: #F2F2F2; }
+
+/* inline chips: date, link, mention, image (TodoItemRow) */
+.ot-dock .ot-row .title { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.dk-chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 7px; border-radius: 7px; font-size: 13px; font-weight: 500; line-height: 1; white-space: nowrap; }
+.dk-chip svg.i { width: 12px; height: 12px; stroke-width: 2; }
+.dk-chip.date { background: rgba(232, 193, 90, 0.14); color: #E8C15A; box-shadow: inset 0 0 0 1px rgba(232,193,90,.18); }
+.dk-chip.link { background: rgba(110, 160, 230, 0.16); color: #9CC0EE; box-shadow: inset 0 0 0 1px rgba(110,160,230,.2); }
+.dk-chip.at { background: rgba(170, 140, 230, 0.16); color: #C3B1FF; box-shadow: inset 0 0 0 1px rgba(170,140,230,.2); }
+.dk-chip.img { background: #161618; color: #E5E5EA; box-shadow: inset 0 0 0 1px #2C2C2E; font-weight: 600; }
+/* meeting card in the feature box */
+.ot-mc-wrap { margin-top: 14px; }
+.ot-mc-wrap .ot-mcard { margin: 0; }

@@ -1,0 +1,670 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Otto · Eyes in the notch</title>
+<style>
+@font-face { font-family: "Host Grotesk"; src: url(fonts/HostGrotesk-VariableFont_wght.ttf) format("truetype"); font-weight: 300 800; }
+:root {
+  --bg: #F2F0EB; --ink: #141416; --muted: #6B6A66; --faint: #A5A39D; --line: #DEDBD3; --card: #FBFAF7;
+  --violet: #7C5CFF; --sys: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root { --bg: #0B0B0D; --ink: #F2F1EE; --muted: #9A9893; --faint: #5E5D59; --line: #222226; --card: #131316; } }
+* { box-sizing: border-box; }
+html { -webkit-font-smoothing: antialiased; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 17px/1.55 "Host Grotesk", var(--sys); }
+.wrap { width: min(1120px, 100% - 32px); margin: 0 auto; }
+header.top { padding: 96px 0 40px; }
+.eyebrow { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-size: clamp(2.4rem, 5vw, 4.2rem); font-weight: 400; letter-spacing: -.04em; line-height: 1.02; margin: 14px 0 22px; max-width: 13em; }
+h2 { font-size: clamp(1.8rem, 3.4vw, 2.6rem); font-weight: 400; letter-spacing: -.035em; line-height: 1.08; margin: 0 0 14px; }
+h3 { font-size: 1.15rem; font-weight: 500; letter-spacing: -.01em; margin: 0 0 6px; }
+p { margin: 0 0 12px; }
+.lead { font-size: 19px; color: var(--muted); max-width: 40em; }
+section { padding: 72px 0; border-top: 1px solid var(--line); }
+nav.toc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 30px; }
+nav.toc a { color: var(--ink); text-decoration: none; font-size: 14px; padding: 8px 14px; border-radius: 99px; border: 1px solid var(--line); }
+nav.toc a:hover { background: var(--card); }
+
+/* ---------- vocabulary ---------- */
+.vocab { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 32px; }
+.expr { background: #000; border-radius: 18px; aspect-ratio: 1 / .78; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; cursor: default; position: relative; }
+.expr .lbl { position: absolute; bottom: 12px; font: 500 12px/1 var(--sys); color: #8E8E93; }
+.expr.use .lbl::after { content: " ●"; color: #9EE0B0; }
+.expr.weak .lbl::after { content: " ○"; color: #6E6E73; }
+.legend { margin-top: 14px; font-size: 14px; color: var(--muted); }
+
+/* ---------- direction ---------- */
+.dir-head { display: grid; grid-template-columns: 1.1fr 1fr; gap: 48px; align-items: start; }
+.tag { display: inline-block; font-size: 12px; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); margin: 0 6px 8px 0; }
+.scale { display: flex; gap: 4px; margin: 4px 0 18px; }
+.scale i { width: 26px; height: 6px; border-radius: 3px; background: var(--line); }
+.scale i.on { background: var(--ink); }
+.meta dt { font-size: 13px; color: var(--muted); margin-top: 14px; }
+.meta dd { margin: 2px 0 0; font-size: 15px; }
+
+.stage { margin-top: 36px; border-radius: 28px; overflow: hidden; position: relative; background: #1a1247 url(wallpaper.jpg) center / cover; height: 360px; user-select: none; }
+.stage::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 50%, rgba(0,0,0,.35)); pointer-events: none; }
+.menubar { position: absolute; left: 0; right: 0; top: 0; height: 30px; display: flex; justify-content: space-between; align-items: center; padding: 0 18px; font: 500 13px/1 var(--sys); color: rgba(255,255,255,.92); background: rgba(10,8,24,.28); backdrop-filter: blur(10px); z-index: 1; }
+.menubar b { font-weight: 700; }
+.menubar span + span { margin-left: 9px; }
+
+/* the notch silhouette */
+.notch { position: absolute; z-index: 3; left: 50%; top: 0; transform: translateX(-50%); width: var(--w, 200px); height: var(--h, 30px);
+  transition: width var(--dw, .5s) var(--ease, cubic-bezier(.3,1.15,.5,1)), height var(--dh, .46s) var(--ease, cubic-bezier(.3,1.15,.5,1)); }
+.notch::before, .notch::after { content: ""; position: absolute; top: 0; width: 12px; height: 12px; }
+.notch::before { left: -12px; background: radial-gradient(circle at 0 100%, transparent 11.5px, #000 12px); }
+.notch::after { right: -12px; background: radial-gradient(circle at 100% 100%, transparent 11.5px, #000 12px); }
+.notch .body { position: absolute; inset: 0; background: #000; border-radius: 0 0 var(--r, 10px) var(--r, 10px); overflow: hidden; transition: border-radius var(--dw, .5s) var(--ease); }
+.notch .panel { position: absolute; left: 22px; right: 22px; top: 46px; opacity: 0; transform: translateY(-6px); transition: opacity .25s, transform .35s; font: 400 14px/1.3 var(--sys); color: #F2F2F2; }
+.notch.open .panel { opacity: 1; transform: none; transition-delay: .12s; }
+.notch .wing { position: absolute; top: 0; height: 30px; display: flex; align-items: center; font: 500 12px/1 var(--sys); color: #fff; opacity: 0; transition: opacity .25s; }
+.notch .wing.r { right: 12px; } .notch .wing.l { left: 12px; }
+.notch .wing.on { opacity: 1; }
+.notch .wing .dot { width: 6px; height: 6px; border-radius: 50%; background: #7FB8E0; margin-right: 6px; }
+
+.row { display: flex; align-items: center; gap: 11px; height: 32px; transition: opacity .3s, color .3s; }
+.cb { width: 16px; height: 16px; border-radius: 5px; border: 2px solid rgba(143,184,255,.85); flex: none; display: grid; place-items: center; transition: background .2s; }
+.row.done .cb { background: #8FB8FF; }
+.row.done .cb::after { content: ""; width: 7px; height: 4px; border-left: 2px solid #000; border-bottom: 2px solid #000; transform: rotate(-45deg) translate(1px,-1px); }
+.row.done span { color: #5E5E63; text-decoration: line-through; }
+.mtg { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: #161618; box-shadow: inset 0 0 0 1px rgba(255,255,255,.07); }
+.mtg small { display: block; color: #E8C15A; font-size: 12px; }
+.mtg b { font-weight: 500; font-size: 15px; }
+.mtg .join { margin-left: auto; background: #E5E5EA; color: #111; border-radius: 13px; padding: 5px 12px; font-size: 13px; font-weight: 600; }
+.msg { color: #8E8E93; font-size: 13px; margin-top: 10px; }
+.big { text-align: center; padding-top: 28px; }
+.big b { display: block; font-weight: 500; font-size: 16px; margin-top: 18px; }
+.big span { color: #8E8E93; font-size: 13px; }
+
+.eyes { position: absolute; z-index: 4; pointer-events: none; transition: left var(--mv, .55s) var(--ease), top var(--mv, .55s) var(--ease), opacity .3s; }
+.eyes svg { display: block; overflow: visible; }
+
+.moments { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.moments button { font: 500 13px/1 "Host Grotesk", var(--sys); color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 99px; padding: 9px 14px; cursor: pointer; }
+.moments button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.caption { margin-top: 14px; font-size: 15px; color: var(--muted); min-height: 3em; max-width: 46em; }
+.hint { position: absolute; z-index: 5; right: 16px; bottom: 14px; font: 500 12px/1 var(--sys); color: rgba(255,255,255,.7); }
+
+table.spec { width: 100%; border-collapse: collapse; margin-top: 28px; font-size: 14px; }
+table.spec th, table.spec td { text-align: left; padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.spec th { font-weight: 500; color: var(--muted); font-size: 13px; }
+table.spec td:first-child { width: 22%; font-weight: 500; }
+code { font: 13px/1.4 ui-monospace, "SF Mono", Menlo, monospace; background: var(--card); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
+.pros { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 28px; }
+.pros div { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px 22px; }
+.pros ul { margin: 6px 0 0; padding-left: 18px; font-size: 15px; }
+.pros li { margin: 4px 0; }
+
+.compare { width: 100%; border-collapse: collapse; margin-top: 28px; font-size: 15px; }
+.compare th, .compare td { padding: 12px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+.compare th { font-weight: 500; color: var(--muted); font-size: 13px; }
+.compare td.n { font-variant-numeric: tabular-nums; }
+.dots { letter-spacing: 2px; }
+.reco { margin-top: 40px; padding: 32px; border-radius: 24px; background: #000; color: #F2F2F2; display: grid; grid-template-columns: 200px 1fr; gap: 32px; align-items: center; }
+.reco p { color: #C7C7CC; }
+.reco h3 { color: #fff; font-size: 1.4rem; font-weight: 400; letter-spacing: -.02em; }
+footer { padding: 60px 0 90px; color: var(--muted); font-size: 14px; }
+
+@media (max-width: 820px) {
+  .dir-head, .pros, .reco { grid-template-columns: 1fr; }
+  .stage { height: 340px; }
+}
+@media (prefers-reduced-motion: reduce) { .notch, .notch .body, .eyes { transition: none; } }
+</style>
+</head>
+<body>
+
+<header class="top wrap">
+  <div class="eyebrow">Otto · product exploration · October 2026</div>
+  <h1>Two eyes, living in the notch.</h1>
+  <p class="lead">The O’s in Otto’s logo already have eyes: holes that drift and blink in the footer of the site. This page explores how that same creature could live inside the product, with four directions from “almost invisible” to “always there”. Every stage below is live: pick a moment, and move your cursor over it.</p>
+  <nav class="toc">
+    <a href="#vocab">Vocabulary</a><a href="#a">A · The detail</a><a href="#b">B · The tell</a><a href="#c">C · The gesture</a><a href="#d">D · The companion</a><a href="#compare">Comparison</a>
+  </nav>
+</header>
+
+<section id="vocab">
+  <div class="wrap">
+    <div class="eyebrow">01 · Vocabulary</div>
+    <h2>Nine expressions, two circles.</h2>
+    <p class="lead">Each eye is the O from the logo: a white disc with the black hole as pupil. Everything else is made with three things: where the pupil looks, a lid that comes down (and can tilt), and a lower lid that pushes up into a smile. No mouth, no brows, no extra shapes. ● reads well at notch size (10–14 px), ○ only works large.</p>
+    <div class="vocab" id="vocab-grid"></div>
+    <p class="legend">Hover a tile: the eyes follow your cursor, with the inertia of the footer logo.</p>
+  </div>
+</section>
+
+<!-- Direction A -->
+<section id="a" class="dir">
+  <div class="wrap">
+    <div class="eyebrow">02 · Direction A</div>
+    <div class="dir-head">
+      <div>
+        <h2>The detail.</h2>
+        <div class="scale" title="Presence"><i class="on"></i><i></i><i></i><i></i></div>
+        <p>The eyes are almost never there. They show up for half a second at the moments that deserve a reaction (the notch opening, a to-do done, an empty day) and then they’re gone. Otto stays a tool; the eyes are a signature, like a wink in the corner of a page.</p>
+      </div>
+      <dl class="meta">
+        <dt>From the references</dt>
+        <dd>Espacio La Nube’s restraint: one small thing moving, lots of quiet around it. The footer logo’s blink, reused once instead of always.</dd>
+        <dt>Motion character</dt>
+        <dd>Minimal and precise. Short ease-out fades, a single blink, no overshoot.</dd>
+      </dl>
+    </div>
+    <div class="stage" data-dir="a"></div>
+    <div class="moments" data-for="a"></div>
+    <p class="caption" data-cap="a"></p>
+    <table class="spec">
+      <tr><th>Spec</th><th>Value</th></tr>
+      <tr><td>Appear / disappear</td><td>opacity 0→1 in <code>160 ms</code> ease-out, hold <code>600–900 ms</code>, out in <code>240 ms</code></td></tr>
+      <tr><td>Blink</td><td>lid down <code>70 ms</code>, up <code>110 ms</code> (ease-in / ease-out). One blink per appearance, never more.</td></tr>
+      <tr><td>Look</td><td>critically damped spring, response <code>0.25 s</code>, no overshoot</td></tr>
+      <tr><td>With the notch</td><td>appear after the panel has settled (<code>+ 320 ms</code>), never during the open spring</td></tr>
+    </table>
+    <div class="pros">
+      <div><h3>Strong</h3><ul><li>Can’t get annoying: it’s rare by design.</li><li>Zero cost to reading: nothing sits on top of information.</li><li>Cheapest to build.</li></ul></div>
+      <div><h3>Risky</h3><ul><li>Too rare to become “a character”; many people never notice it.</li><li>Doesn’t carry any information, so it’s pure decoration.</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- Direction B -->
+<section id="b" class="dir">
+  <div class="wrap">
+    <div class="eyebrow">03 · Direction B</div>
+    <div class="dir-head">
+      <div>
+        <h2>The tell.</h2>
+        <div class="scale"><i class="on"></i><i class="on"></i><i></i><i></i></div>
+        <p>The eyes live in the closed notch, in the left wing where the meeting icon sits today, and they are a status light with a face. Calm and half-lidded when nothing is due, looking at the countdown when a meeting is close, wide when you’re late, pleased when you tick something off. You read the state of your day before you open anything.</p>
+      </div>
+      <dl class="meta">
+        <dt>From the references</dt>
+        <dt></dt>
+        <dd>CoolDock’s idea of a system utility with a wink that stays clean. FacilPay’s confidence: one bold element doing a clear job.</dd>
+        <dt>Motion character</dt>
+        <dd>Soft and organic. Springs with a little life, slow breathing at rest.</dd>
+      </dl>
+    </div>
+    <div class="stage" data-dir="b"></div>
+    <div class="moments" data-for="b"></div>
+    <p class="caption" data-cap="b"></p>
+    <table class="spec">
+      <tr><th>Spec</th><th>Value</th></tr>
+      <tr><td>Idle</td><td>lids at <code>35 %</code>, breathing scale <code>1 → 1.03</code> over <code>4 s</code> sine; a glance every <code>8–14 s</code>; a blink every <code>4–7 s</code></td></tr>
+      <tr><td>Look</td><td>spring <code>response 0.45 s, damping 0.72</code> (≈ 6 % overshoot). Pupils lead, lids follow <code>60 ms</code> later.</td></tr>
+      <tr><td>State change</td><td>lids/tilt spring <code>response 0.35 s, damping 0.8</code>; never two expressions within <code>1.2 s</code></td></tr>
+      <tr><td>With the notch</td><td>on open, the eyes stay in the wing for the first <code>120 ms</code>, then drift to the panel’s top-left corner (matched geometry) and shrink to <code>10 px</code></td></tr>
+      <tr><td>Size</td><td>closed: <code>11 px</code> per eye, <code>5 px</code> gap; never larger than the wing’s height minus 10</td></tr>
+    </table>
+    <div class="pros">
+      <div><h3>Strong</h3><ul><li>Every animation means something: the eyes are information.</li><li>Replaces the meeting dot with something more legible from the corner of your eye.</li><li>Feels like the same creature as the footer (slow drift, blinks).</li></ul></div>
+      <div><h3>Risky</h3><ul><li>Always-visible movement in the menu bar can pull focus: idle motion must stay below notice.</li><li>Needs a clear rule for which state wins (meeting vs. open to-dos).</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- Direction C -->
+<section id="c" class="dir">
+  <div class="wrap">
+    <div class="eyebrow">04 · Direction C</div>
+    <div class="dir-head">
+      <div>
+        <h2>The gesture.</h2>
+        <div class="scale"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
+        <p>The eyes are the opening itself. Asleep and invisible in the closed notch; on hover they open, look down, and the panel unfolds from their gaze. Once it’s open, they shrink into the bar and keep pointing at what matters, then close again as the notch closes. One continuous creature, no popping in and out.</p>
+      </div>
+      <dl class="meta">
+        <dt>From the references</dt>
+        <dd>Supaste’s continuity, where an element turns into the next section instead of disappearing. FacilPay’s staged reveal, here as an opening in three beats: wake, look, unfold.</dd>
+        <dt>Motion character</dt>
+        <dd>Playful and snappy. Anticipation before the open, a clear overshoot, then still.</dd>
+      </dl>
+    </div>
+    <div class="stage" data-dir="c"></div>
+    <div class="moments" data-for="c"></div>
+    <p class="caption" data-cap="c"></p>
+    <table class="spec">
+      <tr><th>Spec</th><th>Value</th></tr>
+      <tr><td>Wake (hover)</td><td>lids <code>1 → 0</code> in <code>180 ms</code>, pupils dip <code>−4 px</code> (anticipation, <code>80 ms</code>), then look down</td></tr>
+      <tr><td>Unfold</td><td>notch opens <code>140 ms</code> after the look; spring <code>response 0.38 s, damping 0.62</code> (≈ 12 % overshoot), eyes ride the bottom edge</td></tr>
+      <tr><td>Settle</td><td>eyes travel to the bar’s centre and shrink <code>18 → 9 px</code>, <code>420 ms</code>; from there they look at the focused row</td></tr>
+      <tr><td>Close</td><td>reverse path, lids close as the notch reaches its closed size; <code>360 ms</code> total</td></tr>
+    </table>
+    <div class="pros">
+      <div><h3>Strong</h3><ul><li>Gives the gesture of opening the notch a signature nobody else has.</li><li>Personality without adding anything to the open panel.</li><li>The most memorable in a demo or a video.</li></ul></div>
+      <div><h3>Risky</h3><ul><li>The open is the thing you do 50 times a day: any extra beat must stay under ~150 ms or it feels slow.</li><li>Hardest to tune with the existing open spring.</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- Direction D -->
+<section id="d" class="dir">
+  <div class="wrap">
+    <div class="eyebrow">05 · Direction D</div>
+    <div class="dir-head">
+      <div>
+        <h2>The companion.</h2>
+        <div class="scale"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div>
+        <p>Otto is a little someone who lives in your notch. The eyes are always there, a size up, following your cursor around the screen, reacting to everything: they look at a meeting when it’s due, squint with pleasure at a done to-do, get sleepy at the end of the day, and take the whole panel on an empty one.</p>
+      </div>
+      <dl class="meta">
+        <dt>From the references</dt>
+        <dd>The footer logo at full volume: eyes that track the pointer everywhere. CoolDock’s playfulness pushed further.</dd>
+        <dt>Motion character</dt>
+        <dd>Soft and organic, with the most freedom: gaze follows the cursor with weight, saccades, idle fidgets.</dd>
+      </dl>
+    </div>
+    <div class="stage" data-dir="d"></div>
+    <div class="moments" data-for="d"></div>
+    <p class="caption" data-cap="d"></p>
+    <table class="spec">
+      <tr><th>Spec</th><th>Value</th></tr>
+      <tr><td>Cursor tracking</td><td>spring <code>response 0.5 s, damping 0.85</code>; dead zone of <code>40 px</code> so small mouse moves don’t twitch</td></tr>
+      <tr><td>Saccades</td><td>when the cursor is still for <code>3 s</code>: random glance, <code>90 ms</code> jump, hold <code>0.6–1.4 s</code></td></tr>
+      <tr><td>Reactions</td><td>squash on surprise <code>scaleY 1.15</code>, back with <code>damping 0.55</code>; happy squint <code>600 ms</code></td></tr>
+      <tr><td>Size</td><td>closed: <code>14 px</code> per eye, in a widened notch (<code>+44 px</code>); open: avatar in the panel’s top-left at <code>18 px</code></td></tr>
+    </table>
+    <div class="pros">
+      <div><h3>Strong</h3><ul><li>Instantly lovable; the most “Otto” of the four.</li><li>Great in marketing and onboarding.</li></ul></div>
+      <div><h3>Risky</h3><ul><li>Constant motion at the top of the screen, all day: very likely to tire, especially when screen-sharing or presenting.</li><li>Needs a global mouse monitor (permission, battery).</li><li>Closest to “mascot” and furthest from a quiet tool.</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<section id="compare">
+  <div class="wrap">
+    <div class="eyebrow">06 · Comparison</div>
+    <h2>Which one earns its place?</h2>
+    <table class="compare">
+      <tr><th></th><th>A · Detail</th><th>B · Tell</th><th>C · Gesture</th><th>D · Companion</th></tr>
+      <tr><td>Presence</td><td class="dots">●○○○</td><td class="dots">●●○○</td><td class="dots">●●●○</td><td class="dots">●●●●</td></tr>
+      <tr><td>Carries information</td><td>No</td><td>Yes: meeting, late, done, end of day</td><td>A little: what’s focused</td><td>Yes, but mixed with play</td></tr>
+      <tr><td>Fatigue after a month</td><td>None</td><td>Low (if idle stays slow)</td><td>Medium: tied to every open</td><td>High</td></tr>
+      <tr><td>Recognisable as Otto</td><td>Low</td><td>High</td><td>High</td><td>Very high</td></tr>
+      <tr><td>SwiftUI cost</td><td>Low</td><td>Low–medium</td><td>Medium–high</td><td>Medium–high</td></tr>
+    </table>
+
+    <div class="reco">
+      <div class="reco-eyes" id="reco-eyes" style="height:120px"></div>
+      <div>
+        <h3>Recommendation: B, with one beat of C.</h3>
+        <p>Make the eyes the status of the closed notch (B): they replace the meeting dot, carry real information and are the same calm creature as the footer. Then borrow a single moment from C: on hover the lids lift before the panel opens, kept under 120 ms so it never slows you down. Skip cursor tracking for now; it’s the part that tires and costs the most.</p>
+        <p>Rules to keep it quiet: idle motion only every 8–14 s, never two expressions within 1.2 s, everything stops while screen sharing and under Reduce Motion.</p>
+      </div>
+    </div>
+
+    <table class="spec" style="margin-top:48px">
+      <tr><th>Building it in SwiftUI</th><th>Effort</th></tr>
+      <tr><td>The eyes themselves</td><td><b>Easy.</b> Two <code>Circle</code>s, a pupil offset, lids as <code>Rectangle</code>/<code>Ellipse</code> masked by the eye. Animate with <code>.spring(response:dampingFraction:)</code>. One <code>OttoEyes(expression:look:)</code> view.</td></tr>
+      <tr><td>Expressions and blinks</td><td><b>Easy.</b> An enum of expressions mapped to lid/tilt/pupil values; blinks with <code>PhaseAnimator</code> or a timer (macOS 14+, fallback with <code>withAnimation</code> on 13).</td></tr>
+      <tr><td>Status in the closed notch (B)</td><td><b>Easy–medium.</b> Reuses the meeting wing; the work is the state priority rules in <code>NotchController</code>.</td></tr>
+      <tr><td>Eyes moving from closed to open (B, C)</td><td><b>Medium.</b> <code>matchedGeometryEffect</code> between the wing and the panel; must be tuned with the existing open spring.</td></tr>
+      <tr><td>Wake before open (C)</td><td><b>Medium.</b> Needs a short pre-open phase in the hover → open sequence.</td></tr>
+      <tr><td>Cursor tracking (D)</td><td><b>Costly.</b> <code>NSEvent.addGlobalMonitorForEvents(.mouseMoved)</code>, throttled; continuous redraws at the top of the screen; extra battery and a privacy question.</td></tr>
+      <tr><td>Breathing / idle</td><td><b>Easy, but watch energy.</b> Use <code>TimelineView(.animation(minimumInterval: 1/20))</code> only while visible; stop when the display sleeps.</td></tr>
+    </table>
+  </div>
+</section>
+
+<footer class="wrap">Prototype for discussion. The references (Espacio La Nube, FacilPay, Supaste, CoolDock) weren’t reachable from this machine; the directions draw on the Otto footer and on memory of those sites.</footer>
+
+<script>
+(() => {
+'use strict';
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const NS = 'http://www.w3.org/2000/svg';
+const rnd = (a, b) => a + Math.random() * (b - a);
+
+/* ---------------- the eyes ----------------
+   Each eye is the O of the logo: white disc, black hole as pupil. Lids are drawn in the
+   background colour, clipped by the eye. Values are driven by springs. */
+const EXPR = {
+  idle:      { top: .08, tilt: 0,   bot: 0,   pupil: 1,    scale: 1 },
+  calm:      { top: .35, tilt: 0,   bot: 0,   pupil: 1,    scale: 1 },
+  curious:   { top: 0,   tilt: -6,  bot: 0,   pupil: 1.1,  scale: 1.04, skew: 1 },
+  attentive: { top: 0,   tilt: 0,   bot: 0,   pupil: .9,   scale: 1.06 },
+  happy:     { top: 0,   tilt: 0,   bot: .7, pupil: 0,    scale: 1 },
+  sleepy:    { top: .62, tilt: 0,   bot: .08, pupil: 1,    scale: .96 },
+  worried:   { top: .3,  tilt: 14,  bot: 0,   pupil: .85,  scale: 1 },
+  surprised: { top: 0,   tilt: 0,   bot: 0,   pupil: .62,  scale: 1.16 },
+  focused:   { top: .42, tilt: -8,  bot: .12, pupil: .9,   scale: 1 },
+  closed:    { top: 1,   tilt: 0,   bot: 0,   pupil: 1,    scale: 1 },
+};
+const MOTION = {
+  soft:    { k: 120, c: 17 },   // organic: response ~0.55s, small overshoot
+  snappy:  { k: 420, c: 22 },   // playful: fast, visible overshoot
+  precise: { k: 260, c: 32 },   // minimal: critically damped
+};
+
+class Eyes {
+  constructor(host, o = {}) {
+    this.o = Object.assign({ size: 14, gap: 6, bg: '#000', motion: 'soft', breathe: false, idleGlance: false }, o);
+    const R = this.o.size / 2, W = this.o.size * 2 + this.o.gap;
+    this.R = R; this.W = W;
+    this.svg = document.createElementNS(NS, 'svg');
+    this.svg.setAttribute('width', W); this.svg.setAttribute('height', this.o.size);
+    this.svg.setAttribute('viewBox', `0 0 ${W} ${this.o.size}`);
+    this.svg.style.overflow = 'visible';
+    const id = 'e' + Math.random().toString(36).slice(2, 8);
+    this.svg.innerHTML = [0, 1].map((i) => {
+      const cx = R + i * (this.o.size + this.o.gap);
+      return `<clipPath id="${id}${i}"><circle cx="${cx}" cy="${R}" r="${R}"/></clipPath>
+        <g class="eye" data-i="${i}" transform-origin="${cx} ${R}">
+          <circle cx="${cx}" cy="${R}" r="${R}" fill="#fff"/>
+          <g clip-path="url(#${id}${i})">
+            <circle class="p" cx="${cx}" cy="${R}" r="${R * .4}" fill="${this.o.bg}"/>
+            <ellipse class="lt" cx="${cx}" cy="${-R * 2}" rx="${R * 1.9}" ry="${R * 1.5}" fill="${this.o.bg}"/>
+            <circle class="lb" cx="${cx}" cy="${R * 3.2}" r="${R * 1.25}" fill="${this.o.bg}"/>
+          </g></g>`;
+    }).join('');
+    host.appendChild(this.svg);
+    this.els = [...this.svg.querySelectorAll('.eye')].map((g) => ({ g, p: g.querySelector('.p'), lt: g.querySelector('.lt'), lb: g.querySelector('.lb'), cx: +g.getAttribute('transform-origin').split(' ')[0] }));
+    const base = Object.assign({ lx: 0, ly: 0, blink: 0, squash: 0 }, EXPR.idle);
+    this.x = { ...base }; this.v = {}; this.t = { ...base };
+    Object.keys(base).forEach((k) => (this.v[k] = 0));
+    this.set('idle');
+    this.last = performance.now();
+    this.nextBlink = this.last + rnd(2500, 5000);
+    this.nextGlance = this.last + rnd(4000, 8000);
+    const loop = (now) => { this.step(now); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  }
+  set(name, extra = {}) { this.expr = name; Object.assign(this.t, EXPR[name], extra); }
+  look(x, y) { this.t.lx = Math.max(-1, Math.min(1, x)); this.t.ly = Math.max(-1, Math.min(1, y)); this.lookAt = performance.now(); }
+  blink() { if (this.expr === 'closed') return; this.blinkT = performance.now(); }
+  pop(amount = 1) { this.v.squash += 9 * amount; }
+  step(now) {
+    const dt = Math.min(0.033, (now - this.last) / 1000); this.last = now;
+    const { k, c } = MOTION[this.o.motion];
+    // blink: down 70ms, up 110ms
+    if (this.blinkT) {
+      const e = now - this.blinkT;
+      this.x.blink = e < 70 ? e / 70 : e < 180 ? 1 - (e - 70) / 110 : 0;
+      if (e >= 180) this.blinkT = 0;
+    }
+    if (!reduce && this.o.autoBlink !== false && now > this.nextBlink) { this.blink(); this.nextBlink = now + rnd(3800, 7000); }
+    if (!reduce && this.o.idleGlance && now > this.nextGlance && now - (this.lookAt || 0) > 2500) {
+      this.t.lx = rnd(-.7, .7); this.t.ly = rnd(-.3, .4); this.nextGlance = now + rnd(8000, 14000);
+      setTimeout(() => { if (performance.now() - (this.lookAt || 0) > 2500) { this.t.lx = 0; this.t.ly = 0; } }, rnd(700, 1400));
+    }
+    for (const key of Object.keys(this.t)) {
+      if (key === 'blink' || key === 'skew') continue;
+      const kk = key === 'squash' ? 260 : k, cc = key === 'squash' ? 9 : c;
+      const target = key === 'squash' ? 0 : this.t[key];
+      const a = kk * (target - this.x[key]) - cc * this.v[key];
+      this.v[key] += a * dt; this.x[key] += this.v[key] * dt;
+    }
+    this.render(now);
+  }
+  render(now) {
+    const R = this.R, x = this.x;
+    const breathe = this.o.breathe && !reduce ? 1 + 0.03 * Math.sin(now / 640) : 1;
+    const s = x.scale * breathe;
+    const sq = x.squash * 0.02;
+    const top = Math.min(1, Math.max(x.top, x.blink));
+    this.els.forEach((e, i) => {
+      const side = i === 0 ? -1 : 1;
+      const skewY = this.t.skew && i === 1 ? -0.08 : 0;
+      e.g.setAttribute('transform', `translate(${e.cx} ${R}) scale(${s * (1 - sq * .5)} ${s * (1 + sq)}) translate(${-e.cx} ${-R}) ${skewY ? '' : ''}`);
+      const range = R * .42;
+      e.p.setAttribute('cx', e.cx + x.lx * range);
+      e.p.setAttribute('cy', R + x.ly * range);
+      e.p.setAttribute('r', Math.max(0, R * .4 * x.pupil));
+      // top lid: rect whose bottom edge sits at y = -R .. R as top goes 0..1, tilted (inner corner up for "worried")
+      const edge = -R * 1.05 + top * R * 2.15;
+      e.lt.setAttribute('cy', R + edge - R * 1.5);
+      e.lt.setAttribute('transform', `rotate(${x.tilt * side} ${e.cx} ${R + edge})`);
+      // lower lid: a disc rising from below, its top edge curving like a smile
+      e.lb.setAttribute('cy', R * 3.2 - x.bot * R * 1.55 + (this.t.skew && i === 1 ? -R * .12 : 0));
+    });
+  }
+}
+window.Eyes = Eyes;
+
+/* follow the cursor inside an element, with the footer's inertia */
+function follow(el, eyes, opt = {}) {
+  el.addEventListener('pointermove', (ev) => {
+    const r = eyes.svg.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const dx = ev.clientX - cx, dy = ev.clientY - cy;
+    const d = Math.hypot(dx, dy);
+    if (d < (opt.dead || 0)) return;
+    const m = Math.min(1, d / (opt.reach || 160));
+    eyes.look((dx / (d || 1)) * m, (dy / (d || 1)) * m);
+  });
+  el.addEventListener('pointerleave', () => eyes.look(0, 0));
+}
+
+/* ---------------- vocabulary grid ---------------- */
+const grid = document.getElementById('vocab-grid');
+const use = { idle: 1, calm: 1, curious: 0, attentive: 1, happy: 1, sleepy: 1, worried: 1, surprised: 1, focused: 0, closed: 1 };
+['idle', 'calm', 'attentive', 'curious', 'happy', 'sleepy', 'worried', 'surprised', 'focused'].forEach((n) => {
+  const t = document.createElement('div');
+  t.className = 'expr ' + (use[n] ? 'use' : 'weak');
+  t.innerHTML = `<span class="lbl">${n}</span>`;
+  grid.appendChild(t);
+  const big = new Eyes(t, { size: 34, gap: 12, motion: 'soft' });
+  big.set(n);
+  const small = new Eyes(t, { size: 11, gap: 5, motion: 'soft' });
+  small.set(n);
+  follow(t, big, { reach: 90 }); follow(t, small, { reach: 90 });
+  t.addEventListener('pointerenter', () => { if (n === 'surprised') { big.pop(); small.pop(); } });
+});
+
+/* ---------------- stages ---------------- */
+const TODOS = ['Send the proposal to Simon', 'Review the new onboarding', 'Prep for Monday’s standup', 'Call the dentist'];
+const listHTML = (done = -1, dim = false) => TODOS.map((t, i) => `<div class="row${i === done ? ' done' : ''}" style="${dim && i !== done ? 'opacity:.55' : ''}"><span class="cb"></span><span>${t}</span></div>`).join('');
+const meetHTML = (late) => `<div class="mtg"><svg width="22" height="18" viewBox="0 0 87.5 72"><path fill="#00832D" d="M49.5 36L58.03 45.75L69.5 53.08L71.5 36.06L69.5 19.42L57.81 25.86Z"/><path fill="#0066DA" d="M0 51.5V66C0 69.315 2.685 72 6 72H20.5L23.5 61.04L20.5 51.5L10.55 48.5Z"/><path fill="#E94235" d="M20.5 0L0 20.5L10.55 23.5L20.5 20.5L23.45 11.09Z"/><path fill="#2684FC" d="M0 20.5H20.5V51.5H0Z"/><path fill="#00AC47" d="M82.6 8.68L69.5 19.42V53.08L82.66 63.87C84.63 65.41 87.51 64.005 87.51 61.5V11C87.51 8.465 84.565 7.075 82.6 8.68Z M49.5 36V51.5H20.5V72H63.5C66.815 72 69.5 69.315 69.5 66V53.08Z"/><path fill="#FFBA00" d="M63.5 0H20.5V20.5H49.5V36L69.5 19.43V6C69.5 2.685 66.815 0 63.5 0Z"/></svg><div><small>${late ? 'Started 3 min ago' : '9:30 – 10:00 · in 5 min'}</small><b>Design sync</b></div><span class="join">Join</span></div>`;
+
+const MOMENTS = [
+  ['idle', 'Idle'], ['wake', 'Hover to open'], ['meeting', 'Meeting in 5 min'], ['late', 'Late to a meeting'],
+  ['done', 'To-do done'], ['evening', '17:00, 3 left'], ['empty', 'Nothing today'], ['morning', 'Morning'],
+];
+
+const OPEN = { w: 500, h: 250 };
+const CLOSED = { w: 200, h: 30 };
+
+function makeStage(el, dir) {
+  el.innerHTML = `<div class="menubar"><div><svg width="12" height="14" viewBox="0 0 814 1000" fill="currentColor"><path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76.5 0-103.7 40.8-165.9 40.8s-105.6-57-155.5-127C46.7 790.7 0 663 0 541.8c0-194.4 126.4-297.5 250.8-297.5 66.1 0 121.2 43.4 162.7 43.4 39.5 0 101.1-46 176.3-46 28.5 0 130.9 2.6 198.3 99.2zm-234-181.5c31.1-36.9 53.1-88.1 53.1-139.3 0-7.1-.6-14.3-1.9-20.1-50.6 1.9-110.8 33.7-147.1 75.8-28.5 32.4-55.1 83.6-55.1 135.5 0 7.8 1.3 15.6 1.9 18.1 3.2.6 8.4 1.3 13.6 1.3 45.4 0 102.5-30.4 135.5-71.3z"/></svg> <b style="margin-left:14px">Otto</b></div><div><span>Thu Oct 8</span><span class="clock">09:25</span></div></div>
+    <div class="notch"><div class="body"><div class="wing l"></div><div class="wing r"></div><div class="panel"></div></div></div>
+    <div class="eyes"></div><span class="hint">Move your cursor here</span>`;
+  const notch = el.querySelector('.notch'), panel = el.querySelector('.panel');
+  const wl = el.querySelector('.wing.l'), wr = el.querySelector('.wing.r');
+  const holder = el.querySelector('.eyes'), clock = el.querySelector('.clock');
+  const ease = { a: 'cubic-bezier(.2,.8,.2,1)', b: 'cubic-bezier(.3,1.15,.5,1)', c: 'cubic-bezier(.34,1.5,.5,1)', d: 'cubic-bezier(.3,1.15,.5,1)' }[dir];
+  el.style.setProperty('--ease', ease);
+  const cfg = {
+    a: { size: 7, gap: 4, motion: 'precise', autoBlink: false },
+    b: { size: 11, gap: 5, motion: 'soft', breathe: true, idleGlance: true },
+    c: { size: 16, gap: 7, motion: 'snappy' },
+    d: { size: 14, gap: 6, motion: 'soft', breathe: true, idleGlance: true },
+  }[dir];
+  const eyes = new Eyes(holder, cfg);
+  let timers = [];
+  const later = (ms, f) => timers.push(setTimeout(f, ms));
+  const clear = () => { timers.forEach(clearTimeout); timers = []; };
+
+  const center = () => el.clientWidth / 2;
+  const put = (x, y, mv) => { if (mv != null) holder.style.setProperty('--mv', mv + 's'); holder.style.left = x - eyes.W / 2 + 'px'; holder.style.top = y - eyes.o.size / 2 + 'px'; };
+  const show = (on) => { holder.style.opacity = on ? 1 : 0; };
+  const size = (open, extra = 0) => {
+    const s = open ? OPEN : CLOSED;
+    notch.style.setProperty('--w', s.w + (open ? 0 : extra) + 'px');
+    notch.style.setProperty('--h', (open ? (typeof open === 'number' ? open : s.h) : s.h) + 'px');
+    notch.style.setProperty('--r', open ? '26px' : '10px');
+    notch.classList.toggle('open', !!open);
+  };
+  const wings = (l, r) => { wl.innerHTML = l || ''; wr.innerHTML = r || ''; wl.classList.toggle('on', !!l); wr.classList.toggle('on', !!r); };
+  const top = () => 0; // notch top is at 0
+  const leftWing = () => center() - (CLOSED.w + (dir === 'd' ? 44 : 0)) / 2 + 22;
+
+  if (dir === 'd' || dir === 'b') follow(el, eyes, { reach: 420, dead: 30 });
+  if (dir === 'c') {
+    // the notch wakes on hover
+    notch.addEventListener('pointerenter', () => { if (el.dataset.m === 'idle') run('wake'); });
+  }
+
+  function run(m) {
+    clear(); el.dataset.m = m; clock.textContent = { evening: '17:04', morning: '08:12', late: '09:33' }[m] || '09:25';
+    const c = center();
+    panel.innerHTML = '';
+    wings('', '');
+    if (dir === 'a') A(m, c); else if (dir === 'b') B(m, c); else if (dir === 'c') C(m, c); else D(m, c);
+    const cap = document.querySelector(`[data-cap="${dir}"]`);
+    cap.textContent = CAPS[dir][m] || '';
+    document.querySelectorAll(`[data-for="${dir}"] button`).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.m === m)));
+  }
+
+  /* A · the detail: rare, tiny, precise */
+  function A(m, c) {
+    show(false); eyes.set('idle'); eyes.look(0, 0);
+    if (m === 'idle') { size(false); put(c, 15, 0); return; }
+    if (m === 'wake' || m === 'morning') {
+      size(false); put(c, 15, 0);
+      later(250, () => { size(true); panel.innerHTML = listHTML(); });
+      later(250 + 320, () => { put(c, 30, 0); show(true); eyes.set('idle'); });
+      later(250 + 320 + 300, () => eyes.blink());
+      later(250 + 320 + 900, () => show(false));
+      return;
+    }
+    size(true);
+    if (m === 'meeting' || m === 'late') { panel.innerHTML = meetHTML(m === 'late') + '<div style="height:10px"></div>' + listHTML(); return; }
+    if (m === 'done') {
+      panel.innerHTML = listHTML();
+      later(500, () => { panel.querySelector('.row').classList.add('done'); const r = panel.querySelector('.row').getBoundingClientRect(), s = el.getBoundingClientRect(); put(r.left - s.left + 250, r.top - s.top + r.height / 2, 0); show(true); eyes.set('happy'); });
+      later(1400, () => show(false));
+      return;
+    }
+    if (m === 'evening') { panel.innerHTML = listHTML(-1) + '<p class="msg">3 left. Tomorrow is fine too.</p>'; return; }
+    if (m === 'empty') {
+      size(220); panel.innerHTML = `<div class="big"><div style="height:30px"></div><b>Nothing today</b><span>Enjoy it.</span></div>`;
+      eyes.o.size; put(c, 106, 0); show(true); eyes.set('sleepy');
+      later(1600, () => eyes.set('closed'));
+    }
+  }
+
+  /* B · the tell: lives in the left wing, status first */
+  function B(m, c) {
+    show(true); size(false, 0);
+    const wx = leftWing();
+    put(wx, 15, .55);
+    if (m === 'idle') { eyes.set('calm'); return; }
+    if (m === 'meeting') { size(false, 60); wings('', '<span class="dot"></span>in 5′'); put(wx - 30, 15, .55); eyes.set('attentive'); later(300, () => eyes.look(1, 0)); later(2600, () => { eyes.look(0, 0); eyes.blink(); }); later(4200, () => eyes.look(1, 0)); return; }
+    if (m === 'late') { size(false, 60); wings('', '<span class="dot" style="background:#FF6961"></span>−3′'); put(wx - 30, 15, .55); eyes.set('worried'); eyes.pop(); later(200, () => eyes.look(1, 0)); return; }
+    if (m === 'wake') {
+      eyes.set('attentive'); eyes.blink();
+      later(120, () => { size(true); panel.innerHTML = '<div style="padding-left:34px">' + listHTML() + '</div>'; const x = c - OPEN.w / 2 + 34; put(x, 58, .45); });
+      later(500, () => { eyes.look(.6, .3); });
+      return;
+    }
+    if (m === 'done') {
+      size(true); panel.innerHTML = '<div style="padding-left:34px">' + listHTML() + '</div>'; put(c - OPEN.w / 2 + 34, 58, 0); eyes.set('idle');
+      later(500, () => { panel.querySelector('.row').classList.add('done'); eyes.set('happy'); eyes.pop(.6); });
+      later(1600, () => eyes.set('idle'));
+      return;
+    }
+    if (m === 'evening') { size(false, 40); wings('', '<span style="color:#8E8E93">3 left</span>'); put(wx - 20, 15, .55); eyes.set('sleepy'); later(1200, () => eyes.look(1, .2)); return; }
+    if (m === 'empty') { eyes.set('happy'); later(1600, () => eyes.set('calm')); return; }
+    if (m === 'morning') { eyes.set('closed'); later(700, () => { eyes.set('sleepy'); }); later(1500, () => { eyes.set('idle'); eyes.blink(); }); later(2200, () => eyes.blink()); return; }
+  }
+
+  /* C · the gesture: the eyes are the opening */
+  function C(m, c) {
+    show(true); eyes.look(0, 0);
+    if (m === 'idle') { size(false); put(c, 15, .3); eyes.set('closed'); return; }
+    if (m === 'wake' || m === 'morning') {
+      size(false); put(c, 15, .3); eyes.set('closed');
+      later(m === 'morning' ? 500 : 40, () => { eyes.set(m === 'morning' ? 'sleepy' : 'attentive'); eyes.look(0, -.4); });
+      later(m === 'morning' ? 1100 : 180, () => eyes.look(0, 1));
+      later(m === 'morning' ? 1250 : 320, () => { size(true); put(c, 60, .38); });
+      later(m === 'morning' ? 1650 : 700, () => { eyes.set('idle'); panel.innerHTML = listHTML(); put(c, OPEN.h - 22, .42); });
+      later(m === 'morning' ? 2300 : 1400, () => { eyes.look(-.8, -.8); });
+      return;
+    }
+    size(true); put(c, OPEN.h - 22, 0); eyes.set('idle');
+    if (m === 'meeting' || m === 'late') { panel.innerHTML = meetHTML(m === 'late') + '<div style="height:10px"></div>' + listHTML().split('</div>').slice(0, 2).join('</div>') + '</div>'; eyes.set(m === 'late' ? 'surprised' : 'attentive'); if (m === 'late') eyes.pop(); later(150, () => eyes.look(0, -1)); return; }
+    if (m === 'done') { panel.innerHTML = listHTML(); later(150, () => eyes.look(-.7, -1)); later(600, () => { panel.querySelector('.row').classList.add('done'); eyes.set('happy'); eyes.pop(); }); later(1700, () => { eyes.set('idle'); eyes.look(-.6, -.6); }); return; }
+    if (m === 'evening') { panel.innerHTML = listHTML() + '<p class="msg">3 left. They’ll keep till tomorrow.</p>'; eyes.set('sleepy'); later(900, () => eyes.look(-.6, -.3)); return; }
+    if (m === 'empty') { size(220); panel.innerHTML = `<div class="big"><div style="height:40px"></div><b>Nothing today</b><span>Go outside.</span></div>`; put(c, 98, .5); eyes.set('happy'); later(1400, () => eyes.set('sleepy')); later(2600, () => eyes.set('closed')); return; }
+  }
+
+  /* D · the companion: always there, bigger, follows you */
+  function D(m, c) {
+    show(true); size(false, 44);
+    const wx = leftWing() - 22 + 26;
+    put(wx, 15, .55);
+    if (m === 'idle') { eyes.set('idle'); return; }
+    if (m === 'wake') { eyes.set('curious'); eyes.pop(.6); later(150, () => { size(true); panel.innerHTML = '<div style="padding-left:44px">' + listHTML() + '</div>'; put(c - OPEN.w / 2 + 44, 60, .5); }); later(800, () => eyes.set('idle')); return; }
+    if (m === 'meeting') { size(false, 100); wings('', '<span class="dot"></span>Design sync · 5′'); put(wx - 28, 15, .55); eyes.set('attentive'); later(300, () => eyes.look(1, 0)); return; }
+    if (m === 'late') { size(false, 100); wings('', '<span class="dot" style="background:#FF6961"></span>Started 3′ ago'); put(wx - 28, 15, .55); eyes.set('surprised'); eyes.pop(1.2); later(900, () => eyes.set('worried')); later(1100, () => eyes.look(1, 0)); return; }
+    if (m === 'done') { size(true); panel.innerHTML = '<div style="padding-left:44px">' + listHTML() + '</div>'; put(c - OPEN.w / 2 + 44, 60, 0); later(500, () => { panel.querySelector('.row').classList.add('done'); eyes.set('happy'); eyes.pop(1); }); later(900, () => eyes.pop(.6)); later(1900, () => eyes.set('idle')); return; }
+    if (m === 'evening') { eyes.set('sleepy'); later(1500, () => eyes.blink()); later(2500, () => { eyes.set('closed'); }); later(3400, () => eyes.set('sleepy')); return; }
+    if (m === 'empty') { size(220); panel.innerHTML = `<div class="big"><div style="height:44px"></div><b>Nothing today</b><span>Just us.</span></div>`; put(c, 96, .6); eyes.set('happy'); eyes.pop(); later(1500, () => eyes.set('idle')); return; }
+    if (m === 'morning') { eyes.set('closed'); later(600, () => eyes.set('sleepy')); later(1400, () => { eyes.set('surprised'); eyes.pop(); }); later(2100, () => eyes.set('happy')); later(3000, () => eyes.set('idle')); return; }
+  }
+
+  const bar = document.querySelector(`[data-for="${dir}"]`);
+  MOMENTS.forEach(([k, label]) => {
+    const b = document.createElement('button'); b.textContent = label; b.dataset.m = k; b.setAttribute('aria-pressed', 'false');
+    b.onclick = () => run(k); bar.appendChild(b);
+  });
+  run('idle');
+  const io = new IntersectionObserver(([e]) => { if (e.isIntersecting && el.dataset.m === 'idle' && !el.dataset.seen) { el.dataset.seen = 1; later(700, () => run('wake')); } }, { threshold: .6 });
+  io.observe(el);
+}
+
+const CAPS = {
+  a: {
+    idle: 'Closed: nothing. The notch is just the notch.',
+    wake: 'Open: once the panel has settled, two small eyes appear under the camera, blink once, and fade. Under a second.',
+    meeting: 'Meetings: no eyes. Information comes first; the card does the job.',
+    late: 'Late: still no eyes. A tool doesn’t scold you.',
+    done: 'Done: a tiny happy squint next to the row, then gone. The only celebration.',
+    evening: '17:00: no eyes, just one quiet line under the list.',
+    empty: 'Nothing today: the eyes take the empty state, get sleepy and close. The one place they stay.',
+    morning: 'Morning: the same as any open, one blink.',
+  },
+  b: {
+    idle: 'Closed and calm: half-lidded eyes in the left wing, breathing very slowly, glancing around every few seconds. Move your cursor here: they notice it.',
+    wake: 'Open: the eyes leave the wing and settle at the top-left of the panel, looking at your list.',
+    meeting: 'Meeting in 5 minutes: wide awake, looking at the countdown on the right wing. You know without reading.',
+    late: 'Late: a small jump and a worried look towards the red countdown.',
+    done: 'Done: a short happy squint, back to normal after a second.',
+    evening: '17:00 with 3 open: sleepy, glancing at “3 left”. No red, no guilt.',
+    empty: 'Nothing today: pleased, then calm.',
+    morning: 'Morning: the eyes wake up with you, from closed to awake, with two blinks.',
+  },
+  c: {
+    idle: 'Closed: eyes shut, so nothing shows. Hover the notch to wake it.',
+    wake: 'Hover: the eyes open, glance up, then look down, and the panel unfolds from their gaze. They ride the edge down and settle in the bar, looking at the first row.',
+    meeting: 'Meeting: from the bar, the eyes look straight up at the card.',
+    late: 'Late: surprised, looking at the card.',
+    done: 'Done: they look at the row, it ticks, a squint and a bounce.',
+    evening: '17:00: sleepy eyes in the bar; the list keeps the message.',
+    empty: 'Nothing today: the eyes fill the empty panel, happy, then doze off.',
+    morning: 'Morning: a slower wake. Sleepy, then awake, then the unfold.',
+  },
+  d: {
+    idle: 'Always there, a size up, following your cursor across the whole screen. Try it.',
+    wake: 'Open: a curious bounce, then they ride along to the top-left of the panel.',
+    meeting: 'Meeting: the notch widens to name it, and Otto looks right at it.',
+    late: 'Late: surprised, then worried. Strong, maybe too strong for every day.',
+    done: 'Done: a double bounce of joy.',
+    evening: '17:00: dozing off and catching itself.',
+    empty: 'Nothing today: the eyes take the whole panel. “Just us.”',
+    morning: 'Morning: waking up, a surprised “oh, hi”, then happy.',
+  },
+};
+
+document.querySelectorAll('.stage').forEach((el) => makeStage(el, el.dataset.dir));
+
+/* recommendation eyes */
+const re = new Eyes(document.getElementById('reco-eyes'), { size: 52, gap: 18, motion: 'soft', breathe: true, idleGlance: true });
+re.set('calm');
+follow(document.querySelector('.reco'), re, { reach: 260 });
+})();
+</script>
+</body>
+</html>
