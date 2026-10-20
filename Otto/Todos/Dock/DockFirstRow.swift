@@ -32,6 +32,10 @@ struct DockFirstRowChrome<Leading: View, Field: View>: View {
                 // in a surface that has none (Marcello, 2026-10-17). Clicking
                 // it is ⏎.
                 DockReturnKey(action: onSave)
+                    // The same air on both sides of the key: from the text's
+                    // end to the key as from the key to the silhouette's edge
+                    // (content inset = frame inset + this row's padding).
+                    .padding(.leading, NotchContainerMetrics.contentInset - NotchContainerMetrics.rowGap)
                     .transition(.opacity.combined(with: .scale(scale: 0.92)))
             }
         }
@@ -147,31 +151,19 @@ struct DockPlaceholder: View {
     }
 }
 
-private struct DockFieldWidthKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
-}
-
 /// In a list: the to-do being typed.
 struct DockTodoFirstRow: View {
     @ObservedObject private var store = TodoStore.shared
-    @State private var fieldWidth: CGFloat = 0
 
     private static let fontSize: CGFloat = 15
     private var parsed: NLDateMatch? { NLDateParser.parse(store.draftTitle) }
     private var hasText: Bool { !store.draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     private var tint: DockTint { DockTint(store.draftSpaceTint) }
 
-    /// Measured here, where `draftTitle` is observed, the field's own way
-    /// (ChipLineLayout) — an NSViewRepresentable is not re-measured on a pure
-    /// content change (see InlineDraftRow).
-    private var fieldHeight: CGFloat {
-        let width = fieldWidth > 0 ? fieldWidth : 400
-        let measured = ChipLineLayout.height(of: store.draftTitle,
-                                             font: .systemFont(ofSize: Self.fontSize), width: width)
-        return max(HighlightingTitleField.lineHeight(Self.fontSize),
-                   min(ceil(measured), HighlightingTitleField.maxHeight))
-    }
+    /// ONE line, always: a long to-do runs on under the caret and the field
+    /// scrolls sideways, the floating capture header's way (Marcello,
+    /// 2026-10-20: wrapping to a second line pushed the list down).
+    private var fieldHeight: CGFloat { HighlightingTitleField.lineHeight(Self.fontSize) }
 
     private var placeholder: String {
         String(format: L10n.t("dock.addTo"), store.draftDestination?.name ?? "")
@@ -197,14 +189,11 @@ struct DockTodoFirstRow: View {
                             if focused { store.draftWantsFocus = false }
                         },
                         fontSize: Self.fontSize,
+                        singleLine: true,
                         allowsImages: true
                     )
                     .frame(height: fieldHeight)
                 }
-                .background(GeometryReader { proxy in
-                    Color.clear.preference(key: DockFieldWidthKey.self, value: proxy.size.width)
-                })
-                .onPreferenceChange(DockFieldWidthKey.self) { fieldWidth = $0 }
             }
             // NL-3: the resolved date follows the caret in grey now
             // (DateCompletion), not on a line under the text.
