@@ -484,7 +484,8 @@ private struct StreamView: View {
             EmptyListView(compact: isContainer,
                           showsSubtitle: !isContainer || streamBudget >= 180,
                           subtitleKey: "notes.emptySubtitle",
-                          fillHeight: isContainer ? nil : streamBudget)
+                          fillHeight: isContainer ? nil : streamBudget,
+                          logoColor: SpaceTint.notes.sectionColor)
                 .transition(EmptyListView.transition)
         } else if entries.isEmpty {
             EmptyStreamState()

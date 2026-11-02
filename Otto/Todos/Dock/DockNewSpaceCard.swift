@@ -11,6 +11,11 @@ import SwiftUI
 // row.
 
 struct DockNewSpaceCard: View {
+    /// In a floating panel (FloatingNewSpaceLayer): that layer draws the
+    /// surface, and the panel follows the theme where the notch is always
+    /// black.
+    var floating = false
+
     @ObservedObject private var dock = DockState.shared
     @FocusState private var nameFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -37,7 +42,7 @@ struct DockNewSpaceCard: View {
                     TextField("", text: $dock.newSpaceName)
                         .textFieldStyle(.plain)
                         .font(.system(size: 13.5))
-                        .foregroundStyle(DSDock.textStrong)
+                        .foregroundStyle(floating ? DSColor.textPrimaryBright : DSDock.textStrong)
                         .tint(tint.base)
                         .focused($nameFocused)
                         .onSubmit { dock.createSpace() }
@@ -56,7 +61,7 @@ struct DockNewSpaceCard: View {
             .padding(.leading, 14)
             .padding(.trailing, 3)
             .frame(height: 32)
-            .background(Capsule(style: .circular).fill(Color.black.opacity(0.35)))
+            .background(Capsule(style: .circular).fill(floating ? DSColor.fieldBackground : Color.black.opacity(0.35)))
             .opacity(entered ? 1 : 0)
             .offset(y: entered || reduceMotion ? 0 : 6)
 
@@ -92,13 +97,25 @@ struct DockNewSpaceCard: View {
         }
         .padding(10)
         .frame(width: Self.size.width, height: Self.size.height, alignment: .top)
-        .notchGlass(in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
+        .modifier(NewSpaceCardGlass(enabled: !floating))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(L10n.t("todo.newCollection"))
         .onAppear {
             withAnimation(reduceMotion ? .easeOut(duration: 0.15)
                           : .timingCurve(0.22, 1, 0.36, 1, duration: 0.32).delay(0.12)) { entered = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { nameFocused = true }
+        }
+    }
+}
+
+/// The notch's glass; a floating panel's card brings its own surface.
+private struct NewSpaceCardGlass: ViewModifier {
+    let enabled: Bool
+    func body(content: Content) -> some View {
+        if enabled {
+            content.notchGlass(in: RoundedRectangle(cornerRadius: DockNewSpaceCard.radius, style: .continuous))
+        } else {
+            content
         }
     }
 }

@@ -196,8 +196,24 @@ private extension View {
             // The shadow stays and matters MORE on glass: a translucent panel
             // needs the ground shadow to sit above the desktop rather than
             // dissolve into it.
-            .shadow(color: DSColor.shadowStrong,
-                    radius: PanelMetrics.shadowRadius, y: PanelMetrics.shadowOffsetY)
+            //
+            // Cast by the block's SHAPE, and kept outside it. `.shadow` on the
+            // block itself shadowed everything drawn in it: on translucent
+            // glass that was a grey halo round the logo and the text, and a
+            // dark band above the pills' blur — invisible in dark mode, plain
+            // in light (Marcello, 2026-11-02).
+            .background(
+                shape.fill(Color.black)
+                    .shadow(color: DSColor.shadowStrong,
+                            radius: PanelMetrics.shadowRadius, y: PanelMetrics.shadowOffsetY)
+                    .mask(
+                        Rectangle()
+                            .padding(-PanelMetrics.shadowMargin)
+                            .overlay(shape.blendMode(.destinationOut))
+                            .compositingGroup()
+                    )
+                    .allowsHitTesting(false)
+            )
     }
 }
 

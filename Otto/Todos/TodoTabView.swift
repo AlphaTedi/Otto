@@ -359,5 +359,15 @@ struct TodoTabView: View {
             }
 
         }
+        // The new-space card (experiment): grows out of the "New section"
+        // pill, over everything in the panel.
+        .overlayPreferenceValue(NewSectionAnchorKey.self) { anchor in
+            if NewSpaceCardExperiment.isOn {
+                GeometryReader { proxy in
+                    FloatingNewSpaceLayer(pill: anchor.map { proxy[$0] }, size: proxy.size)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: PanelMetrics.blockRadius, style: .continuous))
+            }
+        }
     }
 }

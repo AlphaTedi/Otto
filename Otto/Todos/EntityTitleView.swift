@@ -111,8 +111,7 @@ struct EntityTitleView: NSViewRepresentable {
     }()
 
     private static func cacheKey(_ title: String, bright: Bool, size: CGFloat = DSFont.todoTitleSize) -> String {
-        let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        return (dark ? "d" : "l") + (bright ? "b" : "n") + "\(size)|" + title
+        return (EntityChipRenderer.drawsDark ? "d" : "l") + (bright ? "b" : "n") + "\(size)|" + title
     }
 
     // MARK: Attributed assembly
@@ -294,11 +293,19 @@ enum EntityChipRenderer {
 
     private static var cache: [String: NSImage] = [:]
 
+    /// Which ground the chips sit on. The notch container is black in Light
+    /// mode too, so it always takes the dark chips; judging by the app's
+    /// appearance gave it the light ones (Marcello, 2026-11-02).
+    static var drawsDark: Bool {
+        UserDefaults.standard.string(forKey: "notchLayout") == NotchLayout.container.rawValue
+            || NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    }
+
     static func image(kind: EntityKind, label: String) -> NSImage {
         // Per appearance: the chip colours are light/dark pairs, resolved
         // here once and baked into the image.
-        let appearance = NSApp.effectiveAppearance
-        let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let dark = drawsDark
+        let appearance = NSAppearance(named: dark ? .darkAqua : .aqua) ?? NSApp.effectiveAppearance
         let key = "\(kind)|\(label)|\(dark)"
         if let cached = cache[key] { return cached }
         var made = NSImage()

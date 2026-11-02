@@ -519,7 +519,8 @@ struct TodoBrowsingView: View {
             if !collection.isSystemToday {
                 EmptyListView(compact: isContainerLayout,
                               showsSubtitle: !isContainerLayout || room >= 180,
-                              fillHeight: isContainerLayout ? nil : room)
+                              fillHeight: isContainerLayout ? nil : room,
+                              logoColor: collection.color)
                     .transition(EmptyListView.transition)
             }
         } else {

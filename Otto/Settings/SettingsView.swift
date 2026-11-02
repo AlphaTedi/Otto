@@ -568,6 +568,7 @@ struct AppearanceSettingsView: View {
     @AppStorage("notchExpandedHeight") private var expandedHeight: Double = 200
     @AppStorage("notchLayout")         private var notchLayout: NotchLayout = .panels
     @AppStorage(NotchDisplays.key)     private var notchDisplays: NotchDisplays = .all
+    @AppStorage(NewSpaceCardExperiment.key) private var newSpaceCard = false
 
     var body: some View {
         SettingsPage(section: .appearance) {
@@ -599,6 +600,13 @@ struct AppearanceSettingsView: View {
                         .labelsHidden()
                         .pickerStyle(.segmented)
                         .fixedSize()
+                    }
+                }
+                // Debug and Otto Lab only (NewSpaceCardExperiment).
+                if notchLayout == .panels, NewSpaceCardExperiment.isAvailable {
+                    SettingRow(title: "New section card (experiment)",
+                               subtitle: "\"New section\" grows into a card, as in the notch, instead of a form.") {
+                        RowSwitch(label: "New section card (experiment)", isOn: $newSpaceCard)
                     }
                 }
             } header: {

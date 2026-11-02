@@ -218,7 +218,7 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
 
             // The B3 dock's space menu and new-space card are modal too, and
             // their text fields (rename, the space's name) take the letters.
-            if DockExperiment.isOn {
+            if DockExperiment.isOn || NewSpaceCardExperiment.isOn {
                 switch DockState.shared.handleKey(keyCode: keyCode, shift: shift, option: option, cmd: cmd) {
                 case .consumed: return true
                 case .toField: return false
@@ -860,13 +860,7 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             // mouse-only one (Marcello, 2026-09-20). One level up from ⌘N, and
             // deliberately adjacent to it — same verb, different scale.
             if cmd, shift, lower == "n" {
-                // The B3 dock grows its new-space card instead of a form.
-                if DockExperiment.isOn {
-                    DockState.shared.beginNewSpace()
-                } else {
-                    store.setMode(.newCategory)
-                }
-                NotchController.shared.focusPanel()
+                store.beginNewSection()
                 return true
             }
 

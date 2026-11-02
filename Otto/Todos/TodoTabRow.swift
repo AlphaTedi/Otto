@@ -378,8 +378,7 @@ struct CollectionContextMenu: View {
 
     var body: some View {
         Button(L10n.t("todo.newCollection") + "\u{2026}") {
-            store.setMode(.newCategory)
-            NotchController.shared.focusPanel()
+            store.beginNewSection()
         }
         Divider()
         Button(L10n.t("action.moveLeft")) {
@@ -492,8 +491,7 @@ struct NewSectionButton: View {
 
     var body: some View {
         Button {
-            TodoStore.shared.setMode(.newCategory)
-            NotchController.shared.focusPanel()
+            TodoStore.shared.beginNewSection()
         } label: {
             // A pill of its own after the last section, the tabs' size and
             // shape (Marcello, 2026-09-30: "a pill next to the last
@@ -525,5 +523,6 @@ struct NewSectionButton: View {
         }
         .panelTooltip(L10n.t("todo.newCollection"))
         .accessibilityLabel(L10n.t("todo.newCollection"))
+        .anchorPreference(key: NewSectionAnchorKey.self, value: .bounds) { $0 }
     }
 }

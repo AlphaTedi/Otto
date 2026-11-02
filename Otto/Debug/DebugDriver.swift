@@ -577,6 +577,11 @@ enum DebugDriver {
                     store.goBack()
                     store.setMode(.newCategory); await snap("page-newsection")
                     store.goBack()
+                    if NewSpaceCardExperiment.isOn {
+                        DockState.shared.beginNewSpace(); await snap("newspace-card")
+                        DockState.shared.newSpaceName = "Holiday"; await snap("newspace-named")
+                        DockState.shared.cancelNewSpace(); await snap("newspace-closed")
+                    }
                     appendState("after back: mode=\(store.panelMode) path=\(store.panelPath.map(\.title))")
                     if let work = list("work") {
                         store.selectCollection(work.id)

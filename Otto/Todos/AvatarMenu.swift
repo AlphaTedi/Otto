@@ -286,7 +286,10 @@ enum OttoMenuStyle {
 
     /// Under the glass: enough body that rows behind the menu do not read
     /// through it, whatever the glass tier.
-    static let ground = Color.dynamic(light: NSColor(white: 1, alpha: 0.6),
+    /// Light mode is near-opaque: glass over the glass panel has nothing to
+    /// sample and comes out dark, so at 60 % white every menu looked greyed
+    /// out, as if disabled (Marcello, 2026-11-02).
+    static let ground = Color.dynamic(light: NSColor(white: 0.985, alpha: 0.96),
                                       dark: NSColor(srgbRed: 0.105, green: 0.105, blue: 0.12, alpha: 0.78))
 
     /// Space between a menu and the control it opened from, whichever side
@@ -390,7 +393,7 @@ private struct OttoMenuSurface: ViewModifier {
             content
                 .background(shape.fill(OttoMenuStyle.ground))
                 .floatingGlass(in: shape)
-                .overlay(shape.strokeBorder(Color.white.opacity(0.20), lineWidth: 1))
+                .overlay(shape.strokeBorder(Color.dynamicOverlay(light: 0.10, dark: 0.20), lineWidth: 1))
                 .shadow(color: DSColor.shadowSoft, radius: 18, x: 0, y: 8)
         }
     }

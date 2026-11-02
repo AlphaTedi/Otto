@@ -1307,3 +1307,18 @@ notes and an editor with no top bar.
   cut the phrase out of the title and no row showed the due date, so the
   date looked lost. Relative words ("today") are written as dates on save,
   so they never go stale. A right-aligned due chip was tried and dropped.
+
+### 2026-11-02 light-mode fixes
+
+- The floating block's shadow is cast by its shape and masked to the outside
+  (`panelBlock`). `.shadow` on the block shadowed every element inside the
+  translucent glass: a halo round the empty state and a dark band above the
+  foot blur, unseen in dark mode.
+- The empty state's logo takes the section's colour in the floating panels
+  and the old container path too (`logoColor`), and the Notes colour in Notes.
+- `OttoMenuStyle.ground` is 96 % in light mode: glass on the glass panel
+  samples dark, so 60 % white read as disabled. The hairline follows the
+  appearance.
+- Entity chips choose their ground with `EntityChipRenderer.drawsDark`: the
+  notch container is black in both appearances, so it always gets the dark
+  chips. Appearance comes from there, not from `NSApp.effectiveAppearance`.
