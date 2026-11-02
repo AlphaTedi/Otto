@@ -122,17 +122,14 @@ private struct StylePillsRow: View {
     var body: some View {
         HStack(spacing: 5) {
             pill(L10n.t("filter.notes"), 4)
-                .overlay(Capsule().strokeBorder(Color(obHex: 0xFFC36E, alpha: 0.55),
-                                                style: StrokeStyle(lineWidth: 1.2, dash: [3, 2])))
             Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 12)
             pill(L10n.t("ob.pv.work"), 3)
                 .foregroundStyle(Color(obHex: 0x10261A))
                 .background(Capsule().fill(mint))
             pill(L10n.t("ob.pv.personal"), 5)
             Spacer(minLength: 0)
-            GearGlyph()
-                .stroke(Color.white.opacity(0.75), style: StrokeStyle(lineWidth: 1, lineCap: .round))
-                .frame(width: 12, height: 12)
+            OttoIcon("gearshape", pointSize: 12)
+                .foregroundStyle(Color.white.opacity(0.75))
                 .frame(width: 22, height: 22)
                 .background(Circle().fill(Color.white.opacity(0.07)))
                 .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
@@ -153,21 +150,54 @@ private struct StylePillsRow: View {
     }
 }
 
-/// `circle r3` and eight rays, on a 24 grid.
-private struct GearGlyph: Shape {
-    func path(in rect: CGRect) -> Path {
-        let s = rect.width / 24
-        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + x * s, y: rect.minY + y * s) }
-        var path = Path()
-        path.addEllipse(in: CGRect(x: rect.minX + 9 * s, y: rect.minY + 9 * s, width: 6 * s, height: 6 * s))
-        let rays: [(CGFloat, CGFloat, CGFloat, CGFloat)] = [
-            (12, 2, 12, 5), (12, 19, 12, 22), (4.2, 4.2, 6.3, 6.3), (17.7, 17.7, 19.8, 19.8),
-            (2, 12, 5, 12), (19, 12, 22, 12), (4.2, 19.8, 6.3, 17.7), (17.7, 6.3, 19.8, 4.2),
-        ]
-        for ray in rays {
-            path.move(to: p(ray.0, ray.1)); path.addLine(to: p(ray.2, ray.3))
+/// The notch container's foot, in miniature (DockBar): a round button on each
+/// side and the dots between them, the active section opened into a pill.
+private struct DockPreviewBar: View {
+    var leading: DockGlyph = .notes
+    var leadingColor = Color(obHex: 0xFFC36E)
+    var trailing: DockGlyph = .settings
+
+    var body: some View {
+        HStack(spacing: 0) {
+            DockPreviewRound(glyph: leading, color: leadingColor)
+            Spacer(minLength: 8)
+            HStack(spacing: 11) {
+                dot(0xA8E6C1)
+                HStack(spacing: 5) {
+                    Circle().fill(Color(obHex: 0x9DBBF5)).frame(width: 5, height: 5)
+                    Text(L10n.t("ob.pv.work")).obFont(10, 600).foregroundStyle(Color.white.opacity(0.92))
+                }
+                .padding(.horizontal, 8)
+                .frame(height: 19)
+                .background(Capsule().fill(Color(obHex: 0x9DBBF5, alpha: 0.2)))
+                dot(0xE8A7B8)
+                dot(0xF3C6A5)
+                DockIcon(.plus, size: 10).foregroundStyle(Color.white.opacity(0.4))
+            }
+            .padding(.horizontal, 7)
+            .frame(height: 26)
+            .background(Capsule().fill(Color.white.opacity(0.08)))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .circular).strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
+            Spacer(minLength: 8)
+            DockPreviewRound(glyph: trailing, color: Color.white.opacity(0.7))
         }
-        return path
+    }
+
+    private func dot(_ hex: UInt32) -> some View {
+        Circle().fill(Color(obHex: hex)).frame(width: 5, height: 5)
+    }
+}
+
+private struct DockPreviewRound: View {
+    let glyph: DockGlyph
+    let color: Color
+
+    var body: some View {
+        DockIcon(glyph, size: 13)
+            .foregroundStyle(color)
+            .frame(width: 26, height: 26)
+            .background(Circle().fill(Color.white.opacity(0.08)))
+            .overlay(Circle().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
     }
 }
 
@@ -205,11 +235,16 @@ struct NotchTasksPreview: View {
 
 // MARK: Discover · Notes (C2.2)
 
+/// The note as the notch shows it now (DockNoteEditor): title and day in the
+/// content, the controls in the bar at the foot.
 struct NotePreview: View {
     var body: some View {
-        NotchSlab(width: 360, radius: 24, padding: EdgeInsets(top: 14, leading: 14, bottom: 12, trailing: 14),
+        NotchSlab(width: 360, radius: 24, padding: EdgeInsets(top: 20, leading: 20, bottom: 12, trailing: 12),
                   spacing: 12) {
-            header
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L10n.t("ob.pv.noteTitle")).obFont(19, 700).tracking(-0.3)
+                Text(L10n.t("ob.pv.noteDate")).obFont(11).foregroundStyle(Color.white.opacity(0.45))
+            }
             // 12 pt at a 1.7 line height: 20.4 per line, glyphs centred in it.
             VStack(alignment: .leading, spacing: 0) {
                 Text(L10n.t("ob.pv.noteAgenda")).foregroundStyle(Color.white.opacity(0.85))
@@ -225,77 +260,44 @@ struct NotePreview: View {
             }
             .obFont(12)
             .foregroundStyle(Color.white.opacity(0.6))
-            .padding(.horizontal, 6)
-            HStack {
+            HStack(spacing: 0) {
+                DockPreviewRound(glyph: .back, color: Color.white.opacity(0.7))
+                Spacer(minLength: 8)
                 toolbar
-                Spacer()
-                Text(L10n.t("ob.pv.words")).obFont(10.5).foregroundStyle(Color.white.opacity(0.45))
+                Spacer(minLength: 8)
+                DockPreviewRound(glyph: .export, color: Color.white.opacity(0.7))
             }
+            .padding(.leading, -8)
+            .padding(.top, 2)
         }
         .foregroundStyle(Color(obHex: 0xF2F1F5))
         .obPopIn()
         .accessibilityHidden(true)
     }
 
-    private var header: some View {
-        HStack(spacing: 10) {
-            ChevronLeft()
-                .stroke(Color(obHex: 0x7FD8E0), style: StrokeStyle(lineWidth: 1.2, lineCap: .round, lineJoin: .round))
-                .frame(width: 12, height: 12)
-            Text(L10n.t("ob.pv.noteTitle")).obFont(12.5, 600)
-            Spacer(minLength: 0)
-            Text(L10n.t("ob.pv.saved")).obFont(10.5).foregroundStyle(Color.white.opacity(0.4))
-            Text("\u{2318}[")
-                .obFont(9.5)
-                .foregroundStyle(Color.white.opacity(0.6))
-                .padding(.vertical, 1)
-                .padding(.horizontal, 5)
-                .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
-    }
-
     private var toolbar: some View {
-        HStack(spacing: 4) {
-            tool(Text("Aa"))
-            // Host Grotesk has no ≡: three strokes, drawn.
-            VStack(spacing: 2) {
-                ForEach(0..<3, id: \.self) { _ in
-                    Capsule().fill(Color.white.opacity(0.7)).frame(width: 8, height: 1.1)
-                }
-            }
-            .frame(width: 18)
-            tool(Text("1."))
-            Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1, height: 10)
-            tool(Text("B"), weight: 700)
-            // No italic in the face either: a slant, as the browser drew it.
-            tool(Text("I"))
-                .transformEffect(CGAffineTransform(a: 1, b: 0, c: -0.2, d: 1, tx: 1.6, ty: 0))
-            tool(Text("U").underline())
+        HStack(spacing: 7) {
+            Text("Aa").obFont(10.5, 600)
+            divider
+            DockIcon(.bullets, size: 13)
+            DockIcon(.numbers, size: 13)
+            DockIcon(.checklist, size: 13)
+            divider
+            DockIcon(.textStyle, size: 13)
+            DockIcon(.link, size: 13)
+            divider
+            DockIcon(.inlineCode, size: 13)
+            DockIcon(.codeBlock, size: 13)
         }
-        .padding(.vertical, 5)
-        .padding(.horizontal, 8)
-        .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+        .foregroundStyle(Color.white.opacity(0.75))
+        .padding(.horizontal, 10)
+        .frame(height: 26)
+        .background(Capsule().fill(Color.white.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .circular).strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
     }
 
-    private func tool(_ text: Text, weight: CGFloat = 400) -> some View {
-        text.obFont(11, weight).foregroundStyle(Color.white.opacity(0.7)).frame(width: 18)
-    }
-}
-
-/// `M15 18l-6-6 6-6`.
-private struct ChevronLeft: Shape {
-    func path(in rect: CGRect) -> Path {
-        let s = rect.width / 24
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX + 15 * s, y: rect.minY + 18 * s))
-        path.addLine(to: CGPoint(x: rect.minX + 9 * s, y: rect.minY + 12 * s))
-        path.addLine(to: CGPoint(x: rect.minX + 15 * s, y: rect.minY + 6 * s))
-        return path
+    private var divider: some View {
+        Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 11)
     }
 }
 
@@ -348,8 +350,8 @@ struct MeetingPreview: View {
                 }
                 Text(L10n.t("ob.pv.meeting")).obFont(17, 500).tracking(-0.17)
                 HStack(spacing: 8) {
-                    actionPill(L10n.t("ob.pv.join"), hint: "\u{2318}\u{21B5}", primary: true)
-                    actionPill(L10n.t("ob.pv.snooze"), hint: "S", primary: false)
+                    actionPill(L10n.t("ob.pv.join"), keys: ["\u{2318}", "\u{21A9}"], primary: true)
+                    actionPill(L10n.t("ob.pv.snooze"), keys: ["S"], primary: false)
                     Spacer(minLength: 0)
                     avatars
                 }
@@ -362,22 +364,27 @@ struct MeetingPreview: View {
         .shadow(color: .black.opacity(0.55), radius: 25, y: 24)
     }
 
-    private func actionPill(_ title: String, hint: String, primary: Bool) -> some View {
+    /// The real card's buttons (LabMeetingCard): one square keycap per key.
+    private func actionPill(_ title: String, keys: [String], primary: Bool) -> some View {
         HStack(spacing: 8) {
             Text(title).obFont(12.5, primary ? 600 : 500)
-            Text(hint)
-                .obFont(10.5)
-                .foregroundStyle(primary ? Color.black.opacity(0.55) : .white)
-                .padding(.horizontal, hint.count > 1 ? 6 : 0)
-                .frame(minWidth: 20, minHeight: 20)
-                .background(Capsule().fill(primary ? Color.black.opacity(0.08) : Color.white.opacity(0.1)))
+            HStack(spacing: 3) {
+                ForEach(keys, id: \.self) { key in
+                    Text(key)
+                        .obFont(9.5, 600)
+                        .foregroundStyle(primary ? Color.black.opacity(0.6) : Color.white.opacity(0.8))
+                        .frame(width: 18, height: 18)
+                        .background(RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(primary ? Color.black.opacity(0.12) : Color.white.opacity(0.1)))
+                }
+            }
         }
-        .foregroundStyle(primary ? Color(obHex: 0x111111) : .white)
+        .foregroundStyle(primary ? Color(obHex: 0x111111) : Color.white.opacity(0.65))
         .padding(.leading, 13)
-        .padding(.trailing, 4)
+        .padding(.trailing, 6)
         .frame(height: 28)
-        .background(Capsule().fill(primary ? Color.white : .clear))
-        .overlay(primary ? nil : Capsule().strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+        .background(Capsule().fill(primary ? Color.white.opacity(0.9) : .clear))
+        .overlay(primary ? nil : RoundedRectangle(cornerRadius: 14, style: .circular).strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
     }
 
     /// Three illustrated placeholders overlapping by 7, each ringed in the
@@ -561,29 +568,22 @@ struct NotchStylePreview: View {
             }
     }
 
+    /// The notch container as it is now: the first row is the input, the
+    /// sections are the dock at the foot.
     private var content: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                OBBox(side: 13, radius: 5, color: mint)
-                Text(L10n.t("ob.pv.whatNeedsDoing")).obFont(12)
-                Spacer(minLength: 0)
-                Text(L10n.t("todo.switchSpace")).obFont(9.5)
-                Text("Tab")
-                    .obFont(9)
-                    .padding(.vertical, 1)
-                    .padding(.horizontal, 5)
-                    .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .strokeBorder(Color(obHex: 0x9DBBF5), style: StrokeStyle(lineWidth: 1.4, dash: [3, 2.5]))
+                    .frame(width: 13, height: 13)
+                Text(String(format: L10n.t("dock.addTo"), L10n.t("ob.pv.work"))).obFont(12)
+                    .foregroundStyle(Color.white.opacity(0.4))
             }
-            .foregroundStyle(Color.white.opacity(0.4))
-            .padding(.vertical, 9)
-            .padding(.horizontal, 12)
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color(obHex: 0xA8E6C1, alpha: 0.45), lineWidth: 1))
-            StylePillsRow()
+            .padding(.vertical, 5)
             StyleTodoList()
+            DockPreviewBar().padding(.top, 8)
         }
-        .padding(EdgeInsets(top: 16, leading: 16, bottom: 14, trailing: 16))
+        .padding(EdgeInsets(top: 34, leading: 16, bottom: 12, trailing: 12))
         .frame(width: 340, alignment: .topLeading)
         .fixedSize(horizontal: false, vertical: true)
         .background(GeometryReader { proxy in

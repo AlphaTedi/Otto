@@ -191,11 +191,12 @@ struct NoteFormatBar: View {
             // did not work). Images come in by paste and by drop.
         }
         .padding(.horizontal, 6)
-        .padding(.vertical, 4)
-        // In the floating panel's corner it is concentric with the window
-        // (24 − 16 = 8); the container keeps its capsule.
-        .floatingGlass(in: RoundedRectangle(
-            cornerRadius: notchLayout == .container ? 20 : SpaceChrome.cornerRadius, style: .continuous))
+        .frame(height: 34)
+        // The gear's own surface, as a capsule (Marcello, 2026-11-02). Real
+        // glass here sat on the panel's glass, which it cannot sample, and
+        // came out a dark slab.
+        .background(Capsule(style: .continuous).fill(SpaceInk.a(0.07)))
+        .overlay(RoundedRectangle(cornerRadius: 17, style: .circular).strokeBorder(SpaceInk.a(0.10), lineWidth: 1))
         // The whole bar steps back when the body has no caret: the note is
         // being read, not edited, and tools that cannot act should not look
         // like they can.

@@ -162,7 +162,6 @@ struct SpaceDot: View {
                 .animation(.easeInOut(duration: 0.2), value: tint)
         }
         .buttonStyle(.plain)
-        .panelTooltip(L10n.t("todo.switchSpace"))
         .accessibilityLabel(L10n.t("todo.switchSpace"))
     }
 }

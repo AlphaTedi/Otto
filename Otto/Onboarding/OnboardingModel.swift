@@ -57,10 +57,9 @@ final class OnboardingModel: ObservableObject {
     private var bag = Set<AnyCancellable>()
     private var release: Task<Void, Never>?
 
-    /// The last step's "Share anonymous usage data" checkbox. Checked unless
-    /// the user already said no (Marcello, 2026-09-27: asked once, here, and
-    /// on by default); recorded when the flow finishes.
-    @Published private(set) var shareUsage = AppState.shared.settings.analyticsConsent != .denied
+    /// Anonymous usage counts are on unless they were turned off before; the
+    /// permissions step says so in one line (docs/TELEMETRY.md).
+    private let shareUsage = AppState.shared.settings.analyticsConsent != .denied
     // Usage counts only: how long each step took, how many presses.
     private let flowStart = Date()
     private var stepStart = Date()
@@ -211,13 +210,8 @@ final class OnboardingModel: ObservableObject {
 
     /// `onboarding.completed` is written only here — quitting early resumes
     /// the flow next launch, it does not complete it.
-    func setShareUsage(_ on: Bool) {
-        withAnimation(.easeInOut(duration: 0.15)) { shareUsage = on }
-    }
-
     func finish() {
-        // The one answer the flow gives: whatever the checkbox says as the
-        // user leaves. A yes also sends what the onboarding buffered.
+        // Also sends what the onboarding buffered.
         Analytics.setConsent(shareUsage)
         Analytics.track(.onboardingStepCompleted(.done, durationMs: Int(Date().timeIntervalSince(stepStart) * 1000)))
         Analytics.track(.onboardingCompleted(totalMs: Int(Date().timeIntervalSince(flowStart) * 1000)))

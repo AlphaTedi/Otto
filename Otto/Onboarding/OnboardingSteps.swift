@@ -272,7 +272,6 @@ struct PermissionsStepContent: View {
                 VStack(spacing: 0) {
                     calendarRow(p)
                     loginRow(p)
-                    usageRow(p)
                 }
                 if let summary = permissions.calendarSummary {
                     Text(summary)
@@ -281,6 +280,12 @@ struct PermissionsStepContent: View {
                         .lineLimit(2)
                         .transition(.opacity)
                 }
+                // No switch for usage data (Marcello, 2026-11-02): one quiet
+                // line saying what happens and where to turn it off.
+                Text(L10n.t("ob.perm.usageNote"))
+                    .obFont(10.5)
+                    .foregroundStyle(p.textTertiary)
+                    .padding(.top, 6)
             }
             .animation(.easeInOut(duration: 0.3), value: permissions.calendar)
         }
@@ -303,18 +308,6 @@ struct PermissionsStepContent: View {
                 }
                 .transition(.opacity)
             }
-        }
-    }
-
-    /// Anonymous usage data (docs/TELEMETRY.md): on by default (Marcello,
-    /// 2026-09-27), recorded when the flow finishes. `U` toggles it.
-    private func usageRow(_ p: OBPalette) -> some View {
-        OBPermissionRow(icon: .bolt, tint: p.violet,
-                        title: L10n.t("ob.perm.usage"),
-                        caption: L10n.t("ob.perm.usage.caption")) {
-            OBSwitch(isOn: model.shareUsage) { model.setShareUsage(!model.shareUsage) }
-                .accessibilityLabel(L10n.t("ob.perm.usage") + ", U")
-                .accessibilityValue(model.shareUsage ? "on" : "off")
         }
     }
 
@@ -368,8 +361,6 @@ struct PermissionsPanel: View {
                     .position(Self.onRing(radius: 150, degrees: -90))
                 PermissionChip(icon: .power, tint: p.pink, granted: permissions.loginEnabled)
                     .position(Self.onRing(radius: 150, degrees: 155))
-                PermissionChip(icon: .bolt, tint: p.violet, granted: model.shareUsage)
-                    .position(Self.onRing(radius: 110, degrees: -20))
             }
             .frame(width: OBMetric.panelSize.width, height: OBMetric.panelSize.height)
             .accessibilityHidden(true)

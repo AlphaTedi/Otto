@@ -390,25 +390,29 @@ struct OBKeycap: View {
             .accessibilityHidden(true)
     }
 
-    /// Host Grotesk has no ⌃ or ⇧. The reference PNGs drew them with the
-    /// browser's fallback — a small caret and a tall-stemmed arrow — and of
-    /// the faces macOS ships, Arial Unicode MS is the one that matches
-    /// (compared side by side, 2026-09-26). The system face if it is absent.
+    private var modifierName: String? {
+        switch symbol {
+        case "\u{2303}": return "control"
+        case "\u{21E7}": return "shift"
+        default: return nil
+        }
+    }
+
     @ViewBuilder
     private var glyph: some View {
-        if symbol.unicodeScalars.allSatisfy({ CharacterSet.letters.contains($0) }) {
-            Text(symbol).obFont(23, 600)
-        } else if symbol == "\u{2303}" {
-            // The caret alone is drawn small, heavy and high in the reference.
-            Text(symbol).font(.system(size: 15, weight: .heavy)).offset(y: -3)
-        } else if NSFont(name: "Arial Unicode MS", size: 23) != nil {
-            // The face has one weight; two copies half a point apart give
-            // the stroke the reference's heft.
-            ZStack {
-                Text(symbol).offset(x: -0.35)
-                Text(symbol).offset(x: 0.35)
+        if let name = modifierName {
+            // Printed as on a Mac keyboard: the symbol top-left, the name
+            // under it, both to the left (Marcello, 2026-11-02: a bare ⌃ left
+            // people stuck on the one step they must pass).
+            VStack(alignment: .leading, spacing: 0) {
+                Text(symbol).font(.system(size: 12, weight: .semibold))
+                Spacer(minLength: 0)
+                Text(name).font(.system(size: 11, weight: .medium))
             }
-            .font(.custom("Arial Unicode MS", size: 25))
+            .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 2))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        } else if symbol.unicodeScalars.allSatisfy({ CharacterSet.letters.contains($0) }) {
+            Text(symbol).obFont(23, 600)
         } else {
             Text(symbol).font(.system(size: 23, weight: .semibold))
         }

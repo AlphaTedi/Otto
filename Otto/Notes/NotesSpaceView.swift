@@ -1399,12 +1399,13 @@ private struct NoteDetailView: View {
             // The icon alone: the label was cut to "Downl…" in the container
             // (Marcello, 2026-10-12). The words are in the tooltip.
             Button { store.exportOpenNote() } label: {
-                OttoIcon("square.and.arrow.down", pointSize: 13)
-                    .foregroundStyle(DSColor.textPrimaryBright)
-                    .frame(width: 32, height: 28)
-                    .contentShape(Rectangle())
-                    .floatingGlass(in: RoundedRectangle(
-                        cornerRadius: isContainer ? 10 : SpaceChrome.cornerRadius, style: .continuous))
+                // The gear's button, exactly (SettingsGearButton).
+                OttoIcon("square.and.arrow.down", pointSize: 16)
+                    .foregroundStyle(SpaceInk.a(0.75))
+                    .frame(width: 34, height: 34)
+                    .background(Circle().fill(SpaceInk.a(0.07)))
+                    .overlay(Circle().strokeBorder(SpaceInk.a(0.10), lineWidth: 1))
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
             .panelTooltip(L10n.t("notes.download") + "  \u{2318}\u{21E7}S")

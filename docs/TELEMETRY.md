@@ -1,6 +1,6 @@
 # Otto telemetry and feedback
 
-Anonymous, opt-in usage counts, so Marcello can see how many people use Otto,
+Anonymous usage counts, so Marcello can see how many people use Otto,
 how they get through the onboarding and how they open the notch. Built from
 the "Telemetria, Update e Feedback" PRD (2026-09-27), trimmed to what was
 decided: no appcast proxy yet (the Sparkle feed stays on raw GitHub until
@@ -26,17 +26,18 @@ Change the catalogue in both files together.
 `AppSettings.analyticsConsent`: `nil` = never asked, `.granted`, `.denied`.
 Nothing is sent unless it is `.granted`.
 
-- Onboarding, permissions step ("Connect your day"): a "Share usage data"
-  switch, **on by default** (Marcello, 2026-09-27; key `U`). Its state is
-  recorded when the flow finishes. Asked once — never again after updates.
+- Onboarding, permissions step ("Connect your day"): no switch since
+  2026-11-02 (Marcello), one quiet line saying so.
+  Finishing the flow records `.granted` unless it was already `.denied`.
 - People who update without seeing the onboarding are not asked and stay at
   `nil`: nothing of theirs is sent unless they turn it on in Settings. (A
   one-time panel card existed for them in 1.65.0 and was removed.)
 - Settings › General › Privacy: the switch, "Show what is sent" (the queue
   file), "Reset ID", and the full anonymous ID to quote for deletion.
-- Note: under EU case law (CJEU Planet49, 2019) a pre-ticked box is not valid
-  consent for device identifiers. Accepted knowingly for now; an unticked
-  default is the compliant alternative.
+- Note: under EU case law (CJEU Planet49, 2019) on-by-default is not valid
+  consent for device identifiers, and a notice is weaker than a pre-ticked
+  box. Accepted knowingly; asking, or defaulting to off, is the compliant
+  alternative.
 
 Before the question is answered, events wait in memory only (so a yes on the
 permissions step can still send the onboarding's own funnel); a no or a quit

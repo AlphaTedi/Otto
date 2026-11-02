@@ -1322,3 +1322,17 @@ notes and an editor with no top bar.
 - Entity chips choose their ground with `EntityChipRenderer.drawsDark`: the
   notch container is black in both appearances, so it always gets the dark
   chips. Appearance comes from there, not from `NSApp.effectiveAppearance`.
+
+### 2026-11-02 note bar, onboarding catches up with the UI
+
+- Floating note page: the format bar and Download wear the gear's surface
+  (fill + hairline), a capsule and a circle. Real glass there sat on the
+  panel's glass and came out a dark slab. No tooltip on the space dot.
+- Onboarding previews follow the product: the note and the "In the notch"
+  style show the dock layout (round buttons, section dots), the meeting card
+  has one keycap per key, the floating pills drop the dashed Notes edge.
+- The shortcut step prints "control" and "shift" with their symbols top-left,
+  as a Mac keyboard does.
+- Usage data: no switch and no U key in onboarding. One quiet line says it is
+  on and where to turn it off; finishing records `.granted` unless already
+  `.denied`. Privacy page and TELEMETRY.md updated: it is no longer opt-in.
