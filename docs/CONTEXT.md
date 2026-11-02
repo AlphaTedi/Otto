@@ -1336,3 +1336,8 @@ notes and an editor with no top bar.
 - Usage data: no switch and no U key in onboarding. One quiet line says it is
   on and where to turn it off; finishing records `.granted` unless already
   `.denied`. Privacy page and TELEMETRY.md updated: it is no longer opt-in.
+
+- Later the same day: the onboarding notch and note previews are the real
+  layout at 0.72 (`StyleMetrics`), one row pitch from the input down, boxes in
+  the section colour, one plain to-do and one with steps. The floating note
+  bar's hover is a circle, concentric with its capsule.

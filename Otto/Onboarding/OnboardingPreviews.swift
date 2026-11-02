@@ -81,39 +81,64 @@ private struct OBBox: View {
 
 private let mint = Color(obHex: 0xA8E6C1)
 
-/// The three to-dos the style previews share, the last one opened on its steps.
+/// The real container's list at 0.72 (NotchContainerMetrics): every row, the
+/// input included, sits on one pitch, and the boxes wear the section's colour.
+private enum StyleMetrics {
+    static let rowPitch: CGFloat = 32
+    static let box: CGFloat = 13
+    static let boxRadius: CGFloat = 4.5
+    static let boxStroke: CGFloat = 1.45
+    static let rowGap: CGFloat = 9
+    static let stepPitch: CGFloat = 17
+    static let stepBox: CGFloat = 9
+    static let bar: CGFloat = 27
+    static let barInset: CGFloat = 12
+    /// Boxes centred on the Notes button, as in the product.
+    static let contentInset: CGFloat = (bar - box) / 2
+}
+
+private let sectionBlue = Color(obHex: 0x9DBBF5)
+
+/// A plain to-do and one opened on its steps.
 private struct StyleTodoList: View {
+    var tint = mint
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(["ob.pv.todo1", "ob.pv.todo2", "ob.pv.todo3"], id: \.self) { key in
-                HStack(spacing: 10) {
-                    OBBox(side: 13, radius: 5, color: mint)
-                    Text(L10n.t(key)).obFont(12)
-                }
-                .padding(.vertical, 5)
-            }
+            parent("ob.pv.todo1")
+            parent("ob.pv.todo3")
             // The steps hang off a 1-pt guide line under the parent's box.
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
                 Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1)
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 0) {
                     ForEach(["ob.pv.step1", "ob.pv.step2"], id: \.self) { key in
-                        HStack(spacing: 7) {
-                            OBBox(side: 9, radius: 4, color: mint)
+                        HStack(spacing: 5) {
+                            OBBox(side: StyleMetrics.stepBox, radius: 3, color: tint, lineWidth: 1.2)
                             Text(L10n.t(key))
                         }
+                        .frame(height: StyleMetrics.stepPitch)
                     }
                     Text("\u{00B7}\u{00B7}\u{00B7} " + L10n.t("ob.pv.moreSteps"))
                         .foregroundStyle(Color.white.opacity(0.45))
+                        .frame(height: StyleMetrics.stepPitch)
                 }
-                .obFont(10.5)
+                .obFont(10)
                 .foregroundStyle(Color.white.opacity(0.62))
             }
             .fixedSize(horizontal: false, vertical: true)
             .padding(.leading, 6)
-            .padding(.top, -1)
-            .padding(.bottom, 3)
+            .padding(.top, -4)
         }
         .foregroundStyle(Color(obHex: 0xF2F1F5))
+    }
+
+    private func parent(_ key: String) -> some View {
+        HStack(spacing: StyleMetrics.rowGap) {
+            OBBox(side: StyleMetrics.box, radius: StyleMetrics.boxRadius, color: tint,
+                  lineWidth: StyleMetrics.boxStroke)
+            Text(L10n.t(key)).obFont(11.5)
+        }
+        .frame(height: StyleMetrics.rowPitch)
     }
 }
 
@@ -150,41 +175,38 @@ private struct StylePillsRow: View {
     }
 }
 
-/// The notch container's foot, in miniature (DockBar): a round button on each
-/// side and the dots between them, the active section opened into a pill.
+/// The notch container's foot at 0.72 (DockBar): a round button on each side
+/// and the dots between them, the active section opened into a pill.
 private struct DockPreviewBar: View {
-    var leading: DockGlyph = .notes
-    var leadingColor = Color(obHex: 0xFFC36E)
-    var trailing: DockGlyph = .settings
-
     var body: some View {
         HStack(spacing: 0) {
-            DockPreviewRound(glyph: leading, color: leadingColor)
+            DockPreviewRound(glyph: .notes, color: DSDock.notes)
             Spacer(minLength: 8)
-            HStack(spacing: 11) {
+            HStack(spacing: 0) {
                 dot(0xA8E6C1)
                 HStack(spacing: 5) {
-                    Circle().fill(Color(obHex: 0x9DBBF5)).frame(width: 5, height: 5)
+                    Circle().fill(sectionBlue).frame(width: 5, height: 5)
                     Text(L10n.t("ob.pv.work")).obFont(10, 600).foregroundStyle(Color.white.opacity(0.92))
                 }
                 .padding(.horizontal, 8)
-                .frame(height: 19)
-                .background(Capsule().fill(Color(obHex: 0x9DBBF5, alpha: 0.2)))
+                .frame(height: 21)
+                .background(Capsule().fill(sectionBlue.opacity(0.2)))
                 dot(0xE8A7B8)
                 dot(0xF3C6A5)
-                DockIcon(.plus, size: 10).foregroundStyle(Color.white.opacity(0.4))
+                DockIcon(.plus, size: 11).foregroundStyle(DSDock.plus).frame(width: 21)
             }
-            .padding(.horizontal, 7)
-            .frame(height: 26)
+            .padding(.horizontal, 3)
+            .frame(height: StyleMetrics.bar)
             .background(Capsule().fill(Color.white.opacity(0.08)))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .circular).strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: StyleMetrics.bar / 2, style: .circular)
+                .strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
             Spacer(minLength: 8)
-            DockPreviewRound(glyph: trailing, color: Color.white.opacity(0.7))
+            DockPreviewRound(glyph: .settings, color: DSDock.settingsIcon)
         }
     }
 
     private func dot(_ hex: UInt32) -> some View {
-        Circle().fill(Color(obHex: hex)).frame(width: 5, height: 5)
+        Circle().fill(Color(obHex: hex)).frame(width: 5, height: 5).frame(width: 21)
     }
 }
 
@@ -195,7 +217,7 @@ private struct DockPreviewRound: View {
     var body: some View {
         DockIcon(glyph, size: 13)
             .foregroundStyle(color)
-            .frame(width: 26, height: 26)
+            .frame(width: StyleMetrics.bar, height: StyleMetrics.bar)
             .background(Circle().fill(Color.white.opacity(0.08)))
             .overlay(Circle().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
     }
@@ -239,65 +261,73 @@ struct NotchTasksPreview: View {
 /// content, the controls in the bar at the foot.
 struct NotePreview: View {
     var body: some View {
-        NotchSlab(width: 360, radius: 24, padding: EdgeInsets(top: 20, leading: 20, bottom: 12, trailing: 12),
-                  spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
+        NotchSlab(width: 360, radius: 24, padding: EdgeInsets(top: 38, leading: 12, bottom: 12, trailing: 12),
+                  spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(L10n.t("ob.pv.noteTitle")).obFont(19, 700).tracking(-0.3)
                 Text(L10n.t("ob.pv.noteDate")).obFont(11).foregroundStyle(Color.white.opacity(0.45))
             }
-            // 12 pt at a 1.7 line height: 20.4 per line, glyphs centred in it.
+            .padding(.leading, StyleMetrics.contentInset)
             VStack(alignment: .leading, spacing: 0) {
                 Text(L10n.t("ob.pv.noteAgenda")).foregroundStyle(Color.white.opacity(0.85))
-                    .frame(height: 20.4)
+                    .frame(height: 22)
                 ForEach(["ob.pv.noteLine1", "ob.pv.noteLine2"], id: \.self) { key in
-                    Text("\u{2022} " + L10n.t(key)).frame(height: 20.4)
+                    Text("\u{2022} " + L10n.t(key)).frame(height: 22)
                 }
                 HStack(spacing: 1) {
                     Text("\u{2022} " + L10n.t("ob.pv.noteLine3"))
                     Rectangle().fill(.white).frame(width: 1.5, height: 13)
                 }
-                .frame(height: 20.4)
+                .frame(height: 22)
             }
             .obFont(12)
             .foregroundStyle(Color.white.opacity(0.6))
+            .padding(.leading, StyleMetrics.contentInset)
+            .padding(.top, 16)
             HStack(spacing: 0) {
-                DockPreviewRound(glyph: .back, color: Color.white.opacity(0.7))
-                Spacer(minLength: 8)
+                DockPreviewRound(glyph: .back, color: DSDock.settingsIcon)
+                Spacer(minLength: 6)
                 toolbar
-                Spacer(minLength: 8)
-                DockPreviewRound(glyph: .export, color: Color.white.opacity(0.7))
+                Spacer(minLength: 6)
+                DockPreviewRound(glyph: .export, color: DSDock.settingsIcon)
             }
-            .padding(.leading, -8)
-            .padding(.top, 2)
+            .padding(.top, 10)
         }
         .foregroundStyle(Color(obHex: 0xF2F1F5))
         .obPopIn()
         .accessibilityHidden(true)
     }
 
+    /// The real bar at 0.72: tools on a 23-pt pitch with 12-pt glyphs.
     private var toolbar: some View {
-        HStack(spacing: 7) {
-            Text("Aa").obFont(10.5, 600)
+        HStack(spacing: 0) {
+            Text("Aa").font(.system(size: 10, weight: .semibold)).frame(width: 23)
             divider
-            DockIcon(.bullets, size: 13)
-            DockIcon(.numbers, size: 13)
-            DockIcon(.checklist, size: 13)
+            tool(.bullets)
+            tool(.numbers)
+            tool(.checklist)
             divider
-            DockIcon(.textStyle, size: 13)
-            DockIcon(.link, size: 13)
+            tool(.textStyle)
+            tool(.link)
             divider
-            DockIcon(.inlineCode, size: 13)
-            DockIcon(.codeBlock, size: 13)
+            tool(.inlineCode)
+            tool(.quote)
+            tool(.codeBlock)
         }
-        .foregroundStyle(Color.white.opacity(0.75))
-        .padding(.horizontal, 10)
-        .frame(height: 26)
+        .foregroundStyle(DSDock.text)
+        .padding(.horizontal, 3)
+        .frame(height: StyleMetrics.bar)
         .background(Capsule().fill(Color.white.opacity(0.08)))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .circular).strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: StyleMetrics.bar / 2, style: .circular)
+            .strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
+    }
+
+    private func tool(_ glyph: DockGlyph) -> some View {
+        DockIcon(glyph, size: 12).frame(width: 23)
     }
 
     private var divider: some View {
-        Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 11)
+        Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1, height: 13).padding(.horizontal, 2)
     }
 }
 
@@ -571,19 +601,23 @@ struct NotchStylePreview: View {
     /// The notch container as it is now: the first row is the input, the
     /// sections are the dock at the foot.
     private var content: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .strokeBorder(Color(obHex: 0x9DBBF5), style: StrokeStyle(lineWidth: 1.4, dash: [3, 2.5]))
-                    .frame(width: 13, height: 13)
-                Text(String(format: L10n.t("dock.addTo"), L10n.t("ob.pv.work"))).obFont(12)
-                    .foregroundStyle(Color.white.opacity(0.4))
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: StyleMetrics.rowGap) {
+                    Circle()
+                        .strokeBorder(sectionBlue, style: StrokeStyle(lineWidth: StyleMetrics.boxStroke, dash: [2.6, 2.6]))
+                        .frame(width: StyleMetrics.box, height: StyleMetrics.box)
+                    Text(String(format: L10n.t("dock.addTo"), L10n.t("ob.pv.work"))).obFont(11.5)
+                        .foregroundStyle(Color.white.opacity(0.4))
+                }
+                .frame(height: StyleMetrics.rowPitch)
+                StyleTodoList(tint: sectionBlue)
             }
-            .padding(.vertical, 5)
-            StyleTodoList()
-            DockPreviewBar().padding(.top, 8)
+            .padding(.leading, StyleMetrics.contentInset)
+            DockPreviewBar().padding(.top, 14)
         }
-        .padding(EdgeInsets(top: 34, leading: 16, bottom: 12, trailing: 12))
+        .padding(EdgeInsets(top: 30, leading: StyleMetrics.barInset, bottom: StyleMetrics.barInset,
+                            trailing: StyleMetrics.barInset))
         .frame(width: 340, alignment: .topLeading)
         .fixedSize(horizontal: false, vertical: true)
         .background(GeometryReader { proxy in

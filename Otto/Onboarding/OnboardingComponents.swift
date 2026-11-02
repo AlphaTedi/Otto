@@ -405,11 +405,11 @@ struct OBKeycap: View {
             // under it, both to the left (Marcello, 2026-11-02: a bare ⌃ left
             // people stuck on the one step they must pass).
             VStack(alignment: .leading, spacing: 0) {
-                Text(symbol).font(.system(size: 12, weight: .semibold))
+                Text(symbol).font(.system(size: 16, weight: .semibold))
                 Spacer(minLength: 0)
                 Text(name).font(.system(size: 11, weight: .medium))
             }
-            .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 2))
+            .padding(EdgeInsets(top: 6, leading: 8, bottom: 8, trailing: 2))
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         } else if symbol.unicodeScalars.allSatisfy({ CharacterSet.letters.contains($0) }) {
             Text(symbol).obFont(23, 600)

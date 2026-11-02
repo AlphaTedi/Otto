@@ -254,18 +254,17 @@ private struct DockToolButton<Glyph: View>: View {
 /// apart. A 28×28 hit area under glyphs that are much smaller, so the row is
 /// dense to look at and not to use.
 ///
-/// A compact ROUNDED RECTANGLE, concentric with the bar it sits in: the bar
-/// is an 8-pt rounded rectangle with 4 of padding, so each control is 8 − 4
-/// = 4, rounded to 5 for the eye (2026-09-25 spec, replacing the circles that
-/// matched the old capsule bar). Rest, hover, selected, pressed and disabled
-/// all read differently; the 28×28 frame is exact so no glyph stretches it.
+/// A CIRCLE, concentric with the capsule it sits in (Marcello, 2026-11-02: the
+/// old rounded square clashed with it). Rest, hover, selected, pressed and
+/// disabled all read differently; the 28×28 frame is exact so no glyph
+/// stretches it.
 private struct FormatControlStyle: ButtonStyle {
     let isActive: Bool
     @State private var hover = false
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
+        let shape = Circle()
         return configuration.label
             .foregroundStyle(isActive ? PanelMetrics.accent : DSColor.textPrimary)
             .frame(width: 28, height: 28)
