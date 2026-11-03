@@ -19,32 +19,23 @@ func render(scale: CGFloat, to path: String) {
         NSColor(srgbRed: CGFloat((hex >> 16) & 255) / 255, green: CGFloat((hex >> 8) & 255) / 255,
                 blue: CGFloat(hex & 255) / 255, alpha: a)
     }
-    // Ground: near-white lavender, cooler toward the foot.
-    NSGradient(colors: [c(0xFBFAFF), c(0xEEEBFF)])!.draw(in: NSRect(x: 0, y: 0, width: 640, height: 400), angle: -90)
-    // Two soft bands in the icon's blues, sweeping up from the lower left.
-    func band(_ y0: CGFloat, _ y1: CGFloat, _ colors: [NSColor]) {
-        let p = NSBezierPath()
-        p.move(to: NSPoint(x: 0, y: 0))
-        p.line(to: NSPoint(x: 0, y: y0))
-        p.curve(to: NSPoint(x: 640, y: y1), controlPoint1: NSPoint(x: 220, y: y0 - 150),
-                controlPoint2: NSPoint(x: 430, y: y1 - 40))
-        p.line(to: NSPoint(x: 640, y: 0))
-        p.close()
-        NSGradient(colors: colors)!.draw(in: p, angle: 0)
-    }
-    band(190, 70, [c(0xC9C2FF, 0.55), c(0xA9B8FF, 0.35)])
-    band(120, 34, [c(0x5B57E8, 0.55), c(0x3C5BDB, 0.40)])
+    // The site's hero gradient (ottotofive.com, .hero-bg), its light first
+    // half only: peach at the top to lavender at the foot, so Finder's black
+    // icon labels stay readable (Marcello, 2026-11-03: no bands, one gradient).
+    NSGradient(colors: [c(0xFCF6F3), c(0xF8EAE6), c(0xEAD6EC), c(0xC7B0EE), c(0x9276E0)],
+               atLocations: [0, 0.22, 0.45, 0.75, 1], colorSpace: .sRGB)!
+        .draw(in: NSRect(x: 0, y: 0, width: 640, height: 400), angle: -90)
     // Headline.
     let para = NSMutableParagraphStyle(); para.alignment = .center; para.lineSpacing = 2
     let title = NSAttributedString(string: "To install, drag Otto\ninto the Applications folder.", attributes: [
         .font: NSFont.systemFont(ofSize: 19, weight: .semibold),
-        .foregroundColor: c(0x1C1A4A), .paragraphStyle: para])
+        .foregroundColor: c(0x1A1530), .paragraphStyle: para])
     title.draw(in: NSRect(x: 0, y: 290, width: 640, height: 60))
     // Three chevrons between the icons (centres at x 160 and 480, y 205 from the top).
     ctx.setLineCap(.round); ctx.setLineJoin(.round); ctx.setLineWidth(5)
     for (i, alpha) in [0.28, 0.6, 1.0].enumerated() {
         let x = 288 + CGFloat(i) * 28, y = 400 - 196.0
-        ctx.setStrokeColor(c(0x5B57E8, alpha).cgColor)
+        ctx.setStrokeColor(c(0x5E46BA, alpha).cgColor)
         ctx.move(to: CGPoint(x: x, y: y + 20)); ctx.addLine(to: CGPoint(x: x + 18, y: y))
         ctx.addLine(to: CGPoint(x: x, y: y - 20)); ctx.strokePath()
     }
