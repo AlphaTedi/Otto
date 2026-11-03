@@ -1,5 +1,5 @@
 # dmgbuild settings for Otto's install window: the app on the left, an
-# Applications shortcut on the right, chevrons between them on a branded
+# Applications shortcut on the right, a hand-drawn arrow between them on a branded
 # background. dmgbuild writes the window's .DS_Store itself, so Finder is never
 # scripted (that is what failed before, see release.sh).
 #
@@ -23,7 +23,7 @@ show_pathbar = False
 show_sidebar = False
 icon_size = 112
 text_size = 13
-# Centres, from the window's top left; the chevrons sit between them.
+# Centres, from the window's top left; the arrow runs between them.
 icon_locations = {
     os.path.basename(app): (160, 205),
     "Applications": (480, 205),
