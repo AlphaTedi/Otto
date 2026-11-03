@@ -1,15 +1,10 @@
-// Marcello's private dashboard: one static page, no framework, no CDN. It
-// asks for the password once per tab (kept in sessionStorage) and reads
-// everything from /api/summary.
+// Marcello's private dashboard: static pages, no framework, no CDN. They ask
+// for the password once per tab (kept in sessionStorage, shared by both pages)
+// and read everything from /api/summary (the app) and /api/site (the website,
+// see website.ts).
 
-export const dashboardHTML = /* html */ `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<title>Otto · Dashboard</title>
-<style>
+/** The look, shared by both pages. */
+export const STYLE = `
   :root {
     --bg: #0b0b0f; --panel: #15151c; --line: rgba(255,255,255,.08);
     --text: #f2f1f5; --dim: rgba(242,241,245,.55); --faint: rgba(242,241,245,.35);
@@ -50,7 +45,23 @@ export const dashboardHTML = /* html */ `<!doctype html>
   #gate { max-width: 320px; margin: 18vh auto; display: flex; flex-direction: column; gap: 10px; }
   #gate p { color: var(--dim); margin: 0 0 6px; }
   #error { color: #ff9ec7; font-size: 13px; min-height: 18px; }
-</style>
+  .head-left { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+  .tabs { display: flex; gap: 4px; }
+  .tabs a { color: var(--dim); text-decoration: none; font-size: 13px; font-weight: 600;
+       padding: 5px 10px; border-radius: 8px; }
+  .tabs a:hover { color: var(--text); }
+  .tabs a[aria-current="page"] { color: var(--text); background: var(--panel); border: 1px solid var(--line); }
+`;
+
+export const dashboardHTML = /* html */ `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Otto · Dashboard</title>
+<style>
+${STYLE}</style>
 </head>
 <body>
 <form id="gate" hidden>
@@ -62,7 +73,10 @@ export const dashboardHTML = /* html */ `<!doctype html>
 </form>
 <main id="app" hidden>
   <header>
-    <h1>Otto</h1>
+    <div class="head-left">
+      <h1>Otto</h1>
+      <nav class="tabs"><a href="/dashboard" aria-current="page">App</a><a href="/dashboard/website">Website</a></nav>
+    </div>
     <select id="range">
       <option value="7">Last 7 days</option>
       <option value="30" selected>Last 30 days</option>

@@ -4,6 +4,8 @@
 //   POST /v1/feedback — a feedback message, forwarded by email, never stored
 //   GET  /dashboard   — Marcello's private dashboard (password in a secret)
 //   GET  /api/summary — the numbers behind it
+//   GET  /dashboard/website — its second page: visits and downloads of ottotofive.com
+//   GET  /api/site    — the numbers behind that, read from the site's own D1 (SITE)
 //   cron 03:00 UTC    — daily rollups, 90-day raw retention
 //
 // What it never does: store an IP address, receive a to-do, a note or a
@@ -15,9 +17,12 @@ import { relayFeedback } from "./feedback";
 
 import { EVENTS, UUID, validateContext, validateProps } from "./events";
 import { dashboardHTML } from "./dashboard";
+import { siteSummary, websiteHTML } from "./website";
 
 export interface Env {
   DB: D1Database;
+  /** otto-site-stats: the website's daily totals, written by the otto-site Worker, only read here. */
+  SITE?: D1Database;
   OTTO_KEY: string;
   EXCLUDED_INSTALLS: string;
   DASHBOARD_PASSWORD?: string;
@@ -39,11 +44,16 @@ export default {
         const result = await relayFeedback(request, env);
         return json(result.body, result.status);
       }
-      if (url.pathname === "/dashboard" && request.method === "GET") {
-        return new Response(dashboardHTML, {
+      if ((url.pathname === "/dashboard" || url.pathname === "/dashboard/website") && request.method === "GET") {
+        return new Response(url.pathname === "/dashboard" ? dashboardHTML : websiteHTML, {
           headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store",
                      "x-robots-tag": "noindex" },
         });
+      }
+      if (url.pathname === "/api/site" && request.method === "GET") {
+        if (!authorized(request, env)) return json({ error: "unauthorized" }, 401);
+        if (!env.SITE) return json({ error: "site stats not bound" }, 503);
+        return json(await siteSummary(env.SITE, clampDays(url.searchParams.get("days"))));
       }
       if (url.pathname === "/api/summary" && request.method === "GET") {
         if (!authorized(request, env)) return json({ error: "unauthorized" }, 401);

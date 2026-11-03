@@ -65,6 +65,10 @@ jurisdiction, free plan. <https://otto-telemetry.otto-telemetry.workers.dev>
   (secret `RESEND_API_KEY`), attachments ≤ 10 MB total; nothing is stored.
 - `GET /dashboard` — private dashboard; asks for `DASHBOARD_PASSWORD`.
 - `GET /api/summary?days=30` — its numbers (Bearer password).
+- `GET /dashboard/website` — the dashboard's second page: visits to ottotofive.com
+  and downloads of the DMG, read from the D1 database `otto-site-stats` (binding
+  `SITE`), which the site's own Worker `otto-site` (repo AlphaTedi/website) fills.
+- `GET /api/site?days=30` — its numbers (same Bearer password).
 - Cron 03:00 UTC — daily rollups (kept forever), raw events deleted after 90 days.
 - IP addresses are never stored. `env = dev` (Debug builds) is excluded from
   every number; so are the IDs in `EXCLUDED_INSTALLS` (wrangler.toml).
