@@ -35,20 +35,25 @@ func render(scale: CGFloat, to path: String) {
         .font: NSFont(descriptor: face, size: size)!, .kern: -0.042 * size,
         .foregroundColor: c(0x1E1530), .paragraphStyle: para])
     title.draw(in: NSRect(x: 0, y: 292, width: 640, height: 70))
-    // A hand-drawn arrow from Otto to Applications: up off the app, one loop,
-    // then over into the folder. Drawn in the reference doodle's own 800-unit
-    // box, mirrored to point right, and placed between the icons.
-    func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
-        CGPoint(x: 232 + (800 - x - 20) * 0.228, y: 400 - (152 + (y - 110) * 0.17))
-    }
+    // A hand-drawn arrow from Otto to Applications: it leaves the app's right
+    // edge, makes one loop on the way, and lands on the folder's left edge.
+    // Window points from the top left, as in dmg-settings.py (icons 112 wide,
+    // centred at x 160 and 480, y 205).
+    func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x, y: 400 - y) }
     let doodle = CGMutablePath()
-    doodle.move(to: pt(755, 730))
-    doodle.addCurve(to: pt(600, 358), control1: pt(770, 560), control2: pt(720, 390))
-    doodle.addCurve(to: pt(425, 490), control1: pt(480, 345), control2: pt(410, 420))
-    doodle.addCurve(to: pt(600, 520), control1: pt(440, 560), control2: pt(540, 580))
-    doodle.addCurve(to: pt(600, 320), control1: pt(650, 470), control2: pt(640, 380))
-    doodle.addCurve(to: pt(25, 212), control1: pt(520, 190), control2: pt(250, 110))
-    doodle.move(to: pt(75, 115)); doodle.addLine(to: pt(25, 212)); doodle.addLine(to: pt(115, 240))
+    doodle.move(to: pt(226, 214))
+    doodle.addCurve(to: pt(306, 186), control1: pt(256, 218), control2: pt(286, 206))
+    doodle.addCurve(to: pt(300, 150), control1: pt(322, 170), control2: pt(318, 148))
+    doodle.addCurve(to: pt(296, 198), control1: pt(280, 152), control2: pt(276, 182))
+    doodle.addCurve(to: pt(412, 200), control1: pt(318, 216), control2: pt(368, 218))
+    // The head: two strokes back from the tip, ±32° off the line's heading.
+    let tip = CGPoint(x: 412, y: 200), from = CGPoint(x: 368, y: 218)
+    let heading = atan2(tip.y - from.y, tip.x - from.x)
+    for side in [-1.0, 1.0] {
+        let a = heading + .pi - side * 0.56
+        doodle.move(to: pt(tip.x + 13 * cos(a), tip.y + 13 * sin(a)))
+        doodle.addLine(to: pt(tip.x, tip.y))
+    }
     ctx.addPath(doodle)
     ctx.setLineCap(.round); ctx.setLineJoin(.round); ctx.setLineWidth(3.2)
     ctx.setStrokeColor(c(0x5E46BA).cgColor)
