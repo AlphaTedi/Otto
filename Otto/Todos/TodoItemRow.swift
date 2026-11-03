@@ -327,7 +327,10 @@ struct TodoItemRow: View {
                     // to the note. With it, 312 throughout.
                     .padding(.vertical, PanelMetrics.rowTextInset)
                     .focused($titleFieldFocused)
-                    .onSubmit { commitTitle() }
+                    // ⏎ saves and, on an opened row, closes it: the edit is
+                    // done (Marcello, 2026-11-03). ⇧⏎ breaks the line.
+                    .onSubmit { commitTitle(); closeIfOpen() }
+                    .modifier(ShiftReturnBreaksLine(isActive: titleFieldFocused))
                     // Losing focus commits too — clicking away is a save
                     // everywhere else in this app, so it is here as well.
                     .onChange(of: titleFieldFocused) { focused in
@@ -436,6 +439,12 @@ struct TodoItemRow: View {
             // the change — closing a row is not a cancel.
             commitTitle()
         }
+    }
+
+    private func closeIfOpen() {
+        let store = TodoStore.shared
+        guard store.expandedItemID == item.id else { return }
+        withAnimation(NotchAnimation.contentHug) { store.expandedItemID = nil }
     }
 
     /// Enter edit mode with the caret in the title.
@@ -648,3 +657,32 @@ struct DragGrip: View {
     }
 }
 
+
+/// ⇧⏎ in a SwiftUI text field submits like ⏎. While the field holds the
+/// caret this catches it first and inserts a line break at the caret instead.
+private struct ShiftReturnBreaksLine: ViewModifier {
+    let isActive: Bool
+    @State private var monitor: Any?
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: isActive) { active in active ? install() : remove() }
+            .onDisappear { remove() }
+    }
+
+    private func install() {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            guard event.keyCode == 36 || event.keyCode == 76, flags == .shift,
+                  let editor = event.window?.firstResponder as? NSTextView else { return event }
+            editor.insertNewlineIgnoringFieldEditor(nil)
+            return nil
+        }
+    }
+
+    private func remove() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+    }
+}

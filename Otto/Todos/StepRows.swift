@@ -108,9 +108,11 @@ struct StepRow: View {
             Button {
                 TodoStore.shared.deleteChecklistItem(step.id, in: parentID)
             } label: {
-                OttoIcon("xmark", pointSize: 7)
+                // 10 on 16: at 7 it was a speck beside the step's own box
+                // (Marcello, 2026-11-03).
+                OttoIcon("xmark", pointSize: 10)
                     .foregroundStyle(DSColor.textFaint)
-                    .frame(width: 12, height: 12)
+                    .frame(width: 16, height: 16)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

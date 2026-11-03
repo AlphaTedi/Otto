@@ -221,7 +221,7 @@ final class MarkdownVault: ObservableObject {
     }
 
     private func archiveKeyLine(for item: TodoItem, at: Date, store: TodoStore) -> String {
-        var line = "- [x] \(item.title)"
+        var line = "- [x] \(item.title.vaultLine)"
         if let section = store.collection(id: item.collectionID)?.name {
             line += " (\(section))"
         }
@@ -255,7 +255,7 @@ final class MarkdownVault: ObservableObject {
 
     private func taskLine(_ item: TodoItem) -> String {
         let dayKey = VaultFormatters.cached("yyyy-MM-dd")
-        var line = "- [\(item.isCompleted ? "x" : " ")] \(item.title)"
+        var line = "- [\(item.isCompleted ? "x" : " ")] \(item.title.vaultLine)"
         // Images as ordinary markdown, relative to the vault, so the section
         // file shows them in Obsidian (Attachments.swift).
         for path in item.attachments { line += " " + AttachmentStore.token(for: path) }
@@ -311,7 +311,7 @@ final class MarkdownVault: ObservableObject {
         CompletedArchive.shared.reloadIfNeeded()
         let ids = Set(live.map(\.id))
         for item in CompletedArchive.shared.entries where item.meetingNoteID == note.id && !ids.contains(item.taskID ?? UUID()) {
-            out += "- [x] \(item.title) ✅ \(VaultFormatters.cached("yyyy-MM-dd").string(from: item.completedAt))\n"
+            out += "- [x] \(item.title.vaultLine) ✅ \(VaultFormatters.cached("yyyy-MM-dd").string(from: item.completedAt))\n"
         }
         return out
     }
@@ -350,4 +350,10 @@ private enum VaultFormatters {
         cache[format] = formatter
         return formatter
     }
+}
+
+private extension String {
+    /// A title broken with ⇧⏎ stays one task line: a raw newline would end
+    /// the `- [ ]` item and leave the rest as a stray paragraph.
+    var vaultLine: String { replacingOccurrences(of: "\n", with: "<br>") }
 }

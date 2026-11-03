@@ -1528,10 +1528,15 @@ private struct UndoBar: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 9)
-        .background(Capsule().fill(DSColor.fieldBackground))
+        // Near-opaque: it floats over the stream, and on the field tint the
+        // rows under it read straight through the message (2026-11-03).
+        .background(Capsule().fill(Self.ground))
         .overlay(Capsule().strokeBorder(DSColor.panelBorder, lineWidth: 0.5))
         .shadow(color: DSColor.shadowSoft, radius: 10, y: 4)
     }
+
+    private static let ground = Color.dynamic(light: NSColor(white: 0.985, alpha: 0.98),
+                                              dark: NSColor(srgbRed: 0.105, green: 0.105, blue: 0.12, alpha: 0.98))
 }
 
 // MARK: - The Notes pill in the space bar
