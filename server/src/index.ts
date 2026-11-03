@@ -2,10 +2,12 @@
 //
 //   POST /v1/events   — anonymous event batches from the app (opt-in only)
 //   POST /v1/feedback — a feedback message, forwarded by email, never stored
-//   GET  /dashboard   — Marcello's private dashboard (password in a secret)
-//   GET  /api/summary — the numbers behind it
-//   GET  /dashboard/website — its second page: visits and downloads of ottotofive.com
-//   GET  /api/site    — the numbers behind that, read from the site's own D1 (SITE)
+//   GET  /dashboard, /dashboard/app, /dashboard/website
+//                     — Marcello's private dashboard (password in a secret):
+//                       overview, the app install by install, the website
+//   GET  /api/summary?range=24h — the app's numbers
+//   GET  /api/install?id=…      — one install's events, for its timeline
+//   GET  /api/site?range=24h    — the website's, read from its own D1 (SITE)
 //   cron 03:00 UTC    — daily rollups, 90-day raw retention
 //
 // What it never does: store an IP address, receive a to-do, a note or a
@@ -16,8 +18,8 @@
 import { relayFeedback } from "./feedback";
 
 import { EVENTS, UUID, validateContext, validateProps } from "./events";
-import { dashboardHTML } from "./dashboard";
-import { siteSummary, websiteHTML } from "./website";
+import { appHTML, overviewHTML, websiteHTML } from "./pages";
+import { appSummary, installTimeline, parseRange, scope, siteSummary } from "./stats";
 
 export interface Env {
   DB: D1Database;
@@ -29,6 +31,12 @@ export interface Env {
   RESEND_API_KEY?: string;
   FEEDBACK_TO: string;
 }
+
+const PAGES: Record<string, string> = {
+  "/dashboard": overviewHTML,
+  "/dashboard/app": appHTML,
+  "/dashboard/website": websiteHTML,
+};
 
 const MAX_EVENTS = 100;
 const MAX_BODY = 64 * 1024;
@@ -44,20 +52,27 @@ export default {
         const result = await relayFeedback(request, env);
         return json(result.body, result.status);
       }
-      if ((url.pathname === "/dashboard" || url.pathname === "/dashboard/website") && request.method === "GET") {
-        return new Response(url.pathname === "/dashboard" ? dashboardHTML : websiteHTML, {
+      const page = PAGES[url.pathname];
+      if (page && request.method === "GET") {
+        return new Response(page, {
           headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store",
                      "x-robots-tag": "noindex" },
         });
       }
-      if (url.pathname === "/api/site" && request.method === "GET") {
+      if (url.pathname.startsWith("/api/") && request.method === "GET") {
         if (!authorized(request, env)) return json({ error: "unauthorized" }, 401);
-        if (!env.SITE) return json({ error: "site stats not bound" }, 503);
-        return json(await siteSummary(env.SITE, clampDays(url.searchParams.get("days"))));
-      }
-      if (url.pathname === "/api/summary" && request.method === "GET") {
-        if (!authorized(request, env)) return json({ error: "unauthorized" }, 401);
-        return json(await summary(env, clampDays(url.searchParams.get("days"))));
+        const range = parseRange(url.searchParams.get("range"));
+        if (url.pathname === "/api/summary") return json(await appSummary(env, range));
+        if (url.pathname === "/api/site") {
+          if (!env.SITE) return json({ error: "site stats not bound" }, 503);
+          return json(await siteSummary(env.SITE, range));
+        }
+        if (url.pathname === "/api/install") {
+          const id = url.searchParams.get("id") ?? "";
+          if (!UUID.test(id)) return json({ error: "bad id" }, 400);
+          const timeline = await installTimeline(env, id);
+          return timeline ? json(timeline) : json({ error: "not found" }, 404);
+        }
       }
       if (url.pathname === "/") return new Response("Otto telemetry. Nothing to see here.\n");
       return json({ error: "not found" }, 404);
@@ -139,97 +154,6 @@ function authorized(request: Request, env: Env): boolean {
   let diff = 0;
   for (let i = 0; i < given.length; i++) diff |= given.charCodeAt(i) ^ password.charCodeAt(i);
   return diff === 0;
-}
-
-function clampDays(raw: string | null): number {
-  const days = Number(raw ?? 30);
-  return Number.isFinite(days) ? Math.min(365, Math.max(1, Math.round(days))) : 30;
-}
-
-/** `AND install_id NOT IN (...)` for the excluded Macs, plus prod only. */
-function scope(env: Env, alias = ""): { sql: string; binds: string[] } {
-  const ids = env.EXCLUDED_INSTALLS.split(",").map((s) => s.trim()).filter(Boolean);
-  const column = alias ? `${alias}.install_id` : "install_id";
-  const envColumn = alias ? `${alias}.env` : "env";
-  const sql = `${envColumn} = 'prod'` + (ids.length ? ` AND ${column} NOT IN (${ids.map(() => "?").join(",")})` : "");
-  return { sql, binds: ids };
-}
-
-async function summary(env: Env, days: number) {
-  const since = isoDay(Date.now() - (days - 1) * DAY_MS);
-  const today = isoDay(Date.now());
-  const s = scope(env);
-  const all = <T>(sql: string, ...binds: unknown[]) =>
-    env.DB.prepare(sql).bind(...binds, ...s.binds).all<T>().then((r) => r.results);
-  const one = async <T>(sql: string, ...binds: unknown[]) => (await all<T>(sql, ...binds))[0];
-
-  const activeOn = (from: string) =>
-    one<{ n: number }>(`SELECT COUNT(DISTINCT install_id) AS n FROM events WHERE day >= ? AND ${s.sql}`, from);
-
-  const [installs, newInRange, activeToday, active7, active30] = await Promise.all([
-    one<{ n: number }>(`SELECT COUNT(*) AS n FROM installs WHERE ${s.sql}`),
-    one<{ n: number }>(`SELECT COUNT(*) AS n FROM installs WHERE first_seen >= ? AND ${s.sql}`, since),
-    activeOn(today),
-    activeOn(isoDay(Date.now() - 6 * DAY_MS)),
-    activeOn(isoDay(Date.now() - 29 * DAY_MS)),
-  ]);
-
-  const daily = await all<{ day: string; active: number }>(
-    `SELECT day, COUNT(DISTINCT install_id) AS active FROM events WHERE day >= ? AND ${s.sql}
-     GROUP BY day ORDER BY day`, since);
-  const newDaily = await all<{ day: string; n: number }>(
-    `SELECT substr(first_seen, 1, 10) AS day, COUNT(*) AS n FROM installs WHERE first_seen >= ? AND ${s.sql}
-     GROUP BY day ORDER BY day`, since);
-  // Older than the raw window: what the nightly rollup kept.
-  const archived = await env.DB.prepare(
-    `SELECT day, value FROM daily_rollups WHERE metric = 'active' AND day >= ? ORDER BY day`
-  ).bind(since).all<{ day: string; value: number }>().then((r) => r.results);
-
-  const propCount = (name: string, prop: string) =>
-    all<{ key: string; n: number }>(
-      `SELECT json_extract(props, '$.${prop}') AS key, COUNT(DISTINCT install_id) AS n FROM events
-       WHERE name = ? AND day >= ? AND ${s.sql} GROUP BY key ORDER BY n DESC`, name, since);
-
-  const [funnel, completed, styles, triggers, feedback, versions, permissions] = await Promise.all([
-    propCount("onboarding_step_viewed", "step"),
-    one<{ n: number }>(`SELECT COUNT(DISTINCT install_id) AS n FROM events
-                        WHERE name = 'onboarding_completed' AND day >= ? AND ${s.sql}`, since),
-    propCount("onboarding_style_selected", "mode"),
-    all<{ key: string; n: number }>(
-      `SELECT json_extract(props, '$.trigger') AS key, COUNT(*) AS n FROM events
-       WHERE name = 'notch_opened' AND day >= ? AND ${s.sql} GROUP BY key ORDER BY n DESC`, since),
-    all<{ key: string; n: number }>(
-      `SELECT json_extract(props, '$.category') AS key, COUNT(*) AS n FROM events
-       WHERE name = 'feedback_sent' AND day >= ? AND ${s.sql} GROUP BY key ORDER BY n DESC`, since),
-    all<{ key: string; n: number }>(
-      `SELECT last_version AS key, COUNT(*) AS n FROM installs WHERE last_seen >= ? AND ${s.sql}
-       GROUP BY key ORDER BY key DESC`, since),
-    all<{ key: string; n: number }>(
-      `SELECT json_extract(props, '$.perm') || ':' || json_extract(props, '$.result') AS key,
-              COUNT(DISTINCT install_id) AS n FROM events
-       WHERE name = 'onboarding_permission' AND day >= ? AND ${s.sql} GROUP BY key ORDER BY n DESC`, since),
-  ]);
-
-  const usage = await all<{ key: string; n: number }>(
-    `SELECT name AS key, COUNT(*) AS n FROM events WHERE day >= ? AND ${s.sql}
-     AND name IN ('todo_created','todo_completed','note_created','step_added','section_created',
-                  'shortcut_used','meeting_alert_shown','calendar_connected')
-     GROUP BY name ORDER BY n DESC`, since);
-
-  return {
-    days, since,
-    totals: {
-      installs: installs?.n ?? 0,
-      new_in_range: newInRange?.n ?? 0,
-      active_today: activeToday?.n ?? 0,
-      active_7d: active7?.n ?? 0,
-      active_30d: active30?.n ?? 0,
-      onboarding_completed: completed?.n ?? 0,
-      feedback_sent: feedback.reduce((sum, row) => sum + row.n, 0),
-    },
-    daily, new_daily: newDaily, archived,
-    funnel, styles, triggers, feedback, versions, permissions, usage,
-  };
 }
 
 // MARK: Nightly
