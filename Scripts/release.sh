@@ -250,40 +250,22 @@ rm -f "$OUT/notarize.zip"
 # cover the container it arrives in.
 echo
 echo "6. Building the disk image"
-# NO custom install window, and this is a deliberate retreat.
-#
-# The designed sheet (artwork + positioned icons, like Wispr Flow's) is built
-# and the artwork is committed at Scripts/assets/dmg-background.png — but
-# Finder will not apply it from this machine. Driving it through AppleScript
-# fails at every step that touches volume contents:
-#
-#   set position of item "Otto.app" ...  -> -10006, can't set
-#   get name of every item of disk ...   -> returns nothing
-#   get item 1 of disk ...               -> -1728, can't get
-#
-# and a run that only sets the background reports success while writing no
-# .DS_Store at all, so nothing persists. Finder can open the window but cannot
-# see or arrange what is inside it: an Automation/Full Disk Access limitation
-# of whatever process runs this script, not a scripting error.
-#
-# Shipping it anyway meant a warning on every release and an unstyled DMG
-# regardless — v1.9.0 shipped exactly that. Better a plain window that works.
-#
-# TO ENABLE IT: grant Full Disk Access (and Finder automation) to the app that
-# runs release.sh — Terminal, or Claude Code — in System Settings > Privacy &
-# Security, then restore the styling block from git history. `brew install
-# create-dmg` is the other route, but it drives Finder the same way and will
-# hit the same wall until that permission exists.
-STAGE="$OUT/dmg-stage"
-rm -rf "$STAGE"; mkdir -p "$STAGE"
-cp -R "$APP" "$STAGE/"
-ln -s /Applications "$STAGE/Applications"
-
+# The branded install window: background, icon positions and window size live
+# in Scripts/dmg-settings.py. dmgbuild writes the window's .DS_Store directly.
+# Scripting Finder to do it failed from this machine at every step that
+# touched the volume (-10006, -1728, no .DS_Store written) — an Automation /
+# Full Disk Access wall — so v1.9.0 to v1.75.6 shipped a plain window
+# (Marcello, 2026-11-03: make it look like Otto).
+# Pinned, in a venv under build/ (ignored): created on first use.
+DMGENV="build/dmgenv"
+if [ ! -x "$DMGENV/bin/dmgbuild" ]; then
+    python3 -m venv "$DMGENV"
+    "$DMGENV/bin/pip" install -q dmgbuild==1.6.1
+fi
 DMG="$OUT/Otto-$VERSION.dmg"
 rm -f "$DMG"
-hdiutil create -volname "Otto" -srcfolder "$STAGE" -ov -format UDZO "$DMG" > /dev/null
+"$DMGENV/bin/dmgbuild" -s Scripts/dmg-settings.py -D app="$APP" "Otto" "$DMG" > /dev/null
 codesign --force --sign "$IDENTITY" --timestamp "$DMG"
-rm -rf "$STAGE"
 
 echo "7. Notarizing the disk image"
 xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --wait \
