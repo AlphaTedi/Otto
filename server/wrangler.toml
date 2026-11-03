@@ -10,6 +10,13 @@ binding = "DB"
 database_name = "otto-telemetry"
 database_id = "92ef8974-195b-4d91-9de6-5fef6585f9c2"
 
+# The website's visit and download counts, written by the otto-site Worker
+# (repo AlphaTedi/website) and only read here, for /dashboard/website.
+[[d1_databases]]
+binding = "SITE"
+database_name = "otto-site-stats"
+database_id = "36858311-9167-4c4b-aaef-5d21bebb2c04"
+
 [triggers]
 # 03:00 UTC: roll yesterday up, drop raw events older than 90 days.
 crons = ["0 3 * * *"]
