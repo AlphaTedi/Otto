@@ -278,20 +278,24 @@ xcrun stapler staple "$DMG" 2>&1 | tail -1 | sed 's/^/   /'
 # only on this Mac (Marcello, 2026-08-04).
 echo
 echo "8. Publishing to GitHub"
+# The same disk image under a fixed name too, so one link always serves the
+# newest build: github.com/AlphaTedi/Otto/releases/latest/download/Otto.dmg
+# (the website's Download button, 2026-11-03).
+cp "$DMG" "$OUT/Otto.dmg"
 if ! command -v gh > /dev/null; then
     echo "   gh not installed — cannot publish the release."
     exit 1
 elif [ -z "$TAG" ]; then
     echo "   No git tag found; tag the commit first, or upload manually."
 elif gh release view "$TAG" > /dev/null 2>&1; then
-    gh release upload "$TAG" "$DMG" "$OUT/Otto.zip" --clobber
+    gh release upload "$TAG" "$DMG" "$OUT/Otto.dmg" "$OUT/Otto.zip" --clobber
     echo "   Updated $TAG"
 else
     # CREATE it, do not print advice. Printing advice is how an appcast got
     # published pointing at a release that did not exist — every installed copy
     # would have been offered an update it could not download
     # (Marcello, 2026-08-04).
-    gh release create "$TAG" "$DMG" "$OUT/Otto.zip" \
+    gh release create "$TAG" "$DMG" "$OUT/Otto.dmg" "$OUT/Otto.zip" \
         --title "Otto ${TAG#v}" --generate-notes
     echo "   Created $TAG"
 fi
