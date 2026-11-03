@@ -341,20 +341,14 @@ struct PermissionsPanel: View {
             ZStack {
                 Circle().strokeBorder(p.ink(0.07), lineWidth: 1).frame(width: 302, height: 302)
                 Circle().strokeBorder(p.ink(0.09), lineWidth: 1).frame(width: 222, height: 222)
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .fill(LinearGradient(colors: [Color(obHex: 0x7C5CFF), Color(obHex: 0x3B2A8A)],
-                                         startPoint: UnitPoint(x: 0.33, y: 0.03),
-                                         endPoint: UnitPoint(x: 0.67, y: 0.97)))
-                    .overlay(
-                        // inset 0 1 0 white @ 25%: the tile's top edge catching light.
-                        RoundedRectangle(cornerRadius: 26, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
-                            .mask(LinearGradient(colors: [.white, .clear],
-                                                 startPoint: .top, endPoint: UnitPoint(x: 0.5, y: 0.08)))
-                    )
-                    .frame(width: 96, height: 96)
-                    .shadow(color: Color(obHex: 0x7C5CFF, alpha: 0.45), radius: 25, y: 20)
-                    .overlay(OttoLogo(width: 68, color: .white))
+                // The app's own icon, so the step can never show a logo the
+                // app no longer has (Marcello, 2026-11-03: it still drew the
+                // old hand-drawn mark on a violet tile).
+                Image(nsImage: NSImage(named: NSImage.applicationIconName) ?? NSImage())
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 104, height: 104)
+                    .shadow(color: Color(obHex: 0x2F4FD8, alpha: 0.45), radius: 25, y: 20)
                 // ON the rings, centred on their strokes (they were placed
                 // by the design's pixel offsets and floated off them).
                 PermissionChip(icon: .calendar, tint: p.amber, granted: permissions.calendar == .granted)

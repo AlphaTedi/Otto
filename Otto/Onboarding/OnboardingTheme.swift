@@ -225,43 +225,6 @@ struct OBGlowBackground: View {
     }
 }
 
-// MARK: Logo (§6.7)
-
-/// The approved canvas vector, a 400×300 viewBox stroked at 30 with round
-/// caps and joins. Drawn as a shape so it is crisp at every size it appears
-/// (190, 170, 68) and takes whatever colour the appearance asks for.
-struct OttoLogoShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        let s = min(rect.width / 400, rect.height / 300)
-        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
-            CGPoint(x: rect.minX + x * s, y: rect.minY + y * s)
-        }
-        var path = Path()
-        path.addEllipse(in: CGRect(x: rect.minX + (85 - 68) * s, y: rect.minY + (205 - 68) * s,
-                                   width: 136 * s, height: 136 * s))
-        path.move(to: p(140, 70)); path.addLine(to: p(182, 282))
-        path.move(to: p(188, 18)); path.addLine(to: p(236, 276))
-        path.move(to: p(104, 108)); path.addLine(to: p(252, 74))
-        path.addEllipse(in: CGRect(x: rect.minX + (318 - 68) * s, y: rect.minY + (200 - 68) * s,
-                                   width: 136 * s, height: 136 * s))
-        path.move(to: p(290, 190)); path.addLine(to: p(318, 218)); path.addLine(to: p(378, 92))
-        return path
-    }
-}
-
-struct OttoLogo: View {
-    let width: CGFloat
-    let color: Color
-
-    var body: some View {
-        OttoLogoShape()
-            .stroke(color, style: StrokeStyle(lineWidth: 30 * width / 400,
-                                              lineCap: .round, lineJoin: .round))
-            .frame(width: width, height: width * 0.75)
-            .accessibilityLabel("Otto")
-    }
-}
-
 // MARK: Icons — the handoff's 24-pt stroke glyphs
 
 enum OBIcon {
