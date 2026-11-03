@@ -63,12 +63,23 @@ jurisdiction, free plan. <https://otto-telemetry.otto-telemetry.workers.dev>
 - `POST /v1/events` — batches from the app (`X-Otto-Key` header).
 - `POST /v1/feedback` — relays one feedback to `FEEDBACK_TO` through Resend
   (secret `RESEND_API_KEY`), attachments ≤ 10 MB total; nothing is stored.
-- `GET /dashboard` — private dashboard; asks for `DASHBOARD_PASSWORD`.
-- `GET /api/summary?days=30` — its numbers (Bearer password).
-- `GET /dashboard/website` — the dashboard's second page: visits to ottotofive.com
-  and downloads of the DMG, read from the D1 database `otto-site-stats` (binding
-  `SITE`), which the site's own Worker `otto-site` (repo AlphaTedi/website) fills.
-- `GET /api/site?days=30` — its numbers (same Bearer password).
+- `GET /dashboard` — private dashboard; asks for `DASHBOARD_PASSWORD`. Three pages
+  (`server/src/pages/`), each over the last 2 or 24 hours (5-minute and hourly
+  buckets) or 7 to 365 days (Amsterdam days):
+  - Overview (`/dashboard`): visitors → downloads → opened Otto → finished
+    onboarding → used it another day, the checks worth a look (downloads that
+    never became an install, installs stopped in onboarding, errors, denied
+    permissions, old versions), downloads against new installs over time.
+  - App (`/dashboard/app`): every install seen in the period with its
+    onboarding status, furthest step, permissions and use; click one for its
+    timeline (`/api/install`); the onboarding funnel with median time per step.
+  - Website (`/dashboard/website`): visitors and downloads down to 5 minutes,
+    the latest visits and downloads with their time, sources, devices,
+    countries, every day. Read from the D1 database `otto-site-stats` (binding
+    `SITE`), which the site's own Worker `otto-site` (repo AlphaTedi/website)
+    fills: daily totals and, for 90 days, one row per hit (no IP).
+- `GET /api/summary?range=24h`, `/api/site?range=24h`, `/api/install?id=…` —
+  their numbers (Bearer password). Ranges: `2h`, `24h`, `7d`, `30d`, `90d`, `365d`.
 - Cron 03:00 UTC — daily rollups (kept forever), raw events deleted after 90 days.
 - IP addresses are never stored. `env = dev` (Debug builds) is excluded from
   every number; so are the IDs in `EXCLUDED_INSTALLS` (wrangler.toml).
