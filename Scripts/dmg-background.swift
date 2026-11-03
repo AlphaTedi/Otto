@@ -26,13 +26,14 @@ func render(scale: CGFloat, to path: String) {
     NSGradient(colors: [c(0xFCF6F3), c(0xF8EAE6), c(0xEAD6EC), c(0xC7B0EE), c(0x9276E0)],
                atLocations: [0, 0.22, 0.45, 0.75, 1], colorSpace: .sRGB)!
         .draw(in: NSRect(x: 0, y: 0, width: 640, height: 400), angle: -90)
-    // Headline in the site's face: Host Grotesk at 450, tracked in (-0.042 em).
-    let para = NSMutableParagraphStyle(); para.alignment = .center; para.lineHeightMultiple = 1.05
+    // Headline in the site's face, Host Grotesk at 450, at its own spacing:
+    // the site's -0.042 em read cramped at this size (Marcello, 2026-11-03).
+    let para = NSMutableParagraphStyle(); para.alignment = .center; para.lineHeightMultiple = 0.95
     let face = NSFontDescriptor(fontAttributes: [.family: "Host Grotesk",
                                                  .variation: [NSNumber(value: 0x77676874): 450]])
     let size: CGFloat = 24
     let title = NSAttributedString(string: "To install, drag Otto\ninto your Applications folder", attributes: [
-        .font: NSFont(descriptor: face, size: size)!, .kern: -0.042 * size,
+        .font: NSFont(descriptor: face, size: size)!,
         .foregroundColor: c(0x1E1530), .paragraphStyle: para])
     title.draw(in: NSRect(x: 0, y: 292, width: 640, height: 70))
     // A hand-drawn arrow from Otto to Applications: it leaves the app's right
