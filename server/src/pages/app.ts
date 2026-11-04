@@ -5,36 +5,36 @@
 import { page } from "./shared";
 
 const body = `
-  <section class="grid kpis" id="kpis"></section>
-  <section class="grid two">
-    <div class="card"><h2>Installs using Otto</h2><p class="sub">Installs that sent anything in each period</p><div id="active"></div></div>
-    <div class="card"><h2>Onboarding started and finished</h2><p class="sub">Installs, by when they did it</p><div id="ob-chart"></div></div>
+  <section class="cards4 first" id="kpis"></section>
+  <section class="two">
+    <article class="card"><h2>Installs using Otto</h2><p class="sub" id="active-sub"></p><div id="active"></div></article>
+    <article class="card"><h2>Onboarding started and finished</h2><p class="sub">Installs, by when they did it</p><div id="ob-chart"></div></article>
   </section>
-  <section class="grid">
-    <div class="card"><h2>Installs, one by one</h2>
+  <section class="gap">
+    <article class="card"><h2>Installs, one by one</h2>
       <p class="sub">Every install seen in <span class="rw"></span>, newest first. Click one to see everything it did, latest first.</p>
       <div class="table"><table>
         <thead><tr><th>Install</th><th>First seen</th><th>Onboarding</th><th>Furthest step</th><th class="num">Took</th>
           <th>Permissions</th><th>Version</th><th>macOS</th><th class="num">Launches</th><th class="num">Notch opens</th>
           <th class="num">To-dos</th><th class="num">Days used</th><th>Last seen</th></tr></thead>
         <tbody id="installs"></tbody>
-      </table></div></div>
+      </table></div></article>
   </section>
-  <section class="grid two">
-    <div class="card"><h2>Onboarding, step by step</h2>
+  <section class="two gap">
+    <article class="card"><h2>Onboarding, step by step</h2>
       <p class="sub">Installs that started onboarding in <span class="rw"></span>; the time is the median spent on that step</p>
-      <div id="funnel" class="rows"></div></div>
-    <div class="card"><h2>Permissions</h2><div id="permissions" class="rows"></div>
-      <h2 style="margin-top:18px">Display style chosen</h2><div id="styles" class="rows"></div></div>
+      <div id="funnel" class="rows"></div></article>
+    <article class="card"><h2>Permissions</h2><p class="sub">Installs, by what they answered</p><div id="permissions" class="rows"></div>
+      <h3>Display style chosen</h3><div id="styles" class="rows"></div></article>
   </section>
-  <section class="grid two">
-    <div class="card"><h2>Errors</h2><div id="errors" class="rows"></div></div>
-    <div class="card"><h2>App versions</h2><p class="sub">Installs active in the period, by the version they run now</p><div id="versions" class="rows"></div></div>
+  <section class="two">
+    <article class="card"><h2>Errors</h2><p class="sub">Reported in <span class="rw"></span></p><div id="errors" class="rows"></div></article>
+    <article class="card"><h2>App versions</h2><p class="sub">Installs in use, by the version they run now</p><div id="versions" class="rows"></div></article>
   </section>
-  <section class="grid two">
-    <div class="card"><h2>How the notch is opened</h2><div id="triggers" class="rows"></div></div>
-    <div class="card"><h2>What people do</h2><div id="usage" class="rows"></div>
-      <h2 style="margin-top:18px">Feedback sent</h2><div id="feedback" class="rows"></div></div>
+  <section class="two">
+    <article class="card"><h2>How the notch is opened</h2><p class="sub">Times, in <span class="rw"></span></p><div id="triggers" class="rows"></div></article>
+    <article class="card"><h2>What people do</h2><p class="sub">Times, and by how many installs</p><div id="usage" class="rows"></div>
+      <h3>Feedback sent</h3><div id="feedback" class="rows"></div></article>
   </section>
   <p class="note">Only installs that share anonymous usage data; no to-do, note or calendar event is ever sent. Up to
     1.75.7 an install reports only once its onboarding is finished, so "Stopped" can only show up for versions that
@@ -75,17 +75,20 @@ function draw(d) {
   const stopped = d.installs.filter((r) => status(r)[0] === "Stopped").length;
   const fresh = d.installs.filter((r) => Date.parse(r.first_seen) >= d.from).length;
   $("kpis").replaceChildren(
-    kpi("Installs using Otto", n(t.active), change(t.active, p.active)),
-    kpi("New installs", n(t.new), change(t.new, p.new)),
-    kpi("Finished onboarding", n(t.finished), change(t.finished, p.finished)),
-    kpi("Stopped in onboarding", n(stopped), stopped ? "See the table below" : "None", stopped ? "bad" : ""),
-    kpi("Used it again another day", n(t.returned), fresh ? "of " + n(fresh) + " new in the period" : "No new installs"),
-    kpi("Errors", n(t.errors), t.errors ? (() => { const k = d.errors.reduce((s, r) => s + r.installs, 0); return "From " + n(k) + (k === 1 ? " install" : " installs"); })() : "None reported", t.errors ? "bad" : ""),
-    kpi("All installs", n(t.installs), n(t.active_7d) + " active in the last 7 days"),
+    stat({ title: "Using Otto", sub: Range(), value: n(t.active), change: change(t.active, p.active),
+           items: [["Installed", n(t.installs)], ["Today", n(t.active_today)], ["7 days", n(t.active_7d)]] }),
+    stat({ title: "New installs", sub: Range(), value: n(t.new), change: change(t.new, p.new),
+           items: [["Used again another day", fresh ? n(t.returned) + " of " + n(fresh) : "—"]] }),
+    stat({ title: "Finished onboarding", sub: Range(), value: n(t.finished), change: change(t.finished, p.finished),
+           items: [["Typical time", dur(d.onboarding.total_ms)]] }),
+    stat({ title: "Stopped in onboarding", sub: "Started, didn't finish, quiet for 30 min", value: n(stopped),
+           change: stopped ? "See the installs below" : "", cls: stopped ? "bad" : "",
+           items: [["Errors", n(t.errors)]] }),
   );
-  barChart($("active"), d.buckets, d.step, [{ key: "active", label: "Installs using Otto", color: "var(--violet)" }]);
+  $("active-sub").textContent = STEP_WORDS[d.step] + ", " + RANGE_WORDS[range];
+  barChart($("active"), d.buckets, d.step, [{ key: "active", label: "Installs using Otto", color: "var(--c1)" }]);
   barChart($("ob-chart"), d.buckets, d.step, [
-    { key: "started", label: "Started", color: "var(--blue)" }, { key: "finished", label: "Finished", color: "var(--green)" }]);
+    { key: "started", label: "Started", color: "var(--c4)" }, { key: "finished", label: "Finished", color: "var(--c3)" }]);
 
   // the installs table, and each one's timeline under it
   const body = $("installs");
@@ -113,12 +116,12 @@ function draw(d) {
 
   const steps = STEP_NAMES.map((key) => ({ key, n: (d.onboarding.steps.find((s) => s.key === key || s.step === key) || { n: 0 }).n }));
   rows($("funnel"), d.onboarding.started ? steps : [], {
-    color: "var(--violet)", empty: "Nobody started onboarding in " + RANGE_WORDS[range],
+    color: "var(--c4)", empty: "Nobody started onboarding in " + RANGE_WORDS[range],
     value: (r) => { const ms = d.onboarding.step_ms[r.key]; const w = el("span", "", n(r.n)); if (ms) w.append(el("small", "", " " + dur(ms))); return w; },
   });
   rows($("permissions"), d.permissions, { label: (r) => permText(r.key.replace(" ", "")) });
   rows($("styles"), d.styles);
-  rows($("errors"), d.errors, { color: "var(--pink)", empty: "No errors reported",
+  rows($("errors"), d.errors, { color: "var(--bad)", empty: "No errors reported",
     value: (r) => { const w = el("span", "", n(r.n)); w.append(el("small", "", " " + n(r.installs) + (r.installs === 1 ? " install" : " installs"))); return w; } });
   rows($("versions"), d.versions, { label: (r) => r.key + (r.key === d.latest_version ? " (latest)" : "") });
   rows($("triggers"), d.triggers);
