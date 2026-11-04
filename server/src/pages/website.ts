@@ -7,27 +7,27 @@
 import { page } from "./shared";
 
 const body = `
-  <section class="grid kpis" id="kpis"></section>
-  <section class="grid">
-    <div class="card"><h2>Visitors and downloads</h2><p class="sub" id="traffic-sub"></p><div id="traffic"></div></div>
+  <section class="cards3 first" id="kpis"></section>
+  <section>
+    <article class="card"><h2>Visitors and downloads</h2><p class="sub" id="traffic-sub"></p><div id="traffic"></div></article>
   </section>
-  <section class="grid two">
-    <div class="card"><h2>Latest visits and downloads</h2><p class="sub" id="recent-sub"></p>
+  <section class="two gap">
+    <article class="card"><h2>Latest visits and downloads</h2><p class="sub" id="recent-sub"></p>
       <div class="table short"><table>
         <thead><tr><th>When</th><th>What</th><th>From</th><th>Country</th><th>Device</th></tr></thead>
         <tbody id="recent"></tbody>
-      </table></div></div>
-    <div class="card"><h2>Where visitors come from</h2><p class="sub" id="sources-sub"></p><div id="sources" class="rows"></div>
-      <h2 style="margin-top:18px">Devices</h2><p class="sub">Otto installs only on a Mac</p><div id="devices" class="rows"></div>
-      <h2 style="margin-top:18px">Countries</h2><div id="countries" class="rows"></div></div>
+      </table></div></article>
+    <article class="card"><h2>Where visitors come from</h2><p class="sub" id="sources-sub"></p><div id="sources" class="rows"></div>
+      <h3>Devices</h3><p class="sub">Otto installs only on a Mac</p><div id="devices" class="rows"></div>
+      <h3>Countries</h3><div id="countries" class="rows"></div></article>
   </section>
-  <section class="grid" id="days-card">
-    <div class="card"><h2>Every day</h2>
+  <section id="days-card">
+    <article class="card"><h2>Every day</h2><p class="sub">Newest first</p>
       <div class="table"><table>
         <thead><tr><th>Day</th><th class="num">Visitors</th><th class="num">Page views</th><th class="num">People who downloaded</th>
           <th class="num">Downloads</th><th class="num">Download rate</th></tr></thead>
         <tbody id="days"></tbody>
-      </table></div></div>
+      </table></div></article>
   </section>
   <p class="note">ottotofive.com, counted by the site itself: no cookies, no IP addresses kept. A visitor is one person
     on one day, so someone who comes back the next day counts again; "again" marks a second visit or download by the
@@ -48,14 +48,13 @@ function draw(d) {
   const t = d.totals, p = d.previous;
   const mac = d.devices.find((r) => r.key === "mac"), seen = d.devices.reduce((s, r) => s + Number(r.n), 0);
   $("kpis").replaceChildren(
-    kpi("Visitors", n(t.visitors), change(t.visitors, p.visitors)),
-    kpi("People who downloaded", n(t.downloaders), change(t.downloaders, p.downloaders)),
-    kpi("Download rate", pct(ratio(t.downloaders, t.visitors)),
-        ratio(t.downloaders, t.visitors) !== null && ratio(p.downloaders, p.visitors) !== null
-          ? change(ratio(t.downloaders, t.visitors), ratio(p.downloaders, p.visitors), { points: true }) : "People who downloaded per visitor"),
-    kpi("Visitors on a Mac", seen ? pct(ratio(mac ? Number(mac.n) : 0, seen)) : "—", seen ? n(mac ? mac.n : 0) + " of " + n(seen) : "No visits noted yet"),
-    kpi("Page views", n(t.views), change(t.views, p.views)),
-    kpi("Downloads", n(t.downloads), change(t.downloads, p.downloads)),
+    stat({ title: "People who downloaded", sub: Range(), value: n(t.downloaders), change: change(t.downloaders, p.downloaders),
+           items: [["Downloads", n(t.downloads)]] }),
+    stat({ title: "Visitors", sub: Range(), value: n(t.visitors), change: change(t.visitors, p.visitors),
+           items: [["Page views", n(t.views)], ["On a Mac", seen ? pct(ratio(mac ? Number(mac.n) : 0, seen)) : "—"]] }),
+    stat({ title: "Download rate", sub: "People who downloaded per visitor, " + RANGE_WORDS[range], value: pct(ratio(t.downloaders, t.visitors)),
+           change: ratio(t.downloaders, t.visitors) !== null && ratio(p.downloaders, p.visitors) !== null
+             ? change(ratio(t.downloaders, t.visitors), ratio(p.downloaders, p.visitors), { points: true }) : null }),
   );
 
   const since = d.logged_since ? Date.parse(d.logged_since) : null;
@@ -63,10 +62,10 @@ function draw(d) {
   $("traffic-sub").textContent = (d.step === "min5" ? "Every 5 minutes" : d.step === "hour" ? "Every hour" : "Every day")
     + (partial && d.step !== "day" ? "; single visits are noted from " + when(d.logged_since) : "");
   barChart($("traffic"), d.buckets, d.step, [
-    { key: "visitors", label: "Visitors", color: "var(--blue)" }, { key: "downloaders", label: "People who downloaded", color: "var(--green)" }]);
+    { key: "visitors", label: "Visitors", color: "var(--c1)" }, { key: "downloaders", label: "People who downloaded", color: "var(--c2)" }]);
 
-  const notedFrom = partial ? "Noted from " + when(d.logged_since) + "; " : "";
-  $("recent-sub").textContent = notedFrom + "newest first, your local time";
+  const notedFrom = partial ? "Noted from " + when(d.logged_since) + ". " : "";
+  $("recent-sub").textContent = notedFrom + "Newest first, in your local time";
   $("sources-sub").textContent = (partial ? "Noted from " + when(d.logged_since) + ". " : "") + "The site that linked to the visit, or a ?ref= on the link";
   const recent = $("recent");
   if (!d.recent.length) {
@@ -80,11 +79,11 @@ function draw(d) {
               el("td", "", country(h.country)), el("td", "", DEVICES[h.device || ""] || h.device));
     return tr;
   }));
-  rows($("sources"), d.sources, { label: (r) => source(r.key), color: "var(--blue)", empty: "No visits noted in this period" });
-  rows($("devices"), d.devices.filter((r) => Number(r.n) > 0), { label: (r) => DEVICES[r.key] || r.key, color: "var(--blue)",
+  rows($("sources"), d.sources, { label: (r) => source(r.key), color: "var(--c1)", empty: "No visits noted in this period" });
+  rows($("devices"), d.devices.filter((r) => Number(r.n) > 0), { label: (r) => DEVICES[r.key] || r.key, color: "var(--c1)",
     empty: "No visits noted in this period",
     value: (r) => { const w = el("span", "", n(r.n)); if (Number(r.downloaded)) w.append(el("small", "", " · " + n(r.downloaded) + " downloaded")); return w; } });
-  rows($("countries"), d.countries, { label: (r) => country(r.key), color: "var(--blue)", empty: "No visits noted in this period" });
+  rows($("countries"), d.countries, { label: (r) => country(r.key), color: "var(--c1)", empty: "No visits noted in this period" });
 
   $("days-card").hidden = d.step !== "day";
   if (d.step === "day") {

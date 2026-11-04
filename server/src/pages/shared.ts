@@ -1,120 +1,152 @@
 // What the three dashboard pages share: the look, the password gate, the
-// header with its tabs and period, and small helpers for charts and lists.
-// Static pages, no framework, no CDN: everything comes from /api/*.
+// header with its tabs and period, and small helpers for cards, charts and
+// lists. Static pages, no framework, nothing loaded from elsewhere: the data
+// comes from /api/*.
+//
+// The look follows the Dashboard pages Claude makes (the "Otto Site Stats"
+// one): a near-black page, grey cards, sentence-case titles, big serif numbers,
+// light and dark following the system. Claude's own fonts only exist inside
+// Claude, so the serif is Source Serif 4 (font.ts) and the sans the system's.
 //
 // The page scripts live inside template literals, so they never use
 // backticks, "${" or backslashes: they are written with plain string joins.
 
+import { SERIF_WOFF2 } from "./font";
+
 export const STYLE = `
+  @font-face { font-family: "Otto Serif"; font-weight: 400; font-style: normal; font-display: swap;
+               src: url(data:font/woff2;base64,${SERIF_WOFF2}) format("woff2"); }
   :root {
-    --bg: #0b0b0f; --panel: #15151c; --line: rgba(255,255,255,.08);
-    --text: #f2f1f5; --dim: rgba(242,241,245,.62); --faint: rgba(242,241,245,.4);
-    --violet: #9d8bff; --green: #7fe3a8; --amber: #ffc98a; --pink: #ff9ec7; --blue: #8ccaff;
+    color-scheme: light dark;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --serif: "Otto Serif", ui-serif, Georgia, "Times New Roman", serif;
+    --bg: #f6f6f4; --panel: #ffffff; --line: rgba(0,0,0,.08); --hover: rgba(0,0,0,.035);
+    --fg: rgba(0,0,0,.9); --fg2: rgba(0,0,0,.62); --muted: rgba(0,0,0,.48);
+    --grid: rgba(0,0,0,.07); --axis: rgba(0,0,0,.2); --track: rgba(0,0,0,.06);
+    --ok: #1f7a2e; --bad: #b3292c; --warn: #8a5a00; --live: #2a64c4;
+    --popover: #ffffff; --shadow: 0 8px 24px #0000001f, 0 2px 6px #00000014;
+    --c1: #3f7fdc; --c2: #d0662f; --c3: #3c9a6e; --c4: #8a6ad6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0b0b; --panel: #1f1f1f; --line: rgba(255,255,255,.05); --hover: rgba(255,255,255,.035);
+      --fg: rgba(255,255,255,.93); --fg2: rgba(255,255,255,.62); --muted: rgba(255,255,255,.45);
+      --grid: rgba(255,255,255,.08); --axis: rgba(255,255,255,.16); --track: rgba(255,255,255,.07);
+      --ok: #73c364; --bad: #f17778; --warn: #e49c06; --live: #7fb0f5;
+      --popover: #303030; --shadow: 0 8px 24px #00000052, 0 2px 6px #0003;
+      --c1: #4d8ae6; --c2: #d76e38; --c3: #4fae7f; --c4: #9b7be0;
+    }
   }
   * { box-sizing: border-box; }
   /* display:flex on #gate would otherwise beat the hidden attribute. */
   [hidden] { display: none !important; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
-  main { max-width: 1180px; margin: 0 auto; padding: 28px 20px 64px; }
-  header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap; }
-  .head-left { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
-  h1 { font-size: 22px; font-weight: 600; margin: 0; letter-spacing: -.01em; }
-  .tabs { display: flex; gap: 4px; }
-  .tabs a { color: var(--dim); text-decoration: none; font-size: 13px; font-weight: 600;
-       padding: 5px 10px; border-radius: 8px; border: 1px solid transparent; }
-  .tabs a:hover { color: var(--text); }
-  .tabs a[aria-current="page"] { color: var(--text); background: var(--panel); border-color: var(--line); }
-  .controls { display: flex; align-items: center; gap: 10px; }
-  .updated { color: var(--faint); font-size: 12px; }
-  h2 { font-size: 13px; font-weight: 600; color: var(--dim); margin: 0 0 12px;
-       text-transform: uppercase; letter-spacing: .04em; }
-  .sub { color: var(--faint); font-size: 12.5px; margin: -6px 0 12px; }
-  .lede { color: var(--dim); font-size: 16px; margin: 20px 0 0; max-width: 60rem; }
-  .lede b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
-  .banner { background: rgba(255,158,199,.1); border: 1px solid rgba(255,158,199,.3); color: var(--pink);
-       border-radius: 10px; padding: 10px 14px; margin: 16px 0 0; }
-  select, input, button { font: inherit; color: var(--text); background: var(--panel);
-       border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
-  button { background: var(--text); color: #111; border: 0; font-weight: 600; cursor: pointer; }
-  .grid { display: grid; gap: 12px; margin-top: 16px; }
-  .grid > .card { min-width: 0; }
-  .kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-top: 20px; }
-  .two { grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
-  .kpi .v { font-size: 28px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
-  .kpi .l { color: var(--dim); font-size: 12.5px; }
-  .kpi .d { color: var(--faint); font-size: 12px; margin-top: 4px; font-variant-numeric: tabular-nums; }
-  .kpi.warn { border-color: rgba(255,201,138,.35); } .kpi.warn .v { color: var(--amber); }
-  .kpi.bad { border-color: rgba(255,158,199,.35); } .kpi.bad .v { color: var(--pink); }
-  .up { color: var(--green); } .down { color: var(--pink); }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--sans);
+         -webkit-font-smoothing: antialiased; }
+  main { max-width: 1200px; margin: 0 auto; padding: 28px 24px 64px; }
+  header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; }
+  .head-left { display: flex; align-items: baseline; gap: 20px; flex-wrap: wrap; }
+  h1 { font: 400 22px/1.2 var(--serif); margin: 0; }
+  .tabs { display: flex; gap: 2px; }
+  .tabs a { color: var(--muted); text-decoration: none; font-size: 14px; padding: 4px 10px; border-radius: 6px; }
+  .tabs a:hover { color: var(--fg); background: var(--hover); }
+  .tabs a[aria-current="page"] { color: var(--fg); background: var(--panel); box-shadow: inset 0 0 0 1px var(--line); }
+  .controls { display: flex; align-items: center; gap: 12px; }
+  .updated { color: var(--muted); font-size: 12px; }
+  .lede { color: var(--muted); font-size: 15px; margin: 14px 0 0; max-width: 62rem; }
+  .lede b { color: var(--fg); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .banner { color: var(--bad); background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+            padding: 10px 14px; margin: 16px 0 0; }
+  select, input, button { font: inherit; color: var(--fg); background: var(--panel); border: 1px solid var(--line);
+                          border-radius: 8px; padding: 6px 10px; }
+  button { background: var(--fg); color: var(--bg); border: 0; font-weight: 500; cursor: pointer; }
 
-  .chart { position: relative; }
+  section { display: grid; gap: 16px; margin-top: 16px; }
+  section.first { margin-top: 24px; }
+  section.gap { margin-top: 28px; }
+  .cards3 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
+  .cards4 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); }
+  .two { grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px 16px 18px; min-width: 0; }
+  .card h2 { font-size: 15px; font-weight: 500; margin: 0; color: var(--fg); }
+  .card h3 { font-size: 14px; font-weight: 500; margin: 20px 0 0; color: var(--fg); }
+  .sub { color: var(--muted); font-size: 12px; margin: 3px 0 0; }
+  .body { margin-top: 14px; }
+
+  .stat .big { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+  .stat .big .n { font: 400 40px/1 var(--serif); font-variant-numeric: lining-nums tabular-nums; }
+  .stat .chg { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .stat .items { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 16px 0 0; padding: 0; list-style: none;
+                 color: var(--muted); font-size: 12px; }
+  .stat .items b { color: var(--fg); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .stat.bad .big .n { color: var(--bad); }
+  .up { color: var(--ok); } .down { color: var(--bad); }
+
+  .chart { position: relative; margin-top: 14px; }
   .chart svg { display: block; overflow: visible; touch-action: pan-y; }
-  .chart text { fill: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
-  .chart .grid-line { stroke: rgba(255,255,255,.06); }
-  .chart .axis-line { stroke: rgba(255,255,255,.16); }
-  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--dim); margin: -4px 0 8px; }
-  .legend i, .tip i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
-  .tip { position: absolute; pointer-events: none; background: #050507; border: 1px solid var(--line);
-       border-radius: 8px; padding: 6px 9px; font-size: 12px; white-space: nowrap; z-index: 2;
-       font-variant-numeric: tabular-nums; }
-  .tip .t { color: var(--faint); margin-bottom: 2px; }
+  .chart text { fill: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .chart .grid-line { stroke: var(--grid); }
+  .chart .axis-line { stroke: var(--axis); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+  .legend i, .tip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+  .tip { position: absolute; pointer-events: none; background: var(--popover); box-shadow: var(--shadow);
+         border-radius: 8px; padding: 7px 10px; font-size: 12px; white-space: nowrap; z-index: 2; font-variant-numeric: tabular-nums; }
+  .tip .t { color: var(--muted); margin-bottom: 2px; }
 
-  .rows > div { display: grid; grid-template-columns: minmax(90px, 160px) 1fr minmax(64px, auto); gap: 10px; align-items: center;
-       padding: 4px 0; font-size: 13px; }
+  .rows { margin-top: 12px; }
+  .rows > div { display: grid; grid-template-columns: minmax(90px, 170px) 1fr minmax(56px, auto); gap: 12px; align-items: center;
+                padding: 5px 0; font-size: 13px; }
   .rows .k { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .rows .track { background: rgba(255,255,255,.06); border-radius: 4px; height: 8px; overflow: hidden; }
-  .rows .fill { display: block; height: 100%; background: var(--green); border-radius: 4px; }
-  .rows .n { text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .rows .n small { color: var(--faint); font-size: 11px; }
+  .rows .track { background: var(--track); border-radius: 3px; height: 8px; overflow: hidden; }
+  .rows .fill { display: block; height: 100%; background: var(--c1); border-radius: 3px; }
+  .rows .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .rows .n small { color: var(--muted); font-size: 12px; }
 
-  .checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-  .checks li { display: grid; grid-template-columns: 10px 1fr; gap: 10px; align-items: start; }
-  .checks .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; background: var(--faint); }
-  .checks .ok .dot { background: var(--green); } .checks .warn .dot { background: var(--amber); }
-  .checks .bad .dot { background: var(--pink); } .checks .live .dot { background: var(--blue); }
-  .checks .what { font-weight: 600; } .checks .why { color: var(--faint); font-size: 12.5px; margin-top: 2px; }
+  .checks { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 12px; }
+  .checks li { display: grid; grid-template-columns: 8px 1fr; gap: 12px; align-items: start; }
+  .checks .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; background: var(--muted); }
+  .checks .ok .dot { background: var(--ok); } .checks .warn .dot { background: var(--warn); }
+  .checks .bad .dot { background: var(--bad); } .checks .live .dot { background: var(--live); }
+  .checks .what { font-weight: 500; } .checks .why { color: var(--muted); font-size: 12px; margin-top: 2px; }
 
-  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
-  .pill.ok { background: rgba(127,227,168,.13); color: var(--green); }
-  .pill.warn { background: rgba(255,201,138,.13); color: var(--amber); }
-  .pill.bad { background: rgba(255,158,199,.13); color: var(--pink); }
-  .pill.live { background: rgba(140,202,255,.13); color: var(--blue); }
-  .pill.dim { background: rgba(255,255,255,.06); color: var(--dim); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .pill.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+  .pill.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+  .pill.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent); }
+  .pill.live { color: var(--live); background: color-mix(in srgb, var(--live) 14%, transparent); }
+  .pill.dim { color: var(--fg2); background: var(--track); }
 
-  .table { overflow: auto; max-height: 560px; }
-  .table.short { max-height: 420px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .table { overflow: auto; max-height: 560px; margin-top: 14px; }
+  .table.short { max-height: 430px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
   th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: top; }
-  th { position: sticky; top: 0; background: var(--panel); color: var(--dim); font-weight: 600; font-size: 12px; z-index: 1; }
+  th { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-weight: 500; font-size: 12px; z-index: 1; }
   td.num, th.num { text-align: right; }
-  td.muted { color: var(--faint); }
+  td.muted, span.muted { color: var(--muted); }
   tr.row { cursor: pointer; }
-  tr.row:hover td { background: rgba(255,255,255,.03); }
-  tr.row.open td { background: rgba(157,139,255,.08); }
-  tr.detail td { white-space: normal; background: rgba(0,0,0,.25); padding: 12px 14px 16px; }
-  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+  tr.row:hover td { background: var(--hover); }
+  tr.row.open td { background: var(--hover); }
+  tr.detail td { white-space: normal; background: var(--bg); padding: 14px 16px 18px; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; }
 
-  .timeline .meta { color: var(--dim); font-size: 12.5px; margin-bottom: 8px; }
-  .timeline .meta b { color: var(--text); font-weight: 600; }
-  .timeline .day { color: var(--dim); font-weight: 600; font-size: 12px; margin: 12px 0 4px; }
-  .timeline .ev { display: grid; grid-template-columns: 64px minmax(150px, 220px) 1fr; gap: 10px; font-size: 12.5px; padding: 2px 0; }
-  .timeline .tm { color: var(--faint); font-variant-numeric: tabular-nums; }
-  .timeline .props { color: var(--faint); }
-  .timeline .ob .what { color: var(--violet); }
-  .timeline .done .what { color: var(--green); }
-  .timeline .err .what { color: var(--pink); }
+  .timeline .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+  .timeline .meta b { color: var(--fg); font-weight: 500; }
+  .timeline .day { font-weight: 500; font-size: 13px; margin: 14px 0 4px; }
+  .timeline .ev { display: grid; grid-template-columns: 70px minmax(150px, 230px) 1fr; gap: 12px; font-size: 13px; padding: 2px 0; }
+  .timeline .tm { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .timeline .props { color: var(--muted); }
+  .timeline .ob .what { color: var(--c4); }
+  .timeline .done .what { color: var(--ok); }
+  .timeline .err .what { color: var(--bad); }
 
-  .empty { color: var(--faint); font-size: 13px; margin: 0; }
-  .note { color: var(--faint); font-size: 12px; margin-top: 28px; max-width: 60rem; }
+  .empty { color: var(--muted); font-size: 13px; margin: 12px 0 0; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 28px; max-width: 62rem; }
   #gate { max-width: 320px; margin: 18vh auto; display: flex; flex-direction: column; gap: 10px; }
-  #gate p { color: var(--dim); margin: 0 0 6px; }
-  #error { color: var(--pink); font-size: 13px; min-height: 18px; }
+  #gate p { color: var(--muted); margin: 0 0 6px; }
+  #error { color: var(--bad); font-size: 13px; min-height: 18px; }
   @media (max-width: 600px) {
-    main { padding: 20px 14px 48px; }
+    main { padding: 20px 16px 48px; }
     .rows > div { grid-template-columns: minmax(80px, 120px) 1fr minmax(52px, auto); }
-    .timeline .ev { grid-template-columns: 58px 1fr; }
+    .timeline .ev { grid-template-columns: 62px 1fr; }
     .timeline .ev .props { grid-column: 2; }
   }
 `;
@@ -133,13 +165,16 @@ const RANGE_WORDS = { "2h": "the last 2 hours", "24h": "the last 24 hours", "7d"
                       "30d": "the last 30 days", "90d": "the last 90 days", "365d": "the last year" };
 const PREV_WORDS = { "2h": "the 2 hours before", "24h": "the day before", "7d": "the week before",
                      "30d": "the 30 days before", "90d": "the 90 days before", "365d": "the year before" };
+const STEP_WORDS = { min5: "Every 5 minutes", hour: "Every hour", day: "Every day" };
 let range = new URLSearchParams(location.search).get("range") || store.get(RANGE_KEY) || "24h";
 if (!RANGES.some((r) => r[0] === range)) range = "24h";
+const Range = () => RANGE_WORDS[range].charAt(0).toUpperCase() + RANGE_WORDS[range].slice(1);
 
 const int = new Intl.NumberFormat("en");
 const n = (v) => int.format(Number(v) || 0);
 const pct = (v) => v === null || v === undefined || !isFinite(v) ? "—" : (v * 100).toFixed(v < 0.1 && v > 0 ? 1 : 0) + "%";
 const ratio = (a, b) => b ? a / b : null;
+const plural = (k, one, many) => n(k) + " " + (Number(k) === 1 ? one : many);
 const dtf = (o) => new Intl.DateTimeFormat("en-GB", o);
 const F = { time: dtf({ hour: "2-digit", minute: "2-digit" }), secs: dtf({ hour: "2-digit", minute: "2-digit", second: "2-digit" }),
             day: dtf({ weekday: "short", day: "numeric", month: "short" }), short: dtf({ day: "numeric", month: "short" }),
@@ -173,7 +208,10 @@ function el(tag, cls, text) {
   if (text !== undefined && text !== null) e.textContent = text;
   return e;
 }
-function fillWords() { document.querySelectorAll(".rw").forEach((s) => { s.textContent = RANGE_WORDS[range]; }); }
+function fillWords() {
+  document.querySelectorAll(".rw").forEach((s) => { s.textContent = RANGE_WORDS[range]; });
+  document.querySelectorAll(".Rw").forEach((s) => { s.textContent = Range(); });
+}
 
 async function api(path) {
   const res = await fetch(path + (path.indexOf("?") < 0 ? "?" : "&") + "range=" + range,
@@ -183,22 +221,31 @@ async function api(path) {
   return res.json();
 }
 
-// a change against the period before: signed, green when up (pink when down, unless lower is better)
+// a change against the period before: signed, green when up, red when down
 function change(now, before, opts) {
   opts = opts || {};
   if (now === null || now === undefined || before === null || before === undefined) return null;
   const d = now - before;
-  const good = opts.lowerIsBetter ? d < 0 : d > 0, bad = opts.lowerIsBetter ? d > 0 : d < 0;
   const wrap = el("span");
-  wrap.append(el("span", good ? "up" : bad ? "down" : "",
+  wrap.append(el("span", d > 0 ? "up" : d < 0 ? "down" : "",
                  (d > 0 ? "+" : "") + (opts.points ? (d * 100).toFixed(1) + " pts" : n(d))),
               document.createTextNode(" vs " + PREV_WORDS[range]));
   return wrap;
 }
-function kpi(label, value, note, cls) {
-  const card = el("div", "card kpi" + (cls ? " " + cls : ""));
-  card.append(el("div", "v", value), el("div", "l", label));
-  if (note) { const d = el("div", "d"); if (typeof note === "string") d.textContent = note; else d.append(note); card.append(d); }
+// a card: title, what it covers, the big number with its change, then a line of smaller numbers
+function stat(o) {
+  const card = el("article", "card stat" + (o.cls ? " " + o.cls : ""));
+  card.append(el("h2", "", o.title));
+  if (o.sub) card.append(el("p", "sub", o.sub));
+  const big = el("div", "big");
+  big.append(el("span", "n", o.value));
+  if (o.change) { const c = el("span", "chg"); if (typeof o.change === "string") c.textContent = o.change; else c.append(o.change); big.append(c); }
+  card.append(big);
+  if (o.items && o.items.length) {
+    const list = el("ul", "items");
+    o.items.forEach((it) => { const li = el("li", "", it[0] + " "); li.append(el("b", "", it[1])); list.append(li); });
+    card.append(list);
+  }
   return card;
 }
 
@@ -223,7 +270,7 @@ function barChart(box, buckets, step, series) {
     series.forEach((s) => { const item = el("span"); const sw = el("i"); sw.style.background = s.color; item.append(sw, document.createTextNode(s.label)); legend.append(item); });
     box.append(legend);
   }
-  const W = Math.max(280, box.clientWidth), H = 190, T = 10, B = 24;
+  const W = Math.max(280, box.clientWidth), H = 200, T = 8, B = 26;
   const max = Math.max(0, ...buckets.map((b) => Math.max(...series.map((s) => b.values[s.key] || 0))));
   const top = niceTop(max);
   const ticks = [0, top / 4, top / 2, top * 3 / 4, top].filter((t) => Number.isInteger(t));
@@ -232,24 +279,24 @@ function barChart(box, buckets, step, series) {
   let L = 0;
   ticks.forEach((t) => { probe.textContent = n(t); L = Math.max(L, probe.getComputedTextLength()); });
   probe.remove();
-  L = Math.ceil(L) + 10;
+  L = Math.ceil(L) + 12;
   const y = (v) => T + (H - T - B) * (1 - v / top);
   const slot = (W - L) / buckets.length;
-  const hl = svg("rect", { x: 0, y: T, width: slot, height: H - T - B, fill: "rgba(255,255,255,.05)", visibility: "hidden" }, root);
+  const hl = svg("rect", { x: 0, y: T, width: slot, height: H - T - B, fill: "var(--hover)", visibility: "hidden" }, root);
   ticks.forEach((t) => {
     svg("line", { x1: L, x2: W, y1: y(t), y2: y(t), class: t === 0 ? "axis-line" : "grid-line" }, root);
-    svg("text", { x: L - 6, y: y(t) + 4, "text-anchor": "end" }, root).textContent = n(t);
+    svg("text", { x: L - 8, y: y(t) + 4, "text-anchor": "end" }, root).textContent = n(t);
   });
-  const inner = Math.min(slot * 0.78, 16 * series.length + 2);
+  const inner = Math.min(slot * 0.72, 24 * series.length + 2);
   const bw = inner / series.length;
   buckets.forEach((b, i) => series.forEach((s, j) => {
     const v = b.values[s.key] || 0;
     if (v <= 0) return;
-    svg("rect", { x: L + i * slot + (slot - inner) / 2 + j * bw, y: y(v), width: Math.max(1, bw - (series.length > 1 ? 1 : 0)),
-                  height: Math.max(1, y(0) - y(v)), rx: Math.min(3, bw / 3), fill: s.color }, root);
+    svg("rect", { x: L + i * slot + (slot - inner) / 2 + j * bw, y: y(v), width: Math.max(1, bw - (series.length > 1 ? 2 : 0)),
+                  height: Math.max(1, y(0) - y(v)), rx: Math.min(4, bw / 3), fill: s.color }, root);
   }));
   // dates or times along the bottom, counted back from now, never touching
-  const every = Math.max(1, Math.ceil(buckets.length / Math.max(2, Math.floor((W - L) / 72))));
+  const every = Math.max(1, Math.ceil(buckets.length / Math.max(2, Math.floor((W - L) / 80))));
   let leftEdge = Infinity;
   for (let i = buckets.length - 1; i >= 0; i -= every) {
     const cx = L + i * slot + slot / 2;
@@ -257,7 +304,7 @@ function barChart(box, buckets, step, series) {
     t.textContent = bucketLabel(buckets[i].start, step);
     const w = t.getComputedTextLength();
     const x = Math.min(W - w / 2, Math.max(L + w / 2, cx));
-    if (x + w / 2 > leftEdge - 8) { t.remove(); continue; }
+    if (x + w / 2 > leftEdge - 10) { t.remove(); continue; }
     t.setAttribute("x", x);
     leftEdge = x - w / 2;
   }

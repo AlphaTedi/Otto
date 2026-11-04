@@ -116,6 +116,7 @@ export async function appSummary(env: Env, range: Range) {
   const q = <T>(sql: string, binds: unknown[]) => env.DB.prepare(sql).bind(...binds).all<T>().then((r) => r.results);
   const first = async <T>(sql: string, binds: unknown[]) => (await q<T>(sql, binds))[0];
   const from = iso(range.from), prevFrom = iso(range.prevFrom);
+  const today = midnight(amsterdamDay());
   const B = (col: string) => bucketSQL(range.step, col);
   type Row = { b: string | number; n: number };
 
@@ -158,10 +159,17 @@ export async function appSummary(env: Env, range: Range) {
        FROM installs i LEFT JOIN events e ON e.install_id = i.install_id AND e.env = 'prod'
        WHERE ${si.sql} AND (i.last_seen >= ? OR i.first_seen >= ?)
        GROUP BY i.install_id ORDER BY i.first_seen DESC LIMIT 300`, [...si.binds, from, from]),
-    first<{ installs: number; active7: number }>(
-      `SELECT COUNT(*) AS installs, COALESCE(SUM(last_seen >= ?), 0) AS active7 FROM installs WHERE ${s.sql}`,
-      [iso(Date.now() - 7 * DAY_MS), ...s.binds]),
+    // the headline: installs ever, new ones and ones in use today, in 7 and in 30 days
+    first<{ installs: number; new_today: number; new_7d: number; new_30d: number }>(
+      `SELECT COUNT(*) AS installs, COALESCE(SUM(first_seen >= ?), 0) AS new_today,
+              COALESCE(SUM(first_seen >= ?), 0) AS new_7d, COALESCE(SUM(first_seen >= ?), 0) AS new_30d
+       FROM installs WHERE ${s.sql}`, [iso(today), iso(Date.now() - 7 * DAY_MS), iso(Date.now() - 30 * DAY_MS), ...s.binds]),
   ]);
+  const using = await first<{ today: number; d7: number; d30: number }>(
+    `SELECT COUNT(DISTINCT CASE WHEN ts >= ? THEN install_id END) AS today,
+            COUNT(DISTINCT CASE WHEN ts >= ? THEN install_id END) AS d7, COUNT(DISTINCT install_id) AS d30
+     FROM events WHERE ts >= ? AND ${s.sql}`,
+    [iso(today), iso(Date.now() - 7 * DAY_MS), iso(Date.now() - 30 * DAY_MS), ...s.binds]);
 
   // older than the 90 days of raw events: what the nightly rollup kept (UTC days)
   const activeMap = toMap(active);
@@ -235,7 +243,9 @@ export async function appSummary(env: Env, range: Range) {
       active: Number(totals?.active ?? 0), new: fresh.reduce((sum, r) => sum + Number(r.n), 0),
       finished: Number(totals?.finished ?? 0), started: Number(totals?.started ?? 0), returned,
       new_finished: arrivedFinished,
-      installs: Number(everyone?.installs ?? 0), active_7d: Number(everyone?.active7 ?? 0),
+      installs: Number(everyone?.installs ?? 0),
+      new_today: Number(everyone?.new_today ?? 0), new_7d: Number(everyone?.new_7d ?? 0), new_30d: Number(everyone?.new_30d ?? 0),
+      active_today: Number(using?.today ?? 0), active_7d: Number(using?.d7 ?? 0), active_30d: Number(using?.d30 ?? 0),
       errors: errors.reduce((sum, r) => sum + Number(r.n), 0),
     },
     previous: { active: Number(prev?.active ?? 0), new: Number(prevFresh?.n ?? 0), finished: Number(prev?.finished ?? 0) },
