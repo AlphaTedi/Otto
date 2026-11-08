@@ -21,6 +21,14 @@ Hard requirements for every change:
   storage folder via `MarkdownVault`; new persisted fields need a
   `decodeIfPresent` line in the hand-rolled decoders (`TodoItem`,
   `AppSettings`) or old files/settings are silently lost.
+- **Design system** (`docs/DESIGN_SYSTEM.md`, skill `otto-design`). UI is
+  built ONLY from `Otto/DesignSystem/`: palette roles via
+  `@Environment(\.dsPalette)`, `DSType`, `DSSpace`, `DSRadius`, `DSSize`,
+  `Motion`, and the shared components (buttons, `DSCheckbox`, `DSMenuRow`,
+  `KeyBadge`, `.ottoTooltip`…). No literal fonts, colours, radii, off-scale
+  spacing or inline animation curves; never style by branching on the
+  layout. `Scripts/design-lint.sh` must be clean (a hook runs it after every
+  Swift edit). A new component goes in `DesignSystem/` + `DSGallery.swift`.
 - **New system verbs go through App Intents** (`Otto/Intents/`), thin
   wrappers over `TodoStore` — never a second logic path.
 - `Otto/` is a synchronized folder: new source files need no project-file

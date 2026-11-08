@@ -236,7 +236,7 @@ private struct DockToolButton<Glyph: View>: View {
             glyph
         }
         .buttonStyle(DSIconButtonStyle(size: 32, isActive: isActive,
-                                       activeTint: DSDock.notes, activeGlyph: DSDock.notesLight))
+                                       activeTint: DSDock.notes, activeGlyph: DSDock.notesLight)) // ds-allow: the dock-only tool bar wears the notes gold
         .barTip("fmt." + label, isEnabled ? BarTip(label: label, shortcut: shortcut) : nil)
         .accessibilityLabel(label)
     }

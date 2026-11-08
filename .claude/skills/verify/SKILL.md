@@ -45,6 +45,21 @@ copy from Xcode's DerivedData is running, ask first, and kill only the PID your
 own `open` started. Debug commands reach EVERY running Debug copy, so use the
 `-pid` variants (`panel-render-pid`, `settings-snap-pid`) when two are up.
 
+## Design check (any UI change)
+
+```bash
+Scripts/design-lint.sh                    # this working tree vs HEAD
+DS_LINT_BASE=main Scripts/design-lint.sh  # the whole branch
+```
+
+Must be clean (rules: `docs/DESIGN_SYSTEM.md`). Then LOOK at the result: post
+`panel-render-pid <pid> <dir>` (the panel in every state, current layout) and,
+for a component change, `gallery-render-pid <pid> <dir>` (DSGallery, light and
+dark, both surfaces), and Read the PNGs. Render both layouts when a view is
+shared: the layout is the `notchLayout` default (`panels` / `container`) —
+quit your test copy, `defaults write com.notchsnap.app notchLayout …`, relaunch,
+and put the user's value back afterwards.
+
 ## TCC reality on this machine
 
 The agent shell has **no Screen Recording and no Accessibility** permission:
