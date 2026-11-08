@@ -350,7 +350,7 @@ private struct LinkEditor: View {
                 Button(L10n.t("dock.linkRemove")) { editor.commitLink("") }
                     .buttonStyle(.plain)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color(hex: "#FF6961"))
+                    .foregroundStyle(DSColor.destructive)
             }
         }
         .padding(.horizontal, 12)

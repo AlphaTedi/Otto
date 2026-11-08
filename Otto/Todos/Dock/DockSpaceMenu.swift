@@ -406,8 +406,8 @@ struct DockSpaceMenu: View {
 
     private func row(_ index: Int, label: String, shortcut: String?, destructive: Bool = false,
                      action: @escaping () -> Void) -> some View {
-        DockMenuRow(label: label, shortcut: shortcut, destructive: destructive,
-                    isHighlighted: dock.menuHighlight == index, action: action)
+        DSMenuRow(label: label, shortcut: shortcut, isHighlighted: dock.menuHighlight == index,
+                  destructive: destructive, density: .compact, action: action)
     }
 }
 
@@ -419,7 +419,7 @@ private struct HoldToDeleteRow: View {
     let onComplete: () -> Void
 
     static let duration: TimeInterval = 1.2
-    private static let red = Color(hex: "#FF6961")
+    private static let red = DSColor.destructive
 
     @State private var progress: CGFloat = 0
     @State private var holding = false
@@ -514,43 +514,8 @@ struct DockNoteMenu: View {
     }
 
     private func row(_ index: Int, label: String, shortcut: String?, destructive: Bool = false) -> some View {
-        DockMenuRow(label: label, shortcut: shortcut, destructive: destructive,
-                    isHighlighted: dock.noteMenuHighlight == index) { dock.performNote(index) }
-    }
-}
-
-private struct DockMenuRow: View {
-    let label: String
-    let shortcut: String?
-    let destructive: Bool
-    let isHighlighted: Bool
-    let action: () -> Void
-    @State private var hover = false
-    @Environment(\.isEnabled) private var isEnabled
-
-    var body: some View {
-        Button(action: action) {
-            HStack {
-                Text(label)
-                    .font(.system(size: OttoMenuStyle.rowFont))
-                    .foregroundStyle(destructive ? Color(hex: "#FF6961") : DSDock.text)
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                if let shortcut {
-                    Text(shortcut)
-                        .font(.system(size: OttoMenuStyle.shortcutFont))
-                        .foregroundStyle(DSDock.text3)
-                }
-            }
-            .padding(.horizontal, OttoMenuStyle.rowPaddingH)
-            .padding(.vertical, 9)
-            .background(RoundedRectangle(cornerRadius: OttoMenuStyle.rowRadius, style: .continuous)
-                .fill(hover || isHighlighted ? Color.white.opacity(0.12) : .clear))
-            .contentShape(RoundedRectangle(cornerRadius: OttoMenuStyle.rowRadius, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .opacity(isEnabled ? 1 : 0.4)
-        .onHover { hovering in withAnimation(NotchAnimation.hoverFade) { hover = hovering } }
+        DSMenuRow(label: label, shortcut: shortcut, isHighlighted: dock.noteMenuHighlight == index,
+                  destructive: destructive, density: .compact) { dock.performNote(index) }
     }
 }
 

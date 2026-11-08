@@ -153,6 +153,10 @@ enum DSColor {
     static let shadowStrong = Color.dynamic(light: NSColor.black.withAlphaComponent(0.18),
                                             dark: NSColor.black.withAlphaComponent(0.45))
 
+    /// Delete, and anything else that destroys. The one red in the app —
+    /// iOS's dark-mode systemRed, which reads on black and on glass alike.
+    static let destructive = Color(hex: "#FF6961")
+
     // Primary action. The pair inverts together: a near-white button carries
     // near-black text in Dark, and the reverse in Light, so the button never
     // disappears into the panel behind it.

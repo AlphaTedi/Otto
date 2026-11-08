@@ -838,31 +838,12 @@ struct NotesKindMenuList: View {
     }
 
     private func row(_ index: Int, _ title: String, shortcut: String, active: Bool) -> some View {
-        let shape = RoundedRectangle(cornerRadius: OttoMenuStyle.rowRadius, style: .continuous)
-        return Button { notes.chooseKind(meetings: index == 1) } label: {
-            HStack(spacing: 8) {
-                OttoIcon("checkmark", pointSize: 11)
-                    .foregroundStyle(DSColor.textPrimaryBright)
-                    .opacity(active ? 1 : 0)
-                    .frame(width: 14)
-                Text(title)
-                    .font(.system(size: OttoMenuStyle.rowFont, weight: active ? .medium : .regular))
-                    .foregroundStyle(active ? DSColor.textPrimaryBright : DSColor.textPrimary)
-                Spacer(minLength: 8)
-                Text(shortcut)
-                    .font(.system(size: OttoMenuStyle.shortcutFont))
-                    .foregroundStyle(DSColor.textHint)
-                    .fixedSize()
-            }
-            .padding(.leading, 10)
-            .padding(.trailing, OttoMenuStyle.rowPaddingH)
-            .padding(.vertical, OttoMenuStyle.rowPaddingV)
-            .background(shape.fill(OttoMenuStyle.rowFill(highlighted: notes.kindMenuSelection == index)))
-            .contentShape(shape)
+        DSMenuRow(label: title, isChecked: active, shortcut: shortcut,
+                  isHighlighted: notes.kindMenuSelection == index, isEmphasized: active) {
+            notes.chooseKind(meetings: index == 1)
         }
-        .buttonStyle(.plain)
+        // Hover IS the keyboard selection here: one highlight, not two.
         .onHover { if $0 { notes.kindMenuSelection = index } }
-        .accessibilityAddTraits(active ? .isSelected : [])
     }
 }
 
