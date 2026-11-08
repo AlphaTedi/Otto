@@ -161,7 +161,7 @@ struct TodoItemRow: View {
                 .fill(usesDock ? dockFill
                       : (isExpanded ? Self.openedRowFill
                          : (isFocused ? DSColor.focusedRowBackground
-                            : (hover ? DSColor.rowHover(container: notchLayout == .container) : .clear))))
+                            : (hover ? DSColor.rowHover : .clear))))
         )
         // The B3 dock's opened card has a hairline (final flow 4.3).
         .overlay(

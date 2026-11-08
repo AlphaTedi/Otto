@@ -58,6 +58,9 @@ struct NotchRootView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // The ONE place the surface is declared: every role in DSPalette
+        // resolves from this (DesignSystem/Surface.swift).
+        .ottoSurface(OttoSurface(notchLayout))
         .coordinateSpace(name: "notchPanelContent")
         .animation(NotchAnimation.contentHug, value: controller.state)
     }

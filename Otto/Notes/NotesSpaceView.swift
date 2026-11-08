@@ -1081,7 +1081,7 @@ private struct NoteEntryRow: View {
                              style: .continuous)
                 .fill(isLanding ? NotesMetrics.pillStroke.opacity(0.12)
                       : (isSelected ? (usesDock ? DSDock.rowFocus : DSColor.focusedRowBackground)
-                         : (isHovered ? (usesDock ? DSDock.rowHover : DSColor.rowHover(container: notchLayout == .container))
+                         : (isHovered ? (usesDock ? DSDock.rowHover : DSColor.rowHover)
                                       : Color.clear)))
         )
         .overlay(
