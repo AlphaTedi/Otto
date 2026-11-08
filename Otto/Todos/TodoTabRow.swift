@@ -62,6 +62,10 @@ struct TodoTabRow: View {
 
     @AppStorage("notchLayout") private var notchLayout: NotchLayout = .panels
     private var isContainerLayout: Bool { notchLayout == .container }
+    @AppStorage(SectionDotsExperiment.key) private var sectionDots = false
+    /// The dots stand at the row's true centre, as in the notch: the two sides
+    /// take equal shares of what is left.
+    private var usesDots: Bool { SectionDotsExperiment.isOn(layout: notchLayout, flag: sectionDots) }
 
     var body: some View {
         HStack(spacing: 6) {
@@ -82,6 +86,7 @@ struct TodoTabRow: View {
             // First claim on the row's width: when the lists overflow, the
             // scroller gives way, not these two (their ends were being cut).
             NotesPill().layoutPriority(1)
+                .frame(maxWidth: usesDots ? .infinity : nil, alignment: .leading)
             // No Calendar pill: meeting notes are a view inside Notes now
             // (NotesKindMenu), not a third global section.
 
@@ -89,13 +94,17 @@ struct TodoTabRow: View {
             // thing. Notes is one permanent space; the lists are many and they
             // scroll. Without it the bar read as one row of equals in which
             // the first item simply refused to move (Marcello, 2026-09-06).
-            Rectangle()
-                // Dark ink in light mode: white at 12% vanished there.
-                .fill(Color.dynamicOverlay(light: 0.15, dark: 0.12))
-                .frame(width: 1, height: 18)
-                .padding(.horizontal, 2)
+            if usesDots {
+                SpaceDock()
+            } else {
+                Rectangle()
+                    // Dark ink in light mode: white at 12% vanished there.
+                    .fill(Color.dynamicOverlay(light: 0.15, dark: 0.12))
+                    .frame(width: 1, height: 18)
+                    .padding(.horizontal, 2)
 
-            tabScroller
+                tabScroller
+            }
 
             // OUTSIDE the scroller, like the account button beside it.
             //
@@ -111,10 +120,11 @@ struct TodoTabRow: View {
             //
             // If it ever loses the shortcut, it has to come back out here.
 
-            Spacer(minLength: PanelMetrics.tabsGap)
+            if !usesDots { Spacer(minLength: PanelMetrics.tabsGap) }
             // Outside the scroller: settings is not a tab. The gear replaced
             // the avatar (U5 §5.2); it opens the same menu.
             SettingsGearButton()
+                .frame(maxWidth: usesDots ? .infinity : nil, alignment: .trailing)
         }
         // Floating chrome, not a container divider — the Notes bottom bar set
         // this precedent (§9). No static strip behind the pills and no hairline
@@ -146,6 +156,8 @@ struct TodoTabRow: View {
                                                                          : PanelMetrics.tabsBottomPadding))
         .padding(.bottom, !isContainerLayout ? 0 : (rulePosition == .above ? PanelMetrics.tabsBottomPadding
                                                                             : PanelMetrics.tabsTopPadding))
+        // The dots' gliding tooltip (SectionDotsExperiment); empty otherwise.
+        .barTipHost()
 
         // No background here. A frosted band behind the pills was the second
         // of two surfaces in this panel, and its top edge was the hard line

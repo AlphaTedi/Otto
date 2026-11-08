@@ -582,6 +582,13 @@ enum DebugDriver {
                         DockState.shared.newSpaceName = "Holiday"; await snap("newspace-named")
                         DockState.shared.cancelNewSpace(); await snap("newspace-closed")
                     }
+                    if SectionDotsExperiment.isOn, let id = store.activeCollectionID {
+                        BarTipState.shared.debugShow("dock.plus", tip: BarTip(label: "New section", shortcut: "\u{21E7}\u{2318}N"))
+                        await snap("dots-tooltip")
+                        BarTipState.shared.debugShow(nil, tip: nil)
+                        DockState.shared.openMenu(for: id); await snap("dots-menu")
+                        DockState.shared.closeMenu()
+                    }
                     appendState("after back: mode=\(store.panelMode) path=\(store.panelPath.map(\.title))")
                     if let work = list("work") {
                         store.selectCollection(work.id)

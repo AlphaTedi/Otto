@@ -58,7 +58,10 @@ final class MarkdownVault: ObservableObject {
             .appendingPathComponent("Documents/\(AppBuild.vaultFolderName)", isDirectory: true)
     }
 
-    var directory: URL { directoryOverride ?? AppState.shared.settings.vaultDirectory }
+    var directory: URL {
+        // Demo mode mirrors into its own folder, whatever the setting says.
+        directoryOverride ?? (DemoMode.isOn ? Self.defaultDirectory : AppState.shared.settings.vaultDirectory)
+    }
     private var archiveDirectory: URL { directory.appendingPathComponent("Archive", isDirectory: true) }
     private var manifestURL: URL { directory.appendingPathComponent(".otto-vault.json") }
 

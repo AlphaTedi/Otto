@@ -218,7 +218,7 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
 
             // The B3 dock's space menu and new-space card are modal too, and
             // their text fields (rename, the space's name) take the letters.
-            if DockExperiment.isOn || NewSpaceCardExperiment.isOn {
+            if DockExperiment.isOn || NewSpaceCardExperiment.isOn || SectionDotsExperiment.isOn {
                 switch DockState.shared.handleKey(keyCode: keyCode, shift: shift, option: option, cmd: cmd) {
                 case .consumed: return true
                 case .toField: return false

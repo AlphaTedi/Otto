@@ -162,10 +162,25 @@ struct TodoTabView: View {
                             .anchoredMenu(to: trigger, in: proxy.size, opensUpward: false)
                             .transition(.opacity.combined(with: .offset(y: -4)))
                     }
+                    // The dots' space menu (SectionDotsExperiment): centred
+                    // over its dot, opening up, on the notch's dark glass —
+                    // its ink is the dock's.
+                    if !isContainerLayout, let id = dock.menuSpaceID, let collection = store.collection(id: id),
+                       let item = menuAnchors[.dockItem] {
+                        DockSpaceMenu(collection: collection)
+                            .fixedSize()
+                            .padding(.bottom, max(0, proxy.size.height - item.minY + OttoMenuStyle.anchorGap))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                            .offset(x: item.midX - proxy.size.width / 2)
+                            .environment(\.ottoMenuGlass, true)
+                            .environment(\.colorScheme, .dark)
+                            .transition(.opacity.combined(with: .offset(y: 4)))
+                    }
                 }
             }
         }
         .animation(NotchAnimation.hintFade, value: notes.kindMenuOpen)
+        .animation(NotchAnimation.hintFade, value: dock.menuSpaceID)
 
         .onPreferenceChange(MenuAnchorKey.self) { anchors in
             menuAnchors = anchors

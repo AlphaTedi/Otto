@@ -205,6 +205,9 @@ final class NotesStore: ObservableObject {
                 recoveryBlocked = true
                 saveError = L10n.t("meeting.recoveryFailed")
             }
+        } else if storageDirectory == nil, DemoMode.isOn {
+            notes = DemoData.notes()
+            scheduleSave()
         }
         if let data = try? Data(contentsOf: meetingDraftURL),
            let envelope = try? JSONDecoder().decode(MeetingDraftEnvelope.self, from: data), envelope.version == 1 {

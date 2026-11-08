@@ -63,6 +63,9 @@ struct FloatingNewSpaceLayer: View {
     @State private var open = false
 
     private static let inset: CGFloat = 12
+    /// Solid: it sits on the pills, which must not read through it.
+    private static let ground = Color.dynamic(light: NSColor(white: 0.985, alpha: 1),
+                                              dark: NSColor(red: 0.11, green: 0.115, blue: 0.16, alpha: 1))
 
     private var origin: CGRect {
         // A pill scrolled out of the row still has somewhere to start from.
@@ -110,7 +113,7 @@ struct FloatingNewSpaceLayer: View {
         let radius = open ? DockNewSpaceCard.radius : frame.height / 2
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         return ZStack {
-            shape.fill(OttoMenuStyle.ground)
+            shape.fill(Self.ground)
             DockNewSpaceCard(floating: true)
                 .opacity(open ? 1 : 0)
         }

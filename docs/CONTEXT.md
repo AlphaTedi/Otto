@@ -1323,6 +1323,23 @@ notes and an editor with no top bar.
   notch container is black in both appearances, so it always gets the dark
   chips. Appearance comes from there, not from `NSApp.effectiveAppearance`.
 
+- **2026-11-02 — Experiment: the new-space card in the floating panels.**
+  Settings › Appearance › "New section card (experiment)", Debug and Otto Lab
+  only (`NewSpaceCardExperiment`). The "New section" pill grows into the
+  notch's card over a veil (`FloatingNewSpaceLayer`), sharing DockState and
+  its keys. Off, the panels keep their form.
+- **2026-11-02 — Experiment: section dots in the floating panels.** Settings ›
+  Appearance › "Section dots (experiment)", Debug and Otto Lab only
+  (`SectionDotsExperiment`). `TodoTabRow` draws the notch's `SpaceDock` at the
+  row's centre instead of the named pills: same highlight, right-click menu,
+  tooltip and "+". Only the row changes; Notes and the gear stay as they are.
+  The dock's dark capsule and menu stay dark in the light theme, as in the notch.
+- **2026-11-03 — Demo mode, for videos.** Settings › Appearance › "Demo data",
+  Debug and Otto Lab only (`DemoMode`), applied at launch. Otto uses
+  `Application Support/Otto Demo` and mirrors its Markdown there too, seeded
+  once from `DemoData`. The real data is never opened. Delete the folder to
+  reseed.
+
 ### 2026-11-02 note bar, onboarding catches up with the UI
 
 - Floating note page: the format bar and Download wear the gear's surface

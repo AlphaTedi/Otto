@@ -353,8 +353,7 @@ struct SpaceDock: View {
 
     private var plusItem: some View {
         Button {
-            dock.beginNewSpace()
-            NotchController.shared.focusPanel()
+            store.beginNewSection()
         } label: {
             DockIcon(.plus, size: 15)
                 .foregroundStyle(DSDock.plus)
@@ -363,6 +362,7 @@ struct SpaceDock: View {
         }
         .buttonStyle(.plain)
         .barTip("dock.plus", label: L10n.t("todo.newCollection"), shortcut: "\u{21E7}\u{2318}N")
+        .anchorPreference(key: NewSectionAnchorKey.self, value: .bounds) { $0 }
         .accessibilityLabel(L10n.t("todo.newCollection"))
     }
 

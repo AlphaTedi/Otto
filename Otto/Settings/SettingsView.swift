@@ -569,6 +569,8 @@ struct AppearanceSettingsView: View {
     @AppStorage("notchLayout")         private var notchLayout: NotchLayout = .panels
     @AppStorage(NotchDisplays.key)     private var notchDisplays: NotchDisplays = .all
     @AppStorage(NewSpaceCardExperiment.key) private var newSpaceCard = false
+    @AppStorage(SectionDotsExperiment.key) private var sectionDots = false
+    @AppStorage(DemoMode.key) private var demoMode = false
 
     var body: some View {
         SettingsPage(section: .appearance) {
@@ -607,6 +609,18 @@ struct AppearanceSettingsView: View {
                     SettingRow(title: "New section card (experiment)",
                                subtitle: "\"New section\" grows into a card, as in the notch, instead of a form.") {
                         RowSwitch(label: "New section card (experiment)", isOn: $newSpaceCard)
+                    }
+                }
+                if notchLayout == .panels, SectionDotsExperiment.isAvailable {
+                    SettingRow(title: "Section dots (experiment)",
+                               subtitle: "Sections as the notch's coloured dots, instead of names and counts.") {
+                        RowSwitch(label: "Section dots (experiment)", isOn: $sectionDots)
+                    }
+                }
+                if DemoMode.isAvailable {
+                    SettingRow(title: "Demo data",
+                               subtitle: "Sample to-dos and notes in a separate folder, for videos. Your data is untouched. Applies when Otto restarts.") {
+                        RowSwitch(label: "Demo data", isOn: $demoMode)
                     }
                 }
             } header: {

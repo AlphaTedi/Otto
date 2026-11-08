@@ -40,6 +40,8 @@ enum AppBuild {
     nonisolated static let supportDirectory: URL = {
         let fm = FileManager.default
         let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        // Demo mode: a folder of its own, never the real data (DemoMode).
+        if DemoMode.isOn { return base.appendingPathComponent("Otto Demo", isDirectory: true) }
         let current = base.appendingPathComponent(isLab ? "Otto Lab" : "Otto", isDirectory: true)
         let legacy = base.appendingPathComponent(legacySupportRoot, isDirectory: true)
         // Already moved: the old name is the link left behind (below).

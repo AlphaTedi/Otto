@@ -770,7 +770,14 @@ final class TodoStore: ObservableObject {
     private init() {
         try? FileManager.default.createDirectory(at: Self.directory, withIntermediateDirectories: true)
         load()
-        if collections.isEmpty { seedStarterCollections() }
+        if collections.isEmpty {
+            if DemoMode.isOn {
+                (collections, items) = DemoData.todos()
+                scheduleSave()
+            } else {
+                seedStarterCollections()
+            }
+        }
         activeCollectionID = firstUserCollection?.id ?? collections.first?.id
         lastUsedCollectionID = lastUsedCollectionID ?? firstUserCollection?.id
         // Old completions leave the live store for the Markdown archive on

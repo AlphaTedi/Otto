@@ -46,6 +46,32 @@ enum DockExperiment {
     }
 }
 
+/// The notch's dock of dots in the floating panels, in place of the named pills
+/// with their counts (experiment, 2026-11-02). Same `SpaceDock`, right-click
+/// menu and tooltip as the notch. A switch in Settings › Appearance that only
+/// Debug and Otto Lab show or honour.
+enum SectionDotsExperiment {
+    static let key = "floatingSectionDots"
+
+    static var isAvailable: Bool {
+        #if DEBUG
+        return true
+        #else
+        return AppBuild.isLab
+        #endif
+    }
+
+    static func isOn(layout: NotchLayout, flag: Bool) -> Bool {
+        isAvailable && flag && layout == .panels
+    }
+
+    /// For code that is not a view (key routing).
+    static var isOn: Bool {
+        let layout = NotchLayout(rawValue: UserDefaults.standard.string(forKey: "notchLayout") ?? "") ?? .panels
+        return isOn(layout: layout, flag: UserDefaults.standard.bool(forKey: key))
+    }
+}
+
 /// Every number the dock is drawn with. 1 CSS px = 1 pt.
 ///
 /// The final flow (OTTO-NOTCH-FINAL-FLOW-SPEC, 2026-10-16) set the grid in

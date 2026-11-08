@@ -31,12 +31,19 @@ Launch detached (a `&` background job dies with the Bash tool's shell):
 The product is **Otto.app**, so the process to kill is `Otto`.
 
 ```bash
-pkill -x Otto   # needs dangerouslyDisableSandbox; sandboxed kill is silently dropped
+kill "$OWN_PID"   # ONLY a copy you launched yourself. Never `pkill -x Otto`: see below
 open "$(xcodebuild -project Otto.xcodeproj -scheme Otto -configuration Debug -showBuildSettings 2>/dev/null | awk '/ BUILT_PRODUCTS_DIR/{print $3; exit}')/Otto.app"
 ```
 
-If pkill leaves survivors in `SX` state, they're held by Xcode's debugserver —
-kill the parent debugserver PIDs (equivalent to pressing Stop in Xcode).
+**Never `pkill -x Otto`, and never kill a process in `SX` or its debugserver.**
+Marcello runs Otto from Xcode. `pkill` matches that copy too: lldb stops the app
+on the SIGTERM, and a stopped panel at shielding level stays frozen over the
+whole screen, taking the clicks. Force Quit cannot clear it, because the debugger
+holds the process. On 2026-11-02 this forced a reboot. Before launching a test
+copy run `ps -o pid,ppid,lstart,command -p $(pgrep -x Otto | paste -sd, -)`: if a
+copy from Xcode's DerivedData is running, ask first, and kill only the PID your
+own `open` started. Debug commands reach EVERY running Debug copy, so use the
+`-pid` variants (`panel-render-pid`, `settings-snap-pid`) when two are up.
 
 ## TCC reality on this machine
 
