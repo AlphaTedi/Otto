@@ -1059,10 +1059,9 @@ private struct NoteEntryRow: View {
         )
         .overlay(alignment: .top) {
             if showsDropIndicator {
-                Capsule()
-                    .fill(DSColor.textPrimaryBright)
-                    .frame(height: 2)
-                    .offset(y: -(NotesMetrics.entryGap / 2 + 1))
+                // The to-do list's own drop line: they are the same row.
+                DropIndicator()
+                    .offset(y: -(NotesMetrics.entryGap / 2 + 3))
             }
         }
         .offset(y: dragOffset)
@@ -1097,17 +1096,20 @@ private struct NoteEntryRow: View {
 
 // MARK: Empty state (Meetings)
 
+/// Meetings' empty state, deliberately NOT `EmptyListView`: no logo, because
+/// the composer above is the call to action and a drawing would compete.
 private struct EmptyStreamState: View {
+    @Environment(\.dsPalette) private var palette
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: DSSpace.xl) {
             Text(L10n.t("calendar.emptyTitle"))
-                .font(.system(size: 16))
-                .foregroundStyle(DSColor.textSecondary)
+                .font(.system(size: 16)) // ds-allow: matches the composer's own type
+                .foregroundStyle(palette.textSecondary)
             // No illustration, no icon, no button: the composer above IS the
             // call to action, and anything here would compete with it.
             Text(L10n.t("calendar.emptyBody"))
-                .font(.system(size: 13.5))
-                .foregroundStyle(DSColor.textHint)
+                .font(DSType.step)
+                .foregroundStyle(palette.placeholder)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 380)
         }

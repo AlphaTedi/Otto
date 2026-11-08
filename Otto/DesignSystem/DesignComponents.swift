@@ -143,20 +143,34 @@ private struct DSFieldWell: ViewModifier {
 // inward and made the rows look like they were floating away from the left
 // edge. The row is now the drag handle, so nothing is indented.
 
+/// `.horizontal` — between two rows (to-dos, notes): a line with a dot on
+/// its leading end. `.vertical` — between two pills or dock items: an 18-pt
+/// upright capsule.
 struct DropIndicator: View {
+    enum Axis { case horizontal, vertical }
+    var axis: Axis = .horizontal
     var tint: Color = DSColor.textPrimaryBright
 
     var body: some View {
-        HStack(spacing: 0) {
-            Circle()
-                .fill(tint)
-                .frame(width: 6, height: 6)
-            Rectangle()
-                .fill(tint)
-                .frame(height: 1.5)
+        Group {
+            switch axis {
+            case .horizontal:
+                HStack(spacing: 0) {
+                    Circle()
+                        .fill(tint)
+                        .frame(width: 6, height: 6)
+                    Rectangle()
+                        .fill(tint)
+                        .frame(height: 1.5)
+                }
+                .frame(height: 6)
+            case .vertical:
+                Capsule()
+                    .fill(tint.opacity(0.85))
+                    .frame(width: 2, height: 18)
+            }
         }
-        .frame(height: 6)
-        .transition(.opacity)
+        .transition(DSTransition.fade)
         .allowsHitTesting(false)
     }
 }

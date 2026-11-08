@@ -244,7 +244,7 @@ struct TodoTabRow: View {
                     // under the cursor, which is the whole bug being fixed.
                     .overlay(alignment: .leading) {
                         if dropBeforeCollectionID == collection.id {
-                            TabDropIndicator().offset(x: -5)
+                            DropIndicator(axis: .vertical).offset(x: -5)
                         }
                     }
                     .onDrop(of: [.ottoInternalItem], delegate: CollectionReorderDropDelegate(
@@ -268,7 +268,7 @@ struct TodoTabRow: View {
                     Color.clear
                         .frame(width: 18, height: 22)
                         .overlay(alignment: .leading) {
-                            if dropCollectionAtEnd { TabDropIndicator() }
+                            if dropCollectionAtEnd { DropIndicator(axis: .vertical) }
                         }
                         .onDrop(of: [.ottoInternalItem], delegate: CollectionEndDropDelegate(
                             draggedID: $draggedCollectionID,
@@ -474,15 +474,6 @@ struct CollectionEndDropDelegate: DropDelegate {
 
 /// The landing slot between two tabs — a vertical bar, since the tab row runs
 /// horizontally. `DropIndicator` is the list's horizontal equivalent.
-struct TabDropIndicator: View {
-    var body: some View {
-        Capsule()
-            .fill(DSColor.textPrimaryBright.opacity(0.85))
-            .frame(width: 2, height: 18)
-            .transition(.opacity)
-    }
-}
-
 // MARK: - NewSectionButton — "New section" at the end of the tabs
 //
 // A WORD, not a glyph. The "+" was two crossing lines with no label, which
