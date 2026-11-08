@@ -1497,46 +1497,18 @@ private struct UndoBar: View {
 struct NotesPill: View {
     @ObservedObject private var store = TodoStore.shared
     @ObservedObject private var notes = NotesStore.shared
-    @State private var hover = false
 
     /// Notes is lit for its meeting-notes view too — it is one space.
     private var isActive: Bool { store.panelMode == .notes || store.panelMode == .calendar }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text(L10n.t("filter.notes"))
-                .font(.system(size: 13, weight: .semibold))
-            Text("\(notes.notes.filter { $0.meetingContext == nil }.count)")
-                .font(.system(size: 13, weight: .semibold))
-                .monospacedDigit()
-                .opacity(0.55)
-                .contentTransition(.numericText())
-        }
-        .foregroundColor(isActive ? SpacePillStyle.onFill : DSColor.textPrimary)
-        .padding(.horizontal, SpacePillStyle.paddingH)
-        .frame(height: 28)
-        // Never squeezed: when the lists overflow, the scroller gives way, not
-        // this pill (its capsule ends were being cut off).
-        .fixedSize()
-        // Like every other pill (Marcello, 2026-10-02): no dashed edge — a
-        // fill when selected, the shared hover wash otherwise.
-        .background(Capsule(style: .continuous).fill(
-            isActive ? SpaceTint.notes.base.color.opacity(0.85)
-                     : (hover ? DSColor.fieldBackground : Color.clear)
-        ))
-        .contentShape(Capsule(style: .continuous))
-        .onTapGesture { NotesStore.shared.enterSpace() }
-        .onHover { hover = $0 }
-        .animation(Motion.hoverFade, value: hover)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(L10n.t("filter.notes"))
+        SpacePill(title: L10n.t("filter.notes"),
+                  fill: SpaceTint.notes.base.color.opacity(0.85),
+                  isActive: isActive,
+                  count: notes.notes.filter { $0.meetingContext == nil }.count,
+                  zeroIsDone: false)
+            .onTapGesture { NotesStore.shared.enterSpace() }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(L10n.t("filter.notes"))
     }
-}
-
-/// U5's space-pill numbers, shared by Notes and Calendar.
-enum SpacePillStyle {
-    /// 11 of padding inside the 1.4-pt border — the reference's content-box
-    /// 11 + border, which lands the text where the section pills' 12 does.
-    static let paddingH: CGFloat = 12.4
-    static let onFill = Color(hex: "#1A1622")
 }

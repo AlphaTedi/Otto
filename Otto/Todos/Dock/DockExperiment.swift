@@ -120,7 +120,7 @@ enum NotchContainerMetrics {
     @MainActor static var contentInset: CGFloat { barInset + (roundButton - box) / 2 }
     /// Inside a highlight: the content column.
     static let rowPadding: CGFloat = (roundButton - box) / 2
-    static let highlightRadius: CGFloat = 14
+    static let highlightRadius: CGFloat = DSRadius.row
     /// The same three, inside the content frame.
     @MainActor static var highlightInFrame: CGFloat { highlightInset - frameInset }
     @MainActor static var contentInFrame: CGFloat { contentInset - frameInset }
@@ -129,8 +129,8 @@ enum NotchContainerMetrics {
     static let rowMinHeight: CGFloat = 38
     /// Checkbox 18 + 12: the text column at 60.
     static let rowGap: CGFloat = 12
-    static let box: CGFloat = 18
-    static let boxRadius: CGFloat = 6
+    static let box: CGFloat = DSSize.box
+    static let boxRadius: CGFloat = DSRadius.keycap
     static let boxStroke: CGFloat = 2
 
     /// The progressive blur + gradient under the bar: the bar's own band and
@@ -148,7 +148,7 @@ enum NotchContainerMetrics {
 
     // Bottom bar
     static let barGap: CGFloat = 8
-    static let roundButton: CGFloat = 38
+    static let roundButton: CGFloat = DSSize.iconLarge
     static let roundIcon: CGFloat = 16
 
     // Dock

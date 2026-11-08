@@ -717,9 +717,9 @@ struct TodoBrowsingView: View {
                             .rotationEffect(.degrees(store.completedExpanded ? 90 : 0))
                         if usesDock {
                             // The final flow's quiet label: "Completed · 2".
-                            Text(String(format: L10n.t("dock.completed"), completed.count + historyCount))
-                                .font(DSDock.quietLabel)
-                                .foregroundStyle(DSDock.text3)
+                            DSSectionLabel(text: String(format: L10n.t("dock.completed"),
+                                                        completed.count + historyCount),
+                                           style: .quiet)
                         } else {
                         Text(L10n.t("todo.completed"))
                             .font(DSFont.checklistItem)

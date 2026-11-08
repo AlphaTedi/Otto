@@ -191,12 +191,12 @@ struct TodoTabRow: View {
                     //
                     // Tapping still selects, and the semantics are restored
                     // explicitly below so VoiceOver still calls it a button.
-                    CategoryTabChip(
+                    SpacePill(
                         title: collection.name,
-                        tint: collection.spaceTint,
+                        fill: collection.spaceTint.sectionColor,
                         isActive: store.panelMode == .browsing
                             && collection.id == store.activeCollectionID,
-                        remaining: store.remainingCount(for: collection)
+                        count: store.remainingCount(for: collection)
                     )
                     .id(collection.id)
                     .contentShape(RoundedRectangle(cornerRadius: DSRadius.chipCorner, style: .continuous))

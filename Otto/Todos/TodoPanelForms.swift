@@ -418,10 +418,7 @@ struct CategoryFormView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if notchLayout == .container {
-                Text(L10n.t("todo.newCollection").uppercased())
-                    .font(.system(size: 10, weight: .medium))
-                    .tracking(0.4)
-                    .foregroundStyle(DSColor.textFaint)
+                DSSectionLabel(text: L10n.t("todo.newCollection"))
             } else {
                 // Floating panels: the one top bar, one level in.
                 ContextBar(parentTitle: store.panelPath.first?.title ?? "",
@@ -440,12 +437,9 @@ struct CategoryFormView: View {
                 .focused($nameFocused)
                 .padding(.horizontal, PanelMetrics.barPaddingH)
                 .padding(.vertical, PanelMetrics.barPaddingV)
-                .background(
-                    RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
-                        .fill(DSColor.fieldWell)
-                )
+                .dsFieldWell()
                 .overlay(
-                    RoundedRectangle(cornerRadius: PanelMetrics.barRadius, style: .continuous)
+                    DSShape.squircle(DSRadius.bar)
                         .strokeBorder(nameFocused ? chosen.opacity(0.8)
                                                   : DSColor.hairlineOnPanel, lineWidth: 1)
                         // After the stroke, not before: `.animation` on a

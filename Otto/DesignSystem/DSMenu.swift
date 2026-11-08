@@ -16,9 +16,9 @@ import SwiftUI
 // the reference). One surface and one row treatment now.
 
 enum OttoMenuStyle {
-    static let radius: CGFloat = 20
+    static let radius: CGFloat = DSRadius.menu
     static let padding: CGFloat = 10
-    static let rowRadius: CGFloat = 11
+    static let rowRadius: CGFloat = DSRadius.menuRow
     static let rowFont: CGFloat = 13.5
     static let rowPaddingH: CGFloat = 13
     static let rowPaddingV: CGFloat = 11

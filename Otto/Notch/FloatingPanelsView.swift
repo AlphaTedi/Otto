@@ -32,7 +32,7 @@ enum PanelMetrics {
     /// 24 (Marcello, 2026-09-25: 40, then 32, still too round). Corner
     /// furniture sits 16 in from both edges, so its own radius is 24 − 16 = 8
     /// and the curves are concentric (`SpaceChrome.cornerInset`).
-    static let blockRadius: CGFloat = 24
+    static let blockRadius: CGFloat = DSRadius.block
     /// Figma's fixed footer material; the pills sit above its blurred sample.
     static let floatingFooterDepth: CGFloat = 95
     /// The progressive blur's reach: the footer plus 64pt above the pills'
@@ -63,13 +63,13 @@ enum PanelMetrics {
     static let barPaddingH: CGFloat = 20
     static let barPaddingV: CGFloat = 12
     /// 16, was 24: the field read as a pill (Marcello, 2026-10-03).
-    static let barRadius: CGFloat = 16
+    static let barRadius: CGFloat = DSRadius.bar
     static let barHeight: CGFloat = 59
 
     // Checkboxes — one size everywhere now, bar and rows alike
-    static let checkboxSize: CGFloat = 18
+    static let checkboxSize: CGFloat = DSSize.box
     static let checkboxStroke: CGFloat = 2
-    static let checkboxRadius: CGFloat = 6
+    static let checkboxRadius: CGFloat = DSRadius.keycap
 
     // List
     /// The container's ONE side line (2026-10-03): the field, the section
@@ -106,7 +106,7 @@ enum PanelMetrics {
     /// 14 since 2026-10-03: the opened to-do took 14 from Marcello's mock and
     /// hover/focus kept 8, so one row changed shape as it opened. 14 is also
     /// the concentric value — window 24 − the list's 10 inset.
-    static let rowRadius: CGFloat = 14
+    static let rowRadius: CGFloat = DSRadius.row
     /// ⏎ badge: 23x18, 1pt border, radius 6.
     static let enterBadgeWidth: CGFloat = 23
     static let enterBadgeHeight: CGFloat = 18
@@ -155,7 +155,7 @@ enum PanelMetrics {
     /// list did directly below it, and against a 32pt corner that reads as the
     /// two blocks being built to different rules (Marcello, 2026-08-23).
     static let blockPadding: CGFloat = 24
-    static let meetingRadius: CGFloat = 32
+    static let meetingRadius: CGFloat = DSRadius.card
 
 
     /// How long the alert waits before snoozing itself.

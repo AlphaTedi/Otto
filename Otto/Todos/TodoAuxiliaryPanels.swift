@@ -90,10 +90,7 @@ private struct MovePickerView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.t("todo.moveTo").uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(1.2)
-                .foregroundStyle(DSColor.textFaint)
+            DSSectionLabel(text: L10n.t("todo.moveTo"))
 
             TextField(L10n.t("todo.searchCollections"), text: $query)
                 .textFieldStyle(.plain)
