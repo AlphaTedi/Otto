@@ -29,21 +29,8 @@ struct StepRow: View {
             Button {
                 TodoStore.shared.toggleChecklistItem(step.id, in: parentID)
             } label: {
-                ZStack {
-                    RoundedRectangle(cornerRadius: DSRadius.checklistCheckboxCorner,
-                                     style: .continuous)
-                        .strokeBorder(accent, lineWidth: 1)
-                        .frame(width: 10, height: 10)
-                    if step.isDone {
-                        RoundedRectangle(cornerRadius: DSRadius.checklistCheckboxCorner,
-                                         style: .continuous)
-                            .fill(accent)
-                            .frame(width: 10, height: 10)
-                        OttoIcon("checkmark", pointSize: 6)
-                            .foregroundStyle(DSColor.primaryText.opacity(0.85))
-                    }
-                }
-                .contentShape(Rectangle())
+                DSCheckbox(size: .step, isChecked: step.isDone, tint: accent,
+                           checkColor: DSColor.primaryText.opacity(0.85))
             }
             .buttonStyle(.plain)
             .padding(.top, 1.5)
@@ -201,10 +188,7 @@ struct StepDraftRow: View {
             // A dashed outline is the ordinary way to draw a slot rather than
             // a thing, and it keeps the section's colour so the row still
             // reads as part of this checklist.
-            RoundedRectangle(cornerRadius: DSRadius.checklistCheckboxCorner, style: .continuous)
-                .strokeBorder(accent.opacity(0.5),
-                              style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
-                .frame(width: 10, height: 10)
+            DSCheckbox(size: .step, isChecked: false, tint: accent, dashed: true)
                 .padding(.top, 1.5)
 
             // Single-line deliberately: on a vertical-axis field Return

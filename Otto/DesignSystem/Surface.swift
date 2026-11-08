@@ -98,7 +98,10 @@ struct DSPalette {
         iconHover: DSColor.textPrimary,
         rowHover: DSColor.rowHover,
         rowFocus: DSColor.focusedRowBackground,
-        card: DSColor.fieldBackground,
+        // The opened to-do in the panels is a WELL, darker than the list
+        // (Marcello, 2026-10-03), not a lighter card.
+        card: Color.dynamic(light: NSColor.black.withAlphaComponent(0.05),
+                            dark: NSColor.black.withAlphaComponent(0.30)),
         cardBorder: .clear,
         hairline: DSColor.hairlineOnPanel,
         fieldWell: DSColor.fieldWell,
@@ -126,5 +129,44 @@ struct DSPalette {
 
     static func `for`(_ surface: OttoSurface) -> DSPalette {
         surface == .container ? .container : .panels
+    }
+}
+
+// MARK: - Row background
+
+extension View {
+    /// THE list-row slab: hover, keyboard focus and "opened" in one place, for
+    /// to-dos and notes alike (they are the same row). Resolves through the
+    /// surface's palette, so a row never asks which layout it is in.
+    ///
+    /// `override` wins over every state — e.g. a note's drop-landing gold.
+    func dsRowBackground(hover: Bool, focused: Bool, expanded: Bool = false,
+                         override: Color? = nil) -> some View {
+        modifier(DSRowBackground(hover: hover, focused: focused,
+                                 expanded: expanded, override: override))
+    }
+}
+
+private struct DSRowBackground: ViewModifier {
+    let hover: Bool
+    let focused: Bool
+    let expanded: Bool
+    let override: Color?
+    @Environment(\.dsPalette) private var palette
+
+    private var fill: Color {
+        if let override { return override }
+        if expanded { return palette.card }
+        if focused { return palette.rowFocus }
+        return hover ? palette.rowHover : .clear
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .background(DSShape.squircle(DSRadius.row).fill(fill))
+            // The container's opened card carries a hairline (final flow
+            // 4.3); the panels' well has none.
+            .overlay(DSShape.squircle(DSRadius.row)
+                .strokeBorder(expanded ? palette.cardBorder : .clear, lineWidth: DSSize.hairline))
     }
 }

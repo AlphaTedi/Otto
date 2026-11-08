@@ -1069,16 +1069,10 @@ private struct NoteEntryRow: View {
                                      : (notchLayout == .container ? NotesMetrics.entryInset + 10 : NotesMetrics.entryInset))
         .padding(.vertical, usesDock ? 11 : 9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: usesDock ? NotchContainerMetrics.highlightRadius : NotesMetrics.highlightRadius,
-                             style: .continuous)
-                .fill(isLanding ? NotesMetrics.pillStroke.opacity(0.12)
-                      : (isSelected ? (usesDock ? DSDock.rowFocus : DSColor.focusedRowBackground)
-                         : (isHovered ? (usesDock ? DSDock.rowHover : DSColor.rowHover)
-                                      : Color.clear)))
-        )
+        .dsRowBackground(hover: isHovered, focused: isSelected,
+                         override: isLanding ? NotesMetrics.pillStroke.opacity(0.12) : nil)
         .overlay(
-            RoundedRectangle(cornerRadius: NotesMetrics.highlightRadius, style: .continuous)
+            DSShape.squircle(DSRadius.row)
                 .strokeBorder(isLanding ? NotesMetrics.pillStroke.opacity(0.3) : Color.clear,
                               lineWidth: 1)
         )
