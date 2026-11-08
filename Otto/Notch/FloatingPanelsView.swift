@@ -418,7 +418,9 @@ struct PanelMeetingCard: View {
                     // No Notes button for now (Marcello, 2026-10-19): Join
                     // and Snooze are the card's verbs.
                     if meeting.videoURL != nil {
-                        PanelJoinButton(showsShortcut: isNext) { join() }
+                        PrimaryActionButton(title: L10n.t("cal.join"),
+                                            shortcutHint: isNext ? "\u{2318}\u{21A9}" : "",
+                                            fillsWidth: false, isCompact: true) { join() }
                     }
                     // ALWAYS. A meeting with no video link had a Join button
                     // and nothing else, so its card sat visibly empty on the
@@ -460,39 +462,6 @@ struct PanelMeetingCard: View {
         guard let url = meeting.videoURL else { return }
         NSWorkspace.shared.open(url)
         NotchController.shared.attentionLeft()
-    }
-}
-
-/// White, filled — the one primary action on screen.
-private struct PanelJoinButton: View {
-    var showsShortcut: Bool = true
-    let action: () -> Void
-    @State private var hover = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Text(L10n.t("cal.join"))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(DSColor.primaryText)
-                if showsShortcut {
-                    // .onLight because it sits on primaryFill, which is the
-                    // INVERSE of the appearance — a light chip in Dark and a
-                    // dark one in Light. The tone tracks the button, not the
-                    // system.
-                    Keycap(text: "\u{2318}\u{21A9}", tone: .onLight, size: 9)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 5)
-            .background(Capsule(style: .continuous)
-                .fill(DSColor.primaryFill.opacity(hover ? 1 : 0.92)))
-            .contentShape(Capsule(style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            withAnimation(NotchAnimation.hintFade) { hover = hovering }
-        }
     }
 }
 

@@ -120,22 +120,13 @@ struct DockRoundButton<Icon: View>: View {
                 .notchGlass(in: Circle(), tint: isOn ? onTint : nil)
                 .contentShape(Circle())
         }
-        .buttonStyle(DockPressStyle())
+        .buttonStyle(DSPressStyle())
         .onHover { hover = $0 }
         .barTip(label, label: label, shortcut: shortcut)
         .animation(.easeInOut(duration: 0.3), value: isOn)
         .animation(.easeOut(duration: 0.15), value: hover)
         .accessibilityLabel(label)
         .accessibilityAddTraits(isOn ? .isSelected : [])
-    }
-}
-
-/// Pressing scales a round button to 0.93 over 150 ms.
-struct DockPressStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.93 : 1)
-            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 

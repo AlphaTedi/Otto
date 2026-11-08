@@ -319,7 +319,7 @@ enum DSSize {
 enum DSType {
     // Titles
     static let cardTitleSize: CGFloat = 15
-    static let cardTitle: Font = .system(size: cardTitleSize, weight: .semibold)
+    static let cardTitle: Font = .system(size: cardTitleSize, weight: .medium)
     /// A space's title in its header bar ("Notes", a section name).
     static let pageTitle: Font = .system(size: 18, weight: .medium)
     /// An open note's title, set like a document's.

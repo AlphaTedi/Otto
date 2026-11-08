@@ -614,18 +614,9 @@ struct RowActions: View {
     var body: some View {
         HStack(spacing: PanelMetrics.rowActionGap) {
             if showEnter {
-                Text(enterLabel)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(DSColor.rowAffordance)
-                    .padding(.horizontal, enterLabel.count > 1 ? 5 : 0)
-                    .frame(minWidth: PanelMetrics.enterBadgeWidth,
-                           minHeight: PanelMetrics.enterBadgeHeight)
-                    .fixedSize()
-                    .overlay(
-                        RoundedRectangle(cornerRadius: PanelMetrics.enterBadgeRadius,
-                                         style: .continuous)
-                            .strokeBorder(DSColor.rowAffordance, lineWidth: 1)
-                    )
+                KeyBadge(text: enterLabel, color: DSColor.rowAffordance,
+                         minWidth: PanelMetrics.enterBadgeWidth,
+                         height: PanelMetrics.enterBadgeHeight)
             }
 
             // No separator between the two (Marcello, 2026-10-02): the gap

@@ -132,7 +132,7 @@ struct DockReturnKey: View {
                     .fill(hover ? Color.white : Color(hex: "#F2F1F5")))
                 .contentShape(Rectangle())
         }
-        .buttonStyle(DockPressStyle())
+        .buttonStyle(DSPressStyle())
         .onHover { hovering in withAnimation(.easeOut(duration: 0.15)) { hover = hovering } }
         .accessibilityLabel(L10n.t("dock.save") + ", Return")
     }

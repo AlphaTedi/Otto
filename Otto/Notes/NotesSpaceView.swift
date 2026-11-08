@@ -760,14 +760,7 @@ private struct Composer: View {
             // app — it files a to-do, it commits a step — and Notes was the
             // one surface asking for a modifier to do the same thing.
             // ⇧⏎ still puts in a line break.
-            Text("\u{21A9}")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(DSColor.textFaint)
-                .frame(width: 32, height: 19)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .strokeBorder(DSColor.textFaint, lineWidth: 1)
-                )
+            KeyBadge(text: "\u{21A9}", minWidth: 32, height: 19)
         }
         .animation(Motion.hintFade, value: store.draft.isEmpty)
     }
@@ -1327,14 +1320,7 @@ private struct NoteDetailView: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(DSColor.textFaint)
                     .fixedSize()
-                Text("\u{2318}[")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(DSColor.textFaint)
-                    .frame(width: 32, height: 19)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(DSColor.textFaint, lineWidth: 1)
-                    )
+                KeyBadge(text: "\u{2318}[", minWidth: 32, height: 19)
             }
         }
         .padding(.horizontal, PanelMetrics.barPaddingH)
@@ -1374,7 +1360,7 @@ private struct NoteDetailView: View {
                     .font(.system(size: 12.5))
                     .foregroundStyle(SpaceInk.a(0.45))
                     .fixedSize()
-                CaptureKeyHint(label: "esc")
+                KeyBadge(text: "esc", style: .hint)
             }
         }
     }
@@ -1401,13 +1387,8 @@ private struct NoteDetailView: View {
             Button { store.exportOpenNote() } label: {
                 // The gear's button, exactly (SettingsGearButton).
                 OttoIcon("square.and.arrow.down", pointSize: 16)
-                    .foregroundStyle(SpaceInk.a(0.75))
-                    .frame(width: 34, height: 34)
-                    .background(Circle().fill(SpaceInk.a(0.07)))
-                    .overlay(Circle().strokeBorder(SpaceInk.a(0.10), lineWidth: 1))
-                    .contentShape(Circle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(DSIconButtonStyle(variant: .filled, size: DSSize.icon))
             .panelTooltip(L10n.t("notes.download") + "  \u{2318}\u{21E7}S")
             .accessibilityLabel(L10n.t("notes.download"))
             // Rename is gone from this row — the bar needs the width. It is
@@ -1481,24 +1462,14 @@ private struct NoteDetailView: View {
 /// has to answer the pointer when it arrives.
 private struct BackButton: View {
     let action: () -> Void
-    @State private var hover = false
 
     var body: some View {
         Button(action: action) {
             OttoIcon("chevron.left", pointSize: 15)
-                .foregroundStyle(hover ? DSColor.textPrimaryBright : PanelMetrics.accent)
-                .frame(width: 30, height: 30)
-                // A rounded square, like every other small control in the
-                // panel — not a circle (Marcello, 2026-10-12).
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(hover ? DSColor.fieldBackground : Color.clear)
-                )
-                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .buttonStyle(.plain)
-        .onHover { hover = $0 }
-        .animation(Motion.hoverFade, value: hover)
+        // A rounded square, like every other small control in the panel —
+        // not a circle (Marcello, 2026-10-12).
+        .buttonStyle(DSIconButtonStyle(shape: .squircle, size: 30, restGlyph: PanelMetrics.accent))
         .panelTooltip(L10n.t("notes.back"))
     }
 }

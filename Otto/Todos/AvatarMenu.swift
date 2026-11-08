@@ -189,12 +189,8 @@ private struct AvatarMenuRowView: View {
                         // One keycap per key, Raycast-style.
                         HStack(spacing: 3) {
                             ForEach(Array(shortcut.enumerated()), id: \.offset) { _, key in
-                                Text(String(key))
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(DSColor.textSecondary)
-                                    .frame(minWidth: 20, minHeight: 20)
-                                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+                                KeyBadge(text: String(key), color: DSColor.textSecondary,
+                                         minWidth: 20, height: 20)
                             }
                         }
                         .fixedSize()

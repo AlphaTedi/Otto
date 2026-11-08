@@ -182,6 +182,53 @@ struct Keycap: View {
     }
 }
 
+// MARK: - Reusable component: Key badge (outlined)
+//
+// The other half of the key vocabulary. `Keycap` is FILLED and sits on a
+// control (a button's own shortcut). `KeyBadge` is OUTLINED and sits on the
+// panel as a quiet hint beside words: "Switch space  Tab", the ⌘⏎ at the end
+// of a focused row, "esc" in a header. There were six hand-drawn copies of
+// it (2026-11-08); every outlined key is this one now.
+//
+//   .row   — 10 pt semibold, text and border one colour (row affordances,
+//            footer hints). Fixed 32-pt width for a word key, min 23 for a
+//            glyph.
+//   .hint  — 10.5 pt regular at 60%, border at 22% (U5 §4.1, the capture
+//            header and menus).
+
+struct KeyBadge: View {
+    enum Style { case row, hint }
+    let text: String
+    var style: Style = .row
+    /// The ink for `.row`. Ignored by `.hint`, which takes the panel's ink.
+    var color: Color = DSColor.textFaint
+    var minWidth: CGFloat = 23
+    var height: CGFloat = 18
+
+    var body: some View {
+        switch style {
+        case .row:
+            Text(text)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(color)
+                .padding(.horizontal, text.count > 1 ? 5 : 0) // ds-allow: optical key padding
+                .frame(minWidth: minWidth, minHeight: height)
+                .fixedSize()
+                .overlay(DSShape.squircle(DSRadius.keycap).strokeBorder(color, lineWidth: 1))
+        case .hint:
+            Text(text)
+                .font(.system(size: 10.5))
+                .foregroundStyle(SpaceInk.a(0.6))
+                .frame(minWidth: 18, minHeight: 18)
+                .padding(.horizontal, 5) // ds-allow: content-box, as the reference renders it
+                .padding(1)
+                .overlay(DSShape.squircle(5).strokeBorder(SpaceInk.a(0.22), lineWidth: 1))
+                .fixedSize()
+                .accessibilityHidden(true)
+        }
+    }
+}
+
 // MARK: - Reusable component: Shortcut hint badge
 
 struct ShortcutHintBadge: View {
@@ -190,48 +237,6 @@ struct ShortcutHintBadge: View {
     var body: some View {
         // One keycap implementation for the whole app.
         Keycap(text: text, tone: .onDark, size: 9)
-    }
-}
-
-// MARK: - Reusable component: Primary action button (Create, etc.)
-
-/// A capsule, like every other action in the app and like macOS 26's own push
-/// buttons. It used to be a rounded rectangle while Join was a capsule — the
-/// same control in two shapes (Marcello, 2026-07-26).
-struct PrimaryActionButton: View {
-    let title: String
-    let shortcutHint: String
-    /// Filled by default; `false` gives the outlined secondary treatment, so
-    /// Cancel/Snooze pair with a filled primary instead of inventing a style.
-    var isProminent: Bool = true
-    /// Form buttons span the panel; a button sitting inline next to other
-    /// content (Join, on a meeting card) hugs its label instead.
-    var fillsWidth: Bool = true
-    /// Inline buttons are smaller so they sit inside a card without dominating.
-    var isCompact: Bool = false
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Text(title)
-                .font(isCompact ? .system(size: 11, weight: .medium) : DSFont.buttonLabel)
-                .foregroundColor(isProminent ? DSColor.primaryText : DSColor.textSecondary)
-            if !shortcutHint.isEmpty {
-                // The shortcut lives ON the control, so the keyboard path is
-                // discoverable without opening the reference sheet.
-                Keycap(text: shortcutHint,
-                       tone: isProminent ? .onLight : .onDark,
-                       size: isCompact ? 9 : 10)
-            }
-        }
-        .padding(.horizontal, fillsWidth ? 0 : (isCompact ? 12 : 16))
-        .frame(maxWidth: fillsWidth ? .infinity : nil)
-        .padding(.vertical, isCompact ? 5 : 9)
-        .background(isProminent ? DSColor.primaryFill : Color.clear)
-        .overlay(
-            DSShape.action.strokeBorder(isProminent ? .clear : DSColor.panelBorder,
-                                        lineWidth: 1)
-        )
-        .clipShape(DSShape.action)
     }
 }
 

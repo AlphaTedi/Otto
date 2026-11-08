@@ -786,24 +786,13 @@ struct TodoBrowsingView: View {
 
 struct SweepButton: View {
     let action: () -> Void
-    @State private var hover = false
 
     var body: some View {
         Button(action: action) {
             OttoIcon("wind", pointSize: 11)
-                .foregroundStyle(hover ? DSColor.textPrimaryBright : DSColor.textHint)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(
-                    DSShape.squircle(DSRadius.chipCorner)
-                        .fill(hover ? DSColor.fieldBackground : .clear)
-                )
-                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            withAnimation(NotchAnimation.hintFade) { hover = hovering }
-        }
+        .buttonStyle(DSIconButtonStyle(shape: .squircle, size: 18, width: 24,
+                                       restGlyph: DSColor.textHint))
         .panelTooltip(L10n.t("todo.clearCompleted"))
     }
 }
