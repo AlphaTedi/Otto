@@ -7,6 +7,9 @@ what is here, so don't invent new pieces.
 - **Code:** `Otto/DesignSystem/` — tokens, surfaces, components.
 - **Catalogue:** `Otto/DesignSystem/DSGallery.swift` (an Xcode preview of
   every component, on both surfaces, in light and dark).
+- **On the web:** https://claude.ai/artifact/3dJChTxTimC3yu8rvWGMpM, a private
+  claude.ai page that mirrors the tokens and components with live previews.
+  The code is the source: when components change, update that page too.
 - **Render without Xcode:** post `gallery-render-pid <pid> <dir>` to a Debug
   build (see the `verify` skill). It writes `gallery-light.png` and
   `gallery-dark.png`.
