@@ -103,8 +103,10 @@ blocks are `section`.
 
 `checkbox 3 · keycap 6 · chip 7 · control 10 · menuRow 11 · row 14 · bar 16 · menu 20 · block 24 · card 32`
 
-- **Shape rule:** if you can click it to *do* something, it is a capsule
-  (`DSShape.action`). If it *holds* content, it is a squircle.
+- **Shape rule:** a button with words is a rounded rectangle, radius
+  `DSRadius.button` 10 (8 on xs/sm), as reui's shadcn button. Pills and tabs
+  are capsules (`DSShape.action`). Anything that *holds* content is a
+  squircle.
 - Checkboxes, swatches and toggles are selection controls, so they stay
   squircles.
 - Corners nest concentrically: inner radius = outer radius − inset.
@@ -131,7 +133,7 @@ blocks are `section`.
 | `label` | 13 semibold | pills, tabs |
 | `menu` | 13.5 | menu rows |
 | `meta` / `quiet` | 12.5 / 12.5 semibold | meta lines / "Completed · 2" |
-| `button` / `buttonCompact` | 12 / 11 medium | action buttons |
+| `button` / `buttonSM` / `buttonXS` | 14 / 12.8 / 12 medium | buttons with words, by size |
 | `caption` / `tooltip` | 11 / 11 medium | small print / tooltips |
 | `micro` / `sectionCaps` | 10 / 10 medium | counts / UPPERCASE labels |
 
@@ -172,7 +174,7 @@ Rules:
 
 | You need… | Use | File |
 |---|---|---|
-| A button with words (Join, Save, Snooze) | `PrimaryActionButton(title:shortcutHint:isProminent:fillsWidth:isCompact:action:)`. Only ONE prominent button per view. | DSButtons.swift |
+| A button with words (Join, Save, Snooze) | `PrimaryActionButton(title:shortcutHint:variant:size:fillsWidth:action:)`, modelled on reui.io's shadcn button. Variants `.primary` (ONE per view), `.secondary`, `.outline`, `.ghost`, `.destructive`. Sizes `.xs` 24, `.sm` 28, `.md` 32, `.lg` 36. Colours: `DSButtonColor`. For a custom label, `.buttonStyle(DSButtonStyle(...))`. | DSButtons.swift |
 | An icon button | `Button { } label: { OttoIcon(...) }.buttonStyle(DSIconButtonStyle(variant:shape:size:isActive:))` (see the variants below) | DSButtons.swift |
 | The container dock's 38-pt glass circle | `DockRoundButton` | Todos/Dock/DockBar.swift |
 | A press scale on a standalone control | `.buttonStyle(DSPressStyle())`. Menu rows never scale. | DSButtons.swift |

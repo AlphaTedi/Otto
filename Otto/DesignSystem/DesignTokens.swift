@@ -214,6 +214,40 @@ enum DSColor {
 
 }
 
+// MARK: - Buttons with words
+//
+// shadcn's neutral theme, as reui draws its buttons: light values first, dark
+// second. Used only by DSButtonStyle.
+
+enum DSButtonColor {
+    private static func pair(_ light: String, _ dark: String) -> Color {
+        .dynamic(light: NSColor(Color(hex: light)), dark: NSColor(Color(hex: dark)))
+    }
+    private static func pair(_ light: NSColor, _ dark: NSColor) -> Color { .dynamic(light: light, dark: dark) }
+
+    static let primary = pair("#171717", "#E5E5E5")
+    /// 80% of the fill, as shadcn's hover.
+    static let primaryHover = pair(NSColor(Color(hex: "#171717")).withAlphaComponent(0.8),
+                                   NSColor(Color(hex: "#E5E5E5")).withAlphaComponent(0.8))
+    static let onPrimary = pair("#FAFAFA", "#171717")
+    static let secondary = pair("#F5F5F5", "#262626")
+    /// The fill mixed 5% toward the foreground.
+    static let secondaryHover = pair("#EBEBEB", "#313131")
+    static let onSecondary = pair("#171717", "#FAFAFA")
+    static let outline = pair(.white, NSColor.white.withAlphaComponent(0.045))
+    static let outlineHover = pair(NSColor(Color(hex: "#F5F5F5")), NSColor.white.withAlphaComponent(0.075))
+    static let outlineBorder = pair(NSColor(Color(hex: "#E5E5E5")), NSColor.white.withAlphaComponent(0.15))
+    static let ghostHover = pair(NSColor(Color(hex: "#F5F5F5")), NSColor(Color(hex: "#262626")).withAlphaComponent(0.5))
+    static let foreground = pair("#0A0A0A", "#FAFAFA")
+    static let destructive = pair("#E7000B", "#FF6467")
+    static let destructiveFill = pair(NSColor(Color(hex: "#E7000B")).withAlphaComponent(0.10),
+                                      NSColor(Color(hex: "#FF6467")).withAlphaComponent(0.20))
+    static let destructiveHover = pair(NSColor(Color(hex: "#E7000B")).withAlphaComponent(0.20),
+                                       NSColor(Color(hex: "#FF6467")).withAlphaComponent(0.30))
+    /// The auto-snooze countdown's fill, under an outline button's label.
+    static let progress = pair(NSColor.black.withAlphaComponent(0.08), NSColor.white.withAlphaComponent(0.10))
+}
+
 // MARK: - Spacing
 //
 // The scale the app already used most (audit 2026-11-08: 2/4/6/8/10/12/16
@@ -272,6 +306,9 @@ enum DSRadius {
     static let block: CGFloat = 24
     /// The meeting card.
     static let card: CGFloat = 32
+    /// Buttons with words (reui's shadcn button): 10, 8 on the xs/sm sizes.
+    static let button: CGFloat = 10
+    static let buttonSmall: CGFloat = 8
 
     // Older names.
     static let controlCorner: CGFloat = control
@@ -312,6 +349,11 @@ enum DSSize {
     static let miniBox: CGFloat = 10
     /// A hairline.
     static let hairline: CGFloat = 1
+    /// Buttons with words, by size (DSButtonStyle.Size).
+    static let buttonXS: CGFloat = 24
+    static let buttonSM: CGFloat = 28
+    static let button: CGFloat = 32
+    static let buttonLG: CGFloat = 36
 }
 
 /// Type ROLES. A view picks what the text IS, never a point size.
@@ -354,8 +396,10 @@ enum DSType {
     static let label: Font = .system(size: 13, weight: .semibold)
     /// Menu rows.
     static let menu: Font = .system(size: 13.5)
-    static let button: Font = .system(size: 12, weight: .medium)
-    static let buttonCompact: Font = .system(size: 11, weight: .medium)
+    /// Buttons with words: 14 medium, 12.8 on sm, 12 on xs (reui's sizes).
+    static let button: Font = .system(size: 14, weight: .medium)
+    static let buttonSM: Font = .system(size: 12.8, weight: .medium)
+    static let buttonXS: Font = .system(size: 12, weight: .medium)
     static let tooltip: Font = .system(size: 11, weight: .medium)
     static let keycap: Font = .system(size: 10, weight: .medium)
 
@@ -380,7 +424,7 @@ enum DSFont {
     static let sectionLabel: Font = DSType.micro
     static let hint: Font = .system(size: 9)
     static let checklistItem: Font = DSType.caption
-    static let buttonLabel: Font = DSType.button
+    static let buttonLabel: Font = DSType.buttonXS
 }
 
 // DSAnimation is gone.

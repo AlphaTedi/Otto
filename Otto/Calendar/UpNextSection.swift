@@ -130,8 +130,8 @@ struct MeetingCard: View {
                     if let onSnooze {
                         PrimaryActionButton(title: String(format: L10n.t("cal.snooze"),
                                                           CalendarStore.shared.snoozeMinutes),
-                                            isProminent: false, fillsWidth: false,
-                                            isCompact: true, action: onSnooze)
+                                            variant: .outline, size: .xs,
+                                            action: onSnooze)
                     }
                     Spacer(minLength: 8)
                     AvatarStack(
@@ -201,7 +201,7 @@ private struct JoinButton: View {
     var body: some View {
         PrimaryActionButton(title: L10n.t("cal.join"),
                             shortcutHint: showsShortcut ? "\u{2318}\u{21A9}" : "",
-                            fillsWidth: false, isCompact: true, action: action)
+                            size: .xs, action: action)
             .panelTooltip(L10n.t("cal.joinHelp"))
     }
 }

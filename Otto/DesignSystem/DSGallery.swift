@@ -52,11 +52,22 @@ private struct DSGallerySurface: View {
             }
 
             group("Buttons") {
+                VStack(alignment: .leading, spacing: DSSpace.m) {
+                    HStack(spacing: DSSpace.m) {
+                        PrimaryActionButton(title: "Primary") {}
+                        PrimaryActionButton(title: "Secondary", variant: .secondary) {}
+                        PrimaryActionButton(title: "Outline", variant: .outline) {}
+                        PrimaryActionButton(title: "Ghost", variant: .ghost) {}
+                        PrimaryActionButton(title: "Delete", variant: .destructive) {}
+                    }
+                    HStack(spacing: DSSpace.m) {
+                        PrimaryActionButton(title: "Join", shortcutHint: "\u{2318}\u{21A9}", size: .xs) {}
+                        PrimaryActionButton(title: "Snooze", variant: .outline, size: .xs) {}
+                        PrimaryActionButton(title: "Small", size: .sm) {}
+                        PrimaryActionButton(title: "Large", variant: .outline, size: .lg) {}
+                    }
+                }
                 HStack(spacing: DSSpace.m) {
-                    PrimaryActionButton(title: "Join", shortcutHint: "\u{2318}\u{21A9}",
-                                        fillsWidth: false, isCompact: true) {}
-                    PrimaryActionButton(title: "Snooze 5 min", isProminent: false,
-                                        fillsWidth: false, isCompact: true) {}
                     Button {} label: { OttoIcon("gearshape", pointSize: 18) }
                         .buttonStyle(DSIconButtonStyle(variant: .filled, size: DSSize.icon))
                     Button {} label: { OttoIcon("chevron.left", pointSize: 15) }

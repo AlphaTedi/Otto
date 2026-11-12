@@ -4,7 +4,8 @@ import SwiftUI
 //
 // Three kinds of button exist in Otto, and only three (docs/DESIGN_SYSTEM.md §4):
 //
-//   PrimaryActionButton   a capsule with words: Join, Save, Snooze, Create.
+//   PrimaryActionButton   words: Join, Save, Snooze, Create (DSButtonStyle —
+//                         reui's shadcn button: 5 variants, 4 sizes).
 //   DSIconButtonStyle     an icon in a circle or squircle: gear, export, back,
 //                         a format tool, sweep.
 //   DockRoundButton       the container dock's 38-pt glass circle (Dock/).
@@ -108,55 +109,159 @@ private struct DSIconButtonBody: View {
 }
 
 // MARK: - Action button (Join, Snooze, Create…)
+//
+// Modelled on reui's shadcn button (reui.io/components/button, "nova" style,
+// Marcello 2026-11-12): a rounded rectangle, not a capsule — radius 10, 8 on
+// the two small sizes — medium-weight label, five variants, four sizes, and a
+// 1-pt drop when pressed. Colours are shadcn's neutral theme
+// (`DSButtonColor`), resolved per appearance; the notch container is always
+// dark, so it takes the dark values.
 
-/// A capsule, like every other action in the app and like macOS 26's own push
-/// buttons. It used to be a rounded rectangle while Join was a capsule — the
-/// same control in two shapes (Marcello, 2026-07-26), and later three private
-/// copies (PanelJoinButton, JoinButton, SnoozeButton). This is the one.
-///
-///   isProminent true  — filled `primaryFill`: the ONE primary action on
-///                       screen. 92% at rest, 100% under the pointer.
-///   isProminent false — a 0.5-pt outline, secondary text that brightens on
-///                       hover: the quiet way out beside a primary.
+/// The chrome of every button with words. Use it through `PrimaryActionButton`;
+/// apply it directly only when the label is not plain text plus a shortcut
+/// (the auto-snooze countdown passes its `progress`).
+struct DSButtonStyle: ButtonStyle {
+    enum Variant {
+        /// The ONE primary action in view (Join, Create).
+        case primary
+        /// A filled, quieter alternative.
+        case secondary
+        /// A bordered button: the usual second action (Snooze, Cancel).
+        case outline
+        /// No chrome until hovered: tertiary actions in a dense row.
+        case ghost
+        /// Delete and nothing else.
+        case destructive
+    }
+
+    enum Size {
+        /// 24 pt — inside a card, beside other content (Join on a meeting).
+        case xs
+        /// 28 pt — compact forms and bars.
+        case sm
+        /// 32 pt — the default.
+        case md
+        /// 36 pt — a form's main action.
+        case lg
+
+        var height: CGFloat {
+            switch self {
+            case .xs: return DSSize.buttonXS
+            case .sm: return DSSize.buttonSM
+            case .md: return DSSize.button
+            case .lg: return DSSize.buttonLG
+            }
+        }
+        var radius: CGFloat { self == .xs || self == .sm ? DSRadius.buttonSmall : DSRadius.button }
+        var padding: CGFloat { self == .xs ? DSSpace.m : DSSpace.l }
+        var gap: CGFloat { self == .xs || self == .sm ? DSSpace.xs : DSSpace.s }
+        var font: Font {
+            switch self {
+            case .xs: return DSType.buttonXS
+            case .sm: return DSType.buttonSM
+            case .md, .lg: return DSType.button
+            }
+        }
+        var keycapSize: CGFloat { self == .xs || self == .sm ? 9 : 10 }
+    }
+
+    var variant: Variant = .primary
+    var size: Size = .md
+    /// Span the container (a form's action) instead of hugging the label.
+    var fillsWidth = false
+    /// 0…1 — a fill growing from the leading edge, under the label: the
+    /// auto-snooze countdown. Nil draws nothing.
+    var progress: CGFloat? = nil
+
+    func makeBody(configuration: Configuration) -> some View {
+        DSButtonBody(style: self, configuration: configuration)
+    }
+}
+
+private struct DSButtonBody: View {
+    let style: DSButtonStyle
+    let configuration: ButtonStyleConfiguration
+    @State private var hover = false
+    @Environment(\.isEnabled) private var isEnabled
+
+    private typealias C = DSButtonColor
+
+    private var fill: Color {
+        switch style.variant {
+        case .primary:     return hover ? C.primaryHover : C.primary
+        case .secondary:   return hover ? C.secondaryHover : C.secondary
+        case .outline:     return hover ? C.outlineHover : C.outline
+        case .ghost:       return hover ? C.ghostHover : .clear
+        case .destructive: return hover ? C.destructiveHover : C.destructiveFill
+        }
+    }
+
+    private var ink: Color {
+        switch style.variant {
+        case .primary:     return C.onPrimary
+        case .secondary:   return C.onSecondary
+        case .outline, .ghost: return C.foreground
+        case .destructive: return C.destructive
+        }
+    }
+
+    var body: some View {
+        let shape = DSShape.squircle(style.size.radius)
+        configuration.label
+            .font(style.size.font)
+            .foregroundStyle(ink)
+            .padding(.horizontal, style.size.padding)
+            .frame(maxWidth: style.fillsWidth ? .infinity : nil)
+            .frame(height: style.size.height)
+            .background {
+                ZStack(alignment: .leading) {
+                    shape.fill(fill)
+                    if let progress = style.progress {
+                        GeometryReader { proxy in
+                            Rectangle().fill(C.progress)
+                                .frame(width: proxy.size.width * progress)
+                        }
+                    }
+                }
+                .clipShape(shape)
+            }
+            .overlay(shape.strokeBorder(style.variant == .outline ? C.outlineBorder : .clear,
+                                        lineWidth: DSSize.hairline))
+            .contentShape(shape)
+            // shadcn's press: the button drops one point.
+            .offset(y: configuration.isPressed ? 1 : 0)
+            .opacity(isEnabled ? 1 : 0.5)
+            .onHover { hover = $0 }
+            .animation(Motion.hoverFade, value: hover)
+            .animation(Motion.press, value: configuration.isPressed)
+    }
+}
+
+/// A button with words: Join, Save, Snooze, Create. One `.primary` per view;
+/// the shortcut, when there is one, sits on the button as a `Keycap`.
 struct PrimaryActionButton: View {
     let title: String
     var shortcutHint: String = ""
-    var isProminent: Bool = true
+    var variant: DSButtonStyle.Variant = .primary
+    var size: DSButtonStyle.Size = .md
     /// Form buttons span the panel; a button sitting inline next to other
-    /// content (Join, on a meeting card) hugs its label instead.
-    var fillsWidth: Bool = true
-    /// Inline buttons are smaller so they sit inside a card without dominating.
-    var isCompact: Bool = false
+    /// content (Join, on a meeting card) hugs its label.
+    var fillsWidth: Bool = false
     let action: () -> Void
-
-    @State private var hover = false
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: DSSpace.s) {
-                Text(title)
-                    .font(isCompact ? DSType.buttonCompact : DSType.button)
-                    .foregroundStyle(isProminent ? DSColor.primaryText
-                                     : (hover ? DSColor.textPrimaryBright : DSColor.textSecondary))
+            HStack(spacing: size.gap) {
+                Text(title).lineLimit(1)
                 if !shortcutHint.isEmpty {
-                    // The shortcut lives ON the control, so the keyboard path
-                    // is discoverable. `.onLight` on the filled button: its
-                    // fill is the INVERSE of the appearance.
+                    // `.onLight` on the filled primary: its fill is the
+                    // INVERSE of the appearance.
                     Keycap(text: shortcutHint,
-                           tone: isProminent ? .onLight : .onDark,
-                           size: isCompact ? 9 : 10)
+                           tone: variant == .primary ? .onLight : .onDark,
+                           size: size.keycapSize)
                 }
             }
-            .padding(.horizontal, fillsWidth ? 0 : (isCompact ? DSSpace.xl : DSSpace.xxl))
-            .frame(maxWidth: fillsWidth ? .infinity : nil)
-            .padding(.vertical, isCompact ? 5 : 9) // ds-allow: the capsule's optical height
-            .background(DSShape.action.fill(isProminent ? DSColor.primaryFill.opacity(hover ? 1 : 0.92)
-                                                        : Color.clear))
-            .overlay(DSShape.action.strokeBorder(isProminent ? .clear : DSColor.panelBorder,
-                                                 lineWidth: 0.5))
-            .contentShape(DSShape.action)
         }
-        .buttonStyle(.plain)
-        .onHover { hovering in withAnimation(Motion.hintFade) { hover = hovering } }
+        .buttonStyle(DSButtonStyle(variant: variant, size: size, fillsWidth: fillsWidth))
     }
 }

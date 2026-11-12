@@ -247,7 +247,6 @@ struct AutoSnoozeButton: View {
     /// of the pointer over this button filled the capsule instantly and
     /// stopped the clock for good.
     @State private var progress: CGFloat = 0
-    @State private var hover = false
 
     var body: some View {
         // A Button, not `.onTapGesture`.
@@ -259,37 +258,17 @@ struct AutoSnoozeButton: View {
         // point resolve unpredictably; a Button's press gesture takes
         // precedence over an ancestor's (Marcello, 2026-09-06).
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: DSSpace.xs) {
                 Text(L10n.t("cal.snoozeShort"))
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(hover ? DSColor.textPrimaryBright : DSColor.textSecondary)
                 Keycap(text: "S", tone: .onDark, size: 9)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 5)
-            .background(
-                // The fill is the clock. It grows from the leading edge inside
-                // the same capsule the label sits in, so there is one object
-                // here, not a button with a progress bar bolted underneath it.
-                GeometryReader { proxy in
-                    // A straight leading edge, clipped by the button's own
-                    // capsule — not a capsule of its own whose rounded end
-                    // rode across the button (Marcello, 2026-10-03).
-                    Rectangle()
-                        .fill(Color.dynamicOverlay(light: 0.10, dark: 0.13))
-                        .frame(width: proxy.size.width * progress)
-                }
-            )
-            .clipShape(Capsule(style: .continuous))
-            .overlay(
-                Capsule(style: .continuous)
-                    .strokeBorder(DSColor.panelBorder, lineWidth: 0.5)
-            )
-            .contentShape(Capsule(style: .continuous))
         }
-        .buttonStyle(.plain)
+        // Join's sibling, so the same button: outline, xs. The fill is the
+        // clock: it grows from the leading edge INSIDE the button, clipped by
+        // its shape — one object, not a button with a progress bar bolted on
+        // (Marcello, 2026-10-03).
+        .buttonStyle(DSButtonStyle(variant: .outline, size: .xs, progress: progress))
         .onHover { hovering in
-            hover = hovering
             guard countsDown else { return }
             // Pause, do not reset. Restarting the clock every time the pointer
             // crossed the button would make it effectively never fire.
@@ -420,7 +399,7 @@ struct PanelMeetingCard: View {
                     if meeting.videoURL != nil {
                         PrimaryActionButton(title: L10n.t("cal.join"),
                                             shortcutHint: isNext ? "\u{2318}\u{21A9}" : "",
-                                            fillsWidth: false, isCompact: true) { join() }
+                                            size: .xs) { join() }
                     }
                     // ALWAYS. A meeting with no video link had a Join button
                     // and nothing else, so its card sat visibly empty on the
