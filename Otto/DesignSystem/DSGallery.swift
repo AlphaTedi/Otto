@@ -65,6 +65,10 @@ private struct DSGallerySurface: View {
                         PrimaryActionButton(title: "Snooze", variant: .outline, size: .xs) {}
                         PrimaryActionButton(title: "Small", size: .sm) {}
                         PrimaryActionButton(title: "Large", variant: .outline, size: .lg) {}
+                        Button {} label: { Text("\u{21B5}") }
+                            .buttonStyle(DSButtonStyle(size: .xs, square: true))
+                        Button {} label: { OttoIcon("mic", pointSize: 13) }
+                            .buttonStyle(DSButtonStyle(variant: .ghost, size: .xs, square: true))
                     }
                 }
                 HStack(spacing: DSSpace.m) {

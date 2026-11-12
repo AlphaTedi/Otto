@@ -167,37 +167,15 @@ struct SpaceDot: View {
 }
 
 
-/// "Save to Work" + a filled white ↵ cap; on hover the label brightens and the
-/// cap takes a soft violet glow (U5 §4.2, `02b`).
-/// The white "Save ↵" — the floating panels' capture header, and the B3
-/// dock's first row once it holds text (final flow 4.1).
+/// "Save ↵" — the floating panels' capture header, once it holds text: the
+/// primary button at xs, its key on it.
 struct SaveButton: View {
     let label: String
     let action: () -> Void
-    @State private var hover = false
 
     var body: some View {
-        // One button, the word inside it: "Save ↵" (2026-09-27).
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Text(label)
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .lineLimit(1)
-                Text("\u{21B5}")
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .opacity(0.6)
-            }
-            .foregroundStyle(Color(hex: "#111111"))
-            .padding(.horizontal, 10)
-            .frame(height: 26)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(hover ? Color.white : Color(hex: "#F2F1F5")))
-            .shadow(color: Color(hex: "#B69CFF").opacity(hover ? 0.55 : 0), radius: 6)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in withAnimation(.easeOut(duration: 0.2)) { hover = hovering } }
-        .accessibilityLabel(label + ", Return")
+        PrimaryActionButton(title: label, shortcutHint: "\u{21B5}", size: .xs, action: action)
+            .accessibilityLabel(label + ", Return")
     }
 }
 

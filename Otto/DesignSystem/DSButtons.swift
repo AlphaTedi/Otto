@@ -169,6 +169,8 @@ struct DSButtonStyle: ButtonStyle {
     var size: Size = .md
     /// Span the container (a form's action) instead of hugging the label.
     var fillsWidth = false
+    /// An icon-only button: as wide as it is tall (reui's `size-icon-*`).
+    var square = false
     /// 0…1 — a fill growing from the leading edge, under the label: the
     /// auto-snooze countdown. Nil draws nothing.
     var progress: CGFloat? = nil
@@ -210,7 +212,8 @@ private struct DSButtonBody: View {
         configuration.label
             .font(style.size.font)
             .foregroundStyle(ink)
-            .padding(.horizontal, style.size.padding)
+            .padding(.horizontal, style.square ? 0 : style.size.padding)
+            .frame(width: style.square ? style.size.height : nil)
             .frame(maxWidth: style.fillsWidth ? .infinity : nil)
             .frame(height: style.size.height)
             .background {

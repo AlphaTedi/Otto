@@ -174,7 +174,7 @@ Rules:
 
 | You need… | Use | File |
 |---|---|---|
-| A button with words (Join, Save, Snooze) | `PrimaryActionButton(title:shortcutHint:variant:size:fillsWidth:action:)`, modelled on reui.io's shadcn button. Variants `.primary` (ONE per view), `.secondary`, `.outline`, `.ghost`, `.destructive`. Sizes `.xs` 24, `.sm` 28, `.md` 32, `.lg` 36. Colours: `DSButtonColor`. For a custom label, `.buttonStyle(DSButtonStyle(...))`. | DSButtons.swift |
+| A button with words (Join, Save, Snooze) | `PrimaryActionButton(title:shortcutHint:variant:size:fillsWidth:action:)`, modelled on reui.io's shadcn button. Variants `.primary` (ONE per view), `.secondary`, `.outline`, `.ghost`, `.destructive`. Sizes `.xs` 24, `.sm` 28, `.md` 32, `.lg` 36. Colours: `DSButtonColor`. For a custom label, `.buttonStyle(DSButtonStyle(...))`; `square: true` for an icon-only button in the same family (the ↵ key, the mic). | DSButtons.swift |
 | An icon button | `Button { } label: { OttoIcon(...) }.buttonStyle(DSIconButtonStyle(variant:shape:size:isActive:))` (see the variants below) | DSButtons.swift |
 | The container dock's 38-pt glass circle | `DockRoundButton` | Todos/Dock/DockBar.swift |
 | A press scale on a standalone control | `.buttonStyle(DSPressStyle())`. Menu rows never scale. | DSButtons.swift |
