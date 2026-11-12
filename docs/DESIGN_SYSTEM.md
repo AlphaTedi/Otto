@@ -120,6 +120,23 @@ blocks are `section`.
 | Checkboxes | `box 18` · `stepBox 14` · `miniBox 10` |
 | Hairline | `hairline 1` |
 
+### Control sizes: `DSControlSize`
+
+One scale for every control with a fixed height, after reui's shadcn sizes.
+Pick by where the control sits, never by height:
+
+| Size | Height | Radius | Label | Use for |
+|---|---|---|---|---|
+| `.xs` | 24 | 8 | 12 medium | inside a card or a row, beside content (Join, the ↵ key, the mic) |
+| `.sm` | 28 | 8 | 12.8 medium | bars and tab rows (space pills), compact forms |
+| `.md` | 32 | 10 | 14 medium | the default: standalone actions |
+| `.lg` | 36 | 10 | 14 medium | a form's main action |
+| `.xl` | 40 | 12 | 15 medium | a hero action on an empty page |
+
+Sized: `PrimaryActionButton` / `DSButtonStyle` (icon-only `square: true`
+too, glyph at `size.iconSize`), `SpacePill`. Single-size, like reui's:
+inputs (`dsFieldWell`), `Keycap`, `KeyBadge`, `DSCheckbox`.
+
 ### Type: `DSType` (SF only, roles not sizes)
 
 | Role | Spec | Where |
@@ -174,7 +191,7 @@ Rules:
 
 | You need… | Use | File |
 |---|---|---|
-| A button with words (Join, Save, Snooze) | `PrimaryActionButton(title:shortcutHint:variant:size:fillsWidth:action:)`, modelled on reui.io's shadcn button. Variants `.primary` (ONE per view), `.secondary`, `.outline`, `.ghost`, `.destructive`. Sizes `.xs` 24, `.sm` 28, `.md` 32, `.lg` 36. Colours: `DSButtonColor`. For a custom label, `.buttonStyle(DSButtonStyle(...))`; `square: true` for an icon-only button in the same family (the ↵ key, the mic). | DSButtons.swift |
+| A button with words (Join, Save, Snooze) | `PrimaryActionButton(title:shortcutHint:variant:size:fillsWidth:action:)`, modelled on reui.io's shadcn button. Variants `.primary` (ONE per view), `.secondary`, `.outline`, `.ghost`, `.destructive`. Sizes: the `DSControlSize` scale (`.xs` 24 → `.xl` 40). Colours: `DSButtonColor`. For a custom label, `.buttonStyle(DSButtonStyle(...))`; `square: true` for an icon-only button in the same family (the ↵ key, the mic). | DSButtons.swift |
 | An icon button | `Button { } label: { OttoIcon(...) }.buttonStyle(DSIconButtonStyle(variant:shape:size:isActive:))` (see the variants below) | DSButtons.swift |
 | The container dock's 38-pt glass circle | `DockRoundButton` | Todos/Dock/DockBar.swift |
 | A press scale on a standalone control | `.buttonStyle(DSPressStyle())`. Menu rows never scale. | DSButtons.swift |
@@ -184,7 +201,7 @@ Rules:
 | A tooltip | `.ottoTooltip("Label", shortcut: "⌘K")` | PanelTooltip.swift |
 | A checkbox | `DSCheckbox(size: .row/.step/.archive, isChecked:, tint:)`. `dashed: true` for an empty slot. | DSCheckbox.swift |
 | A list row's hover/focus/opened slab | `.dsRowBackground(hover:focused:expanded:)` | Surface.swift |
-| A space tab | `SpacePill(title:fill:isActive:count:)` | DesignComponents.swift |
+| A space tab | `SpacePill(title:fill:isActive:count:size:)`, `.sm` in the tab row | DesignComponents.swift |
 | A heading for a group | `DSSectionLabel(text:style: .caps / .quiet)` | DesignComponents.swift |
 | A text field | `.dsFieldWell()` plus your own padding | DesignComponents.swift |
 | A menu | rows of `DSMenuRow(...)` in a `VStack`, `.padding(OttoMenuStyle.padding)`, `.ottoMenuSurface()`, placed with `.menuAnchor` / `.anchoredMenu` | DSMenu.swift |

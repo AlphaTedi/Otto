@@ -60,15 +60,16 @@ private struct DSGallerySurface: View {
                         PrimaryActionButton(title: "Ghost", variant: .ghost) {}
                         PrimaryActionButton(title: "Delete", variant: .destructive) {}
                     }
-                    HStack(spacing: DSSpace.m) {
-                        PrimaryActionButton(title: "Join", shortcutHint: "\u{2318}\u{21A9}", size: .xs) {}
-                        PrimaryActionButton(title: "Snooze", variant: .outline, size: .xs) {}
-                        PrimaryActionButton(title: "Small", size: .sm) {}
-                        PrimaryActionButton(title: "Large", variant: .outline, size: .lg) {}
-                        Button {} label: { Text("\u{21B5}") }
-                            .buttonStyle(DSButtonStyle(size: .xs, square: true))
-                        Button {} label: { OttoIcon("mic", pointSize: 13) }
-                            .buttonStyle(DSButtonStyle(variant: .ghost, size: .xs, square: true))
+                    // The control scale, xs → xl, with the icon-only square of each.
+                    ForEach(DSControlSize.allCases, id: \.self) { size in
+                        HStack(spacing: DSSpace.m) {
+                            PrimaryActionButton(title: "\(size)".uppercased(), shortcutHint: "\u{21A9}", size: size) {}
+                            PrimaryActionButton(title: "Outline", variant: .outline, size: size) {}
+                            Button {} label: { OttoIcon("mic", pointSize: size.iconSize) }
+                                .buttonStyle(DSButtonStyle(variant: .ghost, size: size, square: true))
+                            SpacePill(title: "Work", fill: SpaceTint.work.sectionColor, isActive: true,
+                                      count: 4, size: size)
+                        }
                     }
                 }
                 HStack(spacing: DSSpace.m) {

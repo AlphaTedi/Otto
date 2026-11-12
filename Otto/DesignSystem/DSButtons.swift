@@ -134,36 +134,9 @@ struct DSButtonStyle: ButtonStyle {
         case destructive
     }
 
-    enum Size {
-        /// 24 pt — inside a card, beside other content (Join on a meeting).
-        case xs
-        /// 28 pt — compact forms and bars.
-        case sm
-        /// 32 pt — the default.
-        case md
-        /// 36 pt — a form's main action.
-        case lg
-
-        var height: CGFloat {
-            switch self {
-            case .xs: return DSSize.buttonXS
-            case .sm: return DSSize.buttonSM
-            case .md: return DSSize.button
-            case .lg: return DSSize.buttonLG
-            }
-        }
-        var radius: CGFloat { self == .xs || self == .sm ? DSRadius.buttonSmall : DSRadius.button }
-        var padding: CGFloat { self == .xs ? DSSpace.m : DSSpace.l }
-        var gap: CGFloat { self == .xs || self == .sm ? DSSpace.xs : DSSpace.s }
-        var font: Font {
-            switch self {
-            case .xs: return DSType.buttonXS
-            case .sm: return DSType.buttonSM
-            case .md, .lg: return DSType.button
-            }
-        }
-        var keycapSize: CGFloat { self == .xs || self == .sm ? 9 : 10 }
-    }
+    /// The shared control scale (DesignTokens.swift): xs 24 · sm 28 · md 32 ·
+    /// lg 36 · xl 40.
+    typealias Size = DSControlSize
 
     var variant: Variant = .primary
     var size: Size = .md

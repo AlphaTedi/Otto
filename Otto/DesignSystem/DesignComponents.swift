@@ -22,6 +22,8 @@ struct SpacePill: View {
     /// A count of 0 reads as "all clear" — a quiet ✓ — for a to-do section.
     /// Notes show their 0 as a number.
     var zeroIsDone = true
+    /// The tab row uses `.sm` (28). Bigger pills are for roomier pickers.
+    var size: DSControlSize = .sm
 
     /// The lists had NO hover state at all, so the only chip in the bar that
     /// answered the pointer was the one already selected (Marcello, 2026-09-06).
@@ -39,7 +41,7 @@ struct SpacePill: View {
     var body: some View {
         HStack(spacing: DSSpace.s) {
             Text(title)
-                .font(DSType.label)
+                .font(size == .sm ? DSType.label : size.font.weight(.semibold))
                 .foregroundColor(ink)
 
             if let count {
@@ -50,7 +52,7 @@ struct SpacePill: View {
                         .opacity(0.5)
                 } else {
                     Text("\(count)")
-                        .font(DSType.label)
+                        .font(size == .sm ? DSType.label : size.font.weight(.semibold))
                         .monospacedDigit()
                         .foregroundColor(ink)
                         .opacity(0.5)
@@ -58,8 +60,8 @@ struct SpacePill: View {
                 }
             }
         }
-        .padding(.horizontal, DSSpace.xl)
-        .frame(height: DSSize.control)
+        .padding(.horizontal, size == .sm ? DSSpace.xl : size.padding + DSSpace.xxs)
+        .frame(height: size.height)
         // Never squeezed: when the lists overflow, the scroller gives way.
         .fixedSize()
         // ONE shape, in every state — a capsule; selection is a fill, not a

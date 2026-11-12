@@ -309,6 +309,7 @@ enum DSRadius {
     /// Buttons with words (reui's shadcn button): 10, 8 on the xs/sm sizes.
     static let button: CGFloat = 10
     static let buttonSmall: CGFloat = 8
+    static let buttonLarge: CGFloat = 12
 
     // Older names.
     static let controlCorner: CGFloat = control
@@ -349,11 +350,74 @@ enum DSSize {
     static let miniBox: CGFloat = 10
     /// A hairline.
     static let hairline: CGFloat = 1
-    /// Buttons with words, by size (DSButtonStyle.Size).
-    static let buttonXS: CGFloat = 24
-    static let buttonSM: CGFloat = 28
-    static let button: CGFloat = 32
-    static let buttonLG: CGFloat = 36
+    /// The control scale's heights (DSControlSize).
+    static let controlXS: CGFloat = 24
+    static let controlSM: CGFloat = 28
+    static let controlMD: CGFloat = 32
+    static let controlLG: CGFloat = 36
+    static let controlXL: CGFloat = 40
+}
+
+/// THE size scale for controls with a fixed height — buttons (with words or
+/// icon-only) and space pills — after reui's shadcn sizes (button xs/sm/
+/// default/lg, toggle sm/default/lg), plus xl. A control picks a size by
+/// where it sits, never a height:
+///
+///   xs 24  inside a card or a row, beside content (Join, the ↵ key, the mic)
+///   sm 28  bars and tab rows (space pills), compact forms
+///   md 32  the default: standalone actions, dialogs
+///   lg 36  a form's main action
+///   xl 40  a hero action on an empty page or onboarding-like moment
+///
+/// Components with one natural size (inputs, keycaps, badges, checkboxes)
+/// don't take it — reui gives those a single size too.
+enum DSControlSize: CaseIterable {
+    case xs, sm, md, lg, xl
+
+    var height: CGFloat {
+        switch self {
+        case .xs: return DSSize.controlXS
+        case .sm: return DSSize.controlSM
+        case .md: return DSSize.controlMD
+        case .lg: return DSSize.controlLG
+        case .xl: return DSSize.controlXL
+        }
+    }
+    /// 8 on the two small sizes, 10 on md/lg, 12 on xl — concentric with
+    /// the label's inset.
+    var radius: CGFloat {
+        switch self {
+        case .xs, .sm: return DSRadius.buttonSmall
+        case .md, .lg: return DSRadius.button
+        case .xl: return DSRadius.buttonLarge
+        }
+    }
+    var padding: CGFloat {
+        switch self {
+        case .xs: return DSSpace.m
+        case .sm, .md, .lg: return DSSpace.l
+        case .xl: return DSSpace.xl
+        }
+    }
+    var gap: CGFloat { self == .xs || self == .sm ? DSSpace.xs : DSSpace.s }
+    var font: Font {
+        switch self {
+        case .xs: return DSType.buttonXS
+        case .sm: return DSType.buttonSM
+        case .md, .lg: return DSType.button
+        case .xl: return DSType.buttonXL
+        }
+    }
+    /// The glyph size for an icon in a control of this size (OttoIcon pointSize).
+    var iconSize: CGFloat {
+        switch self {
+        case .xs: return 12
+        case .sm: return 13
+        case .md, .lg: return 15
+        case .xl: return 17
+        }
+    }
+    var keycapSize: CGFloat { self == .xs || self == .sm ? 9 : 10 }
 }
 
 /// Type ROLES. A view picks what the text IS, never a point size.
@@ -400,6 +464,7 @@ enum DSType {
     static let button: Font = .system(size: 14, weight: .medium)
     static let buttonSM: Font = .system(size: 12.8, weight: .medium)
     static let buttonXS: Font = .system(size: 12, weight: .medium)
+    static let buttonXL: Font = .system(size: 15, weight: .medium)
     static let tooltip: Font = .system(size: 11, weight: .medium)
     static let keycap: Font = .system(size: 10, weight: .medium)
 
