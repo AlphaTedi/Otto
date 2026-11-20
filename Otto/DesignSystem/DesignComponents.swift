@@ -373,3 +373,42 @@ enum DSEntityChip {
     /// monospaced while every other chip stays in the UI face.
     static func isMonospaced(_ kind: EntityKind) -> Bool { kind == .code }
 }
+
+// MARK: - Progress bar
+
+/// How far a long job has got — an update downloading. `value` 0…1, or nil
+/// when it cannot be known: a segment then sweeps across (`Motion.sweep`).
+struct DSProgressBar: View {
+    var value: Double?
+    var tint: Color? = nil
+    @State private var sweeping = false
+    @Environment(\.dsPalette) private var palette
+
+    var body: some View { inspectedBody }
+
+    private var inspectedBody: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            ZStack(alignment: .leading) {
+                Capsule().fill(DSColor.divider)
+                if let value {
+                    Capsule().fill(tint ?? palette.textPrimary)
+                        .frame(width: max(DSSpace.xs, width * min(max(value, 0), 1)))
+                        .animation(Motion.contentHug, value: value)
+                } else {
+                    Capsule().fill(tint ?? palette.textPrimary)
+                        .frame(width: width * 0.35)
+                        .offset(x: Motion.sweep == nil ? width * 0.325 : (sweeping ? width : -width * 0.35))
+                        .onAppear {
+                            guard let sweep = Motion.sweep else { return }
+                            withAnimation(sweep) { sweeping = true }
+                        }
+                }
+            }
+            .clipShape(Capsule())
+        }
+        .frame(height: DSSpace.xs)
+        .accessibilityElement()
+        .accessibilityValue(value.map { "\(Int($0 * 100)) %" } ?? "")
+    }
+}

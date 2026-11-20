@@ -140,6 +140,12 @@ enum Motion {
     /// Colour is not physical, so this is a curve, not a spring.
     static var tint: Animation       { isReduced ? fade : .easeInOut(duration: 0.2) }
 
+    /// A progress bar that cannot say how far it is: its segment sweeping
+    /// across. Nil under Reduce Motion: the bar then stays still, half full.
+    static var sweep: Animation? {
+        isReduced ? nil : .easeInOut(duration: 1.2).repeatForever(autoreverses: false)
+    }
+
     /// A menu or popover opening/closing in place.
     static var menu: Animation       { isReduced ? fade : .spring(response: 0.34, dampingFraction: 0.86) }
 }

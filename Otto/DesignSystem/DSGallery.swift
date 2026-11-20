@@ -82,6 +82,14 @@ private struct DSGallerySurface: View {
                 }
             }
 
+            group("Progress") {
+                VStack(spacing: DSSpace.m) {
+                    DSProgressBar(value: 0.6)
+                    DSProgressBar(value: nil)
+                }
+                .frame(width: 240)
+            }
+
             group("Keys") {
                 HStack(spacing: DSSpace.m) {
                     Keycap(text: "\u{2318}N")

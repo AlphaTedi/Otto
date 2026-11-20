@@ -208,6 +208,8 @@ Rules:
 | A drag drop marker | `DropIndicator(axis: .horizontal / .vertical)` | DesignComponents.swift |
 | An empty list | `EmptyListView(...)` | Todos/EmptyListView.swift |
 | An inline link/date/@/code chip | `DSEntityChip` colours via `EntityTitleView` | DesignComponents.swift |
+| How far a long job has got | `DSProgressBar(value:)`: 0…1, or nil for a sweeping segment (`Motion.sweep`) | DesignComponents.swift |
+| A release worth showing | `DSMediaBanner`: media 192×144 on the left, title, line, actions on the text's edge; `DSLoopingVideo` for clips | DSMediaBanner.swift |
 | A page header one level in | `ContextBar(parentTitle:title:onBack:)` | Todos/SpaceChrome.swift |
 | A meeting | `PanelMeetingCard` (standalone card) or `MeetingCard` (inside the Today list) | Notch/FloatingPanelsView.swift, Calendar/UpNextSection.swift |
 | A surface | panels: `.liquidGlass(in:)`. Over the notch: `.notchGlass(in:)`. Floating chrome: `.floatingGlass(in:)` | LiquidGlass.swift |

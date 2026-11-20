@@ -27,7 +27,38 @@ final class UpdateController: ObservableObject {
     /// the menu item and button can disable rather than queue duplicates.
     @Published private(set) var canCheck = true
 
+    /// What the notch's update banner shows (UpdateAlertCard).
+    enum Phase: Equatable {
+        case idle
+        /// A newer version is waiting: "Otto 1.5 is ready".
+        case available(version: String)
+        /// Downloading; nil progress while the size is not known.
+        case downloading(progress: Double?)
+        case installing
+    }
+    @Published var phase: Phase = .idle
+
+    /// A release worth advertising: the notch shows the media banner
+    /// (DSMediaBanner) instead of the plain one. Set per release; nil for an
+    /// ordinary update.
+    struct Featured: Equatable {
+        let title: String
+        let subtitle: String
+        /// A short looping clip; nil plays the built-in AI scene.
+        var video: URL? = nil
+    }
+    @Published var featured: Featured?
+    /// "Not now" on the banner: hidden until the next version.
+    @Published private(set) var dismissedVersion: String?
+
+    /// The banner shows unless the person said "not now" to this version.
+    var showsBanner: Bool {
+        if case .available(let version) = phase { return version != dismissedVersion }
+        return phase != .idle
+    }
+
     private let controller: SPUStandardUpdaterController
+    private let bridge = UpdateBridge()
     private var observation: NSKeyValueObservation?
 
     private init() {
@@ -39,8 +70,8 @@ final class UpdateController: ObservableObject {
         // the shipped Otto as an update to the experiment. See AppBuild.
         controller = SPUStandardUpdaterController(
             startingUpdater: AppBuild.updatesEnabled,
-            updaterDelegate: nil,
-            userDriverDelegate: nil
+            updaterDelegate: bridge,
+            userDriverDelegate: bridge
         )
         observation = controller.updater.observe(\.canCheckForUpdates, options: [.initial, .new]) {
             [weak self] updater, _ in
@@ -55,6 +86,60 @@ final class UpdateController: ObservableObject {
         guard AppBuild.updatesEnabled else { return }
         controller.checkForUpdates(nil)
     }
+
+    /// Every phase change goes through here, on the banner's spring: the
+    /// card reshapes and its rows cross-fade instead of jumping
+    /// (Marcello, 2026-11-15).
+    func move(to next: Phase) {
+        guard next != phase else { return }
+        withAnimation(Motion.contentHug) { phase = next }
+    }
+
+    /// The banner's Update: Sparkle downloads and installs, and the banner
+    /// follows its phases (UpdateBridge) until Otto relaunches.
+    func installUpdate() {
+        guard AppBuild.updatesEnabled else {
+            #if DEBUG || OTTO_LAB
+            simulateInstall()
+            #endif
+            return
+        }
+        move(to: .downloading(progress: nil))
+        controller.checkForUpdates(nil)
+    }
+
+    /// The banner's Dismiss: this version is not offered again in the notch;
+    /// Settings › About still has it.
+    func dismissBanner() {
+        if case .available(let version) = phase {
+            withAnimation(Motion.contentHug) { dismissedVersion = version }
+        }
+    }
+
+    #if DEBUG || OTTO_LAB
+    /// Otto Lab has no feed: Update plays the phases, so the banner can be
+    /// tried end to end.
+    private func simulateInstall() {
+        Task { @MainActor in
+            for step in 0...10 {
+                move(to: .downloading(progress: Double(step) / 10))
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+            move(to: .installing)
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            move(to: .idle)
+        }
+    }
+
+    /// Otto Lab's dial kit: the banner in each phase, without Sparkle.
+    func stage(_ phase: Phase, featured: Featured? = nil) {
+        withAnimation(Motion.contentHug) {
+            dismissedVersion = nil
+            self.featured = featured
+        }
+        move(to: phase)
+    }
+    #endif
 
     /// Mirrors Sparkle's own preference, so the Settings toggle and whatever
     /// Sparkle's UI does stay in agreement.
@@ -81,5 +166,46 @@ final class UpdateController: ObservableObject {
     /// constant so it can never disagree with what Sparkle compares against.
     static var currentVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+    }
+}
+
+/// Sparkle's delegates, which must be NSObjects: they tell the banner what
+/// Sparkle found and where it is with it.
+@MainActor
+private final class UpdateBridge: NSObject, SPUUpdaterDelegate, @MainActor SPUStandardUserDriverDelegate {
+    private func set(_ phase: UpdateController.Phase) {
+        Task { @MainActor in UpdateController.shared.move(to: phase) }
+    }
+
+    func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        Task { @MainActor in
+            // A check the banner started is already past "available".
+            if case .idle = UpdateController.shared.phase {
+                UpdateController.shared.move(to: .available(version: item.displayVersionString))
+            }
+        }
+    }
+    func updaterDidNotFindUpdate(_ updater: SPUUpdater) { set(.idle) }
+    func updater(_ updater: SPUUpdater, willDownloadUpdate item: SUAppcastItem, with request: NSMutableURLRequest) {
+        set(.downloading(progress: nil))
+    }
+    func updater(_ updater: SPUUpdater, didDownloadUpdate item: SUAppcastItem) { set(.installing) }
+    func updater(_ updater: SPUUpdater, willInstallUpdate item: SUAppcastItem) { set(.installing) }
+    func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
+        Task { @MainActor in
+            // Back to the offer, so Update can be pressed again.
+            switch UpdateController.shared.phase {
+            case .downloading, .installing: UpdateController.shared.move(to: .idle)
+            default: break
+            }
+        }
+    }
+
+    // Scheduled checks are announced by the notch's banner, not by a window
+    // popping up over whatever the person is doing (gentle reminders).
+    var supportsGentleScheduledUpdateReminders: Bool { true }
+    func standardUserDriverShouldHandleShowingScheduledUpdate(_ update: SUAppcastItem,
+                                                              andInImmediateFocus immediateFocus: Bool) -> Bool {
+        false
     }
 }

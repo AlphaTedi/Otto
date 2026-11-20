@@ -273,6 +273,14 @@ private struct DockBarLayer: View {
     var body: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
+            // A new version, just above the sections (UpdateAlertCard).
+            if !editingNote, store.showsSpaceBar, !dock.isCreatingSpace {
+                UpdateAlertCard()
+                    .padding(.horizontal, NotchContainerMetrics.barInset)
+                    .padding(.bottom, DSSpace.xl)
+                    .frame(width: controller.containerBodyWidth)
+                    .onHover { if $0 { controller.cancelCollapse() } }
+            }
             Group {
                 if editingNote {
                     DockEditorBar()
