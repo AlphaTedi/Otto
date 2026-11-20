@@ -66,7 +66,23 @@ class NotchController: ObservableObject {
         // An image chip's hover preview is its own window, so nothing closes
         // it when the notch does — a desktop swipe mid-hover left it floating
         // on screen (Marcello, 2026-10-01). Leaving `.expanded` closes it.
-        didSet { if oldValue == .expanded, state != .expanded { ImagePreviewPanel.shared.dismiss() } }
+        didSet {
+            if oldValue == .expanded, state != .expanded {
+                ImagePreviewPanel.shared.dismiss()
+                alertOnly = false
+            }
+        }
+    }
+    /// Container layout: the notch opened for a meeting alert and shows the
+    /// meeting card ALONE, hanging under a notch that stays at its hover size.
+    /// The to-dos were opening with it, which nobody asked for (Marcello,
+    /// 2026-11-20). Pointing at or clicking the notch opens it the usual way.
+    @Published private(set) var alertOnly = false
+
+    /// From the card alone to the whole notch.
+    func openFromAlert() {
+        guard alertOnly else { return }
+        withAnimation(NotchAnimation.contentHug) { alertOnly = false }
     }
     /// Visibility follows presentation; cancelled tasks cannot strand an empty panel.
     var contentVisible: Bool { state == .expanded }
@@ -1018,6 +1034,7 @@ class NotchController: ObservableObject {
             if state == .idle {
                 triggerHover()
             }
+            openFromAlert()
             cancelCollapse()
         } else if !inZone && state == .expanded {
             scheduleCollapseIfOutsidePanel(location, screen: screen)
@@ -1050,6 +1067,11 @@ class NotchController: ObservableObject {
         // global monitor) closed it. A click outside the content is outside,
         // whichever window it arrived through; it means what Escape means
         // (Thomas, 2026-09-01). The save dialog remains attached to its note.
+        if state == .expanded, alertOnly, onNotch {
+            openFromAlert()
+            makeKeyForTyping()
+            return
+        }
         if state == .expanded {
             // The save dialog is a separate Otto window that belongs to the
             // open note. Its clicks must not dismiss the note behind it.
@@ -1153,10 +1175,12 @@ class NotchController: ObservableObject {
         let notchRect = calculateNotchRect(screen: screen)
 
         // Matches NotchShapeView.currentFilletRadius.
-        let fillet: CGFloat = (state == .hovering) ? 14 : 12
+        // The alert-only notch is drawn at its hover size.
+        let drawn: NotchState = alertOnly ? .hovering : state
+        let fillet: CGFloat = (drawn == .hovering) ? 14 : 12
         let width: CGFloat
         let height: CGFloat
-        switch state {
+        switch drawn {
         case .idle:
             width = notchSize.width + fillet * 2
             height = notchSize.height + Self.cursorApron
@@ -1512,6 +1536,7 @@ class NotchController: ObservableObject {
     /// self-triggered open is indistinguishable in feel from a manual one —
     /// same spring, same sequencing, no special "alert" animation.
     func presentMeetingAlert() {
+        if AppState.shared.notchLayout == .container, state != .expanded { alertOnly = true }
         triggerExpand(trigger: .meetingAlert)
     }
 
@@ -1555,6 +1580,8 @@ class NotchController: ObservableObject {
     var dialogHostWindow: NSWindow? { panel }
 
     func focusPanel() {
+        // Focusing asks for the panel itself (a note from the card, a hotkey).
+        openFromAlert()
         (panel as? NotchPanel)?.allowKey = true
         NSApp.activate(ignoringOtherApps: true)
         panel?.makeKeyAndOrderFront(nil)

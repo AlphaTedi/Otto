@@ -44,6 +44,9 @@ struct NotchRootView: View {
             if notchLayout == .container, controller.state == .expanded {
                 ContainerMeetingCard(controller: controller)
                     .transition(.opacity.animation(NotchAnimation.contentOut))
+            }
+            // A meeting alert alone shows only its card (alertOnly).
+            if notchLayout == .container, controller.state == .expanded, !controller.alertOnly {
                 // The B3 dock's glass bar, OUTSIDE the silhouette's mask so
                 // the glass can see what is behind it (DockBarLayer).
                 if DockExperiment.isOn(layout: notchLayout, flag: containerDock) {
@@ -71,7 +74,7 @@ struct NotchRootView: View {
     /// to being driven by the real state, because growing IS the design.
     private var notchShape: some View {
         NotchShapeView(
-            state: notchLayout == .container
+            state: notchLayout == .container && !controller.alertOnly
                 ? $controller.state
                 : .constant(controller.state == .expanded ? .hovering : controller.state),
             notchSize: controller.notchSize,
@@ -80,7 +83,7 @@ struct NotchRootView: View {
             // content the tab is showing.
             extraExpandedHeight: appState.notchExtraHeight,
             hasPhysicalNotch: controller.hasPhysicalNotch,
-            contentVisible: controller.contentVisible,
+            contentVisible: controller.contentVisible && !controller.alertOnly,
             content: AnyView(expandedContent)
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -210,7 +213,10 @@ private struct ContainerMeetingCard: View {
         // (Marcello, 2026-10-04: the card was wider than the notch).
         let shape = RoundedRectangle(cornerRadius: controller.containerBottomRadius, style: .continuous)
         VStack(spacing: 0) {
-            Color.clear.frame(height: controller.containerSilhouetteHeight + 12)
+            // Under the silhouette, or under the hover-size notch when the
+            // alert is shown alone (NotchShapeView: hover is notch + 6).
+            Color.clear.frame(height: (controller.alertOnly ? controller.notchSize.height + 6
+                                                            : controller.containerSilhouetteHeight) + 12)
             if let meeting {
                 PanelMeetingCard(meeting: meeting, isNext: true)
                     .padding(PanelMetrics.blockPadding)

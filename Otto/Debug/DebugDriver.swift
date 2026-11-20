@@ -284,6 +284,16 @@ enum DebugDriver {
                     window.orderOut(nil)
                     appendState("empty-snap done")
                 }
+            } else if command.hasPrefix("notch-window-snap-pid ") {
+                // notch-window-snap-pid <pid> <file> — the live notch window as
+                // drawn (no glass), plus the alert-only flag. Writes nothing.
+                let parts = command.split(separator: " ", maxSplits: 2)
+                guard parts.count == 3, Int32(parts[1]) == ProcessInfo.processInfo.processIdentifier,
+                      let view = NotchController.shared.panelForDebug?.contentView,
+                      let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+                view.cacheDisplay(in: view.bounds, to: rep)
+                try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: String(parts[2])))
+                appendState("notch-window-snap done state=\(NotchController.shared.state) alertOnly=\(NotchController.shared.alertOnly)")
             } else if command.hasPrefix("presence-snap-pid ") {
                 // presence-snap-pid <pid> <dir> — the collapsed notch's meeting
                 // indicator for each platform, and the card icons. Writes nothing.
