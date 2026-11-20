@@ -128,8 +128,10 @@ struct MeetingCard: View {
                         JoinButton(showsShortcut: isNext) { open() }
                     }
                     if let onSnooze {
-                        SnoozeButton(minutes: CalendarStore.shared.snoozeMinutes,
-                                     action: onSnooze)
+                        PrimaryActionButton(title: String(format: L10n.t("cal.snooze"),
+                                                          CalendarStore.shared.snoozeMinutes),
+                                            variant: .outline, size: .xs,
+                                            action: onSnooze)
                     }
                     Spacer(minLength: 8)
                     AvatarStack(
@@ -190,59 +192,17 @@ struct MeetingCard: View {
 
 // MARK: - JoinButton
 
-/// The same control as Create, in compact form — not a one-off blue pill.
-/// It was the only blue button in the app (Marcello, 2026-07-26).
+/// Join, in compact form. Only the next meeting advertises ⌘↩, because ⌘↩
+/// joins THAT meeting; showing it on every card would promise something false.
 private struct JoinButton: View {
-    /// Only the next meeting advertises the shortcut, because ⌘↩ joins THAT
-    /// meeting; showing it on every card would promise something false.
     var showsShortcut: Bool = true
     let action: () -> Void
-    @State private var hover = false
 
     var body: some View {
-        Button(action: action) {
-            PrimaryActionButton(
-                title: L10n.t("cal.join"),
-                shortcutHint: showsShortcut ? "\u{2318}\u{21A9}" : "",
-                fillsWidth: false,
-                isCompact: true
-            )
-            .opacity(hover ? 0.85 : 1)
-            .contentShape(DSShape.action)
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            withAnimation(NotchAnimation.hintFade) { hover = hovering }
-        }
-        .panelTooltip(L10n.t("cal.joinHelp"))
-    }
-}
-
-// MARK: - SnoozeButton
-
-/// Join's quiet sibling. Same capsule and the same compact metrics, outlined
-/// instead of filled — the alert offers two ways out and only one of them is
-/// the point.
-private struct SnoozeButton: View {
-    let minutes: Int
-    let action: () -> Void
-    @State private var hover = false
-
-    var body: some View {
-        Button(action: action) {
-            Text(String(format: L10n.t("cal.snooze"), minutes))
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(hover ? DSColor.textPrimaryBright : DSColor.textSecondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .overlay(DSShape.action.strokeBorder(DSColor.panelBorder,
-                                                     lineWidth: 0.5))
-                .contentShape(DSShape.action)
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            withAnimation(NotchAnimation.hintFade) { hover = hovering }
-        }
+        PrimaryActionButton(title: L10n.t("cal.join"),
+                            shortcutHint: showsShortcut ? "\u{2318}\u{21A9}" : "",
+                            size: .xs, action: action)
+            .panelTooltip(L10n.t("cal.joinHelp"))
     }
 }
 

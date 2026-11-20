@@ -760,14 +760,7 @@ private struct Composer: View {
             // app — it files a to-do, it commits a step — and Notes was the
             // one surface asking for a modifier to do the same thing.
             // ⇧⏎ still puts in a line break.
-            Text("\u{21A9}")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(DSColor.textFaint)
-                .frame(width: 32, height: 19)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .strokeBorder(DSColor.textFaint, lineWidth: 1)
-                )
+            KeyBadge(text: "\u{21A9}", minWidth: 32, height: 19)
         }
         .animation(Motion.hintFade, value: store.draft.isEmpty)
     }
@@ -845,31 +838,12 @@ struct NotesKindMenuList: View {
     }
 
     private func row(_ index: Int, _ title: String, shortcut: String, active: Bool) -> some View {
-        let shape = RoundedRectangle(cornerRadius: OttoMenuStyle.rowRadius, style: .continuous)
-        return Button { notes.chooseKind(meetings: index == 1) } label: {
-            HStack(spacing: 8) {
-                OttoIcon("checkmark", pointSize: 11)
-                    .foregroundStyle(DSColor.textPrimaryBright)
-                    .opacity(active ? 1 : 0)
-                    .frame(width: 14)
-                Text(title)
-                    .font(.system(size: OttoMenuStyle.rowFont, weight: active ? .medium : .regular))
-                    .foregroundStyle(active ? DSColor.textPrimaryBright : DSColor.textPrimary)
-                Spacer(minLength: 8)
-                Text(shortcut)
-                    .font(.system(size: OttoMenuStyle.shortcutFont))
-                    .foregroundStyle(DSColor.textHint)
-                    .fixedSize()
-            }
-            .padding(.leading, 10)
-            .padding(.trailing, OttoMenuStyle.rowPaddingH)
-            .padding(.vertical, OttoMenuStyle.rowPaddingV)
-            .background(shape.fill(OttoMenuStyle.rowFill(highlighted: notes.kindMenuSelection == index)))
-            .contentShape(shape)
+        DSMenuRow(label: title, isChecked: active, shortcut: shortcut,
+                  isHighlighted: notes.kindMenuSelection == index, isEmphasized: active) {
+            notes.chooseKind(meetings: index == 1)
         }
-        .buttonStyle(.plain)
+        // Hover IS the keyboard selection here: one highlight, not two.
         .onHover { if $0 { notes.kindMenuSelection = index } }
-        .accessibilityAddTraits(active ? .isSelected : [])
     }
 }
 
@@ -1076,25 +1050,18 @@ private struct NoteEntryRow: View {
                                      : (notchLayout == .container ? NotesMetrics.entryInset + 10 : NotesMetrics.entryInset))
         .padding(.vertical, usesDock ? 11 : 9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: usesDock ? NotchContainerMetrics.highlightRadius : NotesMetrics.highlightRadius,
-                             style: .continuous)
-                .fill(isLanding ? NotesMetrics.pillStroke.opacity(0.12)
-                      : (isSelected ? (usesDock ? DSDock.rowFocus : DSColor.focusedRowBackground)
-                         : (isHovered ? (usesDock ? DSDock.rowHover : DSColor.rowHover(container: notchLayout == .container))
-                                      : Color.clear)))
-        )
+        .dsRowBackground(hover: isHovered, focused: isSelected,
+                         override: isLanding ? NotesMetrics.pillStroke.opacity(0.12) : nil)
         .overlay(
-            RoundedRectangle(cornerRadius: NotesMetrics.highlightRadius, style: .continuous)
+            DSShape.squircle(DSRadius.row)
                 .strokeBorder(isLanding ? NotesMetrics.pillStroke.opacity(0.3) : Color.clear,
                               lineWidth: 1)
         )
         .overlay(alignment: .top) {
             if showsDropIndicator {
-                Capsule()
-                    .fill(DSColor.textPrimaryBright)
-                    .frame(height: 2)
-                    .offset(y: -(NotesMetrics.entryGap / 2 + 1))
+                // The to-do list's own drop line: they are the same row.
+                DropIndicator()
+                    .offset(y: -(NotesMetrics.entryGap / 2 + 3))
             }
         }
         .offset(y: dragOffset)
@@ -1129,17 +1096,20 @@ private struct NoteEntryRow: View {
 
 // MARK: Empty state (Meetings)
 
+/// Meetings' empty state, deliberately NOT `EmptyListView`: no logo, because
+/// the composer above is the call to action and a drawing would compete.
 private struct EmptyStreamState: View {
+    @Environment(\.dsPalette) private var palette
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: DSSpace.xl) {
             Text(L10n.t("calendar.emptyTitle"))
-                .font(.system(size: 16))
-                .foregroundStyle(DSColor.textSecondary)
+                .font(.system(size: 16)) // ds-allow: matches the composer's own type
+                .foregroundStyle(palette.textSecondary)
             // No illustration, no icon, no button: the composer above IS the
             // call to action, and anything here would compete with it.
             Text(L10n.t("calendar.emptyBody"))
-                .font(.system(size: 13.5))
-                .foregroundStyle(DSColor.textHint)
+                .font(DSType.step)
+                .foregroundStyle(palette.placeholder)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 380)
         }
@@ -1327,14 +1297,7 @@ private struct NoteDetailView: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(DSColor.textFaint)
                     .fixedSize()
-                Text("\u{2318}[")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(DSColor.textFaint)
-                    .frame(width: 32, height: 19)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(DSColor.textFaint, lineWidth: 1)
-                    )
+                KeyBadge(text: "\u{2318}[", minWidth: 32, height: 19)
             }
         }
         .padding(.horizontal, PanelMetrics.barPaddingH)
@@ -1374,7 +1337,7 @@ private struct NoteDetailView: View {
                     .font(.system(size: 12.5))
                     .foregroundStyle(SpaceInk.a(0.45))
                     .fixedSize()
-                CaptureKeyHint(label: "esc")
+                KeyBadge(text: "esc", style: .hint)
             }
         }
     }
@@ -1401,13 +1364,8 @@ private struct NoteDetailView: View {
             Button { store.exportOpenNote() } label: {
                 // The gear's button, exactly (SettingsGearButton).
                 OttoIcon("square.and.arrow.down", pointSize: 16)
-                    .foregroundStyle(SpaceInk.a(0.75))
-                    .frame(width: 34, height: 34)
-                    .background(Circle().fill(SpaceInk.a(0.07)))
-                    .overlay(Circle().strokeBorder(SpaceInk.a(0.10), lineWidth: 1))
-                    .contentShape(Circle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(DSIconButtonStyle(variant: .filled, size: DSSize.icon))
             .panelTooltip(L10n.t("notes.download") + "  \u{2318}\u{21E7}S")
             .accessibilityLabel(L10n.t("notes.download"))
             // Rename is gone from this row — the bar needs the width. It is
@@ -1481,24 +1439,14 @@ private struct NoteDetailView: View {
 /// has to answer the pointer when it arrives.
 private struct BackButton: View {
     let action: () -> Void
-    @State private var hover = false
 
     var body: some View {
         Button(action: action) {
             OttoIcon("chevron.left", pointSize: 15)
-                .foregroundStyle(hover ? DSColor.textPrimaryBright : PanelMetrics.accent)
-                .frame(width: 30, height: 30)
-                // A rounded square, like every other small control in the
-                // panel — not a circle (Marcello, 2026-10-12).
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(hover ? DSColor.fieldBackground : Color.clear)
-                )
-                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .buttonStyle(.plain)
-        .onHover { hover = $0 }
-        .animation(Motion.hoverFade, value: hover)
+        // A rounded square, like every other small control in the panel —
+        // not a circle (Marcello, 2026-10-12).
+        .buttonStyle(DSIconButtonStyle(shape: .squircle, size: 30, restGlyph: PanelMetrics.accent))
         .panelTooltip(L10n.t("notes.back"))
     }
 }
@@ -1551,46 +1499,18 @@ private struct UndoBar: View {
 struct NotesPill: View {
     @ObservedObject private var store = TodoStore.shared
     @ObservedObject private var notes = NotesStore.shared
-    @State private var hover = false
 
     /// Notes is lit for its meeting-notes view too — it is one space.
     private var isActive: Bool { store.panelMode == .notes || store.panelMode == .calendar }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text(L10n.t("filter.notes"))
-                .font(.system(size: 13, weight: .semibold))
-            Text("\(notes.notes.filter { $0.meetingContext == nil }.count)")
-                .font(.system(size: 13, weight: .semibold))
-                .monospacedDigit()
-                .opacity(0.55)
-                .contentTransition(.numericText())
-        }
-        .foregroundColor(isActive ? SpacePillStyle.onFill : DSColor.textPrimary)
-        .padding(.horizontal, SpacePillStyle.paddingH)
-        .frame(height: 28)
-        // Never squeezed: when the lists overflow, the scroller gives way, not
-        // this pill (its capsule ends were being cut off).
-        .fixedSize()
-        // Like every other pill (Marcello, 2026-10-02): no dashed edge — a
-        // fill when selected, the shared hover wash otherwise.
-        .background(Capsule(style: .continuous).fill(
-            isActive ? SpaceTint.notes.base.color.opacity(0.85)
-                     : (hover ? DSColor.fieldBackground : Color.clear)
-        ))
-        .contentShape(Capsule(style: .continuous))
-        .onTapGesture { NotesStore.shared.enterSpace() }
-        .onHover { hover = $0 }
-        .animation(Motion.hoverFade, value: hover)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(L10n.t("filter.notes"))
+        SpacePill(title: L10n.t("filter.notes"),
+                  fill: SpaceTint.notes.base.color.opacity(0.85),
+                  isActive: isActive,
+                  count: notes.notes.filter { $0.meetingContext == nil }.count,
+                  zeroIsDone: false)
+            .onTapGesture { NotesStore.shared.enterSpace() }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(L10n.t("filter.notes"))
     }
-}
-
-/// U5's space-pill numbers, shared by Notes and Calendar.
-enum SpacePillStyle {
-    /// 11 of padding inside the 1.4-pt border — the reference's content-box
-    /// 11 + border, which lands the text where the section pills' 12 does.
-    static let paddingH: CGFloat = 12.4
-    static let onFill = Color(hex: "#1A1622")
 }

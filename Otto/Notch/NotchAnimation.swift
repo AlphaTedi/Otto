@@ -122,7 +122,7 @@ enum Motion {
     }
 
     /// What every token collapses to when the user has asked for less.
-    private static let fade = Animation.easeOut(duration: 0.12)
+    static let fade = Animation.easeOut(duration: 0.12)
 
     static var contentHug: Animation { isReduced ? fade : NotchAnimation.contentHug }
     static var hintFade: Animation   { isReduced ? fade : NotchAnimation.hintFade }
@@ -130,6 +130,45 @@ enum Motion {
     static var swap: Animation       { isReduced ? fade : NotchAnimation.swap }
     static var hoverFade: Animation  { isReduced ? fade : NotchAnimation.hoverFade }
     static var press: Animation      { isReduced ? fade : NotchAnimation.press }
+
+    /// Something small appearing, disappearing or changing state in place: a
+    /// badge, a Save button enabling, a hint. Not movement — a fade. This is
+    /// the `easeOut(0.15)` that was written by hand seventeen times.
+    static var appear: Animation     { isReduced ? fade : .easeOut(duration: 0.15) }
+
+    /// A colour changing: a tint following the space, a swatch picked.
+    /// Colour is not physical, so this is a curve, not a spring.
+    static var tint: Animation       { isReduced ? fade : .easeInOut(duration: 0.2) }
+
+    /// A menu or popover opening/closing in place.
+    static var menu: Animation       { isReduced ? fade : .spring(response: 0.34, dampingFraction: 0.86) }
+}
+
+// MARK: - Transitions — the whole vocabulary
+//
+// Every insert/remove in the notch is one of these. The ad-hoc
+// `.opacity.combined(with: .offset(y: 4/8/-10))` and `.scale(0.6/0.9/0.92)`
+// combinations that grew around the app map onto `rise` and `pop`.
+
+enum DSTransition {
+    /// Appears/disappears in place. The default.
+    static var fade: AnyTransition { .opacity }
+
+    /// Settles the last few points into place from below. Lists, cards.
+    static func rise(reduceMotion: Bool = Motion.isReduced) -> AnyTransition {
+        reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 6))
+    }
+
+    /// Grows from slightly smaller. Badges, small floating controls.
+    static func pop(reduceMotion: Bool = Motion.isReduced) -> AnyTransition {
+        reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.92))
+    }
+
+    /// A section or mode swap — see `AnyTransition.sectionSwap`.
+    static var sectionSwap: AnyTransition { .sectionSwap }
+
+    /// The floating panels' list swap — see `AnyTransition.spaceSwap`.
+    static func spaceSwap(reduceMotion: Bool) -> AnyTransition { .spaceSwap(reduceMotion: reduceMotion) }
 }
 
 // MARK: - Panel content entry (Marcello, 2026-07-26)

@@ -93,7 +93,7 @@ struct EmptyListView: View {
         .asymmetric(
             insertion: .opacity.combined(with: .scale(scale: 0.96))
                 .animation(Motion.contentHug),
-            removal: .opacity.animation(.easeOut(duration: 0.15))
+            removal: .opacity.animation(Motion.appear)
         )
     }
 }

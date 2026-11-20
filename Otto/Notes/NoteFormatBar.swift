@@ -125,7 +125,7 @@ struct NoteFormatBar: View {
                     .font(.system(size: 12, weight: .semibold))
                     .fixedSize()
             }
-            .buttonStyle(FormatControlStyle(isActive: editor.activeBlock == .h1
+            .buttonStyle(DSIconButtonStyle(isActive: editor.activeBlock == .h1
                                                    || editor.activeBlock == .h2))
             .popover(isPresented: $showsBlockMenu, arrowEdge: .top) {
                 BlockMenu { block in
@@ -138,14 +138,14 @@ struct NoteFormatBar: View {
 
             // Group 2 — lists
             Button { editor.toggleBlock(.bullet) } label: { BulletGlyph() }
-                .buttonStyle(FormatControlStyle(isActive: editor.activeBlock == .bullet))
+                .buttonStyle(DSIconButtonStyle(isActive: editor.activeBlock == .bullet))
             Button { editor.toggleBlock(.numbered) } label: {
                 // The system face: monospace is for code only.
                 Text("1.").font(.system(size: 11.5, weight: .medium))
             }
-            .buttonStyle(FormatControlStyle(isActive: editor.activeBlock == .numbered))
+            .buttonStyle(DSIconButtonStyle(isActive: editor.activeBlock == .numbered))
             Button { editor.toggleBlock(.checklistOpen) } label: { ChecklistGlyph() }
-                .buttonStyle(FormatControlStyle(isActive: editor.activeBlock.isChecklist))
+                .buttonStyle(DSIconButtonStyle(isActive: editor.activeBlock.isChecklist))
 
             divider
 
@@ -155,15 +155,15 @@ struct NoteFormatBar: View {
                 Button { editor.toggleBold() } label: {
                     Text("B").font(.system(size: 12.5, weight: .bold))
                 }
-                .buttonStyle(FormatControlStyle(isActive: editor.bold))
+                .buttonStyle(DSIconButtonStyle(isActive: editor.bold))
                 Button { editor.toggleItalic() } label: {
                     Text("I").font(.system(size: 12.5).italic())
                 }
-                .buttonStyle(FormatControlStyle(isActive: editor.italic))
+                .buttonStyle(DSIconButtonStyle(isActive: editor.italic))
                 Button { editor.toggleUnderline() } label: {
                     Text("U").font(.system(size: 12.5)).underline()
                 }
-                .buttonStyle(FormatControlStyle(isActive: editor.underline))
+                .buttonStyle(DSIconButtonStyle(isActive: editor.underline))
             }
             .disabled(editor.activeBlock == .code)
 
@@ -175,16 +175,16 @@ struct NoteFormatBar: View {
                 // boxed "</>" read badly): </> inline, { } for the block.
                 OttoIcon("chevron.left.forwardslash.chevron.right", pointSize: 12)
             }
-            .buttonStyle(FormatControlStyle(isActive: editor.code))
+            .buttonStyle(DSIconButtonStyle(isActive: editor.code))
             .disabled(editor.activeBlock == .code)
             .panelTooltip(L10n.t("notes.fmt.inlineCode") + "  \u{2318}\u{21E7}C")
             .accessibilityLabel(L10n.t("notes.fmt.inlineCode"))
             Button { editor.toggleQuote() } label: { QuoteGlyph() }
-                .buttonStyle(FormatControlStyle(isActive: editor.activeBlock == .quote))
+                .buttonStyle(DSIconButtonStyle(isActive: editor.activeBlock == .quote))
                 .panelTooltip(L10n.t("notes.fmt.quote") + "  \u{2318}'")
                 .accessibilityLabel(L10n.t("notes.fmt.quote"))
             Button { editor.toggleCodeBlock() } label: { OttoIcon("curlybraces", pointSize: 12) }
-                .buttonStyle(FormatControlStyle(isActive: editor.activeBlock == .code))
+                .buttonStyle(DSIconButtonStyle(isActive: editor.activeBlock == .code))
                 .panelTooltip(L10n.t("notes.fmt.codeBlock") + "  \u{2318}\u{2325}\u{21E7}C")
                 .accessibilityLabel(L10n.t("notes.fmt.codeBlock"))
             // No image button (Marcello, 2026-10-12: picking from the vault
@@ -221,63 +221,24 @@ struct NoteFormatBar: View {
     }
 }
 
-/// One tool in the docked bar: a circular hover fill (white 9 %) and its
-/// tooltip, which reads the same hover.
+/// One tool in the docked bar: `DSIconButtonStyle` in the notes gold, plus
+/// the dock's gliding tooltip.
 private struct DockToolButton<Glyph: View>: View {
     let label: String
     let shortcut: String?
     let isActive: Bool
     let action: () -> Void
     @ViewBuilder let glyph: Glyph
-    @State private var hover = false
     @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         Button(action: action) {
             glyph
-                .foregroundStyle(isActive ? DSDock.notesLight : DSDock.text)
-                .frame(width: 32, height: 32)
-                .background(Circle().fill(isActive ? DSDock.notes.opacity(0.18)
-                                          : (hover ? Color.white.opacity(0.09) : .clear)))
-                .contentShape(Circle())
         }
-        .buttonStyle(.plain)
-        .opacity(isEnabled ? 1 : 0.35)
-        .onHover { hover = $0 }
-        .animation(Motion.hoverFade, value: hover)
+        .buttonStyle(DSIconButtonStyle(size: 32, isActive: isActive,
+                                       activeTint: DSDock.notes, activeGlyph: DSDock.notesLight)) // ds-allow: the dock-only tool bar wears the notes gold
         .barTip("fmt." + label, isEnabled ? BarTip(label: label, shortcut: shortcut) : nil)
         .accessibilityLabel(label)
-    }
-}
-
-/// Rest, hover, active, pressed — one style so the controls cannot drift
-/// apart. A 28×28 hit area under glyphs that are much smaller, so the row is
-/// dense to look at and not to use.
-///
-/// A CIRCLE, concentric with the capsule it sits in (Marcello, 2026-11-02: the
-/// old rounded square clashed with it). Rest, hover, selected, pressed and
-/// disabled all read differently; the 28×28 frame is exact so no glyph
-/// stretches it.
-private struct FormatControlStyle: ButtonStyle {
-    let isActive: Bool
-    @State private var hover = false
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        let shape = Circle()
-        return configuration.label
-            .foregroundStyle(isActive ? PanelMetrics.accent : DSColor.textPrimary)
-            .frame(width: 28, height: 28)
-            .background(
-                shape.fill(configuration.isPressed ? PanelMetrics.accent.opacity(0.28)
-                           : (isActive ? PanelMetrics.accent.opacity(0.18)
-                              : (hover ? DSColor.fieldBackground : Color.clear)))
-            )
-            .contentShape(shape)
-            .opacity(isEnabled ? 1 : 0.35)
-            .onHover { hover = $0 }
-            .animation(Motion.hoverFade, value: hover)
-            .animation(Motion.hoverFade, value: isActive)
     }
 }
 
@@ -389,7 +350,7 @@ private struct LinkEditor: View {
                 Button(L10n.t("dock.linkRemove")) { editor.commitLink("") }
                     .buttonStyle(.plain)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color(hex: "#FF6961"))
+                    .foregroundStyle(DSColor.destructive)
             }
         }
         .padding(.horizontal, 12)

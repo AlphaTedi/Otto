@@ -117,23 +117,16 @@ struct EvenDashBox: Shape {
     }
 }
 
-/// The ↵ keycap that files the first row: white, the glyph in full black.
+/// The ↵ that files the first row: the primary button, icon-only.
 struct DockReturnKey: View {
     let action: () -> Void
-    @State private var hover = false
 
     var body: some View {
         Button(action: action) {
             Text("\u{21B5}")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color.black)
-                .frame(width: 30, height: 24)
-                .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(hover ? Color.white : Color(hex: "#F2F1F5")))
-                .contentShape(Rectangle())
         }
-        .buttonStyle(DockPressStyle())
-        .onHover { hovering in withAnimation(.easeOut(duration: 0.15)) { hover = hovering } }
+        .buttonStyle(DSButtonStyle(variant: .primary, size: .xs, square: true))
+        .ottoTooltip(L10n.t("dock.save"), shortcut: "\u{21A9}")
         .accessibilityLabel(L10n.t("dock.save") + ", Return")
     }
 }

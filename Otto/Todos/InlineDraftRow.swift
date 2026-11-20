@@ -164,14 +164,7 @@ struct InlineDraftRow: View {
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(DSColor.textFaint)
                         .fixedSize()
-                    Text(L10n.t("key.tab"))
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(DSColor.textFaint)
-                        .frame(width: 32, height: 19)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .strokeBorder(DSColor.textFaint, lineWidth: 1)
-                        )
+                    KeyBadge(text: L10n.t("key.tab"), minWidth: 32, height: 19)
                 }
             }
 

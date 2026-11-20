@@ -37,7 +37,7 @@ put it in the folder it belongs to. Keep scratch files and generated output
 | `Settings/` | The Settings window: `SettingsView` (every page), `CalendarSettingsView`, `SettingsWindowController` |
 | `Storage/` | What lands on disk for humans: `MarkdownVault` (the Markdown mirror of to-dos and notes) and `Attachments` (images pasted into notes and to-dos) |
 | `Telemetry/` | Opt-in usage counts (`Analytics`, `AnalyticsEvent`) and the feedback window — both talk to `server/` |
-| `DesignSystem/` | `DesignTokens` (DSColor, DSSpacing, DSRadius, DSFont — the only source of styling), `DesignComponents`, `OttoIcon` (Lucide icons), `LiquidGlass`, `SharedGlass`, `ProgressiveBlur`, `HapticManager`, `SoundManager` |
+| `DesignSystem/` | The design system (`docs/DESIGN_SYSTEM.md`): `DesignTokens` (DSColor, DSSpace, DSRadius, DSSize, DSType — the only source of styling), `Surface` (OttoSurface, DSPalette roles, `dsRowBackground`), `DSButtons`, `DSCheckbox`, `DSMenu`, `DesignComponents` (SpacePill, Keycap, KeyBadge, DSSectionLabel, DropIndicator…), `PanelTooltip` (`.ottoTooltip`), `DSGallery` (preview catalogue), `OttoIcon` (Lucide icons), `LiquidGlass`, `SharedGlass`, `ProgressiveBlur`, `HapticManager`, `SoundManager` |
 | `Intents/` | App Intents (Shortcuts, Spotlight, Siri): thin wrappers over `TodoStore` |
 | `Debug/` | `DebugDriver` (DEBUG-only headless test side door) and `MeetingNotesVerification` |
 | `Resources/` | Assets (app icon, Lucide icons, meeting platform marks), the Host Grotesk font, sounds, licences |
@@ -103,7 +103,9 @@ seconds and on `EKEventStoreChanged`.
   second logic path.
 - New persisted user data: a `decodeIfPresent` line in its decoder, and a
   Markdown mirror via `MarkdownVault`.
-- A colour, spacing, radius or font: `DesignTokens.swift`, never inline.
+- Any UI: compose it from `docs/DESIGN_SYSTEM.md` — tokens, palette roles
+  (`Surface.swift`) and shared components. A colour, spacing, radius, font or
+  animation is a token, never inline; `Scripts/design-lint.sh` checks it.
 - A user-visible string: `Localization.swift`, in both English and Italian.
 - A new `Notification.Name`: `AppNotifications.swift`.
 

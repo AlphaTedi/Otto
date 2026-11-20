@@ -485,6 +485,37 @@ enum DebugDriver {
                 // The click path: open, then take the caret.
                 NotchController.shared.triggerExpand()
                 NotchController.shared.makeKeyForTyping()
+            } else if command.hasPrefix("gallery-render-pid ") {
+                // gallery-render-pid <pid> <dir> — DSGallery (every design
+                // system component, both surfaces) in light and dark, off
+                // screen. Writes nothing.
+                let parts = command.split(separator: " ", maxSplits: 2)
+                guard parts.count == 3, Int32(parts[1]) == ProcessInfo.processInfo.processIdentifier else { return }
+                let directory = URL(fileURLWithPath: String(parts[2]))
+                Task { @MainActor in
+                    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                    GlassDebug.forceOpaque = true
+                    for (name, appearance, scheme) in [("light", NSAppearance.Name.aqua, ColorScheme.light),
+                                                       ("dark", .darkAqua, .dark)] {
+                        let host = NSHostingView(rootView: DSGallery().environment(\.colorScheme, scheme))
+                        host.frame = NSRect(origin: .zero, size: host.fittingSize)
+                        let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000,
+                                                                  width: host.frame.width, height: host.frame.height),
+                                              styleMask: [.borderless], backing: .buffered, defer: false)
+                        window.appearance = NSAppearance(named: appearance)
+                        window.contentView = host
+                        window.orderBack(nil)
+                        try? await Task.sleep(nanoseconds: 900_000_000)
+                        if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                            host.cacheDisplay(in: host.bounds, to: rep)
+                            try? rep.representation(using: .png, properties: [:])?
+                                .write(to: directory.appendingPathComponent("gallery-\(name).png"))
+                        }
+                        window.orderOut(nil)
+                    }
+                    GlassDebug.forceOpaque = false
+                    appendState("gallery-render done")
+                }
             } else if command.hasPrefix("panel-render-pid ") {
                 // panel-render-pid <pid> <dir> — only the process with that pid
                 // answers, so a second Debug instance (Xcode's) stays still.
@@ -522,6 +553,9 @@ enum DebugDriver {
                         .clipShape(shape)
                         .environmentObject(AppState.shared)
                         .environment(\.colorScheme, .dark)
+                        // NotchRootView declares the surface; hosted alone the
+                        // panel must declare it itself.
+                        .ottoSurface(container ? .container : .panels)
                     let host = NSHostingView(rootView: root)
                     host.frame = NSRect(origin: .zero, size: size)
                     let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: size.width, height: size.height),

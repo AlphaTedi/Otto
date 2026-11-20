@@ -717,9 +717,9 @@ struct TodoBrowsingView: View {
                             .rotationEffect(.degrees(store.completedExpanded ? 90 : 0))
                         if usesDock {
                             // The final flow's quiet label: "Completed · 2".
-                            Text(String(format: L10n.t("dock.completed"), completed.count + historyCount))
-                                .font(DSDock.quietLabel)
-                                .foregroundStyle(DSDock.text3)
+                            DSSectionLabel(text: String(format: L10n.t("dock.completed"),
+                                                        completed.count + historyCount),
+                                           style: .quiet)
                         } else {
                         Text(L10n.t("todo.completed"))
                             .font(DSFont.checklistItem)
@@ -786,24 +786,13 @@ struct TodoBrowsingView: View {
 
 struct SweepButton: View {
     let action: () -> Void
-    @State private var hover = false
 
     var body: some View {
         Button(action: action) {
             OttoIcon("wind", pointSize: 11)
-                .foregroundStyle(hover ? DSColor.textPrimaryBright : DSColor.textHint)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(
-                    DSShape.squircle(DSRadius.chipCorner)
-                        .fill(hover ? DSColor.fieldBackground : .clear)
-                )
-                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            withAnimation(NotchAnimation.hintFade) { hover = hovering }
-        }
+        .buttonStyle(DSIconButtonStyle(shape: .squircle, size: 18, width: 24,
+                                       restGlyph: DSColor.textHint))
         .panelTooltip(L10n.t("todo.clearCompleted"))
     }
 }

@@ -182,17 +182,13 @@ struct CompletedEntryRow: View {
     }
 
     private func tick(filled: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 5, style: .continuous)
-            .fill(filled ? PanelMetrics.accent.opacity(0.9) : Color.clear)
-            .overlay(
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .strokeBorder(filled ? Color.clear : DSColor.textFaint, lineWidth: 1.2)
-            )
-            .overlay(
-                OttoIcon("checkmark", pointSize: 8)
-                    .foregroundStyle(filled ? DSColor.onAccentFill : DSColor.textFaint)
-            )
-            .frame(width: 16, height: 16)
+        // An archived completion shows its tick even unfilled: it IS done,
+        // there is just nothing live behind it to undo.
+        DSCheckbox(size: .archive, isChecked: true,
+                   tint: filled ? PanelMetrics.accent.opacity(0.9) : DSColor.textFaint,
+                   checkedFill: filled ? nil : .clear,
+                   checkedStroke: filled ? nil : DSColor.textFaint,
+                   checkColor: filled ? DSColor.onAccentFill : DSColor.textFaint)
     }
 
     private static func time(_ at: Date) -> String {

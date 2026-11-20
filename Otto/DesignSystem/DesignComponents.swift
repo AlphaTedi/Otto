@@ -3,79 +3,126 @@ import SwiftUI
 // Reusable SwiftUI components built on the tokens in DesignTokens.swift.
 // Use these rather than re-specifying a chip, keycap or button inline.
 
-// MARK: - Reusable component: Category tab chip
+// MARK: - Reusable component: Space pill
 
-/// A single tab in the browsing view's tab row. Only the ACTIVE tab is
-/// rendered in its category color — inactive tabs are always neutral.
-/// See TD-9 / TD-2 in the to-do pivot PRD — this is not optional
-/// styling, it's a functional requirement.
-struct CategoryTabChip: View {
+/// A space in the floating panels' tab row — a section, or Notes. Only the
+/// ACTIVE pill is drawn in its colour; inactive pills are always neutral, with
+/// the shared hover wash (TD-9 / TD-2 in the to-do pivot PRD — this is not
+/// optional styling, it's a functional requirement).
+///
+/// One component for every space (2026-11-08): Notes had its own copy with a
+/// different text colour on the fill.
+struct SpacePill: View {
     let title: String
-    /// The space's tint: the selected fill is its LIGHT colour, the shadow its
-    /// base (U5 §5.1, §7).
-    let tint: SpaceTint
+    /// The fill while active: the space's own colour.
+    let fill: Color
     let isActive: Bool
-    /// How many to-dos are still OPEN in this category. nil = the category is
-    /// empty (no indicator at all); 0 = everything done (checkmark).
-    ///
-    /// This replaces the circular progress ring: a 14pt arc couldn't tell you
-    /// how much was left — "I don't understand from that view how much I am
-    /// still missing" (Marcello, 2026-07-23). A remaining COUNT answers that
-    /// directly, the way Reminders/Things do.
-    let remaining: Int?
+    /// The number after the title. nil = no number at all.
+    let count: Int?
+    /// A count of 0 reads as "all clear" — a quiet ✓ — for a to-do section.
+    /// Notes show their 0 as a number.
+    var zeroIsDone = true
+    /// The tab row uses `.sm` (28). Bigger pills are for roomier pickers.
+    var size: DSControlSize = .sm
 
-    /// Whether the pointer is on this chip. The lists had NO hover state at
-    /// all, so the only chip in the bar that answered the pointer was the one
-    /// already selected — a row of controls that looked inert until clicked
-    /// (Marcello, 2026-09-06).
+    /// The lists had NO hover state at all, so the only chip in the bar that
+    /// answered the pointer was the one already selected (Marcello, 2026-09-06).
     @State private var hover = false
+    @Environment(\.dsPalette) private var palette
 
-    /// Text on the section-coloured fill: dark on the light tone (dark mode),
+    /// Text on the space-coloured fill: dark on the light tone (dark mode),
     /// white on the deepened one (light mode).
     private static let onFill = Color.dynamic(light: .white,
                                               dark: NSColor(srgbRed: 0x16 / 255, green: 0x1A / 255,
                                                             blue: 0x24 / 255, alpha: 1))
 
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(isActive ? Self.onFill : DSColor.textPrimary)
+    private var ink: Color { isActive ? Self.onFill : palette.textPrimary }
 
-            if let remaining {
-                if remaining == 0 {
+    var body: some View {
+        HStack(spacing: DSSpace.s) {
+            Text(title)
+                .font(size == .sm ? DSType.label : size.font.weight(.semibold))
+                .foregroundColor(ink)
+
+            if let count {
+                if count == 0 && zeroIsDone {
                     // Nothing left — a quiet "all clear", not a zero.
                     OttoIcon("checkmark", pointSize: 9)
-                        .foregroundColor(isActive ? Self.onFill : DSColor.textPrimary)
+                        .foregroundColor(ink)
                         .opacity(0.5)
                 } else {
-                    Text("\(remaining)")
-                        .font(.system(size: 13, weight: .semibold))
+                    Text("\(count)")
+                        .font(size == .sm ? DSType.label : size.font.weight(.semibold))
                         .monospacedDigit()
-                        .foregroundColor(isActive ? Self.onFill : DSColor.textPrimary)
+                        .foregroundColor(ink)
                         .opacity(0.5)
                         .contentTransition(.numericText())
                 }
             }
         }
-        .padding(.horizontal, 12)
-        .frame(height: 28)
+        .padding(.horizontal, size == .sm ? DSSpace.xl : size.padding + DSSpace.xxs)
+        .frame(height: size.height)
+        // Never squeezed: when the lists overflow, the scroller gives way.
+        .fixedSize()
         // ONE shape, in every state — a capsule; selection is a fill, not a
-        // silhouette (Marcello, 2026-09-06). Still no matchedGeometryEffect:
-        // it resolved frames outside the scroller and cut the first chip.
-        .background(
-            Capsule(style: .continuous)
-                .fill(isActive ? tint.sectionColor
-                      : (hover ? DSColor.fieldBackground : Color.clear))
-        )
-        .clipShape(Capsule(style: .continuous))
-        // No glow: the strip scrolls, and a scroller clips whatever reaches
-        // past it — the shadow was being cut off square (2026-09-25).
-        .contentShape(Capsule(style: .continuous))
+        // silhouette (Marcello, 2026-09-06). No glow: the strip scrolls and
+        // a scroller clips whatever reaches past it.
+        .background(DSShape.action.fill(isActive ? fill : (hover ? palette.controlHover : .clear)))
+        .contentShape(DSShape.action)
         .onHover { hover = $0 }
         // No implicit animation on selection: a click animates it (180 ms,
         // at the call site), the keyboard switches instantly (U5 §5.1).
         .animation(Motion.hoverFade, value: hover)
+    }
+}
+
+// MARK: - Reusable component: Section label
+
+/// A label that heads a group, never a control.
+///
+///   .caps   — "NEW SECTION", "MOVE TO": 10 pt medium caps, tracked, tertiary
+///             ink. Heads a form or a picker.
+///   .quiet  — "Completed · 2": 12.5 pt semibold, tertiary. Heads a group
+///             INSIDE a list.
+struct DSSectionLabel: View {
+    enum Style { case caps, quiet }
+    let text: String
+    var style: Style = .caps
+    @Environment(\.dsPalette) private var palette
+
+    var body: some View {
+        switch style {
+        case .caps:
+            Text(text.uppercased())
+                .font(DSType.sectionCaps)
+                .tracking(0.4)
+                .foregroundStyle(palette.textTertiary)
+                .accessibilityAddTraits(.isHeader)
+        case .quiet:
+            Text(text)
+                .font(DSType.quiet)
+                .foregroundStyle(palette.textTertiary)
+                .accessibilityAddTraits(.isHeader)
+        }
+    }
+}
+
+// MARK: - Reusable component: Field well
+
+extension View {
+    /// A text field sunk into the panel: the creation bar's well, one shape
+    /// for every field the notch draws (new section, rename, composers).
+    /// Padding is the caller's — fields differ in size, not in look.
+    func dsFieldWell(radius: CGFloat = DSRadius.bar) -> some View {
+        modifier(DSFieldWell(radius: radius))
+    }
+}
+
+private struct DSFieldWell: ViewModifier {
+    let radius: CGFloat
+    @Environment(\.dsPalette) private var palette
+    func body(content: Content) -> some View {
+        content.background(DSShape.squircle(radius).fill(palette.fieldWell))
     }
 }
 
@@ -98,20 +145,34 @@ struct CategoryTabChip: View {
 // inward and made the rows look like they were floating away from the left
 // edge. The row is now the drag handle, so nothing is indented.
 
+/// `.horizontal` — between two rows (to-dos, notes): a line with a dot on
+/// its leading end. `.vertical` — between two pills or dock items: an 18-pt
+/// upright capsule.
 struct DropIndicator: View {
+    enum Axis { case horizontal, vertical }
+    var axis: Axis = .horizontal
     var tint: Color = DSColor.textPrimaryBright
 
     var body: some View {
-        HStack(spacing: 0) {
-            Circle()
-                .fill(tint)
-                .frame(width: 6, height: 6)
-            Rectangle()
-                .fill(tint)
-                .frame(height: 1.5)
+        Group {
+            switch axis {
+            case .horizontal:
+                HStack(spacing: 0) {
+                    Circle()
+                        .fill(tint)
+                        .frame(width: 6, height: 6)
+                    Rectangle()
+                        .fill(tint)
+                        .frame(height: 1.5)
+                }
+                .frame(height: 6)
+            case .vertical:
+                Capsule()
+                    .fill(tint.opacity(0.85))
+                    .frame(width: 2, height: 18)
+            }
         }
-        .frame(height: 6)
-        .transition(.opacity)
+        .transition(DSTransition.fade)
         .allowsHitTesting(false)
     }
 }
@@ -182,6 +243,53 @@ struct Keycap: View {
     }
 }
 
+// MARK: - Reusable component: Key badge (outlined)
+//
+// The other half of the key vocabulary. `Keycap` is FILLED and sits on a
+// control (a button's own shortcut). `KeyBadge` is OUTLINED and sits on the
+// panel as a quiet hint beside words: "Switch space  Tab", the ⌘⏎ at the end
+// of a focused row, "esc" in a header. There were six hand-drawn copies of
+// it (2026-11-08); every outlined key is this one now.
+//
+//   .row   — 10 pt semibold, text and border one colour (row affordances,
+//            footer hints). Fixed 32-pt width for a word key, min 23 for a
+//            glyph.
+//   .hint  — 10.5 pt regular at 60%, border at 22% (U5 §4.1, the capture
+//            header and menus).
+
+struct KeyBadge: View {
+    enum Style { case row, hint }
+    let text: String
+    var style: Style = .row
+    /// The ink for `.row`. Ignored by `.hint`, which takes the panel's ink.
+    var color: Color = DSColor.textFaint
+    var minWidth: CGFloat = 23
+    var height: CGFloat = 18
+
+    var body: some View {
+        switch style {
+        case .row:
+            Text(text)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(color)
+                .padding(.horizontal, text.count > 1 ? 5 : 0) // ds-allow: optical key padding
+                .frame(minWidth: minWidth, minHeight: height)
+                .fixedSize()
+                .overlay(DSShape.squircle(DSRadius.keycap).strokeBorder(color, lineWidth: 1))
+        case .hint:
+            Text(text)
+                .font(.system(size: 10.5))
+                .foregroundStyle(SpaceInk.a(0.6))
+                .frame(minWidth: 18, minHeight: 18)
+                .padding(.horizontal, 5) // ds-allow: content-box, as the reference renders it
+                .padding(1)
+                .overlay(DSShape.squircle(5).strokeBorder(SpaceInk.a(0.22), lineWidth: 1))
+                .fixedSize()
+                .accessibilityHidden(true)
+        }
+    }
+}
+
 // MARK: - Reusable component: Shortcut hint badge
 
 struct ShortcutHintBadge: View {
@@ -190,48 +298,6 @@ struct ShortcutHintBadge: View {
     var body: some View {
         // One keycap implementation for the whole app.
         Keycap(text: text, tone: .onDark, size: 9)
-    }
-}
-
-// MARK: - Reusable component: Primary action button (Create, etc.)
-
-/// A capsule, like every other action in the app and like macOS 26's own push
-/// buttons. It used to be a rounded rectangle while Join was a capsule — the
-/// same control in two shapes (Marcello, 2026-07-26).
-struct PrimaryActionButton: View {
-    let title: String
-    let shortcutHint: String
-    /// Filled by default; `false` gives the outlined secondary treatment, so
-    /// Cancel/Snooze pair with a filled primary instead of inventing a style.
-    var isProminent: Bool = true
-    /// Form buttons span the panel; a button sitting inline next to other
-    /// content (Join, on a meeting card) hugs its label instead.
-    var fillsWidth: Bool = true
-    /// Inline buttons are smaller so they sit inside a card without dominating.
-    var isCompact: Bool = false
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Text(title)
-                .font(isCompact ? .system(size: 11, weight: .medium) : DSFont.buttonLabel)
-                .foregroundColor(isProminent ? DSColor.primaryText : DSColor.textSecondary)
-            if !shortcutHint.isEmpty {
-                // The shortcut lives ON the control, so the keyboard path is
-                // discoverable without opening the reference sheet.
-                Keycap(text: shortcutHint,
-                       tone: isProminent ? .onLight : .onDark,
-                       size: isCompact ? 9 : 10)
-            }
-        }
-        .padding(.horizontal, fillsWidth ? 0 : (isCompact ? 12 : 16))
-        .frame(maxWidth: fillsWidth ? .infinity : nil)
-        .padding(.vertical, isCompact ? 5 : 9)
-        .background(isProminent ? DSColor.primaryFill : Color.clear)
-        .overlay(
-            DSShape.action.strokeBorder(isProminent ? .clear : DSColor.panelBorder,
-                                        lineWidth: 1)
-        )
-        .clipShape(DSShape.action)
     }
 }
 

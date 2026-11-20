@@ -36,7 +36,7 @@ struct DockNoteHeader: View {
                     .foregroundStyle(DSDock.text3)
                 if store.saveError != nil {
                     Text(L10n.t("meeting.saveFailed"))
-                        .foregroundStyle(Color(hex: "#FF6961"))
+                        .foregroundStyle(DSColor.destructive)
                 }
             }
             .font(DSDock.noteDate)

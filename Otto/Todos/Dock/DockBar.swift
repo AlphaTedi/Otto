@@ -120,22 +120,13 @@ struct DockRoundButton<Icon: View>: View {
                 .notchGlass(in: Circle(), tint: isOn ? onTint : nil)
                 .contentShape(Circle())
         }
-        .buttonStyle(DockPressStyle())
+        .buttonStyle(DSPressStyle())
         .onHover { hover = $0 }
         .barTip(label, label: label, shortcut: shortcut)
         .animation(.easeInOut(duration: 0.3), value: isOn)
         .animation(.easeOut(duration: 0.15), value: hover)
         .accessibilityLabel(label)
         .accessibilityAddTraits(isOn ? .isSelected : [])
-    }
-}
-
-/// Pressing scales a round button to 0.93 over 150 ms.
-struct DockPressStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.93 : 1)
-            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 
@@ -237,7 +228,7 @@ struct SpaceDock: View {
                 .onDrop(of: [.ottoInternalItem], delegate: CollectionEndDropDelegate(
                     draggedID: $draggedID, dropBeforeID: $dropBeforeID, dropAtEnd: $dropAtEnd))
                 .overlay(alignment: .leading) {
-                    if dropAtEnd { TabDropIndicator().offset(x: -2) }
+                    if dropAtEnd { DropIndicator(axis: .vertical).offset(x: -2) }
                 }
         }
         // One curve for the label widths and the highlight, so they move as
@@ -315,7 +306,7 @@ struct SpaceDock: View {
             Circle().fill(tint.base).frame(width: 12, height: 12)
         }
         .overlay(alignment: .leading) {
-            if dropBeforeID == collection.id { TabDropIndicator().offset(x: -2) }
+            if dropBeforeID == collection.id { DropIndicator(axis: .vertical).offset(x: -2) }
         }
         .onDrop(of: [.ottoInternalItem], delegate: CollectionReorderDropDelegate(
             targetID: collection.id, draggedID: $draggedID,

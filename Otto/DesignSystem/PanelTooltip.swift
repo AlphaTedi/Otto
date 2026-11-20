@@ -14,6 +14,17 @@ extension View {
     func panelTooltip(_ text: String) -> some View {
         modifier(PanelTooltip(text: text))
     }
+
+    /// THE tooltip for a new control, on either surface: the label, then its
+    /// shortcut, the way every Otto tooltip reads ("Download  ⌘⇧S").
+    /// Shortcuts live here, never printed permanently (principle 4).
+    ///
+    /// The container's dock BAR has its own gliding tooltip (`.barTip`, in
+    /// Dock/DockTooltip.swift) because its tips slide between neighbours;
+    /// use that only for controls inside `DockBar`.
+    func ottoTooltip(_ label: String, shortcut: String? = nil) -> some View {
+        panelTooltip(shortcut.map { label + "  " + $0 } ?? label)
+    }
 }
 
 private struct PanelTooltip: ViewModifier {
@@ -30,23 +41,23 @@ private struct PanelTooltip: ViewModifier {
                     pending = Task { @MainActor in
                         try? await Task.sleep(nanoseconds: 700_000_000)
                         guard !Task.isCancelled else { return }
-                        withAnimation(.easeOut(duration: 0.12)) { shown = true }
+                        withAnimation(Motion.hintFade) { shown = true }
                     }
                 } else {
-                    withAnimation(.easeOut(duration: 0.08)) { shown = false }
+                    withAnimation(Motion.hintFade) { shown = false }
                 }
             }
             .overlay(alignment: .top) {
                 if shown {
                     Text(text)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(DSType.tooltip)
                         .foregroundStyle(Color.white.opacity(0.92))
                         .fixedSize()
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .padding(.horizontal, DSSpace.m)
+                        .padding(.vertical, DSSpace.xs)
+                        .background(DSShape.squircle(DSRadius.keycap)
                             .fill(Color(white: 0.16)))
-                        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .overlay(DSShape.squircle(DSRadius.keycap)
                             .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
                         .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
                         .offset(y: -30)

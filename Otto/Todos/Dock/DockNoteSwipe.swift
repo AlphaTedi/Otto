@@ -27,7 +27,7 @@ struct NoteSwipeDelete: View {
                 .background(Capsule(style: .circular).fill(Color(hex: "#FF5F57")))
                 .contentShape(Capsule(style: .circular))
         }
-        .buttonStyle(DockPressStyle())
+        .buttonStyle(DSPressStyle())
         .scaleEffect(0.5 + 0.5 * progress)
         .opacity(progress)
         .padding(.trailing, 4)

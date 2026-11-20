@@ -55,11 +55,6 @@ enum DSColor {
     /// THE row hover — to-dos and notes alike (Marcello, 2026-09-25: the
     /// to-do's is the right one). A 4% wash; selection keeps its own fill.
     static var rowHover: Color { .dynamicOverlay(light: 0.04, dark: 0.04) }
-    /// The notch container sits on pure black (or white), where 4% all but
-    /// disappears (Marcello, 2026-09-27: "I almost don't see the hover").
-    /// Stronger there, in both appearances.
-    static var containerRowHover: Color { .dynamicOverlay(light: 0.06, dark: 0.10) }
-    static func rowHover(container: Bool) -> Color { container ? containerRowHover : rowHover }
     // Panel & structure
     static let panelBackground = Color.dynamic(light: .white, dark: NSColor(white: 0.067, alpha: 1))
     /// Apple's own hairline. It already differs per appearance.
@@ -158,6 +153,10 @@ enum DSColor {
     static let shadowStrong = Color.dynamic(light: NSColor.black.withAlphaComponent(0.18),
                                             dark: NSColor.black.withAlphaComponent(0.45))
 
+    /// Delete, and anything else that destroys. The one red in the app —
+    /// iOS's dark-mode systemRed, which reads on black and on glass alike.
+    static let destructive = Color(hex: "#FF6961")
+
     // Primary action. The pair inverts together: a near-white button carries
     // near-black text in Dark, and the reverse in Light, so the button never
     // disappears into the panel behind it.
@@ -215,9 +214,64 @@ enum DSColor {
 
 }
 
+// MARK: - Buttons with words
+//
+// shadcn's neutral theme, as reui draws its buttons: light values first, dark
+// second. Used only by DSButtonStyle.
+
+enum DSButtonColor {
+    private static func pair(_ light: String, _ dark: String) -> Color {
+        .dynamic(light: NSColor(Color(hex: light)), dark: NSColor(Color(hex: dark)))
+    }
+    private static func pair(_ light: NSColor, _ dark: NSColor) -> Color { .dynamic(light: light, dark: dark) }
+
+    static let primary = pair("#171717", "#E5E5E5")
+    /// 80% of the fill, as shadcn's hover.
+    static let primaryHover = pair(NSColor(Color(hex: "#171717")).withAlphaComponent(0.8),
+                                   NSColor(Color(hex: "#E5E5E5")).withAlphaComponent(0.8))
+    static let onPrimary = pair("#FAFAFA", "#171717")
+    static let secondary = pair("#F5F5F5", "#262626")
+    /// The fill mixed 5% toward the foreground.
+    static let secondaryHover = pair("#EBEBEB", "#313131")
+    static let onSecondary = pair("#171717", "#FAFAFA")
+    static let outline = pair(.white, NSColor.white.withAlphaComponent(0.045))
+    static let outlineHover = pair(NSColor(Color(hex: "#F5F5F5")), NSColor.white.withAlphaComponent(0.075))
+    static let outlineBorder = pair(NSColor(Color(hex: "#E5E5E5")), NSColor.white.withAlphaComponent(0.15))
+    static let ghostHover = pair(NSColor(Color(hex: "#F5F5F5")), NSColor(Color(hex: "#262626")).withAlphaComponent(0.5))
+    static let foreground = pair("#0A0A0A", "#FAFAFA")
+    static let destructive = pair("#E7000B", "#FF6467")
+    static let destructiveFill = pair(NSColor(Color(hex: "#E7000B")).withAlphaComponent(0.10),
+                                      NSColor(Color(hex: "#FF6467")).withAlphaComponent(0.20))
+    static let destructiveHover = pair(NSColor(Color(hex: "#E7000B")).withAlphaComponent(0.20),
+                                       NSColor(Color(hex: "#FF6467")).withAlphaComponent(0.30))
+    /// The auto-snooze countdown's fill, under an outline button's label.
+    static let progress = pair(NSColor.black.withAlphaComponent(0.08), NSColor.white.withAlphaComponent(0.10))
+}
+
+// MARK: - Spacing
+//
+// The scale the app already used most (audit 2026-11-08: 2/4/6/8/10/12/16
+// cover ~75% of every padding and stack spacing). New code takes a step from
+// here. 3, 5 and 9 survive in old code as optical nudges; a new one needs a
+// `// ds-allow:` comment saying why.
+
+enum DSSpace {
+    static let xxs: CGFloat = 2
+    static let xs: CGFloat = 4
+    static let s: CGFloat = 6
+    static let m: CGFloat = 8
+    static let l: CGFloat = 10
+    static let xl: CGFloat = 12
+    static let xxl: CGFloat = 16
+    /// Between blocks: the panel's own padding, the gap between two cards.
+    static let section: CGFloat = 24
+}
+
+/// The older names. Kept so existing call sites read the same; new code uses
+/// `DSSpace`.
 enum DSSpacing {
-    static let panelPadding: CGFloat = 16
-    static let rowInternalGap: CGFloat = 10
+    static let panelPadding: CGFloat = DSSpace.xxl
+    static let rowInternalGap: CGFloat = DSSpace.l
     static let tabRowBottomMargin: CGFloat = 14
     static let checklistIndent: CGFloat = 24
 }
@@ -230,10 +284,37 @@ enum DSSpacing {
 ///
 /// Never write a raw `cornerRadius:` literal in a view — take one from here, or
 /// the shapes drift apart again (there were 24 distinct values before this).
+/// The steps are the values the app actually draws with, smallest first.
 enum DSRadius {
-    static let controlCorner: CGFloat = 10
-    static let chipCorner: CGFloat = 7
-    static let checklistCheckboxCorner: CGFloat = 3
+    /// A checklist step's checkbox.
+    static let checkbox: CGFloat = 3
+    /// Keycaps, badges, a to-do's checkbox, tooltips.
+    static let keycap: CGFloat = 6
+    /// Inline chips, small square buttons.
+    static let chip: CGFloat = 7
+    /// Controls: fields, segmented items.
+    static let control: CGFloat = 10
+    /// A row inside a menu.
+    static let menuRow: CGFloat = 11
+    /// A list row's hover/focus slab, the opened to-do card.
+    static let row: CGFloat = 14
+    /// The draft row's well, input bars.
+    static let bar: CGFloat = 16
+    /// Menus and popovers.
+    static let menu: CGFloat = 20
+    /// A floating panel block.
+    static let block: CGFloat = 24
+    /// The meeting card.
+    static let card: CGFloat = 32
+    /// Buttons with words (reui's shadcn button): 10, 8 on the xs/sm sizes.
+    static let button: CGFloat = 10
+    static let buttonSmall: CGFloat = 8
+    static let buttonLarge: CGFloat = 12
+
+    // Older names.
+    static let controlCorner: CGFloat = control
+    static let chipCorner: CGFloat = chip
+    static let checklistCheckboxCorner: CGFloat = checkbox
 }
 
 /// The app's shape vocabulary, so a view never has to decide.
@@ -254,28 +335,161 @@ enum DSShape {
     static var action: Capsule { Capsule(style: .continuous) }
 }
 
-enum DSFont {
-    /// The scale has two steps, deliberately (Marcello, 2026-08-04):
-    ///
-    ///   cardTitleSize 15  — the meeting card. One item, needs to carry.
-    ///   todoTitleSize 13  — a to-do row. There are twenty of these; at 15 they
-    ///                       dominated the panel and ate the vertical space.
-    ///
-    /// They were briefly the same size, which flattened the hierarchy and made
-    /// the list feel oversized. Anything rendering a to-do title must use
-    /// todoTitleSize — EntityTitleView's TextKit body attributes included, or
-    /// the measured row height stops matching the drawn text.
+/// Fixed sizes of controls. A control's size is part of its identity: a 34pt
+/// round button next to a 32pt one reads as a mistake, not a choice.
+enum DSSize {
+    /// Pills, tabs, compact controls.
+    static let control: CGFloat = 28
+    /// Round icon buttons.
+    static let iconSmall: CGFloat = 28
+    static let icon: CGFloat = 34
+    static let iconLarge: CGFloat = 38
+    /// Checkboxes: a to-do, a checklist step in the dock, a step in panels.
+    static let box: CGFloat = 18
+    static let stepBox: CGFloat = 14
+    static let miniBox: CGFloat = 10
+    /// A hairline.
+    static let hairline: CGFloat = 1
+    /// The control scale's heights (DSControlSize).
+    static let controlXS: CGFloat = 24
+    static let controlSM: CGFloat = 28
+    static let controlMD: CGFloat = 32
+    static let controlLG: CGFloat = 36
+    static let controlXL: CGFloat = 40
+}
+
+/// THE size scale for controls with a fixed height — buttons (with words or
+/// icon-only) and space pills — after reui's shadcn sizes (button xs/sm/
+/// default/lg, toggle sm/default/lg), plus xl. A control picks a size by
+/// where it sits, never a height:
+///
+///   xs 24  inside a card or a row, beside content (Join, the ↵ key, the mic)
+///   sm 28  bars and tab rows (space pills), compact forms
+///   md 32  the default: standalone actions, dialogs
+///   lg 36  a form's main action
+///   xl 40  a hero action on an empty page or onboarding-like moment
+///
+/// Components with one natural size (inputs, keycaps, badges, checkboxes)
+/// don't take it — reui gives those a single size too.
+enum DSControlSize: CaseIterable {
+    case xs, sm, md, lg, xl
+
+    var height: CGFloat {
+        switch self {
+        case .xs: return DSSize.controlXS
+        case .sm: return DSSize.controlSM
+        case .md: return DSSize.controlMD
+        case .lg: return DSSize.controlLG
+        case .xl: return DSSize.controlXL
+        }
+    }
+    /// 8 on the two small sizes, 10 on md/lg, 12 on xl — concentric with
+    /// the label's inset.
+    var radius: CGFloat {
+        switch self {
+        case .xs, .sm: return DSRadius.buttonSmall
+        case .md, .lg: return DSRadius.button
+        case .xl: return DSRadius.buttonLarge
+        }
+    }
+    var padding: CGFloat {
+        switch self {
+        case .xs: return DSSpace.m
+        case .sm, .md, .lg: return DSSpace.l
+        case .xl: return DSSpace.xl
+        }
+    }
+    var gap: CGFloat { self == .xs || self == .sm ? DSSpace.xs : DSSpace.s }
+    var font: Font {
+        switch self {
+        case .xs: return DSType.buttonXS
+        case .sm: return DSType.buttonSM
+        case .md, .lg: return DSType.button
+        case .xl: return DSType.buttonXL
+        }
+    }
+    /// The glyph size for an icon in a control of this size (OttoIcon pointSize).
+    var iconSize: CGFloat {
+        switch self {
+        case .xs: return 12
+        case .sm: return 13
+        case .md, .lg: return 15
+        case .xl: return 17
+        }
+    }
+    var keycapSize: CGFloat { self == .xs || self == .sm ? 9 : 10 }
+}
+
+/// Type ROLES. A view picks what the text IS, never a point size.
+///
+/// The app is set in SF (the system face) throughout; Onboarding's Host
+/// Grotesk is its own theme and does not leak here. Where the two surfaces
+/// differ (a row title is 14 medium in the panels, 15 regular in the
+/// container), use `DSType.rowTitle(_:)` with the view's `ottoSurface`.
+enum DSType {
+    // Titles
     static let cardTitleSize: CGFloat = 15
+    static let cardTitle: Font = .system(size: cardTitleSize, weight: .medium)
+    /// A space's title in its header bar ("Notes", a section name).
+    static let pageTitle: Font = .system(size: 18, weight: .medium)
+    /// An open note's title, set like a document's.
+    static let editorTitle: Font = DSType.editorTitle
+
+    // Rows
+    static let rowTitleSizePanels: CGFloat = 14
+    static let rowTitleSizeContainer: CGFloat = 15
+    static func rowTitleSize(_ surface: OttoSurface) -> CGFloat {
+        surface == .container ? rowTitleSizeContainer : rowTitleSizePanels
+    }
+    static func rowTitle(_ surface: OttoSurface) -> Font {
+        surface == .container ? .system(size: rowTitleSizeContainer)
+                              : .system(size: rowTitleSizePanels, weight: .medium)
+    }
+
+    // Running text
+    static let body: Font = .system(size: 13)
+    /// A checklist step, a note preview line.
+    static let step: Font = DSType.step
+    /// Meta lines under a title: dates, counts, "3 more steps".
+    static let meta: Font = DSType.meta
+    /// "Completed · 2" — a quiet header inside a list.
+    static let quiet: Font = .system(size: 12.5, weight: .semibold)
+
+    // Controls
+    /// Pills and tabs.
+    static let label: Font = .system(size: 13, weight: .semibold)
+    /// Menu rows.
+    static let menu: Font = .system(size: 13.5)
+    /// Buttons with words: 14 medium, 12.8 on sm, 12 on xs (reui's sizes).
+    static let button: Font = .system(size: 14, weight: .medium)
+    static let buttonSM: Font = .system(size: 12.8, weight: .medium)
+    static let buttonXS: Font = .system(size: 12, weight: .medium)
+    static let buttonXL: Font = .system(size: 15, weight: .medium)
+    static let tooltip: Font = .system(size: 11, weight: .medium)
+    static let keycap: Font = .system(size: 10, weight: .medium)
+
+    // Small print
+    static let caption: Font = .system(size: 11)
+    static let micro: Font = .system(size: 10)
+    /// Uppercase section caps ("SECTION NAME"). Pair with `.tracking(0.4)`
+    /// and `.textCase(.uppercase)` — `DSSectionLabel` does both.
+    static let sectionCaps: Font = .system(size: 10, weight: .medium)
+}
+
+/// The older names, kept as aliases of `DSType` so existing call sites
+/// compile unchanged. New code uses `DSType`.
+enum DSFont {
+    static let cardTitleSize: CGFloat = DSType.cardTitleSize
     /// 14/17 medium, per the Figma export. EntityTitleView mirrors this in
     /// its own TextKit attributes — if the two drift the measured row height
     /// stops matching the drawn text.
-    static let todoTitleSize: CGFloat = 14
-    static let todoTitle: Font = .system(size: todoTitleSize, weight: .medium)
-    static let tabLabel: Font = .system(size: 11)
-    static let sectionLabel: Font = .system(size: 10, weight: .regular)
+    static let todoTitleSize: CGFloat = DSType.rowTitleSizePanels
+    static let todoTitle: Font = DSType.rowTitle(.panels)
+    static let tabLabel: Font = DSType.caption
+    static let sectionLabel: Font = DSType.micro
     static let hint: Font = .system(size: 9)
-    static let checklistItem: Font = .system(size: 11)
-    static let buttonLabel: Font = .system(size: 12, weight: .medium)
+    static let checklistItem: Font = DSType.caption
+    static let buttonLabel: Font = DSType.buttonXS
 }
 
 // DSAnimation is gone.
@@ -292,6 +506,10 @@ enum DSFont {
 //
 // The dock experiment draws on pure black in both appearances (the notch is a
 // hole in the hardware), so these are fixed values, not dynamic ones.
+//
+// These are the VALUES behind `DSPalette.container` (Surface.swift). A view
+// asks the palette for a role; reaching for `DSDock` directly is only for
+// dock-only furniture (the dot dock, its tooltip, its keycaps).
 
 enum DSDock {
     static let text = Color(hex: "#F2F2F2")
@@ -323,23 +541,23 @@ enum DSDock {
     static let notes = Color(hex: "#E5B66B")
     static let notesLight = Color(hex: "#F0CF98")
 
-    static let rowTitle: Font = .system(size: 15)
+    static let rowTitle: Font = DSType.rowTitle(.container)
     /// The to-do row's own type: semibold read heavier than "Add to …" and
     /// the dock's labels beside it (Marcello, 2026-10-17).
-    static let noteTitle: Font = .system(size: 15)
-    static let notePreview: Font = .system(size: 13)
-    static let meta: Font = .system(size: 12.5)
+    static let noteTitle: Font = DSType.rowTitle(.container)
+    static let notePreview: Font = DSType.body
+    static let meta: Font = DSType.meta
     /// Medium, one step under the spec's semibold (Marcello, 2026-10-17).
     static let dockLabel: Font = .system(size: 13, weight: .medium)
     static let dockCount: Font = .system(size: 13, weight: .medium)
     static let tooltipFont: Font = .system(size: 12, weight: .semibold)
     static let keycap: Font = .system(size: 11, weight: .semibold)
-    static let step: Font = .system(size: 13.5)
+    static let step: Font = DSType.step
     static let moreSteps: Font = .system(size: 12.5, weight: .medium)
     /// "Completed · 2", the editor's meta line.
-    static let quietLabel: Font = .system(size: 12.5, weight: .semibold)
+    static let quietLabel: Font = DSType.quiet
     /// The open note's title, set like a document's (2026-10-18).
-    static let editorTitle: Font = .system(size: 24, weight: .bold)
+    static let editorTitle: Font = DSType.editorTitle
     /// The day under it.
     static let noteDate: Font = .system(size: 14, weight: .medium)
     static let tooltipShortcut: Font = .system(size: 11, weight: .medium)

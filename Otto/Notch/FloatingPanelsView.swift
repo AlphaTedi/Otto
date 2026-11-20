@@ -32,7 +32,7 @@ enum PanelMetrics {
     /// 24 (Marcello, 2026-09-25: 40, then 32, still too round). Corner
     /// furniture sits 16 in from both edges, so its own radius is 24 − 16 = 8
     /// and the curves are concentric (`SpaceChrome.cornerInset`).
-    static let blockRadius: CGFloat = 24
+    static let blockRadius: CGFloat = DSRadius.block
     /// Figma's fixed footer material; the pills sit above its blurred sample.
     static let floatingFooterDepth: CGFloat = 95
     /// The progressive blur's reach: the footer plus 64pt above the pills'
@@ -63,13 +63,13 @@ enum PanelMetrics {
     static let barPaddingH: CGFloat = 20
     static let barPaddingV: CGFloat = 12
     /// 16, was 24: the field read as a pill (Marcello, 2026-10-03).
-    static let barRadius: CGFloat = 16
+    static let barRadius: CGFloat = DSRadius.bar
     static let barHeight: CGFloat = 59
 
     // Checkboxes — one size everywhere now, bar and rows alike
-    static let checkboxSize: CGFloat = 18
+    static let checkboxSize: CGFloat = DSSize.box
     static let checkboxStroke: CGFloat = 2
-    static let checkboxRadius: CGFloat = 6
+    static let checkboxRadius: CGFloat = DSRadius.keycap
 
     // List
     /// The container's ONE side line (2026-10-03): the field, the section
@@ -106,7 +106,7 @@ enum PanelMetrics {
     /// 14 since 2026-10-03: the opened to-do took 14 from Marcello's mock and
     /// hover/focus kept 8, so one row changed shape as it opened. 14 is also
     /// the concentric value — window 24 − the list's 10 inset.
-    static let rowRadius: CGFloat = 14
+    static let rowRadius: CGFloat = DSRadius.row
     /// ⏎ badge: 23x18, 1pt border, radius 6.
     static let enterBadgeWidth: CGFloat = 23
     static let enterBadgeHeight: CGFloat = 18
@@ -155,7 +155,7 @@ enum PanelMetrics {
     /// list did directly below it, and against a 32pt corner that reads as the
     /// two blocks being built to different rules (Marcello, 2026-08-23).
     static let blockPadding: CGFloat = 24
-    static let meetingRadius: CGFloat = 32
+    static let meetingRadius: CGFloat = DSRadius.card
 
 
     /// How long the alert waits before snoozing itself.
@@ -247,7 +247,6 @@ struct AutoSnoozeButton: View {
     /// of the pointer over this button filled the capsule instantly and
     /// stopped the clock for good.
     @State private var progress: CGFloat = 0
-    @State private var hover = false
 
     var body: some View {
         // A Button, not `.onTapGesture`.
@@ -259,37 +258,17 @@ struct AutoSnoozeButton: View {
         // point resolve unpredictably; a Button's press gesture takes
         // precedence over an ancestor's (Marcello, 2026-09-06).
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: DSSpace.xs) {
                 Text(L10n.t("cal.snoozeShort"))
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(hover ? DSColor.textPrimaryBright : DSColor.textSecondary)
                 Keycap(text: "S", tone: .onDark, size: 9)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 5)
-            .background(
-                // The fill is the clock. It grows from the leading edge inside
-                // the same capsule the label sits in, so there is one object
-                // here, not a button with a progress bar bolted underneath it.
-                GeometryReader { proxy in
-                    // A straight leading edge, clipped by the button's own
-                    // capsule — not a capsule of its own whose rounded end
-                    // rode across the button (Marcello, 2026-10-03).
-                    Rectangle()
-                        .fill(Color.dynamicOverlay(light: 0.10, dark: 0.13))
-                        .frame(width: proxy.size.width * progress)
-                }
-            )
-            .clipShape(Capsule(style: .continuous))
-            .overlay(
-                Capsule(style: .continuous)
-                    .strokeBorder(DSColor.panelBorder, lineWidth: 0.5)
-            )
-            .contentShape(Capsule(style: .continuous))
         }
-        .buttonStyle(.plain)
+        // Join's sibling, so the same button: outline, xs. The fill is the
+        // clock: it grows from the leading edge INSIDE the button, clipped by
+        // its shape — one object, not a button with a progress bar bolted on
+        // (Marcello, 2026-10-03).
+        .buttonStyle(DSButtonStyle(variant: .outline, size: .xs, progress: progress))
         .onHover { hovering in
-            hover = hovering
             guard countsDown else { return }
             // Pause, do not reset. Restarting the clock every time the pointer
             // crossed the button would make it effectively never fire.
@@ -418,7 +397,9 @@ struct PanelMeetingCard: View {
                     // No Notes button for now (Marcello, 2026-10-19): Join
                     // and Snooze are the card's verbs.
                     if meeting.videoURL != nil {
-                        PanelJoinButton(showsShortcut: isNext) { join() }
+                        PrimaryActionButton(title: L10n.t("cal.join"),
+                                            shortcutHint: isNext ? "\u{2318}\u{21A9}" : "",
+                                            size: .xs) { join() }
                     }
                     // ALWAYS. A meeting with no video link had a Join button
                     // and nothing else, so its card sat visibly empty on the
@@ -460,39 +441,6 @@ struct PanelMeetingCard: View {
         guard let url = meeting.videoURL else { return }
         NSWorkspace.shared.open(url)
         NotchController.shared.attentionLeft()
-    }
-}
-
-/// White, filled — the one primary action on screen.
-private struct PanelJoinButton: View {
-    var showsShortcut: Bool = true
-    let action: () -> Void
-    @State private var hover = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Text(L10n.t("cal.join"))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(DSColor.primaryText)
-                if showsShortcut {
-                    // .onLight because it sits on primaryFill, which is the
-                    // INVERSE of the appearance — a light chip in Dark and a
-                    // dark one in Light. The tone tracks the button, not the
-                    // system.
-                    Keycap(text: "\u{2318}\u{21A9}", tone: .onLight, size: 9)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 5)
-            .background(Capsule(style: .continuous)
-                .fill(DSColor.primaryFill.opacity(hover ? 1 : 0.92)))
-            .contentShape(Capsule(style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            withAnimation(NotchAnimation.hintFade) { hover = hovering }
-        }
     }
 }
 

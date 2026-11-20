@@ -155,19 +155,7 @@ struct TodoItemRow: View {
         // 12pt either side and nothing above or below.
         .frame(minHeight: carriesDetails ? 0 : (usesDock ? NotchContainerMetrics.rowMinHeight
                                                          : PanelMetrics.rowMinHeight))
-        .background(
-            RoundedRectangle(cornerRadius: usesDock ? NotchContainerMetrics.highlightRadius : PanelMetrics.rowRadius,
-                             style: .continuous)
-                .fill(usesDock ? dockFill
-                      : (isExpanded ? Self.openedRowFill
-                         : (isFocused ? DSColor.focusedRowBackground
-                            : (hover ? DSColor.rowHover(container: notchLayout == .container) : .clear))))
-        )
-        // The B3 dock's opened card has a hairline (final flow 4.3).
-        .overlay(
-            RoundedRectangle(cornerRadius: NotchContainerMetrics.highlightRadius, style: .continuous)
-                .strokeBorder(usesDock && isExpanded ? DSDock.cardBorder : .clear, lineWidth: 1)
-        )
+        .dsRowBackground(hover: hover, focused: isFocused, expanded: isExpanded)
         // An opened to-do is a well sunk into the panel: darker than the
         // list, and no outline at all — not the lighter card with a
         // section-coloured stroke it was (Marcello, 2026-10-03).
@@ -242,17 +230,6 @@ struct TodoItemRow: View {
 
     /// The B3 dock's highlight: the opened card, keyboard focus at 9 %,
     /// hover at 4.5 % (final flow 3.2).
-    private var dockFill: Color {
-        if isExpanded { return DSDock.card }
-        if isFocused { return DSDock.rowFocus }
-        return hover ? DSDock.rowHover : .clear
-    }
-
-    /// The opened to-do's ground: darker than the panel in dark mode, a
-    /// faint grey well in light.
-    private static let openedRowFill = Color.dynamic(light: NSColor.black.withAlphaComponent(0.05),
-                                                     dark: NSColor.black.withAlphaComponent(0.30))
-
     private var titleRow: some View {
         // CENTER, per the export's `align-items: center`. Top-aligning while
         // the label carries its own 8pt box is what left every checkbox
@@ -269,25 +246,12 @@ struct TodoItemRow: View {
             Button {
                 TodoStore.shared.toggleComplete(item.id)
             } label: {
-                if usesDock {
-                    dockCheckbox
-                } else {
-                ZStack {
-                    RoundedRectangle(cornerRadius: PanelMetrics.checkboxRadius, style: .continuous)
-                        .strokeBorder(accent, lineWidth: PanelMetrics.checkboxStroke)
-                        .frame(width: PanelMetrics.checkboxSize, height: PanelMetrics.checkboxSize)
-                    if item.isCompleted {
-                        RoundedRectangle(cornerRadius: PanelMetrics.checkboxRadius, style: .continuous)
-                            .fill(accent)
-                            .frame(width: PanelMetrics.checkboxSize, height: PanelMetrics.checkboxSize)
-                        OttoIcon("checkmark", pointSize: 10)
-                            // On the category's own fill, which is light in
-                            // both appearances — see DSColor.onAccentFill.
-                            .foregroundStyle(DSColor.onAccentFill.opacity(0.85))
-                    }
-                }
-                .contentShape(Rectangle())
-                }
+                // The section's colour; in the dock at half strength until
+                // ticked (spec §5.3).
+                DSCheckbox(size: .row, isChecked: item.isCompleted,
+                           tint: usesDock ? dockTint.base : accent,
+                           uncheckedStroke: usesDock ? dockTint.checkboxStroke : nil)
+                    .accessibilityLabel(item.isCompleted ? L10n.t("todo.completed") : item.title)
             }
             .buttonStyle(.plain)
             // §8.3: near-instant fill; row exit + shrink follow on contentHug.
@@ -390,25 +354,6 @@ struct TodoItemRow: View {
         // are — see `reorderGesture`.
     }
 
-    /// The B3 dock's checkbox: the space colour at half strength, filled with
-    /// a black ✓ once done (spec §5.3), over 200 ms.
-    private var dockCheckbox: some View {
-        let shape = RoundedRectangle(cornerRadius: NotchContainerMetrics.boxRadius, style: .continuous)
-        return ZStack {
-            shape.fill(item.isCompleted ? dockTint.base : .clear)
-            shape.strokeBorder(item.isCompleted ? dockTint.base : dockTint.checkboxStroke,
-                               lineWidth: NotchContainerMetrics.boxStroke)
-            if item.isCompleted {
-                OttoIcon("checkmark", pointSize: 11)
-                    .foregroundStyle(Color.black)
-                    .transition(.opacity.combined(with: .scale(scale: 0.6)))
-            }
-        }
-        .frame(width: NotchContainerMetrics.box, height: NotchContainerMetrics.box)
-        .contentShape(Rectangle())
-        .animation(.easeOut(duration: 0.2), value: item.isCompleted)
-        .accessibilityLabel(item.isCompleted ? L10n.t("todo.completed") : item.title)
-    }
 
     /// NC-1: deliberate open — clicking the row body (not the checkbox)
     /// toggles the note/checklist details. Non-link clicks inside the
@@ -614,18 +559,9 @@ struct RowActions: View {
     var body: some View {
         HStack(spacing: PanelMetrics.rowActionGap) {
             if showEnter {
-                Text(enterLabel)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(DSColor.rowAffordance)
-                    .padding(.horizontal, enterLabel.count > 1 ? 5 : 0)
-                    .frame(minWidth: PanelMetrics.enterBadgeWidth,
-                           minHeight: PanelMetrics.enterBadgeHeight)
-                    .fixedSize()
-                    .overlay(
-                        RoundedRectangle(cornerRadius: PanelMetrics.enterBadgeRadius,
-                                         style: .continuous)
-                            .strokeBorder(DSColor.rowAffordance, lineWidth: 1)
-                    )
+                KeyBadge(text: enterLabel, color: DSColor.rowAffordance,
+                         minWidth: PanelMetrics.enterBadgeWidth,
+                         height: PanelMetrics.enterBadgeHeight)
             }
 
             // No separator between the two (Marcello, 2026-10-02): the gap

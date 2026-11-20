@@ -129,7 +129,7 @@ struct CaptureHeader<Field: View>: View {
                         .font(.system(size: 12.5))
                         .foregroundStyle(SpaceInk.a(0.45))
                         .fixedSize()
-                    CaptureKeyHint(label: L10n.t("capture.tab"))
+                    KeyBadge(text: L10n.t("capture.tab"), style: .hint)
                 }
                 .transition(.opacity)
             }
@@ -166,56 +166,16 @@ struct SpaceDot: View {
     }
 }
 
-/// The generic key hint: 1-pt border at 22%, 10.5 pt at 60% (U5 §4.1).
-struct CaptureKeyHint: View {
-    let label: String
-    var body: some View {
-        Text(label)
-            .font(.system(size: 10.5))
-            .foregroundStyle(SpaceInk.a(0.6))
-            // Content-box, as the reference renders it: 18 of content, 5 of
-            // padding each side, then the border.
-            .frame(minWidth: 18, minHeight: 18)
-            .padding(.horizontal, 5)
-            .padding(1)
-            .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .strokeBorder(SpaceInk.a(0.22), lineWidth: 1))
-            .fixedSize()
-            .accessibilityHidden(true)
-    }
-}
 
-/// "Save to Work" + a filled white ↵ cap; on hover the label brightens and the
-/// cap takes a soft violet glow (U5 §4.2, `02b`).
-/// The white "Save ↵" — the floating panels' capture header, and the B3
-/// dock's first row once it holds text (final flow 4.1).
+/// "Save ↵" — the floating panels' capture header, once it holds text: the
+/// primary button at xs, its key on it.
 struct SaveButton: View {
     let label: String
     let action: () -> Void
-    @State private var hover = false
 
     var body: some View {
-        // One button, the word inside it: "Save ↵" (2026-09-27).
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Text(label)
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .lineLimit(1)
-                Text("\u{21B5}")
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .opacity(0.6)
-            }
-            .foregroundStyle(Color(hex: "#111111"))
-            .padding(.horizontal, 10)
-            .frame(height: 26)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(hover ? Color.white : Color(hex: "#F2F1F5")))
-            .shadow(color: Color(hex: "#B69CFF").opacity(hover ? 0.55 : 0), radius: 6)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in withAnimation(.easeOut(duration: 0.2)) { hover = hovering } }
-        .accessibilityLabel(label + ", Return")
+        PrimaryActionButton(title: label, shortcutHint: "\u{21B5}", size: .xs, action: action)
+            .accessibilityLabel(label + ", Return")
     }
 }
 
@@ -266,20 +226,15 @@ extension ContextBar where Title == Text, Trailing == EmptyView {
 private struct BackChip: View {
     let parentTitle: String
     let action: () -> Void
-    @State private var hover = false
 
     var body: some View {
         Button(action: action) {
             OttoIcon("arrow.left", pointSize: 13)
-                .foregroundStyle(SpaceInk.a(0.85))
-                .frame(width: SpaceChrome.slotWidth, height: 28)
-                // 24 − 16: concentric with the window's corner.
-                .background(RoundedRectangle(cornerRadius: SpaceChrome.cornerRadius, style: .continuous)
-                    .fill(SpaceInk.a(hover ? 0.14 : 0.08)))
-                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .onHover { hovering in withAnimation(Motion.hoverFade) { hover = hovering } }
+        // A filled key, no hairline; its 8-pt corner is concentric with the
+        // window's (24 − 16).
+        .buttonStyle(DSIconButtonStyle(variant: .filled, shape: .squircle, size: DSSize.control,
+                                       width: SpaceChrome.slotWidth, hairline: false))
         .panelTooltip(String(format: L10n.t("nav.backTo"), parentTitle) + "  (Esc)")
         .accessibilityLabel(String(format: L10n.t("nav.backTo"), parentTitle))
     }
@@ -301,22 +256,16 @@ extension Text {
 /// Insights, the shortcuts, the notes folder and Quit all live there.
 struct SettingsGearButton: View {
     @ObservedObject private var store = TodoStore.shared
-    @State private var hover = false
 
     var body: some View {
         Button {
             if store.showsAvatarMenu { store.closeAvatarMenu() } else { store.openAvatarMenu() }
         } label: {
             OttoIcon("gearshape", pointSize: 18)
-                .foregroundStyle(SpaceInk.a(0.75))
-                .frame(width: 34, height: 34)
-                .background(Circle().fill(SpaceInk.a(hover || store.showsAvatarMenu ? 0.12 : 0.07)))
-                .overlay(Circle().strokeBorder(SpaceInk.a(0.10), lineWidth: 1))
-                .contentShape(Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(DSIconButtonStyle(variant: .filled, size: DSSize.icon,
+                                       isActive: store.showsAvatarMenu))
         .menuAnchor(.gear)
-        .onHover { hovering in withAnimation(Motion.hoverFade) { hover = hovering } }
         .panelTooltip(L10n.t("settings.open"))
         .accessibilityLabel(L10n.t("settings.open"))
     }
