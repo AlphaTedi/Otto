@@ -465,7 +465,10 @@ enum DebugDriver {
                             + "leads=\(cal.ambientLeadMinutes)m/\(cal.alertLeadMinutes)m "
                             + "notch=\(NotchController.shared.state) "
                             + "joinHotKey=\(HotkeyManager.shared.joinHotKeyActive) status=\(HotkeyManager.shared.joinHotKeyStatus) "
-                            + "panelKey=\(NSApp.keyWindow is NotchPanel)")
+                            + "panelKey=\(NSApp.keyWindow is NotchPanel) "
+                            + "alertOnly=\(NotchController.shared.alertOnly) card=\(cal.cardMeeting?.title ?? "nil") "
+                            + "presence=\(NotchPresence.shared.state.debugDescription) "
+                            + "panelPath=\(TodoStore.shared.panelPath.count) mode=\(TodoStore.shared.panelMode) note=\(NotesStore.shared.openNoteID != nil)")
             } else if command == "cal-debug" {
                 let cal = CalendarStore.shared
                 appendState("cal-debug connected=\(cal.isConnected)")
@@ -1573,6 +1576,8 @@ enum DebugDriver {
                             }.joined(separator: " ") + "]")
             } else if command == "cal-release" {
                 CalendarStore.shared.debugReleaseInjectedMeetings()
+            } else if command == "cal-snooze-card" {
+                if let m = CalendarStore.shared.cardMeeting { CalendarStore.shared.snooze(m) }
             } else if command == "cal-snooze" {
                 CalendarStore.shared.snooze()
             } else if command == "cal-dismiss" {

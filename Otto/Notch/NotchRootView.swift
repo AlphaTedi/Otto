@@ -194,7 +194,6 @@ private struct ContainerMenuLayer: View {
 private struct ContainerMeetingCard: View {
     @ObservedObject var controller: NotchController
     @ObservedObject private var calendar = CalendarStore.shared
-    @ObservedObject private var store = TodoStore.shared
     @EnvironmentObject private var appState: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Drives the entrance: the card drops out of the notch just behind it,
@@ -202,11 +201,11 @@ private struct ContainerMeetingCard: View {
     /// there when the notch opened).
     @State private var entered = false
 
-    /// Same rule as the floating panels: at the root only, never over a page.
-    private var meeting: DetectedMeeting? {
-        guard store.panelPath.count == 1 else { return nil }
-        return calendar.activeAlert ?? calendar.upcomingToday.first
-    }
+    /// Over a page too, unlike the floating panels: this card hangs BELOW the
+    /// silhouette, so it covers nothing. Hiding it inside a note meant a
+    /// notch closed on a note reopened with no meeting, and an alert raised
+    /// over it drew nothing at all (Marcello, 2026-11-26).
+    private var meeting: DetectedMeeting? { calendar.cardMeeting }
 
     var body: some View {
         // Exactly the notch's body width and corner, whatever the size preset

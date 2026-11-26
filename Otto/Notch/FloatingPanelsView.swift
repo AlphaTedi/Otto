@@ -321,7 +321,7 @@ struct PanelMeetingBlock: View {
         // Invisible on a Mac with no meetings, which is every test run here:
         // an empty list always takes the isEmpty branch and never reaches the
         // subscript at all.
-        let list = calendar.upcomingToday
+        let list = calendar.cardMeeting.map { [$0] } ?? []
         content(for: list)
     }
 
@@ -458,7 +458,7 @@ struct FloatingPanelsView: View {
     /// not stay up above it as a second live panel — the page is the one
     /// surface (top-navigation spec, "Meeting e notes").
     private var showsMeetingCard: Bool {
-        store.panelPath.count == 1 && !calendar.upcomingToday.isEmpty
+        store.panelPath.count == 1 && calendar.cardMeeting != nil
     }
 
     /// The to-do panel is centred in the screen's usable area rather than

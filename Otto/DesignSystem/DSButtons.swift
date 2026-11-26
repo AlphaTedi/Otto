@@ -191,7 +191,14 @@ private struct DSButtonBody: View {
             .frame(height: style.size.height)
             .background {
                 ZStack(alignment: .leading) {
+                    // The hover fade is scoped to the fill. On the whole
+                    // button it also took over the countdown below: leaving
+                    // Snooze resumes the clock in the same update the hover
+                    // ends, so the fill raced to full in the fade's 0.15 s
+                    // instead of running out over the time left (Marcello,
+                    // 2026-11-26).
                     shape.fill(fill)
+                        .animation(Motion.hoverFade, value: hover)
                     if let progress = style.progress {
                         GeometryReader { proxy in
                             Rectangle().fill(C.progress)
@@ -208,7 +215,6 @@ private struct DSButtonBody: View {
             .offset(y: configuration.isPressed ? 1 : 0)
             .opacity(isEnabled ? 1 : 0.5)
             .onHover { hover = $0 }
-            .animation(Motion.hoverFade, value: hover)
             .animation(Motion.press, value: configuration.isPressed)
     }
 }

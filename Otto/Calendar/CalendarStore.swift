@@ -108,7 +108,8 @@ final class CalendarStore: ObservableObject {
     private var ticker: Timer?
     /// Meetings already alerted (or snoozed past) — keyed by meeting id.
     private var alertedIDs: Set<String> = []
-    private var snoozedUntil: [String: Date] = [:]
+    /// Published: a snoozed meeting leaves the card at once (`cardMeeting`).
+    @Published private var snoozedUntil: [String: Date] = [:]
     /// The alert auto-collapses if untouched (Marcello, 2026-07-25).
     private var autoCollapseTask: Task<Void, Never>?
     private var alertLeavingTask: Task<Void, Never>?
@@ -188,6 +189,19 @@ final class CalendarStore: ObservableObject {
     }
 
     var nextMeeting: DetectedMeeting? { upcomingToday.first }
+
+    /// The meeting a card shows: the live alert, else the next one that is not
+    /// snoozed. Snooze on a card the user opened only suppressed the alert and
+    /// left the card exactly as it was, so the click looked like it did
+    /// nothing (Marcello, 2026-11-26). Snoozed means gone until the snooze
+    /// runs out.
+    var cardMeeting: DetectedMeeting? {
+        if let activeAlert { return activeAlert }
+        let now = Date()
+        return upcomingToday.first { meeting in
+            snoozedUntil[meeting.id].map { now >= $0 } ?? true
+        }
+    }
 
     // MARK: Scheduling
 

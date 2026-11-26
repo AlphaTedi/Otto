@@ -1546,7 +1546,12 @@ class NotchController: ObservableObject {
     ///   hold the meeting card in place until it has.
     @discardableResult
     func dismissMeetingAlert() -> Bool {
-        guard state == .expanded, !TodoStore.shared.isPanelPinnedOpen else { return false }
+        // A note left open pins the panel, and the notch reopens on it — so an
+        // alert raised over a closed note could never close again: Snooze
+        // cleared it and left an empty, open notch with no countdown
+        // (Marcello, 2026-11-26). An alert shown alone was opened by the
+        // alert, not by the user, so nothing of theirs is in the way.
+        guard state == .expanded, alertOnly || !TodoStore.shared.isPanelPinnedOpen else { return false }
         // force: the alert pins the panel open against a stray mouse-out (see
         // isUserEngaged), and that same pin was vetoing the collapse the
         // alert itself asked for — so Snooze worked or did nothing depending

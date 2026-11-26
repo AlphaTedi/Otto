@@ -782,6 +782,25 @@ struct TodoBrowsingKeyHandler: NSViewRepresentable {
             if cmd, !shift, keyCode == 36, draftHasCaret(), CalendarStore.shared.joinNextMeeting() {
                 return true
             }
+            // S snoozes the meeting card: the key printed on its Snooze, which
+            // was never wired to anything (Marcello, 2026-11-26). A live alert
+            // takes it from an empty draft too, since the caret sits there
+            // every time the notch opens; otherwise S is a letter wherever
+            // there is text to type it into.
+            if lower == "s", !cmd, !option, !control, !shift {
+                let calendar = CalendarStore.shared
+                let emptyDraft = draftHasCaret()
+                    && store.draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                if let alert = calendar.activeAlert, emptyDraft || !isEditingText() {
+                    calendar.snooze(alert)
+                    return true
+                }
+                if !isEditingText(), let meeting = calendar.cardMeeting,
+                   store.panelPath.count == 1 || AppState.shared.notchLayout == .container {
+                    calendar.snooze(meeting)
+                    return true
+                }
+            }
             if handleDraft(store, keyCode: keyCode) { return true }
 
             // While a text control has focus (note field, add-step), don't
