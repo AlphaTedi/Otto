@@ -3,12 +3,12 @@
     <channel>
         <title>Otto</title>
         <item>
-            <title>1.76.0</title>
-            <pubDate>Sat, 21 Nov 2026 12:45:58 +0100</pubDate>
-            <sparkle:version>443</sparkle:version>
-            <sparkle:shortVersionString>1.76.0</sparkle:shortVersionString>
+            <title>1.76.1</title>
+            <pubDate>Thu, 26 Nov 2026 19:23:16 +0100</pubDate>
+            <sparkle:version>445</sparkle:version>
+            <sparkle:shortVersionString>1.76.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/AlphaTedi/Otto/releases/download/v1.76.0/Otto.zip" length="13567503" type="application/octet-stream" sparkle:edSignature="iPjwV1yuqCGvdqC7/ORQeK9EOy8zfKkCkIn1Jp+TOdmy8GXG0YuDZv5Fp7rPwNv0Rm+LJ9lH9ISUOTtHaTBkBg=="/>
+            <enclosure url="https://github.com/AlphaTedi/Otto/releases/download/v1.76.1/Otto.zip" length="13569891" type="application/octet-stream" sparkle:edSignature="MwWeLXtvMXTewY+xQwg7qMWurMEVIYHdmmFeBHbYjyGjxLLBvBNa6jubLwJfQO4dMHOvN90qDIhixwacpwHMAQ=="/>
         </item>
     </channel>
 </rss>
